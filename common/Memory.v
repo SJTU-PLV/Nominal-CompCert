@@ -3977,6 +3977,36 @@ Record inject' (f: meminj) (m1 m2: mem) : Prop :=
   }.
 Definition inject := inject'.
 
+Record inject_nothread (f: meminj) (m1 m2: mem) : Prop :=
+  mk_inject_nothread {
+    mi_inj_nt:
+      mem_inj f m1 m2;
+    mi_freeblocks_nt:
+      forall b, ~(valid_block m1 b) -> f b = None;
+    mi_mappedblocks_nt:
+      forall b b' delta, f b = Some(b', delta) -> valid_block m2 b';
+    mi_no_overlap_nt:
+      meminj_no_overlap f m1;
+    mi_representable_nt:
+      forall b b' delta ofs,
+      f b = Some(b', delta) ->
+      perm m1 b (Ptrofs.unsigned ofs) Max Nonempty \/ perm m1 b (Ptrofs.unsigned ofs - 1) Max Nonempty ->
+      delta >= 0 /\ 0 <= Ptrofs.unsigned ofs + delta <= Ptrofs.max_unsigned;
+    mi_perm_inv_nt:
+      forall b1 ofs b2 delta k p,
+      f b1 = Some(b2, delta) ->
+      perm m2 b2 (ofs + delta) k p ->
+      perm m1 b1 ofs k p \/ ~perm m1 b1 ofs Max Nonempty
+    }.
+
+Lemma inject_nothread_inv : forall f m1 m2,
+    inject f m1 m2 <-> inject_nothread f m1 m2 /\ match_sup (support m1) (support m2).
+Proof.
+  intros. split; intros.
+  inv H. split. constructor; eauto. auto.
+  inv H. inv H0. constructor; eauto.
+Qed.
+  
 Local Hint Resolve mi_mappedblocks: mem.
 
 (** Preservation of access validity and pointer validity *)

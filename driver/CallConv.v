@@ -1345,8 +1345,9 @@ Proof.
     inv Hw'. inv Hr1i. inv H3. inv Hri2. cbn -[Z.add Z.mul] in *.
     rename m1'0 into m1'. rename m2'0 into m2'_. rename m' into m2'.
     assert (Hm'' : Mem.inject f' m1' m2'). {
+      tinv. split.
       change (m_pred (minjection f' m1') m2').
-      eapply m_invar; cbn; eauto. split. rewrite H28. eauto.
+      eapply m_invar; cbn; eauto. tinv. split. rewrite H28. eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros b2 ofs2 (b1 & delta & Hb & Hp) Hb2 Harg. inv Harg.
       eapply inject_incr_separated_inv in Hb; [eapply H4 | .. ]; eauto.
@@ -1358,6 +1359,7 @@ Proof.
         -- right. eapply Mem.valid_block_free_1; eauto.
            edestruct PERM as (sb2' & sofs2' & Hsp2 & ? & ?); eauto. inv Hsp2.
            eapply Mem.perm_valid_block; eauto.
+      * rewrite <- H28. inv Hm'. eauto.
     }
     exists (injpw f' m1' m2' Hm''); cbn.
     destruct H15 as [S15 H15]. destruct H16 as [S16 H16].

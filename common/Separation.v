@@ -50,7 +50,7 @@ notion of splitting a memory state into two disjoint halves).  *)
 Record massert : Type := {
   m_pred : mem -> Prop;
   m_footprint: block -> Z -> Prop;
-  m_invar: forall m m', m_pred m -> Mem.unchanged_on_tl m_footprint m m' -> m_pred m';
+  m_invar: forall m m', m_pred m -> Mem.unchanged_on_big m_footprint m m' -> m_pred m';
   m_valid: forall m b ofs, m_pred m -> m_footprint b ofs -> Mem.valid_block m b
 }.
 
@@ -347,8 +347,8 @@ Proof.
   apply Mem.perm_implies with Freeable; auto with mem.
   eapply Mem.perm_alloc_2; eauto.
 - apply (m_invar P) with m; auto. split. 
-  erewrite (Mem.support_alloc _ _ _ _ _ H).
-  constructor; simpl; auto. rewrite Mem.update_list_length. auto.
+  erewrite (Mem.support_alloc _ _ _ _ _ H). auto.
+  (* constructor; simpl; auto. rewrite Mem.update_list_length. auto. *)
   eapply Mem.alloc_unchanged_on; eauto.
 - red; simpl. intros. destruct H3; subst b0.
   eelim Mem.fresh_block_alloc; eauto. eapply (m_valid P); eauto.
@@ -620,7 +620,7 @@ Qed.
 (** The image of a memory injection *)
 
 Program Definition minjection (j: meminj) (m0: mem) : massert := {|
-  m_pred := fun m => Mem.inject j m0 m;
+  m_pred := fun m => Mem.inject_nothread j m0 m;
   m_footprint := fun b ofs => exists b0 delta, j b0 = Some(b, delta) /\ Mem.perm m0 b0 (ofs - delta) Max Nonempty
 |}.
 Next Obligation.
@@ -632,8 +632,7 @@ Next Obligation.
     eauto with mem. }
   destruct H0 as [MSUP H0].
   destruct H. constructor.
-- eapply Mem.match_sup_trans; eauto.
-- destruct mi_inj. constructor; intros.
+- destruct mi_inj_nt. constructor; intros.
 + eapply Mem.perm_unchanged_on; eauto.
 + eauto.
 + rewrite (Mem.unchanged_on_contents _ _ _ H0); eauto.
@@ -642,18 +641,18 @@ Next Obligation.
 - assumption.
 - assumption.
 - intros. destruct (Mem.perm_dec m0 b1 ofs Max Nonempty); auto.
-  eapply mi_perm_inv; eauto.
+  eapply mi_perm_inv_nt; eauto.
   eapply Mem.perm_unchanged_on_2; eauto.
 Qed.
 Next Obligation.
-  eapply Mem.valid_block_inject_2; eauto.
+  inv H. eapply mi_mappedblocks_nt; eauto.
 Qed.
 
 Lemma minjection_incr j m1 m2 j' m1' m2' P:
   m2 |= minjection j m1 ** P ->
   Mem.inject j' m1' m2' ->
-  Mem.unchanged_on_tl (loc_unmapped j) m1 m1' ->
-  Mem.unchanged_on_tl (loc_out_of_reach j m1) m2 m2' ->
+  Mem.unchanged_on_big (loc_unmapped j) m1 m1' ->
+  Mem.unchanged_on_big (loc_out_of_reach j m1) m2 m2' ->
   inject_incr j j' ->
   inject_separated j j' m1 m2 ->
   (forall b ofs p,
@@ -665,10 +664,11 @@ Proof.
   intros SEP INJ' UNCH1 UNCH2 INCR ISEP MAXPERMS.
   destruct SEP as (A & B & C). simpl in A.
   split; [|split].
-  - exact INJ'.
+  - red. simpl. inv INJ'. constructor; eauto.
   - apply m_invar with (m0 := m2).
     + assumption.
-    + destruct UNCH2. constructor. auto.
+    + 
+      destruct UNCH2. constructor.  auto.
       eapply Mem.unchanged_on_implies; eauto.
       intros; red; intros; red; intros.
       eelim C; eauto. simpl. exists b0, delta; auto.
@@ -676,38 +676,47 @@ Proof.
     destruct (j b0) as [[b' delta'] | ] eqn:J.
     + erewrite INCR in J' by eauto. inv J'.
       eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
-      eapply Mem.valid_block_inject_1; eauto.
+      inv A. destruct (Mem.sup_dec b0 (Mem.support m1)). auto. exploit mi_freeblocks_nt; eauto.
+      intro. congruence.
     + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
 Qed.
 
 Lemma loadv_parallel_rule:
   forall j m1 m2 chunk addr1 v1 addr2,
   m2 |= minjection j m1 ->
+  Mem.match_sup (Mem.support m1) (Mem.support m2) ->
   Mem.loadv chunk m1 addr1 = Some v1 ->
   Val.inject j addr1 addr2 ->
   exists v2, Mem.loadv chunk m2 addr2 = Some v2 /\ Val.inject j v1 v2.
 Proof.
-  intros. simpl in H. eapply Mem.loadv_inject; eauto.
+  intros. simpl in H.
+  eapply Mem.loadv_inject; eauto.
+  apply Mem.inject_nothread_inv; auto.
 Qed.
+
+Definition thread_same (m1 m2 : mem) := Mem.match_sup (Mem.support m1) (Mem.support m2).
+Ltac tinv := eapply Mem.inject_nothread_inv; eauto.
 
 Lemma storev_parallel_rule:
   forall j m1 m2 P chunk addr1 v1 m1' addr2 v2,
-  m2 |= minjection j m1 ** P ->
+  m2 |= minjection j m1 ** P -> thread_same m1 m2 ->
   Mem.storev chunk m1 addr1 v1 = Some m1' ->
   Val.inject j addr1 addr2 ->
   Val.inject j v1 v2 ->
-  exists m2', Mem.storev chunk m2 addr2 v2 = Some m2' /\ m2' |= minjection j m1' ** P.
+  exists m2', Mem.storev chunk m2 addr2 v2 = Some m2' /\ m2' |= minjection j m1' ** P /\ thread_same m1' m2'.
 Proof.
   intros. destruct H as (A & B & C). simpl in A.
-  exploit Mem.storev_mapped_inject; eauto. intros (m2' & STORE & INJ).
-  inv H1; simpl in STORE; try discriminate.
+  exploit Mem.storev_mapped_inject; eauto. tinv.
+  intros (m2' & STORE & INJ).
+  inv H2; simpl in STORE; try discriminate.
   assert (VALID: Mem.valid_access m1 chunk b1 (Ptrofs.unsigned ofs1) Writable)
     by eauto with mem.
   assert (EQ: Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)) = Ptrofs.unsigned ofs1 + delta).
   { eapply Mem.address_inject'; eauto with mem. }
-  exists m2'; split; auto.
+  apply Mem.inject_nothread_inv in INJ. destruct INJ as [X Y].
+  exists m2'; split; auto. split; auto.
   split; [|split].
-- exact INJ.
+- apply X.
 - apply (m_invar P) with m2; auto.
   constructor. erewrite (Mem.support_store _ _ _ _ _ _ STORE); eauto.
   eapply Mem.store_unchanged_on; eauto.
@@ -715,13 +724,14 @@ Proof.
   exists b1, delta; split; auto. destruct VALID as [V1 V2].
   apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
   apply V1. lia.
-- red; simpl; intros. destruct H1 as (b0 & delta0 & U & V).
+- red; simpl; intros. destruct H2 as (b0 & delta0 & U & V).
   eelim C; eauto. simpl. exists b0, delta0; eauto with mem.
 Qed.
 
 Lemma alloc_parallel_rule:
   forall m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** P ->
+  thread_same m1 m2 ->  
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -730,18 +740,19 @@ Lemma alloc_parallel_rule:
   0 <= sz2 <= Ptrofs.max_unsigned ->
   0 <= delta -> hi <= sz2 ->
   exists j',
-     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** P
+    m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** P
+  /\ thread_same m1' m2' 
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ (forall b, b <> b1 -> j' b = j b).
 Proof.
-  intros until delta; intros SEP ALLOC1 ALLOC2 ALIGN LO HI RANGE1 RANGE2 RANGE3.
+  intros until delta; intros SEP TEQ ALLOC1 ALLOC2 ALIGN LO HI RANGE1 RANGE2 RANGE3.
   assert (RANGE4: lo <= hi) by extlia.
   assert (FRESH1: ~Mem.valid_block m1 b1) by (eapply Mem.fresh_block_alloc; eauto).
   assert (FRESH2: ~Mem.valid_block m2 b2) by (eapply Mem.fresh_block_alloc; eauto).
   destruct SEP as (INJ & SP & DISJ). simpl in INJ.
   exploit Mem.alloc_left_mapped_inject.
-- eapply Mem.alloc_right_inject; eauto.
+- eapply Mem.alloc_right_inject; eauto. tinv.
 - eexact ALLOC1.
 - instantiate (1 := b2). eauto with mem.
 - instantiate (1 := delta). extlia.
@@ -750,7 +761,7 @@ Proof.
   eapply Mem.perm_alloc_2; eauto. extlia.
 - red; intros. apply Z.divide_trans with 8; auto.
   exists (8 / align_chunk chunk). destruct chunk; reflexivity.
-- intros. elim FRESH2. eapply Mem.valid_block_inject_2; eauto.
+- intros. elim FRESH2. eapply Mem.valid_block_inject_2; eauto. tinv.
 - intros (j' & INJ' & J1 & J2 & J3).
   exists j'; split; auto.
   rewrite <- ! sep_assoc.
@@ -761,6 +772,7 @@ Proof.
 * apply Mem.perm_implies with Freeable; auto with mem.
   eapply Mem.perm_alloc_2; eauto. lia.
 * red; simpl; intros. destruct H1, H2. lia.
+* apply Mem.inject_nothread_inv in INJ'. apply INJ'.
 * red; simpl; intros.
   assert (b = b2) by tauto. subst b.
   assert (0 <= ofs < lo \/ hi <= ofs < sz2) by tauto. clear H1.
@@ -768,9 +780,9 @@ Proof.
   eapply Mem.perm_alloc_inv in E; eauto.
   destruct (eq_block b0 b1).
   subst b0. rewrite J2 in D. inversion D; clear D; subst delta0. extlia.
-  rewrite J3 in D by auto. elim FRESH2. eapply Mem.valid_block_inject_2; eauto.
-+ apply (m_invar P) with m2; auto. constructor. erewrite (Mem.support_alloc _ _ _ _ _ ALLOC2).
-  red. simpl. rewrite Mem.update_list_length. eauto.
+  rewrite J3 in D by auto. elim FRESH2. eapply Mem.valid_block_inject_2; eauto. tinv.
++ apply (m_invar P) with m2; auto. constructor. erewrite (Mem.support_alloc _ _ _ _ _ ALLOC2). 
+  simpl. eauto.
   eapply Mem.alloc_unchanged_on; eauto.
 + red; simpl; intros.
   assert (VALID: Mem.valid_block m2 b) by (eapply (m_valid P); eauto).
@@ -781,17 +793,20 @@ Proof.
   destruct (eq_block b0 b1).
   subst b0. rewrite J2 in A. inversion A; clear A; subst b delta0. contradiction.
   rewrite J3 in A by auto. exists b0, delta0; auto.
++ split; auto. apply Mem.inject_nothread_inv in INJ'. apply INJ'.
 Qed.
 
 Lemma free_parallel_rule:
   forall j m1 b1 sz1 m1' m2 b2 sz2 lo hi delta P,
   m2 |= range b2 0 lo ** range b2 hi sz2 ** minjection j m1 ** P ->
+  thread_same m1 m2 ->  
   Mem.free m1 b1 0 sz1 = Some m1' ->
   j b1 = Some (b2, delta) ->
   lo = delta -> hi = delta + Z.max 0 sz1 ->
   exists m2',
      Mem.free m2 b2 0 sz2 = Some m2'
-  /\ m2' |= minjection j m1' ** P.
+     /\ m2' |= minjection j m1' ** P
+     /\ thread_same m1' m2' .
 Proof.
   intros. rewrite <- ! sep_assoc in H.
   destruct H as (A & B & C).
@@ -804,30 +819,35 @@ Proof.
     destruct (zlt ofs lo). apply J; lia.
     destruct (zle hi ofs). apply K; lia.
     replace ofs with ((ofs - delta) + delta) by lia.
-    eapply Mem.perm_inject; eauto.
+    eapply Mem.perm_inject; eauto. tinv.
     eapply Mem.free_range_perm; eauto. extlia.
   }
   destruct (Mem.range_perm_free _ _ _ _ PERM) as [m2' FREE].
-  exists m2'; split; auto. split; [|split].
-- simpl. eapply Mem.free_right_inject; eauto. eapply Mem.free_left_inject; eauto.
-  intros. apply (F b2 (ofs + delta0)).
-+ simpl.
-  destruct (zlt (ofs + delta0) lo). intuition auto.
-  destruct (zle hi (ofs + delta0)). intuition auto.
-  destruct (eq_block b0 b1).
-* subst b0. rewrite H1 in H; inversion H; clear H; subst delta0.
-  eelim (Mem.perm_free_2 m1); eauto. extlia.
-* exploit Mem.mi_no_overlap; eauto.
-  apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
-  eapply Mem.perm_free_3; eauto.
-  apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
-  eapply (Mem.free_range_perm m1); eauto.
-  instantiate (1 := ofs + delta0 - delta). extlia.
-  intros [X|X]. congruence. lia.
-+ simpl. exists b0, delta0; split; auto.
-  replace (ofs + delta0 - delta0) with ofs by lia.
-  apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
-  eapply Mem.perm_free_3; eauto.
+  assert (INJ' : Mem.inject j m1' m2').
+  {
+    eapply Mem.free_right_inject; eauto. eapply Mem.free_left_inject; eauto. tinv.
+    intros. apply (F b2 (ofs + delta0)).
+    simpl.
+    destruct (zlt (ofs + delta0) lo). intuition auto.
+    destruct (zle hi (ofs + delta0)). intuition auto.
+    destruct (eq_block b0 b1).
+    * subst b0. rewrite H2 in H; inversion H; clear H; subst delta0.
+      eelim (Mem.perm_free_2 m1); eauto. extlia.
+    * exploit Mem.mi_no_overlap; eauto. tinv.
+      apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
+      eapply Mem.perm_free_3; eauto.
+      apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
+      eapply (Mem.free_range_perm m1); eauto.
+      instantiate (1 := ofs + delta0 - delta). extlia.
+      intros [X|X]. congruence. lia.
+    * simpl. exists b0, delta0; split; auto.
+      replace (ofs + delta0 - delta0) with ofs by lia.
+      apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
+      eapply Mem.perm_free_3; eauto.
+  }
+  exists m2'; split; auto. apply Mem.inject_nothread_inv in INJ' as [X Y].
+  split; auto. split; [|split].
+- apply X.
 - apply (m_invar P) with m2; auto. constructor. erewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
   eapply Mem.free_unchanged_on; eauto.
   intros; red; intros. eelim C; eauto. simpl.
@@ -889,29 +909,32 @@ Lemma external_call_parallel_rule:
   forall ef ge1 ge2 vargs1 m1 t vres1 m1' m2 j P vargs2,
   external_call ef ge1 vargs1 m1 t vres1 m1' ->
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
+  thread_same m1 m2 ->
   Val.inject_list j vargs1 vargs2 ->
   exists j' vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
   /\ Val.inject j' vres1 vres2
   /\ Mem.unchanged_on_tl (loc_unmapped j) m1 m1'
+  /\ Mem.unchanged_on_tl (loc_out_of_reach j m1) m2 m2'
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
+  /\ thread_same m1 m2
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.
 Proof.
-  intros until vargs2; intros CALL SEP ARGS.
+  intros until vargs2; intros CALL SEP TEQ ARGS.
   destruct SEP as (A & B & C). simpl in A.
-  exploit external_call_mem_inject; eauto. apply B.
+  exploit external_call_mem_inject; eauto. apply B. tinv.
   intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }
   exists j', vres2, m2'; intuition auto.
   split; [|split].
-- exact INJ'.
+- tinv.
 - apply (m_invar _ m2).
 + apply globalenv_inject_incr with j m1; auto.
   inv UNCH1. eapply Mem.unchanged_on_support; eauto. 
-+ destruct UNCH2. split. eauto.
++ apply Mem.unchanged_on_tl_big. destruct UNCH2. split. eauto.
   eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
@@ -919,13 +942,14 @@ Proof.
   destruct (j b0) as [[b' delta'] | ] eqn:J.
 + erewrite INCR in J' by eauto. inv J'.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
-  eapply Mem.valid_block_inject_1; eauto.
+  eapply Mem.valid_block_inject_1; eauto. tinv.
 + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
 Qed.
 
 Lemma alloc_parallel_rule_2:
   forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
+  thread_same m1 m2 ->  
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -934,7 +958,8 @@ Lemma alloc_parallel_rule_2:
   0 <= sz2 <= Ptrofs.max_unsigned ->
   0 <= delta -> hi <= sz2 ->
   exists j',
-     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
+    m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
+  /\ thread_same m1' m2'
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ inject_separated j j' m1 m2 .
@@ -943,27 +968,28 @@ Proof.
   set (j1 := fun b => if eq_block b b1 then Some(b2, delta) else j b).
   assert (X: inject_incr j j1).
   { unfold j1; red; intros. destruct (eq_block b b1); auto.
-    subst b. eelim Mem.fresh_block_alloc. eexact H0.
-    eapply Mem.valid_block_inject_1. eauto. apply sep_proj1 in H. eexact H. }
+    subst b. eelim Mem.fresh_block_alloc. eexact H1.
+    eapply Mem.valid_block_inject_1. eauto. apply sep_proj1 in H. tinv. }
   assert (Y: inject_separated j j1 m1 m2).
   { unfold j1; red; intros. destruct (eq_block b0 b1).
-  - inversion H9; clear H9; subst b3 delta0 b0. split; eapply Mem.fresh_block_alloc; eauto.
+  - inversion H10; clear H10; subst b3 delta0 b0. split; eapply Mem.fresh_block_alloc; eauto.
   - congruence. }
   rewrite sep_swap in H. eapply globalenv_inject_incr with (j' := j1) in H; eauto. rewrite sep_swap in H.
   clear X Y.
   exploit alloc_parallel_rule; eauto.
-  intros (j' & A & B & C & D).
+  intros (j' & A & B & C & D & E).
   exists j'; split; auto.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; eauto.
-- red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
-- red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
+- red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite E; auto.
+- red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite E in H10 by auto. congruence.
 - rewrite (Mem.support_alloc m1 0 sz1 m1' b1); eauto.
 - split; auto.
   split; auto.
-  red. intros b0 b3 delta0 H8 H9.
+  split; auto.
+  red. intros b0 b3 delta0 H9 H10.
   destruct (eq_block b0 b1).
   + subst.
-    rewrite C in H9. inversion H9. subst delta0 b3.
+    rewrite D in H10. inversion H10. subst delta0 b3.
     eauto with mem.
-  + rewrite D in H9; congruence.
+  + rewrite E in H10; congruence.
 Qed.
