@@ -184,6 +184,11 @@ Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
 Admitted.
 
 
+Remark list_cons_neq: forall A (a: A) l, a :: l <> l.
+Proof.
+  intros. induction l. intro. congruence.
+  intro. inv H.  congruence.
+Qed.
 
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
@@ -216,12 +221,133 @@ Proof.
       erewrite place_to_cexpr_type; eauto.
     (* match state *)
     + eapply match_regular_state;eauto.
-      econstructor. simpl. eauto.
+      econstructor. simpl. instantiate (1 := g). eauto.
 
   (* assign_variant *)
   - inv MSTMT. simpl in H6.
     monadInv_comb H6.
-      
+    unfold transl_assign_variant in EQ2.
+    rename H1 into SENUM.
+    unfold ge in SENUM. simpl in SENUM. fold ce in SENUM.
+    rewrite SENUM in EQ2.
+    destruct (co_sv co) eqn: SCV; [inv EQ2|].
+    rewrite H2 in EQ2. rename H2 into TAG.
+    destruct TRANSL. eapply match_prog_comp_env0 in SENUM as MATCHCOMP.
+    rewrite SCV in MATCHCOMP.
+    destruct MATCHCOMP as (tco & union_id & tag_fid & union_fid & union & MATCHCOMP).
+    cbn in MATCHCOMP.
+    destruct MATCHCOMP as (A & B & C & D & MATCHCOMP).
+    fold tce in A. rewrite A in EQ2.
+    rewrite D in EQ2.
+    inv EQ2.
+    (* step in target *)
+    (* eexists. split. *)
+    (* + eapply plus_left. *)
+    (*   eapply Clight.step_seq. *)
+    (*   eapply star_step. eapply Clight.step_assign. *)
+    admit.
+
+  (* box *)
+  - admit.
+
+  (* step_drop1 *)
+  - inv MSTMT. simpl in H.
+    monadInv_sym H. unfold gensym in EQ. inv EQ.
+    monadInv_comb EQ0. destruct expand_drop in EQ1;[|inv EQ1].
+    inv EQ1. destruct g. simpl in H1. inv H1. eapply list_cons_neq in H0.
+    contradiction.
+    unfold expand_drop in H1. destruct (typeof_place p) eqn: TYP; try congruence.
+    (* three cases: box, struct and enum *)
+    + admit.
+    + destruct (dropm ! i) eqn: DROPM;inv H1.
+      admit.
+    + destruct (dropm ! i) eqn: DROPM;inv H1.
+      admit.
+
+  (* step_drop2: drop in Dropstate *)
+  - inv MSTMT. simpl in H.
+    monadInv_sym H. unfold gensym in EQ. inv EQ.
+    monadInv_comb EQ0. destruct expand_drop in EQ1;[|inv EQ1].
+    inv EQ1. destruct g. simpl in H1. inv H1. eapply list_cons_neq in H0.
+    contradiction.
+    unfold expand_drop in H1. destruct (typeof_place p) eqn: TYP; try congruence.
+    + admit.
+    + destruct (dropm ! i) eqn: DROPM;inv H1.
+      admit.
+    + destruct (dropm ! i) eqn: DROPM;inv H1.
+      admit.
+
+  (* step_drop_seq *)
+  - admit.
+
+  (* step_calldrop_box: simulate [free] semantics *)
+  - admit.
+
+  (* impossible *)
+  - destruct PTY. congruence. congruence.
+  (* impossible *)
+  - congruence.
+
+  (* step_drop_struct *)
+  - destruct PTY; try congruence. rewrite H in H1. inv H1.
+    (* how to prove drop_glue is generated from drop_glue_for_composite *)
+    admit.
+
+  (* impossible *)
+  - congruence.
+    
+  (* step_drop_enum *)
+  - destruct PTY; try congruence. rewrite H in H4. inv H4.
+    admit.
+  (* step_drop_return *)
+  - admit.
+  (* step_returnstate_drop *)
+  - admit.
+  (* step_storagelive *)
+  - admit.
+  (* step_storagedead *)
+  - admit.
+
+  (* step_call *)
+  - inv MSTMT. simpl in H4.
+    monadInv_comb H4. monadInv_sym EQ3. unfold gensym in EQ2. inv EQ2.
+    inv EQ4. destruct g. simpl in H6. inv H6. eapply list_cons_neq in H5.
+    contradiction.
+    admit.
+
+  (* step_internal_function *)
+  - (* how to prove tr_function f tf because we should guarantee that
+    f is not a drop glue *)
+    admit.
+
+  (* step_external_function *)
+  - admit.
+
+  (* step_return_0 *)
+  - admit.
+  (* step_return_1 *)
+  - admit.
+  (* step_skip_call *)
+  - admit.
+  (* step_returnstate *)
+  - admit.
+  (* step_seq *)
+  - admit.
+  (* step_skip_seq *)
+  - admit.
+  (* step_continue_seq *)
+  - admit.
+  (* step_break_seq *)
+  - admit.
+  (* step_ifthenelse *)
+  - admit.
+  (* step_loop *)
+  - admit.
+  (* step_skip_or_continue_loop *)
+  - admit.
+  (* step_break_loop *)
+  - admit.
+        
 Admitted.
 
 Lemma initial_states_simulation:

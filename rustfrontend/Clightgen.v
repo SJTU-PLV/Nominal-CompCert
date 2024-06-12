@@ -475,35 +475,38 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
   end.
 
 Definition transl_assign_variant (p: place) (ty: type) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
-  match typeof_place p with
-  | Tvariant _ _ _ =>
-      (* lhs.1 = tag;
-             lhs.2. = e'; *)
-      match ce!enum_id, tce!enum_id with
-      | Some co, Some tco =>
+  (* lhs.1 = tag;
+         lhs.2. = e'; *)
+  match ce!enum_id with
+  | Some co =>
+      match co.(co_sv) with
+      | TaggedUnion =>          
           match field_tag arm_id co.(co_members) with
           (* an invariant: arm_id in co is the same as the field
               of type ty in generated union in C code *)
           | Some tagz =>
-              match tco.(co_su), tco.(Ctypes.co_members) with
-              | Ctypes.Struct, Ctypes.Member_plain tag_id _ :: Ctypes.Member_plain body_id body_ty :: nil =>
-                  match body_ty with
-                  | Tunion union_id attr =>
-                      let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
-                      let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
-                      let assign_body := Clight.Sassign lhs' e' in
-                      ret (Clight.Ssequence assign_tag assign_body)
-                  | _ => error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
+              match tce!enum_id with
+              | Some tco =>
+                  match tco.(Ctypes.co_members) with
+                  | Ctypes.Member_plain tag_id _ :: Ctypes.Member_plain body_id body_ty :: nil =>
+                      match body_ty with
+                      | Tunion union_id attr =>
+                          let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
+                          let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
+                          let assign_body := Clight.Sassign lhs' e' in
+                          ret (Clight.Ssequence assign_tag assign_body)
+                      | _ => error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
+                      end
+                  | _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
                   end
-              | _, _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
+              | _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
               end
           | _ => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
           end
-      | _, _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
+      | _ => error [CTX enum_id; MSG ": assign variant to a non-variant place"]
       end
-  | _ => error [CTX (local_of_place p); MSG ": assign a variant to a non variant place "]
+  | _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
   end.
-
 
 
 Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=

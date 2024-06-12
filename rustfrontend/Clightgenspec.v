@@ -60,6 +60,8 @@ Ltac monadInv_sym1 H :=
       destruct (bind2_inversion_sym _ _ _ F G X Z Z' H) as [x [y [z [EQ1 EQ2]]]];
       clear H;
       try (monadInv1 EQ2))))))
+  | (match ?X with left _ => _ | right _ => error _ end = OK _) =>
+      destruct X; [try (monadInv_sym1 H) | discriminate]
   end.
 
 Ltac monadInv_sym H :=
@@ -137,6 +139,8 @@ Ltac monadInv_comb1 H :=
       destruct (bind2_inversion_comb _ _ _ F G X Z Z' H) as [x [y [EQ1 EQ2]]];
       clear H;
       try (monadInv_comb1 EQ2))))))
+  | (match ?X with left _ => _ | right _ => error _ end = OK _) =>
+      destruct X; [try (monadInv_comb1 H) | discriminate]
   end.
 
 Ltac monadInv_comb H :=
