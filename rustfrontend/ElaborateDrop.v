@@ -358,7 +358,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
 Definition transf_fundef (ce: composite_env) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f => do tf <- transf_function ce f; Errors.OK (Internal tf)
-  | External _ orgs org_rels ef targs tres cconv => Errors.OK (External function orgs org_rels ef targs tres cconv)
+  | External orgs org_rels ef targs tres cconv => Errors.OK (External orgs org_rels ef targs tres cconv)
   end.
 
 

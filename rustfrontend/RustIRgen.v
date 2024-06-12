@@ -153,7 +153,7 @@ Definition transl_function (f: RustlightBase.function) : function :=
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   match fd with
   | Internal f => (Internal (transl_function f))
-  | External _ orgs org_rels ef targs tres cconv => External function orgs org_rels ef targs tres cconv
+  | External orgs org_rels ef targs tres cconv => External orgs org_rels ef targs tres cconv
   end.
 
 End COMPOSITE_ENV.

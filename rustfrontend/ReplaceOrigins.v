@@ -277,7 +277,7 @@ Definition transf_fundef (ce: composite_env) (gvars: list ident) (id: ident) (fd
       | OK f' => OK (Internal f')
       | Error msg => Error ([MSG "In function "; CTX id; MSG " : "] ++ msg)
       end
-  | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)
+  | External orgs rels ef targs tres cconv => Errors.OK (External orgs rels ef targs tres cconv)
   end.
 
 Definition transl_globvar (id: ident) (ty: type) := OK ty.

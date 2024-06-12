@@ -396,7 +396,6 @@ Definition classify_bool (ty: type) : classify_bool_cases :=
   | Tlong _ _ => bool_case_l
   | _ => bool_default
   end.
-
 (** Interpretation of values as truth values.
   Non-zero integers, non-zero floats and non-null pointers are
   considered as true.  The integer zero (which also represents
@@ -692,6 +691,21 @@ Definition sem_add (cenv: composite_env) (v1:val) (t1:type) (v2: val) (t2:type) 
         v1 t1 v2 t2 m
   end.
 
+(* For Rust: disable pointer arithmetic in add operation  *)
+
+Definition sem_add_rust (v1:val) (t1:type) (v2: val) (t2:type) (m: mem): option val :=
+  match classify_add t1 t2 with
+  | add_default =>
+      sem_binarith
+        (fun sg n1 n2 => Some(Vint(Int.add n1 n2)))
+        (fun sg n1 n2 => Some(Vlong(Int64.add n1 n2)))
+        (fun n1 n2 => Some(Vfloat(Float.add n1 n2)))
+        (fun n1 n2 => Some(Vsingle(Float32.add n1 n2)))
+        v1 t1 v2 t2 m
+  | _ => None
+  end.
+
+
 (** *** Subtraction *)
 
 Inductive classify_sub_cases : Type :=
@@ -753,6 +767,21 @@ Definition sem_sub (cenv: composite_env) (v1:val) (t1:type) (v2: val) (t2:type) 
         (fun n1 n2 => Some(Vsingle(Float32.sub n1 n2)))
         v1 t1 v2 t2 m
   end.
+
+(* For Rust: disable pointer arithmetic in substract operation  *)
+
+Definition sem_sub_rust (v1:val) (t1:type) (v2: val) (t2:type) (m:mem): option val :=
+  match classify_sub t1 t2 with
+  | sub_default =>
+      sem_binarith
+        (fun sg n1 n2 => Some(Vint(Int.sub n1 n2)))
+        (fun sg n1 n2 => Some(Vlong(Int64.sub n1 n2)))
+        (fun n1 n2 => Some(Vfloat(Float.sub n1 n2)))
+        (fun n1 n2 => Some(Vsingle(Float32.sub n1 n2)))
+        v1 t1 v2 t2 m
+  | _ => None
+end.
+
 
 (** *** Multiplication, division, modulus *)
 
@@ -1068,6 +1097,33 @@ Definition sem_binary_operation
   | Ole => sem_cmp Cle v1 t1 v2 t2 m
   | Oge => sem_cmp Cge v1 t1 v2 t2 m
   end.
+
+(* For rust: disable pointer arithmetic *)
+
+Definition sem_binary_operation_rust
+    (op: binary_operation)
+    (v1: val) (t1: type) (v2: val) (t2:type)
+    (m: mem): option val :=
+  match op with
+  | Oadd => sem_add_rust v1 t1 v2 t2 m
+  | Osub => sem_sub_rust v1 t1 v2 t2 m
+  | Omul => sem_mul v1 t1 v2 t2 m
+  | Omod => sem_mod v1 t1 v2 t2 m
+  | Odiv => sem_div v1 t1 v2 t2 m
+  | Oand => sem_and v1 t1 v2 t2 m
+  | Oor  => sem_or v1 t1 v2 t2 m
+  | Oxor  => sem_xor v1 t1 v2 t2 m
+  | Oshl => sem_shl v1 t1 v2 t2
+  | Oshr  => sem_shr v1 t1 v2 t2
+  | Oeq => sem_cmp Ceq v1 t1 v2 t2 m
+  | One => sem_cmp Cne v1 t1 v2 t2 m
+  | Olt => sem_cmp Clt v1 t1 v2 t2 m
+  | Ogt => sem_cmp Cgt v1 t1 v2 t2 m
+  | Ole => sem_cmp Cle v1 t1 v2 t2 m
+  | Oge => sem_cmp Cge v1 t1 v2 t2 m
+  end.
+
+
 
 Definition sem_incrdecr (cenv: composite_env) (id: incr_or_decr) (v: val) (ty: type) (m: mem) :=
   match id with

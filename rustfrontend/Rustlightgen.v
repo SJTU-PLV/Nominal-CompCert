@@ -635,8 +635,8 @@ Definition transl_fundef (fd: Rustsyntax.fundef) : Errors.res fundef :=
   | Internal f =>
       do tf <- transl_function f;
       Errors.OK (Internal tf)
-  | External _ orgs org_rels ef targs tres cconv =>
-      Errors.OK (External _ orgs org_rels ef targs tres cconv)
+  | External orgs org_rels ef targs tres cconv =>
+      Errors.OK (External orgs org_rels ef targs tres cconv)
   end.
 
 End SIMPL_EXPR.

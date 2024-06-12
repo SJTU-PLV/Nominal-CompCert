@@ -489,29 +489,18 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     (** TODO: define a rust-specific sem_unary_operation  *)
     sem_unary_operation op v1 aty m = Some v ->
     eval_pexpr (Eunop op a ty) v
-(** TODO: fix this binary operation  *)
-(* | eval_Ebinop: forall op a1 a2 ty v1 v2 v ty1 ty2 mp1 mp2, *)
-(*     eval_expr a1 v1 mp1 -> *)
-(*     eval_expr a2 v2 mp2 -> *)
-(*     to_ctype (typeof a1) = Some ty1 -> *)
-(*     to_ctype (typeof a2) = Some ty2 -> *)
-(*     sem_binary_operation ge op v1 ty1 v2 ty2 m = Some v -> *)
-(*     (* For now, we do not return moved place in binary operation *) *)
-(*     eval_expr (Ebinop op a1 a2 ty) v None. *)
+| eval_Ebinop: forall op a1 a2 ty v1 v2 v ty1 ty2,
+    eval_pexpr a1 v1 ->
+    eval_pexpr a2 v2 ->
+    to_ctype (typeof_pexpr a1) = ty1 ->
+    to_ctype (typeof_pexpr a2) = ty2 ->
+    sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
+    (* For now, we do not return moved place in binary operation *)
+    eval_pexpr (Ebinop op a1 a2 ty) v
 | eval_Eplace: forall p b ofs ty v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_pexpr (Eplace p ty) v
-(* | eval_Eget: forall p b ofs ofs' ty m v id fid attr co bf, *)
-(*     typeof_place p = Tvariant id attr -> *)
-(*     ce ! id = Some co -> *)
-(*     eval_place p b ofs -> *)
-(*     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) -> *)
-(*     (* load the value *) *)
-(*     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v -> *)
-(*     (** what if p is an own type? *) *)
-(*     eval_pexpr (Eget p fid ty) v *)
-
 | eval_Ecktag: forall (p: place) b ofs ty tag tagz id fid attr co orgs,
     eval_place p b ofs ->
     (* load the tag *)
@@ -524,6 +513,24 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     eval_place p b ofs ->
     eval_pexpr (Eref org mut p ty) (Vptr b ofs).
 
+(** Try to prove that evaluaiton of expression produces val_casted value *)
+
+
+(* Lemma eval_pexpr_casted: forall pe v, *)
+(*     (* wt_pexpr pe -> *) *)
+(*     eval_pexpr pe v -> *)
+(*     val_casted v (to_ctype (typeof_pexpr pe)). *)
+(* Proof. *)
+(*   induction pe; intros; simpl.  *)
+(*   1-8: admit. *)
+(*   - inv H. eapply IHpe in H3. *)
+    
+    
+(*     destruct op;simpl in H1. *)
+(*     + unfold sem_notbool, option_map in H1. *)
+(*       destruct (bool_val v1 aty m) eqn: BVAL; inv H1. *)
+(*       bool_val *)
+      
 (* expression evaluation has two phase: evaluate the value and produce
 the moved-out place *)
 Inductive eval_expr: expr -> val -> Prop :=
@@ -555,7 +562,7 @@ Inductive eval_pexpr_mem_error: pexpr ->  Prop :=
 | eval_Eunop_error:  forall op a ty,
     eval_pexpr_mem_error a ->
     eval_pexpr_mem_error (Eunop op a ty)
-| eval_Ebinop: forall op a1 a2 ty,
+| eval_Ebinop_error: forall op a1 a2 ty,
     (eval_pexpr_mem_error a1 \/ eval_pexpr_mem_error a2) ->
     eval_pexpr_mem_error (Ebinop op a1 a2 ty)
 | eval_Eplace_error1: forall p ty,

@@ -109,7 +109,7 @@ Definition type_of_function (f: function) : type :=
 Definition type_of_fundef (f: fundef) : type :=
   match f with
   | Internal fd => type_of_function fd
-  | External _ orgs org_rels ef typs typ cc =>
+  | External orgs org_rels ef typs typ cc =>
       Tfunction orgs org_rels typs typ cc                
   end.
 

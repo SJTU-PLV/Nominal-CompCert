@@ -351,13 +351,13 @@ Proof.
 Admitted.
 
 Lemma initial_states_simulation:
-  forall q1 q2 S, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 S ->
+  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
   exists R, Clight.initial_state tge q2 R /\ match_states S R.
 Admitted.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
-  exists r2, Clight.final_state R r2 /\ match_reply (cc_c injp) w r1 r2.
+  exists r2, Clight.final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
 Admitted.
 
 Lemma external_states_simulation:
