@@ -34,19 +34,19 @@ Fixpoint gensym_list (n: nat) : list ident :=
 
 Fixpoint replace_origin_type (ty: type) : type :=
   match ty with
-  | Treference _ mut ty' a =>
-      let ty'' := replace_origin_type ty' in
+  | Treference _ mut ty1 =>
+      let ty2 := replace_origin_type ty1 in
       let org := fresh_atom tt in
-      Treference org mut ty'' a
-  | Tbox ty' a =>
-      let ty'' := replace_origin_type ty' in
-      Tbox ty' a
-  | Tstruct orgs id a =>
+      Treference org mut ty2
+  | Tbox ty1 =>
+      let ty2 := replace_origin_type ty1 in
+      Tbox ty2
+  | Tstruct orgs id =>
       let orgs' := gensym_list (length orgs) in
-      Tstruct orgs' id a
-  | Tvariant orgs id a =>
+      Tstruct orgs' id
+  | Tvariant orgs id =>
       let orgs' := gensym_list (length orgs) in
-      Tvariant orgs' id a
+      Tvariant orgs' id
   | _ => ty
   end.
             
@@ -72,18 +72,18 @@ Definition replace_origin (rels: list origin_rel) (org: origin) : origin :=
 
 Fixpoint replace_origin_in_type (ty: type) (rels: list origin_rel) : type :=
   match ty with
-  | Treference org mut ty a =>
+  | Treference org mut ty =>
       let ty' := replace_origin_in_type ty rels in
-      Treference (replace_origin rels org) mut ty' a
-  | Tbox ty a =>
+      Treference (replace_origin rels org) mut ty'
+  | Tbox ty =>
       let ty' := replace_origin_in_type ty rels in
-      Tbox ty' a
-  | Tstruct orgs id a =>
+      Tbox ty'
+  | Tstruct orgs id  =>
       let orgs' := map (replace_origin rels) orgs in
-      Tstruct orgs' id a
-  | Tvariant orgs id a =>
+      Tstruct orgs' id
+  | Tvariant orgs id =>
       let orgs' := map (replace_origin rels) orgs in
-      Tvariant orgs' id a
+      Tvariant orgs' id
   | _ => ty
   end.
 
@@ -109,8 +109,8 @@ Section TYPE_ENV.
     | Pderef p ty =>
         do p' <- replace_origin_place p;
         match typeof_place p' with
-        | Treference _ _ ty' _
-        | Tbox ty' _ =>
+        | Treference _ _ ty'
+        | Tbox ty' =>
             OK (Pderef p' ty')
         | _ =>
             Error [CTX (local_of_place p); MSG "dereference a non-deferencable type "]
@@ -118,7 +118,7 @@ Section TYPE_ENV.
     | Pfield p fid ty =>
         do p' <- replace_origin_place p;
         match typeof_place p' with
-        | Tstruct orgs id a =>
+        | Tstruct orgs id =>
             match ce!id with
             | Some co =>
                 match find (fun '(Member_plain fid' _) => Pos.eqb fid fid') co.(co_members) with
@@ -141,7 +141,7 @@ Section TYPE_ENV.
     | Pdowncast p fid ty =>
         do p' <- replace_origin_place p;
         match typeof_place p' with
-        | Tvariant orgs id a =>
+        | Tvariant orgs id =>
             match ce!id with
             | Some co =>
                 match find (fun '(Member_plain fid' _) => Pos.eqb fid fid') co.(co_members) with
@@ -169,7 +169,7 @@ Section TYPE_ENV.
     | Eref _ mut p ty =>
         let org := fresh_atom tt in
         do p' <- replace_origin_place p;
-        let ty' := Treference org mut (typeof_place p') (attr_of_type ty) in
+        let ty' := Treference org mut (typeof_place p') in
         OK (Eref org mut p' ty')
     | Eplace p _ =>
         do p' <- replace_origin_place p;

@@ -53,7 +53,7 @@ Definition support_origins (p: place) : list origin :=
   fold_right (fun elt acc => match elt with
                           | (Pderef p' ty) =>
                               match typeof_place p' with
-                              | Treference org _ _ _ => org :: acc
+                              | Treference org _ _ => org :: acc
                               | _ => acc
                               end
                           | _ => acc
@@ -70,8 +70,8 @@ Fixpoint mutable_place (p: place) :=
   | Pfield p' _ _ => mutable_place p'
   | Pderef p' _ =>
       match typeof_place p' with
-      | Treference _ Mutable _ _ => mutable_place p'
-      | Tbox _ _ => true
+      | Treference _ Mutable _ => mutable_place p'
+      | Tbox _ => true
       | _ => false
       end
   | Pdowncast p' _ _ => mutable_place p'
@@ -96,7 +96,7 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
   | Eref org mut p ty =>
       (* simple type check *)
       match ty with
-      | Treference org' mut' _ _ =>
+      | Treference org' mut' _ =>
           if Pos.eqb org org' && mutkind_eq mut mut' then
             (* mut' = Mutable implies (mutable_place p) *)
             if negb (mutkind_eq mut' Mutable) || mutable_place p then
@@ -135,7 +135,7 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
   | Ecktag p id =>
       (* simple type check *)
       match typeof_place p with
-      | Tvariant _ _ _ =>
+      | Tvariant _ _ =>
           if valid_access e p then
             (* invalide origins contain loans relevant to [p] *)
             let ls := relevant_loans live p Ashallow in
@@ -191,7 +191,7 @@ Inductive flow_kind : Type := ByVal | ByRef.
 
 Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k: flow_kind) : res (LOrgEnv.t * LAliasGraph.t) :=
   match s,d with
-  | Treference org1 _ ty1 _, Treference org2 _ ty2 _ =>
+  | Treference org1 _ ty1, Treference org2 _ ty2 =>
       do (e', g1) <- flow_loans pc e g ty1 ty2 ByRef;      
       let g2 := match k with | ByVal => g1 | ByRef => set_alias org1 org2 g1 end in
       let st := LOrgSt.lub (LOrgEnv.get org1 e') (LOrgEnv.get org2 e') in
@@ -205,10 +205,10 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
       | Dead =>
           Error (error_msg pc ++ [MSG "the src/dest origin is invalid in flow_loans: source org is "; CTX org1; MSG " target org is "; CTX org2])
       end
-  | Tbox ty1 _, Tbox ty2 _ =>
+  | Tbox ty1, Tbox ty2 =>
       flow_loans pc e g ty1 ty2 ByRef
-  | Tstruct orgs1 id1 _, Tstruct orgs2 id2 _
-  | Tvariant orgs1 id1 _, Tvariant orgs2 id2 _ =>
+  | Tstruct orgs1 id1, Tstruct orgs2 id2 
+  | Tvariant orgs1 id1 , Tvariant orgs2 id2 =>
       if Nat.eqb (length orgs1) (length orgs2) then
         let orgs := combine orgs1 orgs2 in
         (* set alias between orgs1 and orgs2 *)
@@ -295,7 +295,7 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
 
 Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place) (enum_id: ident) (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   match typeof_place p with
-  | Tvariant orgs_dest vid _ =>
+  | Tvariant orgs_dest vid =>
       if Pos.eqb enum_id vid then
         match ce!vid with
         | Some co =>
@@ -342,13 +342,13 @@ Fixpoint type_list_of_typelist (tl: typelist) : list type :=
 (* bind the origins in two type *)
 Fixpoint bind_type_origins (pc: node) (ty1 ty2: type) (fk: flow_kind) : res (list (origin * origin * flow_kind)) :=
   match ty1, ty2 with
-  | Treference org1 _ ty1 _, Treference org2 _ ty2 _ =>
+  | Treference org1 _ ty1, Treference org2 _ ty2 =>
       do l' <- bind_type_origins pc ty1 ty2 ByRef;
       OK ((org1, org2, fk) :: l')
-  | Tbox ty1 _, Tbox ty2 _ =>
+  | Tbox ty1, Tbox ty2 =>
       bind_type_origins pc ty1 ty2 ByRef
-  | Tstruct orgs1 id1 _, Tstruct orgs2 id2 _
-  | Tvariant orgs1 id1 _, Tvariant orgs2 id2 _ =>
+  | Tstruct orgs1 id1, Tstruct orgs2 id2
+  | Tvariant orgs1 id1, Tvariant orgs2 id2 =>
       if Nat.eqb (length orgs1) (length orgs2) then
         let len := length orgs1 in
         OK (combine (combine orgs1 orgs2) (repeat fk len))

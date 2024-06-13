@@ -110,22 +110,22 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
    (MINJ: Mem.inject j m tm)
    (RINJ: Val.inject j v tv),
     match_states (RustIR.Returnstate v k m) (Clight.Returnstate tv tk tm)
-| match_calldrop_box: forall p k e m b ofs tk tm ty a j fb
+| match_calldrop_box: forall p k e m b ofs tk tm ty j fb
     (* we can store the address of p in calldrop and build a local env
     in Drop state according to this address *)
     (VFIND: Genv.find_def tge fb = Some (Gfun malloc_decl))
-    (PTY: typeof_place p = Tbox ty a)
+    (PTY: typeof_place p = Tbox ty)
     (PADDR: eval_place ce e m p b ofs)
     (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
-| match_calldrop_composite: forall p k e m b ofs tk tm a j fb id fid drop_glue orgs
+| match_calldrop_composite: forall p k e m b ofs tk tm j fb id fid drop_glue orgs
     (DROPM: dropm!id = Some fid)
     (VFIND: Genv.find_def tge fb = Some drop_glue)
     (SYMB: Genv.find_symbol tge fid = Some fb)
     (* Is it correct? *)
     (GLUE: In (fid, drop_glue) tprog.(prog_defs))
-    (PTY: typeof_place p = Tstruct orgs id a \/ typeof_place p = Tvariant orgs id a)
+    (PTY: typeof_place p = Tstruct orgs id \/ typeof_place p = Tvariant orgs id)
     (PADDR: eval_place ce e m p b ofs)
     (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm),

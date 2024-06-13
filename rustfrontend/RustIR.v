@@ -583,10 +583,10 @@ Variable ge: genv.
 
 Fixpoint drop_for_place (p: place) (ty: type) : list statement :=
   match ty with
-  | Tbox ty' attr =>
+  | Tbox ty' =>
       drop_for_place (Pderef p ty') ty' ++ [Sdrop p]
-  | Tstruct _ id attr
-  | Tvariant _ id attr =>
+  | Tstruct _ id 
+  | Tvariant _ id  =>
       [Sdrop p]
   | _ => nil
   end.
@@ -642,10 +642,10 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_drop_seq:  forall id s1 s2 k e m,
     step (Dropstate id (Ssequence s1 s2) k e m)
       E0 (Dropstate id s1 (Kseq s2 k) e m)   
-| step_calldrop_box: forall p le m m' k ty attr b b' ofs ofs' sz,
+| step_calldrop_box: forall p le m m' k ty b b' ofs ofs' sz,
     (* We assume that drop(p) where p is box type has been expanded in
     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
-    typeof_place p = Tbox ty attr ->
+    typeof_place p = Tbox ty ->
     eval_place ge le m p b ofs ->
     (* p stores a pointer *)
     Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
@@ -654,15 +654,15 @@ Inductive step : state -> trace -> state -> Prop :=
     Ptrofs.unsigned sz > 0 ->
     Mem.free m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) (Ptrofs.unsigned ofs' + Ptrofs.unsigned sz) = Some m' ->
     step (Calldrop p k le m) E0 (Returnstate Vundef k m')
-| step_calldrop_struct: forall p le m k attr orgs co id drop_stmt,
+| step_calldrop_struct: forall p le m k  orgs co id drop_stmt,
     (* It corresponds to the call step to the drop glue of this struct *)
-    typeof_place p = Tstruct orgs id attr ->
+    typeof_place p = Tstruct orgs id  ->
     ge.(genv_cenv) ! id = Some co ->
     (* expand the drop statement *)
     drop_stmt = makeseq (concat (map (drop_for_member p) co.(co_members))) ->    
     step (Calldrop p k le m) E0 (Dropstate id (Ssequence drop_stmt (Sreturn None)) k le m)
-| step_calldrop_enum: forall p le m k attr orgs co id fid fty tag b ofs,
-    typeof_place p = Tvariant orgs id attr ->
+| step_calldrop_enum: forall p le m k  orgs co id fid fty tag b ofs,
+    typeof_place p = Tvariant orgs id  ->
     ge.(genv_cenv) ! id = Some co ->
     eval_place ge le m p b ofs ->
     (* big step to evaluate the switch statement *)
@@ -842,29 +842,29 @@ Inductive step_mem_error : state -> Prop :=
     assign_loc_mem_error ge ty m2 b Ptrofs.zero v ->
     step_mem_error (State f (Sbox p e) k le m1)
 
-| step_calldrop_box_error1: forall p le m k ty attr,
-    typeof_place p = Tbox ty attr ->
+| step_calldrop_box_error1: forall p le m k ty ,
+    typeof_place p = Tbox ty  ->
     eval_place_mem_error ge le m p ->
     step_mem_error (Calldrop p k le m)
-| step_calldrop_box_error2: forall p le m k ty attr b ofs,    
-    typeof_place p = Tbox ty attr ->
+| step_calldrop_box_error2: forall p le m k ty  b ofs,    
+    typeof_place p = Tbox ty  ->
     eval_place ge le m p b ofs ->
     ~ Mem.valid_access m Mptr b (Ptrofs.unsigned ofs) Readable ->
     step_mem_error (Calldrop p k le m)
-| step_calldrop_box_error3: forall p le m k ty attr b b' ofs ofs',    
-    typeof_place p = Tbox ty attr ->
+| step_calldrop_box_error3: forall p le m k ty  b b' ofs ofs',    
+    typeof_place p = Tbox ty  ->
     eval_place ge le m p b ofs ->
     Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
     ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) Cur Freeable ->
     step_mem_error (Calldrop p k le m)
 
-| step_calldrop_enum_error1: forall p le m k attr orgs co id,
-    typeof_place p = Tvariant orgs id attr ->
+| step_calldrop_enum_error1: forall p le m k  orgs co id,
+    typeof_place p = Tvariant orgs id  ->
     ge.(genv_cenv) ! id = Some co ->
     eval_place_mem_error ge le m p ->
     step_mem_error (Calldrop p k le m)
-| step_calldrop_enum_error2: forall p le m k attr orgs co id b ofs,
-    typeof_place p = Tvariant orgs id attr ->
+| step_calldrop_enum_error2: forall p le m k  orgs co id b ofs,
+    typeof_place p = Tvariant orgs id  ->
     ge.(genv_cenv) ! id = Some co ->
     eval_place ge le m p b ofs ->
     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->

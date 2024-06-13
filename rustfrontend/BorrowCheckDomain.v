@@ -252,10 +252,10 @@ Definition invalidate_origins (ls: LoanSet.t) (a: access_kind) (oe: LOrgEnv.t) :
 (* All the origins appear in the type [ty] *)
 Fixpoint origins_of_type (ty: type) : list origin :=
   match ty with
-  | Tbox ty _ => origins_of_type ty
-  | Treference org _ ty _ => org :: origins_of_type ty
-  | Tstruct orgs _ _ => orgs
-  | Tvariant orgs _ _ => orgs
+  | Tbox ty => origins_of_type ty
+  | Treference org _ ty => org :: origins_of_type ty
+  | Tstruct orgs _ => orgs
+  | Tvariant orgs _ => orgs
   | _ => []
   end.       
 

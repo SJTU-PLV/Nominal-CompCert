@@ -120,15 +120,15 @@ Variable tce: Ctypes.composite_env.
 
 Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : list Clight.statement :=
   match ty with
-  | Tbox ty' attr =>
+  | Tbox ty'  =>
       let cty' := (to_ctype ty') in
       (* free(arg) *)
       let stmt := call_free cty' arg in
       (* return [...; ... ; drop_in_place(deref arg); free(arg)] *)
       (** TODO: it is time consuming, we can just generate a sequence statement *)
       drop_glue_for_type m (Ederef arg cty') ty' ++ [stmt]
-  | Tstruct _ id attr
-  | Tvariant _ id attr =>
+  | Tstruct _ id 
+  | Tvariant _ id  =>
       match m ! id with
       | None => nil
       | Some id' =>
@@ -358,7 +358,7 @@ Fixpoint place_to_cexpr (p: place) : res Clight.expr :=
   | Pdowncast p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
-      | Tvariant _ id _ =>
+      | Tvariant _ id =>
           match tce!id with
           | Some tco =>
               (** FIXME: the following code appears multiple times *)
@@ -390,7 +390,7 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
   | Ecktag p fid =>
       (** TODO: how to get the tagz from ctypes composite env? or still use Rust composite env? *)
       match typeof_place p with
-      | Tvariant _ id _ =>
+      | Tvariant _ id =>
           match ce!id with
           | Some co =>
               match field_tag fid co.(co_members), get_variant_tag tce id with
@@ -452,15 +452,15 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
   match ty with
   (* drop a box only drop the memory it points to, we do not care
   about the point-to type *)
-  | Tbox ty' attr =>
+  | Tbox ty' =>
       (* free(cty (deref temp)), deref temp has type [cty] and [deref
       temp] points to type [cty'] *)      
       let cty := to_ctype ty in
       let cty' := to_ctype ty' in
       let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
       Some (call_free cty' deref_temp)
-  | Tstruct _ id attr
-  | Tvariant _ id attr =>
+  | Tstruct _ id 
+  | Tvariant _ id  =>
       match dropm ! id with
       | None => None
       | Some id' =>

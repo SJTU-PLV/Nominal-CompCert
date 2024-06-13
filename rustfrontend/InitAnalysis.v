@@ -58,7 +58,7 @@ Definition siblings (p: place) : Paths.t :=
   | Plocal _ _ => Paths.empty
   | Pfield p' fid _ =>
       match typeof_place p' with
-      | Tstruct _ id _ =>
+      | Tstruct _ id =>
           match ce!id with
           | Some co =>
               let siblings := places_of_members p' co.(co_members) in
@@ -111,7 +111,7 @@ Note: if [p] ∉ [S] then [p] must not be mentioned in the function. *)
 
 Fixpoint own_path_box (p: place) (ty: type) :=
   match ty with
-  | Tbox ty' _ =>
+  | Tbox ty' =>
       let p' := Pderef p ty' in
       Paths.add p (own_path_box p' ty')
   | _ => Paths.empty

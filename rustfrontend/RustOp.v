@@ -17,28 +17,28 @@ Local Open Scope error_monad_scope.
 
 Definition classify_bool (ty: type) : classify_bool_cases :=
   match ty with
-  | Tint _ _ _ => bool_case_i
-  | Tfloat F64 _ => bool_case_f
-  | Tfloat F32 _ => bool_case_s
-  | Tlong _ _ => bool_case_l
+  | Tint _ _ => bool_case_i
+  | Tfloat F64 => bool_case_f
+  | Tfloat F32 => bool_case_s
+  | Tlong _ => bool_case_l
   | _ => bool_default
   end.
 
 Definition classify_notint (ty: type) : classify_notint_cases :=
   match ty with
-  | Tint I32 Unsigned _ => notint_case_i Unsigned
-  | Tint _ _ _ => notint_case_i Signed
-  | Tlong si _ => notint_case_l si
+  | Tint I32 Unsigned => notint_case_i Unsigned
+  | Tint _ _ => notint_case_i Signed
+  | Tlong si => notint_case_l si
   | _ => notint_default
   end.
 
 Definition classify_neg (ty: type) : classify_neg_cases :=
   match ty with
-  | Tint I32 Unsigned _ => neg_case_i Unsigned
-  | Tint _ _ _ => neg_case_i Signed
-  | Tfloat F64 _ => neg_case_f
-  | Tfloat F32 _ => neg_case_s
-  | Tlong si _ => neg_case_l si
+  | Tint I32 Unsigned => neg_case_i Unsigned
+  | Tint _ _ => neg_case_i Signed
+  | Tfloat F64 => neg_case_f
+  | Tfloat F32 => neg_case_s
+  | Tlong si => neg_case_l si
   | _ => neg_default
   end.
 
@@ -48,63 +48,63 @@ Definition type_unop (op: unary_operation) (ty: Rusttypes.type) : res type :=
   | Onotbool =>
       match classify_bool ty with
       | bool_default => Error (msg "operator !")
-      | _ => OK (Tint IBool Signed noattr)
+      | _ => OK (Tint IBool Signed )
       end
   | Onotint =>
       match classify_notint ty with
-      | notint_case_i sg => OK (Tint I32 sg noattr)
-      | notint_case_l sg => OK (Tlong sg noattr)
+      | notint_case_i sg => OK (Tint I32 sg )
+      | notint_case_l sg => OK (Tlong sg )
       | notint_default   => Error (msg "operator ~")
       end
   | Oneg =>
       match classify_neg ty with
-      | neg_case_i sg => OK (Tint I32 sg noattr)
-      | neg_case_f => OK (Tfloat F64 noattr)
-      | neg_case_s => OK (Tfloat F32 noattr)
-      | neg_case_l sg => OK (Tlong sg noattr)
+      | neg_case_i sg => OK (Tint I32 sg )
+      | neg_case_f => OK (Tfloat F64 )
+      | neg_case_s => OK (Tfloat F32 )
+      | neg_case_l sg => OK (Tlong sg )
       | neg_default   => Error (msg "operator prefix -")
       end
   | Oabsfloat =>
       match classify_neg ty with
       | neg_default   => Error (msg "operator __builtin_fabs")
-      | _             => OK (Tfloat F64 noattr)
+      | _             => OK (Tfloat F64 )
       end
   end.
 
-Definition classify_binarith (ty1: type) (ty2: type) : binarith_cases :=
-  match ty1, ty2 with
-  | Tint I32 Unsigned _, Tint _ _ _ => bin_case_i Unsigned
-  | Tint _ _ _, Tint I32 Unsigned _ => bin_case_i Unsigned
-  | Tint _ _ _, Tint _ _ _ => bin_case_i Signed
-  | Tlong Signed _, Tlong Signed _ => bin_case_l Signed
-  | Tlong _ _, Tlong _ _ => bin_case_l Unsigned
-  | Tlong sg _, Tint _ _ _ => bin_case_l sg
-  | Tint _ _ _, Tlong sg _ => bin_case_l sg
-  | Tfloat F32 _, Tfloat F32 _ => bin_case_s
-  | Tfloat _ _, Tfloat _ _ => bin_case_f
-  | Tfloat F64 _, (Tint _ _ _ | Tlong _ _) => bin_case_f
-  | (Tint _ _ _ | Tlong _ _), Tfloat F64 _ => bin_case_f
-  | Tfloat F32 _, (Tint _ _ _ | Tlong _ _) => bin_case_s
-  | (Tint _ _ _ | Tlong _ _), Tfloat F32 _ => bin_case_s
-  | _, _ => bin_default
-  end.
+(* Definition classify_binarith (ty1: type) (ty2: type) : binarith_cases := *)
+(*   match ty1, ty2 with *)
+(*   | Tint I32 Unsigned _, Tint _ _ _ => bin_case_i Unsigned *)
+(*   | Tint _ _ _, Tint I32 Unsigned _ => bin_case_i Unsigned *)
+(*   | Tint _ _ _, Tint _ _ _ => bin_case_i Signed *)
+(*   | Tlong Signed _, Tlong Signed _ => bin_case_l Signed *)
+(*   | Tlong _ _, Tlong _ _ => bin_case_l Unsigned *)
+(*   | Tlong sg _, Tint _ _ _ => bin_case_l sg *)
+(*   | Tint _ _ _, Tlong sg _ => bin_case_l sg *)
+(*   | Tfloat F32 _, Tfloat F32 _ => bin_case_s *)
+(*   | Tfloat _ _, Tfloat _ _ => bin_case_f *)
+(*   | Tfloat F64 _, (Tint _ _ _ | Tlong _ _) => bin_case_f *)
+(*   | (Tint _ _ _ | Tlong _ _), Tfloat F64 _ => bin_case_f *)
+(*   | Tfloat F32 _, (Tint _ _ _ | Tlong _ _) => bin_case_s *)
+(*   | (Tint _ _ _ | Tlong _ _), Tfloat F32 _ => bin_case_s *)
+(*   | _, _ => bin_default *)
+(*   end. *)
 
 Definition classify_shift (ty1: type) (ty2: type) :=
   match ty1, ty2 with
-  | Tint I32 Unsigned _, Tint _ _ _ => shift_case_ii Unsigned
-  | Tint _ _ _, Tint _ _ _ => shift_case_ii Signed
-  | Tint I32 Unsigned _, Tlong _ _ => shift_case_il Unsigned
-  | Tint _ _ _, Tlong _ _ => shift_case_il Signed
-  | Tlong s _, Tint _ _ _ => shift_case_li s
-  | Tlong s _, Tlong _ _ => shift_case_ll s
+  | Tint I32 Unsigned, Tint _ _ => shift_case_ii Unsigned
+  | Tint _ _, Tint _ _ => shift_case_ii Signed
+  | Tint I32 Unsigned , Tlong _  => shift_case_il Unsigned
+  | Tint _ _ , Tlong _  => shift_case_il Signed
+  | Tlong s , Tint _ _  => shift_case_li s
+  | Tlong s , Tlong _  => shift_case_ll s
   | _,_  => shift_default
   end.
 
 Definition numeric_type (ty: type) :=
   match ty with
-  | Tint _ _ _
-  | Tlong _ _
-  | Tfloat _ _ => true
+  | Tint _ _ 
+  | Tlong _ 
+  | Tfloat _ => true
   | _ => false
   end.
 
@@ -127,7 +127,12 @@ Definition binarith_type (ty1 ty2: type) (m: string): res type :=
 
 Definition binarith_int_type (ty1 ty2: type) (m: string): res type :=
   if type_eq_except_origins ty1 ty2 then
-    
+    match ty1 with
+    | Tint _ _
+    | Tlong _ => OK ty1
+    | _ =>  Error (msg m)
+    end
+  else  Error (msg m).
   (* match classify_binarith ty1 ty2 with *)
   (* | bin_case_i sg => OK (Tint I32 sg noattr) *)
   (* | bin_case_l sg => OK (Tlong sg noattr) *)
@@ -136,16 +141,22 @@ Definition binarith_int_type (ty1 ty2: type) (m: string): res type :=
 
 Definition shift_op_type (ty1 ty2: type) (m: string): res type :=
   match classify_shift ty1 ty2 with
-  | shift_case_ii sg | shift_case_il sg => OK (Tint I32 sg noattr)
-  | shift_case_li sg | shift_case_ll sg => OK (Tlong sg noattr)
+  | shift_case_ii sg | shift_case_il sg => OK (Tint I32 sg )
+  | shift_case_li sg | shift_case_ll sg => OK (Tlong sg )
   | shift_default => Error (msg m)
   end.
 
 Definition comparison_type (ty1 ty2: type) (m: string): res type :=
-  match classify_binarith ty1 ty2 with
-  | bin_default => Error (msg m)
-  | _ => OK (Tint I32 Signed noattr)
-  end.
+  if type_eq ty1 ty2 then
+    if numeric_type ty1 then
+      OK type_bool
+    else Error (msg m)
+  else Error (msg m).
+
+  (* match classify_binarith ty1 ty2 with *)
+  (* | bin_default => Error (msg m) *)
+  (* | _ => OK (Tint I32 Signed noattr) *)
+  (* end. *)
 
 Definition type_binop (op: binary_operation) (ty1 ty2: type) : res type :=
   match op with
@@ -201,7 +212,7 @@ Fixpoint wt_place (p: place) : res type :=
   | Pfield p fid ty =>
       do pty <- wt_place p;
       match pty with
-      | Tstruct _ sid a =>
+      | Tstruct _ sid =>
           match ce!sid with
           | Some co =>
               do fty <- field_type fid co.(co_members);
@@ -215,7 +226,7 @@ Fixpoint wt_place (p: place) : res type :=
   | Pdowncast p fid ty =>
       do pty <- wt_place p;
       match pty with
-      | Tvariant _ sid a =>
+      | Tvariant _ sid =>
           match ce!sid with
           | Some co =>
               do fty <- field_type fid co.(co_members);
@@ -234,17 +245,17 @@ Fixpoint wt_pexpr (pe: pexpr) : res type :=
   match pe with
   | Eunit => OK Tunit
   (* some adhoc case: we do not support non zero/one cast to bool *)
-  | Econst_int i (Tint IBool sg a) =>
+  | Econst_int i (Tint IBool sg) =>
       if Int.eq i Int.zero || Int.eq i Int.one then
-        OK (Tint IBool sg a)
+        OK (Tint IBool sg)
       else Error (msg "const bool")              
-  | Econst_int i (Tint sz sg a) =>
+  | Econst_int i (Tint sz sg) =>
       if wt_int_dec i sz sg then
-        OK (Tint sz sg a)
+        OK (Tint sz sg)
       else Error (msg "const int")
-  | Econst_float f (Tfloat F64 a) => OK (Tfloat F64 a)
-  | Econst_single f (Tfloat F32 a) => OK (Tfloat F32 a)
-  | Econst_long i (Tlong sg a) => OK (Tlong sg a)
+  | Econst_float f (Tfloat F64 ) => OK (Tfloat F64 )
+  | Econst_single f (Tfloat F32) => OK (Tfloat F32)
+  | Econst_long i (Tlong sg) => OK (Tlong sg)
   | Eplace p ty =>
       do pty <- wt_place p;
       if type_eq_except_origins ty pty then
@@ -254,7 +265,7 @@ Fixpoint wt_pexpr (pe: pexpr) : res type :=
       OK type_bool
   | Eref orgs mut p ty =>
       do pty <- wt_place p;
-      if type_eq_except_origins ty (Treference orgs mut pty (attr_of_type ty)) then
+      if type_eq_except_origins ty (Treference orgs mut pty) then
         OK ty
       else Error (msg "Eref type error")
   | Eunop uop pe ty =>
@@ -355,11 +366,11 @@ Lemma binarith_add_casted: forall t1 t2 t v1 v2 v m s,
     val_casted v (to_ctype t).
 Proof.
   
-  unfold sem_add_rust. unfold sem_binarith.
+  (* unfold sem_add_rust. unfold sem_binarith. *)
   
-  ; intros; DestructCases.  simpl in H0.
-  unfold sem_binarith in H0.
-  
+  (* ; intros; DestructCases.  simpl in H0. *)
+  (* unfold sem_binarith in H0. *)
+Admitted.  
   
 Lemma wt_sem_binary_operation_casted: forall bop t1 t2 t v1 v2 v m,
     type_binop bop t1 t2 = OK t ->
@@ -367,6 +378,7 @@ Lemma wt_sem_binary_operation_casted: forall bop t1 t2 t v1 v2 v m,
     val_casted v (to_ctype t).
 Proof.
   destruct bop; intros until m; simpl.
+Admitted.
 
 (* To move *)
 Lemma type_eq_except_origins_to_ctype: forall ty1 ty2,
@@ -376,19 +388,13 @@ Proof.
   induction ty1;simpl; intros; try eapply proj_sumbool_true in H;subst;auto.
   - destruct ty2; try eapply proj_sumbool_true in H; try congruence.
     destruct m; destruct m0.
-    eapply andb_true_iff in H. destruct H as (TYEQ & AEQ).
-    eapply proj_sumbool_true in AEQ;subst. simpl; f_equal. eapply IHty1;auto.
+    simpl; f_equal. eapply IHty1;auto.
     congruence. congruence.
-    eapply andb_true_iff in H. destruct H as (TYEQ & AEQ).
-    eapply proj_sumbool_true in AEQ;subst. simpl; f_equal. eapply IHty1;auto.
+    simpl; f_equal. eapply IHty1;auto.
   - destruct ty2;try eapply proj_sumbool_true in H; try congruence.
-    eapply andb_true_iff in H. destruct H as (IDEQ & AEQ).
-    eapply proj_sumbool_true in AEQ;subst.
-    eapply proj_sumbool_true in IDEQ;subst. auto.
+    subst. auto.
   - destruct ty2;try eapply proj_sumbool_true in H; try congruence.
-    eapply andb_true_iff in H. destruct H as (IDEQ & AEQ).
-    eapply proj_sumbool_true in AEQ;subst.
-    eapply proj_sumbool_true in IDEQ;subst. auto.
+    subst. auto.
 Qed.
 
 Lemma wt_pexpr_typeof: forall pe ty,
@@ -467,7 +473,7 @@ Proof.
     econstructor. simpl. erewrite Int.eq_false. auto. eapply Int.one_not_zero.
     econstructor. simpl. erewrite Int.eq_true. auto.
   - monadInv H0.
-    destruct (type_eq_except_origins t (Treference o m0 x (attr_of_type t))) eqn: TYEQ.
+    destruct (type_eq_except_origins t (Treference o m0 x)) eqn: TYEQ.
     admit. congruence.
   (* unop *)
   - monadInv H0.
@@ -481,8 +487,9 @@ Proof.
   - monadInv H0.
     exploit IHpe1;eauto. intros CASTED1.
     exploit IHpe2;eauto. intros CASTED2.
-    
-    
+Admitted.    
+
+End SEM.
 End TYPING.
 
 

@@ -43,15 +43,15 @@ let rec name_rust_decl id ty =
   match ty with
   | Rusttypes.Tunit ->
       "()" ^ name_optid id
-  | Rusttypes.Tint(sz, sg, a) ->
-      name_inttype sz sg ^ attributes a ^ name_optid id
-  | Rusttypes.Tfloat(sz, a) ->
-      name_floattype sz ^ attributes a ^ name_optid id
-  | Rusttypes.Tlong(sg, a) ->
-      name_longtype sg ^ attributes a ^ name_optid id
-  | Rusttypes.Treference(org, mut, t, a) ->
+  | Rusttypes.Tint(sz, sg) ->
+      name_inttype sz sg ^ name_optid id
+  | Rusttypes.Tfloat(sz) ->
+      name_floattype sz ^ name_optid id
+  | Rusttypes.Tlong(sg) ->
+      name_longtype sg ^ name_optid id
+  | Rusttypes.Treference(org, mut, t) ->
       "&" ^ (extern_atom org) ^" "^  string_of_mut mut ^ (name_rust_decl ""  t) ^ name_optid id
-  | Tbox(t, a) ->
+  | Tbox(t) ->
       "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
   | Tfunction( _, _, args, res, cconv) ->
       let b = Buffer.create 20 in
@@ -75,11 +75,11 @@ let rec name_rust_decl id ty =
       if not cconv.cc_unproto then add_args true args;
       Buffer.add_char b ')';
       name_rust_decl (Buffer.contents b) res
-  | Tstruct(orgs, name, a) ->
-      "struct" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
-  | Tvariant(orgs, name, a) ->
-      "variant" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
-  | Tarray(ty, sz, a) ->
+  | Tstruct(orgs, name) ->
+      "struct" ^ print_origins orgs ^ " " ^ extern_atom name ^ name_optid id
+  | Tvariant(orgs, name) ->
+      "variant" ^ print_origins orgs ^ " " ^ extern_atom name ^ name_optid id
+  | Tarray(ty, sz) ->
     name_rust_decl (sprintf "%s[%ld]" id (camlint_of_coqint sz)) ty
 
 (* Type *)

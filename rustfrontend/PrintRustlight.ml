@@ -65,7 +65,7 @@ let rec pexpr p (prec, e) =
   | Eunit ->  fprintf p "tt"
   | Eplace(v, _) ->
     fprintf p "%a" print_place v
-  | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->
+  | Econst_int(n, Rusttypes.Tint(I32, Unsigned)) ->
     fprintf p "%luU" (camlint_of_coqint n)
   | Econst_int(n, _) ->
     fprintf p "%ld" (camlint_of_coqint n)
@@ -73,7 +73,7 @@ let rec pexpr p (prec, e) =
     fprintf p "%.18g" (camlfloat_of_coqfloat f)
   | Econst_single(f, _) ->
     fprintf p "%.18gf" (camlfloat_of_coqfloat32 f)
-  | Econst_long(n, Rusttypes.Tlong(Unsigned, _)) ->
+  | Econst_long(n, Rusttypes.Tlong(Unsigned)) ->
     fprintf p "%LuLLU" (camlint64_of_coqint n)
   | Econst_long(n, _) ->
     fprintf p "%LdLL" (camlint64_of_coqint n)

@@ -116,8 +116,8 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
       let elaborate_drop_for := elaborate_drop_for pc mayinit mayuninit universe fuel' ce in
       if Paths.mem p universe then
         match typeof_place p with        
-        | Tstruct _ _ _
-        | Tvariant _ _ _ => (* use drop function of this Tstruct (Tvariant) to drop p *)
+        | Tstruct _ _
+        | Tvariant _ _ => (* use drop function of this Tstruct (Tvariant) to drop p *)
             if Paths.mem p mayinit then
               if Paths.mem p mayuninit then (* need drop flag *)
                 do drop_flag <- gensym type_bool p;
@@ -126,7 +126,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
                 ret ((p, None, true) :: nil)
             else                (* must uninitialized *)
               ret nil
-        | Tbox ty _ =>
+        | Tbox ty =>
             (** TODO: we need to check if p is fully owned, in order
             to just use one function to drop all its successor *)
             (* first drop *p if necessary *)
@@ -155,7 +155,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
       else (* split p into its children and drop them *)
         (** p may be partially initialized *)
         match typeof_place p with
-        | Tstruct _ id attr =>
+        | Tstruct _ id  =>
             match ce!id with
             | Some co =>
                 let children := map (fun elt => match elt with
@@ -169,8 +169,8 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
                 fold_right rec (ret nil) children
             | None => error [CTX pc; MSG ": Unfound struct id in composite_env: elaborate_drop_for"]
             end
-        | Tbox _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
-        | Tvariant _ _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
+        | Tbox _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
+        | Tvariant _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
         | _ => ret nil
         end
   end.
@@ -182,10 +182,10 @@ Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
 
 Fixpoint drop_fully_own (ce: composite_env) (p: place) (ty: type) :=
   match ty with
-  | Tbox ty' _ =>
+  | Tbox ty'  =>
       Ssequence (drop_fully_own ce (Pderef p ty') ty') (Sdrop p)
-  | Tstruct _ _ _
-  | Tvariant _ _ _ =>
+  | Tstruct _ _
+  | Tvariant _ _  =>
       if own_type ce ty then
         Sdrop p
       else Sskip

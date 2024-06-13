@@ -92,20 +92,20 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
   match ty with
   | Tunit => Ctypes.type_int32s  (* unit is set to zero *)
   (* | Tbox _  => None *)
-  | Tint sz si attr => Ctypes.Tint sz si attr
-  | Tlong si attr => Ctypes.Tlong si attr
-  | Tfloat fz attr => Ctypes.Tfloat fz attr
-  | Tstruct _ id attr => Ctypes.Tstruct id attr
+  | Tint sz si => Ctypes.Tint sz si noattr
+  | Tlong si => Ctypes.Tlong si noattr
+  | Tfloat fz => Ctypes.Tfloat fz noattr
+  | Tstruct _ id  => Ctypes.Tstruct id noattr
   (* variant = Struct {tag: .. ; f: union} *)
-  | Tvariant _ id attr => Ctypes.Tstruct id attr
-  | Treference _ _ ty attr
-  | Tbox ty attr => Tpointer (to_ctype ty) attr
+  | Tvariant _ id => Ctypes.Tstruct id noattr
+  | Treference _ _ ty
+  | Tbox ty => Tpointer (to_ctype ty) noattr
       (* match (to_ctype ty) with *)
       (* | Some ty' =>  *)
       (*     Some (Ctypes.Tpointer ty' attr) *)
       (* | _ => None *)
   (* end *)
-  | Tarray ty sz a => Ctypes.Tarray (to_ctype ty) sz a
+  | Tarray ty sz => Ctypes.Tarray (to_ctype ty) sz noattr
   | Tfunction _ _ tyl ty cc =>
       Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
   end
@@ -329,8 +329,8 @@ Fixpoint support_parent_paths (p: place) : list place :=
   | Pfield p' _ _ => p' :: support_parent_paths p'
   | Pderef p' _ =>
       match typeof_place p' with
-      | Tbox _ _
-      | Treference _ Mutable _ _ =>
+      | Tbox _ 
+      | Treference _ Mutable _ =>
           p' :: support_parent_paths p'
       | _ => nil
       end
@@ -429,15 +429,15 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     gloabl environment *)
     e!id = Some (b, ty) ->
     eval_place (Plocal id ty) b Ptrofs.zero
-| eval_Pfield_struct: forall p ty b ofs delta id i co bf attr orgs,
+| eval_Pfield_struct: forall p ty b ofs delta id i co bf orgs,
     eval_place p b ofs ->
-    ty = Tstruct orgs id attr ->
+    ty = Tstruct orgs id ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
-| eval_Pdowncast: forall  p ty b ofs delta id fid co bf attr orgs,
+| eval_Pdowncast: forall  p ty b ofs delta id fid co bf orgs,
     eval_place p b ofs ->
-    ty = Tvariant orgs id attr ->
+    ty = Tvariant orgs id ->
     ce ! id = Some co ->
     (* Is it considered memory error? No! Because we can write any kind of place to trigger this error. *)
     variant_field_offset ce fid (co_members co) = OK (delta, bf) ->
@@ -503,11 +503,11 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_pexpr (Eplace p ty) v
-| eval_Ecktag: forall (p: place) b ofs tag tagz id fid attr co orgs,
+| eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    typeof_place p = Tvariant orgs id attr ->
+    typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
     eval_pexpr (Ecktag p fid) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
@@ -667,9 +667,9 @@ Inductive state: Type :=
 Definition definite_copy_type (ty: type) :=
   match ty with
   | Tunit
-  | Tint _ _ _
-  | Tlong _ _
-  | Tfloat _ _
+  | Tint _ _
+  | Tlong _
+  | Tfloat _
   | Tfunction _ _ _ _ _ => true
   | _ => false
   end.
@@ -681,7 +681,7 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
 | drop_in_base: forall m b ofs ty,
     definite_copy_type ty = true ->
     drop_in_place ce ty m b ofs m
-| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty orgs,
+| drop_in_struct: forall m b ofs id co m' lb lofs lofsbit lty orgs,
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
@@ -689,8 +689,8 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list ce lty m lb lofs m' ->
-    drop_in_place ce (Tstruct orgs id attr) m b ofs m'
-| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf orgs,
+    drop_in_place ce (Tstruct orgs id) m b ofs m'
+| drop_in_variant: forall m b ofs id co m' tag memb fid ofs' bf orgs,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -700,9 +700,9 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* drop the selected type *)
     drop_in_place ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
-    drop_in_place ce (Tvariant orgs id attr) m b ofs m
-| drop_in_box: forall ty ty' attr m m' m'' b ofs b' ofs',
-    ty = Tbox ty' attr ->
+    drop_in_place ce (Tvariant orgs id) m b ofs m
+| drop_in_box: forall ty ty' m m' m'' b ofs b' ofs',
+    ty = Tbox ty' ->
     (* The contents in [p] is (Vptr b' ofs') *)
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
     drop_in_place ce ty' m b' ofs' m' ->
@@ -722,23 +722,23 @@ with drop_in_place_list (ce: composite_env) : list type -> mem -> list block -> 
 (** Memory error in drop_in_place  *)
 
 Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> ptrofs -> Prop :=
-| drop_in_box_error1: forall ty ty' attr m b ofs,
-    ty = Tbox ty' attr ->
+| drop_in_box_error1: forall ty ty' m b ofs,
+    ty = Tbox ty' ->
     (* The contents in [p] is Unreadable. Use signed or unsigned? *)
     ~ Mem.valid_access m Mptr b (Ptrofs.signed ofs) Readable ->
     drop_in_place_mem_error ce ty m b ofs
-| drop_in_box_error2: forall ty ty' attr m b ofs b' ofs',
-    ty = Tbox ty' attr ->
+| drop_in_box_error2: forall ty ty' m b ofs b' ofs',
+    ty = Tbox ty' ->
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
     drop_in_place_mem_error ce ty' m b' ofs' ->
     drop_in_place_mem_error ce ty m b ofs
-| drop_in_box_error3: forall ty ty' attr m m' b ofs b' ofs',
-    ty = Tbox ty' attr ->
+| drop_in_box_error3: forall ty ty'  m m' b ofs b' ofs',
+    ty = Tbox ty'  ->
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
     drop_in_place ce ty' m b' ofs' m' ->
     ~ Mem.range_perm m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ce ty') Cur Freeable ->
     drop_in_place_mem_error ce ty m b ofs
-| drop_in_struct_error: forall m b ofs id attr co lb lofs lofsbit lty orgs,
+| drop_in_struct_error: forall m b ofs id  co lb lofs lofsbit lty orgs,
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
@@ -746,12 +746,12 @@ Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> 
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list_mem_error ce lty m lb lofs ->
-    drop_in_place_mem_error ce (Tstruct orgs id attr) m b ofs
-| drop_in_variant_error1: forall m b ofs id attr co orgs,
+    drop_in_place_mem_error ce (Tstruct orgs id ) m b ofs
+| drop_in_variant_error1: forall m b ofs id  co orgs,
     ce ! id = Some co ->
     ~Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
-    drop_in_place_mem_error ce (Tvariant orgs id attr) m b ofs
-| drop_in_variant_error2: forall m b ofs id attr co tag memb fid ofs' bf orgs,
+    drop_in_place_mem_error ce (Tvariant orgs id ) m b ofs
+| drop_in_variant_error2: forall m b ofs id co tag memb fid ofs' bf orgs,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -761,7 +761,7 @@ Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> 
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* drop the selected type *)
     drop_in_place_mem_error ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) ->
-    drop_in_place_mem_error ce (Tvariant orgs id attr) m b ofs
+    drop_in_place_mem_error ce (Tvariant orgs id ) m b ofs
 
   
 with drop_in_place_list_mem_error (ce: composite_env) : list type -> mem -> list block -> list ptrofs -> Prop :=
@@ -786,9 +786,9 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
 | drop_moved: forall  p m b ofs,
     not (In p owned) ->
     drop_place' ce owned p m b ofs m
-| drop_struct: forall (p: place) m b ofs id attr co m' lb lofs lofsbit fields orgs,
+| drop_struct: forall (p: place) m b ofs id  co m' lb lofs lofsbit fields orgs,
     (* recursively drop all the fields *)
-    typeof_place p = Tstruct orgs id attr ->
+    typeof_place p = Tstruct orgs id  ->
     ce ! id = Some co ->
     fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) ->
     (* do not use eval_place_list, directly compute the field offset *)
@@ -797,14 +797,14 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_variant: forall (p: place) m b ofs id attr m' orgs,
+| drop_variant: forall (p: place) m b ofs id  m' orgs,
     (* select the type based on the tag value *)
-    typeof_place p = Tvariant orgs id attr ->
+    typeof_place p = Tvariant orgs id  ->
     (* p is in owned, so we just use type to destruct the variant *)
-    drop_in_place ce (Tvariant orgs id attr) m b ofs m' ->
+    drop_in_place ce (Tvariant orgs id ) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_box: forall (p: place) attr ty m m' m'' b' b ofs ofs',
-    typeof_place p = Tbox ty attr ->
+| drop_box: forall (p: place)  ty m m' m'' b' b ofs ofs',
+    typeof_place p = Tbox ty  ->
     (* The contents in [p] is (Vptr b' ofs') *)
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
     drop_place' ce owned (Pderef p ty) m b' ofs' m' ->
@@ -884,13 +884,13 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
   | O => nil
   | S fuel' =>
       match ty with
-      | Tbox ty' _ =>
+      | Tbox ty' =>
           let deref := Pderef p ty' in
           p :: own_path fuel' ce deref ty'
       (* | Treference ty' Mutable _ => *)
       (*     let deref := Pderef p ty' in *)
       (*     p :: init_path deref ty' *)
-      | Tstruct _ id _ =>
+      | Tstruct _ id =>
           match ce ! id with
           | Some co =>
               let acc flds m :=
@@ -905,7 +905,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
               end
           | _ => p :: nil
           end
-      | Tvariant _ _ _ =>
+      | Tvariant _ _ =>
           if own_type ce ty then p :: nil
           else nil
       | _ => nil
@@ -986,11 +986,11 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 b ofs v id attr orgs,
+| step_assign: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 b ofs v id  orgs,
     (** FIXME: some ugly restriction  *)
     typeof_place p = ty ->
     typeof e = ty ->
-    ty <> Tvariant orgs id attr ->
+    ty <> Tvariant orgs id  ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value and the moved place (optional) *)
@@ -1010,10 +1010,10 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid enum_id attr orgs,
+| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid enum_id  orgs,
     typeof_place p = ty ->
     typeof e = ty ->
-    ty = Tvariant orgs id attr ->
+    ty = Tvariant orgs id  ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)

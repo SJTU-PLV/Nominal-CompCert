@@ -6,18 +6,18 @@ let dummy_origin_str = "'0"
 let wildcard_id = "_"
 
 type ty = | Tunit
-          | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
-          | Tlong of Ctypes.signedness * Ctypes.attr
-          | Tfloat of Ctypes.floatsize * Ctypes.attr
+          | Tint of Ctypes.intsize * Ctypes.signedness
+          | Tlong of Ctypes.signedness
+          | Tfloat of Ctypes.floatsize
           | Tfunction of (ty list) * ty * id list * (id * id) list
-          | Tbox of ty * Ctypes.attr
+          | Tbox of ty
           | Tadt of id * Ctypes.attr * id list
-          | Treference of ty * id * Rusttypes.mutkind * Ctypes.attr
+          | Treference of ty * id * Rusttypes.mutkind
 
 type struct_or_enum =
   | Struct
   | Enum
-let bool_ty = Tint (Ctypes.IBool, Ctypes.Unsigned, Ctypes.noattr)
+let bool_ty = Tint (Ctypes.IBool, Ctypes.Unsigned)
 
 type expr = Eunit
           | Eval of Values.coq_val * ty
@@ -181,7 +181,7 @@ module To_syntax = struct
     let module T = Rusttypes in
     match t with
     | T.Tunit -> pp_print_string pp "()"
-    | T.Tint (s, si, _) -> (
+    | T.Tint (s, si) -> (
       match si with
       | Ctypes.Signed -> pp_print_string pp "int"
       | Ctypes.Unsigned -> pp_print_string pp "uint"
@@ -192,12 +192,12 @@ module To_syntax = struct
       | Ctypes.I8 -> pp_print_string pp "8"
       | Ctypes.IBool -> pp_print_string pp "_bool"
       )
-    | T.Tlong (si, _) -> (
+    | T.Tlong (si) -> (
       match si with
       | Ctypes.Signed -> pp_print_string pp "long"
       | Ctypes.Unsigned -> pp_print_string pp "ulong"
       )
-    | T.Tfloat (si, _) ->
+    | T.Tfloat (si) ->
       pp_print_string pp "float"; 
       pp_print_string pp (match si with
       | Ctypes.F32 -> "32"
@@ -215,24 +215,24 @@ module To_syntax = struct
       pp_print_space pp ();
       pp_print_rust_type symmap pp r;
       pp_print_origin_relations symmap pp rels
-    | T.Tbox (t, _) ->
+    | T.Tbox (t) ->
       pp_print_string pp "Box(";
       pp_print_rust_type symmap  pp t ;
       pp_print_string pp ")";
-    | T.Tstruct (orgs, id, _) ->      
+    | T.Tstruct (orgs, id) ->      
       pp_print_string pp (IdentMap.find id symmap);
       pp_print_origins symmap pp orgs
-    | T.Tvariant (orgs, id, _) ->
+    | T.Tvariant (orgs, id) ->
       pp_print_string pp (IdentMap.find id symmap);
       pp_print_origins symmap pp orgs
-    | T.Treference (org, m, t, _) ->
+    | T.Treference (org, m, t) ->
       pp_print_string pp "&";
       (* print origin *)
       pp_print_string pp (Camlcoq.extern_atom org ^ " ");
       if m = T.Mutable then
         pp_print_string pp "mut ";
       pp_print_rust_type symmap pp t
-    | T.Tarray (ty, sz, _) ->
+    | T.Tarray (ty, sz) ->
       pp_print_rust_type symmap pp ty;
       Format.fprintf pp "[%ld]" (Camlcoq.camlint_of_coqint sz)
 
@@ -623,9 +623,9 @@ module To_syntax = struct
     let module T = Rusttypes in
     match t with
     | Tunit -> return T.Tunit
-    | Tint (size, si, attr) -> return (T.Tint (size, si, attr))
-    | Tlong (size, attr) -> return (T.Tlong (size, attr))
-    | Tfloat (size, attr) -> return (T.Tfloat (size, attr))
+    | Tint (size, si) -> return (T.Tint (size, si))
+    | Tlong (size) -> return (T.Tlong (size))
+    | Tfloat (size) -> return (T.Tfloat (size))
     | Tfunction (params, ret, orgs, rels) ->
       let rec typelist_of ts =
         match ts with
@@ -637,9 +637,9 @@ module To_syntax = struct
       convert_origins orgs >>= fun orgs ->
       convert_origin_relations rels >>= fun rels ->
       return (T.Tfunction (orgs, rels, typelist_of args', ret', AST.cc_default))
-    | Tbox (t, attr) ->
+    | Tbox (t) ->
       transl_ty t >>= fun t' ->
-      return (T.Tbox (t', attr))
+      return (T.Tbox (t'))
     | Tadt (x, attr, org_ids) ->
       get_composite x >>= fun (i, T.Composite (_, sv, _, _, orgs, rels)) ->
        (* Use org_ids as the origins notation for this type or
@@ -650,12 +650,12 @@ module To_syntax = struct
         else failwith "unreachable (transl_ty)" in
       convert_origins org_ids >>= fun orgs ->
       (match sv with
-        | T.Struct -> return (T.Tstruct (orgs, i, attr))
-        | T.TaggedUnion -> return (T.Tvariant (orgs, i, attr)))
-    | Treference (t, org_id, m, attr) ->
+        | T.Struct -> return (T.Tstruct (orgs, i))
+        | T.TaggedUnion -> return (T.Tvariant (orgs, i)))
+    | Treference (t, org_id, m) ->
       transl_ty t >>= fun t' ->
       get_or_new_ident org_id >>= fun org ->
-      return (T.Treference (org, m, t', attr))
+      return (T.Treference (org, m, t'))
 
   let composite_of_decl i s_or_e a orgs rels =
     match s_or_e with
@@ -716,13 +716,13 @@ module To_syntax = struct
        get_or_new_ident variant_struc_id >>= fun variant_struc_ident ->
        convert_origins orgs >>= fun orgs ->
       (* This type is used in composite definition, so the origins are generic *)
-       return (Rusttypes.Tstruct (orgs, variant_struc_ident, noattr))
+       return (Rusttypes.Tstruct (orgs, variant_struc_ident))
 
   let rec origin_in_ty org ty =
     match ty with
-    | Treference(ty', org', _, _) ->
+    | Treference(ty', org', _) ->
       org = org' || origin_in_ty org ty'
-    | Tbox(ty',_) ->
+    | Tbox(ty') ->
       origin_in_ty org ty'
     | Tadt(i, _, orgs) ->
       List.mem org orgs
@@ -766,7 +766,7 @@ module To_syntax = struct
     | [] -> Rusttypes.Tnil
 
 
-  let rty_bool = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, noattr)
+  let rty_bool = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned)
 
   let infer_unop (op: Cop.unary_operation)
       (t: Rusttypes.coq_type) : Rusttypes.coq_type monad =
@@ -775,20 +775,20 @@ module To_syntax = struct
     match op with
     | Onotbool ->
       (match t with
-       | T.Tint (Ctypes.IBool, Ctypes.Unsigned, _) -> return rty_bool
+       | T.Tint (Ctypes.IBool, Ctypes.Unsigned) -> return rty_bool
        | _ -> throw (Eunop_type_error (op, t)))
     | Onotint ->
       (match t with
-       | T.Tint (size, si, attr) -> return (T.Tint (size, si, attr))
+       | T.Tint (size, si) -> return (T.Tint (size, si))
        | _ -> throw (Eunop_type_error (op, t)))
     | Oneg ->
       (match t with
-       | T.Tint (size1, si1, attr1) -> return (T.Tint (size1, si1, attr1))
-       | T.Tfloat (size1, attr1) -> return (T.Tfloat (size1, attr1))
+       | T.Tint (size1, si1) -> return (T.Tint (size1, si1))
+       | T.Tfloat (size1) -> return (T.Tfloat (size1))
        | _ -> throw (Eunop_type_error (op, t)))
     | Oabsfloat ->
       (match t with
-       | T.Tfloat (size1, attr1) -> return (T.Tfloat (size1, attr1))
+       | T.Tfloat (size1) -> return (T.Tfloat (size1))
        | _ -> throw (Eunop_type_error (op, t)))
 
   let infer_binop (op: Cop.binary_operation)
@@ -799,37 +799,37 @@ module To_syntax = struct
     match op with
     | Oadd | Osub | Omul | Odiv ->
       (match (ta, tb) with
-       | (T.Tint (size1, si1, _), T.Tint (size2, si2, _))
+       | (T.Tint (size1, si1), T.Tint (size2, si2))
          when size1 = size2 && si1 = si2 ->
-         return (T.Tint (size1, si1, noattr))
-       | (T.Tfloat (size1, _), T.Tfloat (size2, _))
+         return (T.Tint (size1, si1))
+       | (T.Tfloat (size1), T.Tfloat (size2))
          when size1 = size2 ->
-         return (T.Tfloat (size1, noattr))
+         return (T.Tfloat (size1))
        | _ -> throw (Ebinop_type_error (op, ta, tb)))
     | Oand | Oor | Oxor ->
       (match (ta, tb) with
-       | (T.Tint (Ctypes.IBool, Ctypes.Unsigned, _), T.Tint (Ctypes.IBool, Ctypes.Unsigned, _)) ->
+       | (T.Tint (Ctypes.IBool, Ctypes.Unsigned), T.Tint (Ctypes.IBool, Ctypes.Unsigned)) ->
          return rty_bool
        | _ -> throw (Ebinop_type_error (op, ta, tb)))
     | Oeq | One | Olt | Ogt | Ole | Oge ->
       (match (ta, tb) with
-       | (T.Tint (size1, si1, _), T.Tint (size2, si2, _))
+       | (T.Tint (size1, si1), T.Tint (size2, si2))
          when size1 = size2 && si1 = si2 ->
          return rty_bool
-       | (T.Tfloat (size1, _), T.Tfloat (size2, _))
+       | (T.Tfloat (size1), T.Tfloat (size2))
          when size1 = size2 ->
          return rty_bool
        | _ -> throw (Ebinop_type_error (op, ta, tb)))
     | Oshl | Oshr ->
       (match (ta, tb) with
-       | (T.Tint (size, si, _), T.Tint (Ctypes.I8, Ctypes.Unsigned, _)) ->
-         return (T.Tint (size, si, noattr))
+       | (T.Tint (size, si), T.Tint (Ctypes.I8, Ctypes.Unsigned)) ->
+         return (T.Tint (size, si))
        | _ -> throw (Ebinop_type_error (op, ta, tb)))
     | Omod ->
       (match (ta, tb) with
-       | (T.Tint (size1, si1, _), T.Tint (size2, si2, _))
+       | (T.Tint (size1, si1), T.Tint (size2, si2))
          when size1 = size2 && si1 = si2 ->
-         return (T.Tint (size1, si1, noattr))
+         return (T.Tint (size1, si1))
        | _ -> throw (Ebinop_type_error (op, ta, tb)))
 
    module Trans_match = struct
@@ -859,7 +859,7 @@ module To_syntax = struct
        : (ident * Rusttypes.coq_type list) option =
        let t = Rustsyntax.typeof (List.hd header) in
        match t with
-       | Rusttypes.Tvariant (_, ienum, _) ->
+       | Rusttypes.Tvariant (_, ienum) ->
           let (patterns, _) = row in
           (match List.hd patterns with
           | Pconstructor' (ienum', ivar, args) ->
@@ -907,7 +907,7 @@ module To_syntax = struct
      let skeleton_groups (header: Rustsyntax.expr list): groups monad =
        let head = List.hd header in
        match Rustsyntax.typeof head with
-       | Rusttypes.Tvariant (_, ienum, _) ->
+       | Rusttypes.Tvariant (_, ienum) ->
          get_enums >>= fun enums ->
          let enum = IdentMap.find ienum enums in
          let var_idents = List.map fst enum in
@@ -965,7 +965,7 @@ module To_syntax = struct
           | Some(Rusttypes.Composite(struct_id, _, _, a, orgs, _)) ->
             (* generate dummy origins *)
             dummy_origins (List.length orgs) >>= fun dummy_origins ->
-            return (Rusttypes.Tstruct (dummy_origins, struct_id, a))
+            return (Rusttypes.Tstruct (dummy_origins, struct_id))
          ) >>= fun as_var_typ ->
          con_header_with_field_access
              (Rustsyntax.Evar (as_var, as_var_typ)) (List.tl header) args_types
@@ -990,8 +990,8 @@ module To_syntax = struct
     let unwrap_bind_type dummy_org p ty =
      match p with
      | Pbind'(None, _) -> ty
-     | Pbind'(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty, noattr)
-     | Pbind'(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty, noattr)
+     | Pbind'(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty)
+     | Pbind'(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty)
      | _ -> failwith "unwrap_bind_type error"
 
     let unwrap_bind_expr_type dummy_org p e =
@@ -1076,15 +1076,15 @@ module To_syntax = struct
    let unwrap_bind_type dummy_org p ty =
     match p with
     | Pbind(None, _) -> ty
-    | Pbind(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty, noattr)
-    | Pbind(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty, noattr)
+    | Pbind(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty)
+    | Pbind(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty)
     | _ -> failwith "unwrap_bind_type error"
 
    let rec lower_pat (p: pat) (t: Rusttypes.coq_type) : pat' monad =
      match p with
      | Pconstructor (enum_id, constr_id, args) ->
        (match t with
-        | Rusttypes.Tvariant (_, ienum, _) ->
+        | Rusttypes.Tvariant (_, ienum) ->
           get_enums >>= fun enums ->
           get_or_new_ident enum_id >>= fun ienum' ->
           rev_ident ienum >>= fun ienum_str ->
@@ -1151,12 +1151,12 @@ module To_syntax = struct
     | Ebox e ->
       transl_expr e >>= fun e ->
       let t = Rustsyntax.typeof e in
-      return (Rustsyntax.Ebox (e, Rusttypes.Tbox (t, Ctypes.noattr)))
+      return (Rustsyntax.Ebox (e, Rusttypes.Tbox (t)))
     | Efield (e, x) ->
       transl_expr e >>= fun e' ->
       let te = Rustsyntax.typeof e' in
       (match te with
-      | Rusttypes.Tstruct (_, ist, _) ->
+      | Rusttypes.Tstruct (_, ist) ->
         get_st >>= fun st ->
         let Rusttypes.Composite (_, _, members, _, _, _) =
           IdentMap.find ist st.composites
@@ -1171,7 +1171,7 @@ module To_syntax = struct
         | Option.None -> throw (Efield_not_found x)
         )
       (* TODO: why? *)
-      | Rusttypes.Treference (org, _, (Rusttypes.Tstruct (_, ist, _) as ts), _) ->
+      | Rusttypes.Treference (org, _, (Rusttypes.Tstruct (_, ist) as ts)) ->
         get_st >>= fun st ->
         let Rusttypes.Composite (_, _, members, _, _, _) =
           IdentMap.find ist st.composites
@@ -1193,8 +1193,8 @@ module To_syntax = struct
       transl_expr e >>= fun e' ->
       let te = Rustsyntax.typeof e' in
       (match te with
-       | Rusttypes.Tbox (t, _) -> return (Rustsyntax.Ederef (e', t))
-       | Rusttypes.Treference (_, _, t, _) -> return (Rustsyntax.Ederef (e', t))
+       | Rusttypes.Tbox (t) -> return (Rustsyntax.Ederef (e', t))
+       | Rusttypes.Treference (_, _, t) -> return (Rustsyntax.Ederef (e', t))
        | _ -> throw (Ederef_non_deref te)
       )
     | Eunop (op, e) ->
@@ -1218,7 +1218,7 @@ module To_syntax = struct
       fun (istruct, Rusttypes.Composite (_, _, _, attr, orgs, rels)) ->
       (* FIXME: we should generate list of dummy origins with the same length as orgs *)
       dummy_origins (List.length orgs) >>= fun dummy_orgs ->
-      let t = Rusttypes.Tstruct (dummy_orgs, istruct, attr) in
+      let t = Rusttypes.Tstruct (dummy_orgs, istruct) in
       return (Rustsyntax.Estruct (istruct, ifl, exprlist_of es', t))
     | Ecall (callee, args) ->
       (match callee with
@@ -1227,9 +1227,9 @@ module To_syntax = struct
         map_m args (fun arg -> transl_expr arg)
         >>= fun args' ->
         (* Refer to C2C.ml *)
-        let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
+        let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned) in
         dummy_origin >>= fun dummy_origin ->
-        let targs = typelist_of [Rusttypes.Treference(dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr)] in
+        let targs = typelist_of [Rusttypes.Treference(dummy_origin, Rusttypes.Immutable, t_byte)] in
         let tres =  Rusttypes.type_int32s in
         let sg =
           Rusttypes.signature_of_type targs tres
@@ -1251,7 +1251,7 @@ module To_syntax = struct
             dummy_origins (List.length orgs) >>= fun dummy_orgs ->
             dummy_origins (List.length orgs) >>= fun dummy_orgs ->
             return (Rustsyntax.Eenum
-                      (ienum, ivar, e', Rusttypes.Tvariant (dummy_orgs, ienum, noattr)))
+                      (ienum, ivar, e', Rusttypes.Tvariant (dummy_orgs, ienum)))
           | _ -> throw (Emulti_args_to_constructor (args, xenum, xvar))))
       | _ ->
         transl_expr callee >>= fun callee' ->
@@ -1266,11 +1266,11 @@ module To_syntax = struct
       transl_expr e >>= fun e' ->
       (* The origin of reference expression is always dummy_origin *)
       dummy_origin >>= fun dummy_origin ->
-      let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e', Ctypes.noattr) in      
+      let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e') in      
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
       let s = Scanf.unescaped s in
-      let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
+      let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned) in
       let init_body = Seq.fold_left
                    (fun lst c ->
                      (List.append lst [AST.Init_int8 (Camlcoq.Z.of_uint (Char.code c))]))
@@ -1278,7 +1278,7 @@ module To_syntax = struct
                    (String.to_seq s)
       in
       let init = List.append init_body [AST.Init_int8 (Camlcoq.Z.Z0)]  in
-      let var_ty = Rusttypes.Tarray(t_byte, (Camlcoq.Z.of_uint (List.length init)), Ctypes.noattr) in
+      let var_ty = Rusttypes.Tarray(t_byte, (Camlcoq.Z.of_uint (List.length init))) in
       (* TODO: what is the origin of static string *)
       let global_var = AST.({ gvar_info = var_ty
                             ; gvar_init = init

@@ -42,27 +42,27 @@ Qed.
 
 Inductive type : Type :=
 | Tunit: type                                    (**r the [unit] type *)
-| Tint: intsize -> signedness -> attr -> type       (**r integer types *)
-| Tlong : signedness -> attr -> type
-| Tfloat : floatsize -> attr -> type
+| Tint: intsize -> signedness -> type       (**r integer types *)
+| Tlong : signedness -> type
+| Tfloat : floatsize -> type
 | Tfunction: list origin -> list origin_rel -> typelist -> type -> calling_convention -> type    (**r function types *)
-| Tbox: type -> attr -> type                                         (**r unique pointer  *)
-| Treference: origin -> mutkind -> type -> attr -> type (**r reference type  *)
-| Tarray: type -> Z -> attr -> type                    (**r array type, just used for constant string for now *)
-| Tstruct: list origin -> ident -> attr -> type                              (**r struct types  *)
-| Tvariant: list origin -> ident -> attr -> type                             (**r tagged variant types *)
+| Tbox: type -> type                                         (**r unique pointer  *)
+| Treference: origin -> mutkind -> type -> type (**r reference type  *)
+| Tarray: type -> Z -> type                    (**r array type, just used for constant string for now *)
+| Tstruct: list origin -> ident -> type                              (**r struct types  *)
+| Tvariant: list origin -> ident -> type                             (**r tagged variant types *)
 with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
 
 
-Definition type_int32s := Tint I32 Signed noattr.
-Definition type_bool := Tint IBool Signed noattr.  
+Definition type_int32s := Tint I32 Signed.
+Definition type_bool := Tint IBool Signed.  
 
 Definition deref_type (ty: type) : type :=
   match ty with
-  | Tbox ty' attr => ty'
-  | Treference _ _ ty' _ => ty'
+  | Tbox ty' => ty'
+  | Treference _ _ ty' => ty'
   | _ => Tunit
   end.
 
@@ -90,78 +90,78 @@ Global Opaque type_eq typelist_eq.
 
 Fixpoint type_eq_except_origins (ty1 ty2: type) : bool :=
   match ty1, ty2 with
-  | Treference _ mut1 ty1 a1, Treference _ mut2 ty2 a2 =>
+  | Treference _ mut1 ty1, Treference _ mut2 ty2 =>
       match mut1, mut2 with
-      | Mutable, Mutable => type_eq_except_origins ty1 ty2 && attr_eq a1 a2
-      | Immutable, Immutable => type_eq_except_origins ty1 ty2 && attr_eq a1 a2
+      | Mutable, Mutable => type_eq_except_origins ty1 ty2
+      | Immutable, Immutable => type_eq_except_origins ty1 ty2
       | _, _ => false
       end
-  | Tstruct _ id1 a1, Tstruct _ id2 a2
-  | Tvariant _ id1 a1, Tvariant _ id2 a2 =>
-      ident_eq id1 id2 && attr_eq a1 a2
+  | Tstruct _ id1, Tstruct _ id2
+  | Tvariant _ id1, Tvariant _ id2 =>
+      ident_eq id1 id2
   | _, _ => type_eq ty1 ty2
   end.
 
 Fixpoint origin_in_type org ty : bool :=
   match ty with
-  | Tbox ty _ => origin_in_type org ty
-  | Treference org' _ ty _ =>
+  | Tbox ty => origin_in_type org ty
+  | Treference org' _ ty =>
     Pos.eqb org org' || origin_in_type org ty
-  | Tarray ty _ _ => origin_in_type org ty
-  | Tstruct orgs _ _
-  | Tvariant orgs _ _ =>
+  | Tarray ty _ => origin_in_type org ty
+  | Tstruct orgs _ 
+  | Tvariant orgs _ =>
       in_dec Pos.eq_dec org orgs
   | _ => false
   end.
 
 Fixpoint replace_type_with_dummy_origin (dummy: origin) (ty: type) : type :=
   match ty with
-  | Tbox ty a => Tbox (replace_type_with_dummy_origin dummy ty) a
-  | Treference _ mut ty a =>
-      Treference dummy mut (replace_type_with_dummy_origin dummy ty) a
-  | Tarray ty sz a =>
-      Tarray (replace_type_with_dummy_origin dummy ty) sz a
-  | Tstruct orgs id a =>
-      Tstruct (map (fun _ => dummy) orgs) id a
-  | Tvariant orgs id a =>
-      Tvariant (map (fun _ => dummy) orgs) id a
+  | Tbox ty => Tbox (replace_type_with_dummy_origin dummy ty)
+  | Treference _ mut ty =>
+      Treference dummy mut (replace_type_with_dummy_origin dummy ty)
+  | Tarray ty sz =>
+      Tarray (replace_type_with_dummy_origin dummy ty) sz
+  | Tstruct orgs id =>
+      Tstruct (map (fun _ => dummy) orgs) id
+  | Tvariant orgs id =>
+      Tvariant (map (fun _ => dummy) orgs) id
   | _ => ty                      (* Is it correct? *)
   end.
 
 
-Definition attr_of_type (ty: type) :=
-  match ty with
-  | Tunit => noattr
-  | Tint sz si a => a
-  | Tlong si a => a
-  | Tfloat sz a => a
-  | Tfunction _ _ args res cc => noattr
-  | Tbox p a => a
-  | Treference _ mut ty a => a
-  | Tarray _ _ a => a
-  | Tstruct _ id a => a
-  | Tvariant _ id a => a
-  end.
+(* Definition attr_of_type (ty: type) := *)
+(*   match ty with *)
+(*   | Tunit => noattr *)
+(*   | Tint sz si a => a *)
+(*   | Tlong si a => a *)
+(*   | Tfloat sz a => a *)
+(*   | Tfunction _ _ args res cc => noattr *)
+(*   | Tbox p a => a *)
+(*   | Treference _ mut ty a => a *)
+(*   | Tarray _ _ a => a *)
+(*   | Tstruct _ id a => a *)
+(*   | Tvariant _ id a => a *)
+(*   end. *)
 
 (** access mode for Rust types  *)
 Definition access_mode (ty: type) : mode :=
   match ty with
-  | Tint I8 Signed _ => By_value Mint8signed
-  | Tint I8 Unsigned _ => By_value Mint8unsigned
-  | Tint I16 Signed _ => By_value Mint16signed
-  | Tint I16 Unsigned _ => By_value Mint16unsigned
-  | Tint I32 _ _ => By_value Mint32
-  | Tint IBool _ _ => By_value Mint8unsigned
-  | Tlong _ _ => By_value Mint64
-  | Tfloat F32 _ => By_value Mfloat32
-  | Tfloat F64 _ => By_value Mfloat64                                   
+  | Tint I8 Signed => By_value Mint8signed
+  | Tint I8 Unsigned => By_value Mint8unsigned
+  | Tint I16 Signed => By_value Mint16signed
+  | Tint I16 Unsigned => By_value Mint16unsigned
+  | Tint I32 _ => By_value Mint32
+  | Tint IBool _ => By_value Mint8unsigned
+  | Tlong _ => By_value Mint64
+  | Tfloat F32 => By_value Mfloat32
+  | Tfloat F64 => By_value Mfloat64                                   
   | Tunit => By_nothing
   | Tfunction _ _ _ _ _ => By_reference
-  | Tbox _ _ => By_value Mptr
-  | Treference _ _ _ _ => By_value Mptr
-  | Tarray _ _ _ => By_reference
-  | Tstruct _ _ _ => By_copy
-  | Tvariant _ _ _ => By_copy
+  | Tbox _ => By_value Mptr
+  | Treference _ _ _ => By_value Mptr
+  | Tarray _ _ => By_reference
+  | Tstruct _ _ => By_copy
+  | Tvariant _ _ => By_copy
 end.
 
 
@@ -241,14 +241,14 @@ Definition composite_env : Type := PTree.t composite.
 Fixpoint complete_type (env: composite_env) (t: type) : bool :=
   match t with
   | Tunit => true
-  | Tint _ _ _ => true
-  | Tlong _ _ => true
-  | Tfloat _ _ => true
+  | Tint _ _ => true
+  | Tlong _ => true
+  | Tfloat _ => true
   | Tfunction _ _ _ _ _ => false
-  | Tbox _ _ => true
-  | Treference _ _ _ _ => true
-  | Tarray t' _ _ => complete_type env t'
-  | Tstruct _ id _ | Tvariant _ id _ =>
+  | Tbox _ => true
+  | Treference _ _ _ => true
+  | Tarray t' _ => complete_type env t'
+  | Tstruct _ id | Tvariant _ id =>
       match env!id with Some co => true | None => false end
   end.
 
@@ -272,21 +272,20 @@ Definition align_attr (a: attr) (al: Z) : Z :=
   end.
 
 Fixpoint alignof (env: composite_env) (t: type) : Z :=
-  align_attr (attr_of_type t)
    (match t with
     | Tunit => 1
-    | Tint I8 _ _ => 1
-    | Tint I16 _ _ => 2
-    | Tint I32 _ _ => 4
-    | Tint IBool _ _ => 1
-    | Tlong _ _ => Archi.align_int64
-    | Tfloat F32 _ => 4
-    | Tfloat F64 _ => Archi.align_float64
+    | Tint I8 _ => 1
+    | Tint I16 _ => 2
+    | Tint I32 _ => 4
+    | Tint IBool _ => 1
+    | Tlong _ => Archi.align_int64
+    | Tfloat F32 => 4
+    | Tfloat F64 => Archi.align_float64
     | Tfunction _ _ _ _ _ => 1
-    | Treference _ _ _ _
-    | Tbox _ _ => if Archi.ptr64 then 8 else 4
-    | Tarray t' _ _ => alignof env t'
-      | Tstruct _ id _ | Tvariant _ id _ =>
+    | Treference _ _ _
+    | Tbox _ => if Archi.ptr64 then 8 else 4
+    | Tarray t' _ => alignof env t'
+      | Tstruct _ id | Tvariant _ id =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
 
@@ -303,7 +302,7 @@ Qed.
 Lemma alignof_two_p:
   forall env t, exists n, alignof env t = two_power_nat n.
 Proof.
-  induction t; apply align_attr_two_p; simpl.
+  induction t; simpl.
   exists 0%nat; auto.
   destruct i.
     exists 0%nat; auto.
@@ -377,8 +376,8 @@ Program Definition get_composite (id: ident) : composite_result :=
 
 Definition own_type' (ty: type) : bool :=
   match ty with
-  | Tstruct _ id _
-  | Tvariant _ id _ =>
+  | Tstruct _ id
+  | Tvariant _ id =>
       match get_composite id with
       | co_some i co P =>
           let acc res m :=
@@ -390,7 +389,7 @@ Definition own_type' (ty: type) : bool :=
           fold_left acc co.(co_members) false
       | co_none => false
       end
-  | Tbox _ _ => true
+  | Tbox _ => true
   | _ => false
   end.
  
@@ -440,19 +439,19 @@ Definition own_type (ce: composite_env) : type -> bool :=
 Fixpoint sizeof (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
-  | Tint I8 _ _ => 1
-  | Tint I16 _ _ => 2
-  | Tint I32 _ _
-  | Tfloat F32 _ => 4
-  | Tint IBool _ _ => 1
-  | Tlong _ _
-  | Tfloat F64 _ => 8
+  | Tint I8 _ => 1
+  | Tint I16 _ => 2
+  | Tint I32 _
+  | Tfloat F32 => 4
+  | Tint IBool _ => 1
+  | Tlong _
+  | Tfloat F64 => 8
   | Tfunction _ _ _ _ _ => 1
-  | Treference _ _ _ _
-  | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tarray t' n _ => sizeof env t' * Z.max 0 n
-  | Tstruct _ id _
-  | Tvariant _ id _ =>
+  | Treference _ _ _
+  | Tbox _ => if Archi.ptr64 then 8 else 4
+  | Tarray t' n => sizeof env t' * Z.max 0 n
+  | Tstruct _ id
+  | Tvariant _ id =>
       match env!id with
       | Some co => co_sizeof co
       | None => 0
@@ -478,19 +477,19 @@ Qed.
 Fixpoint alignof_blockcopy (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
-  | Tint I8 _ _ => 1
-  | Tint I16 _ _ => 2
-  | Tint I32 _ _
-  | Tfloat F32 _ => 4
-  | Tlong _ _
-  | Tfloat F64 _ => 8
-  | Tint IBool _ _ => 1
+  | Tint I8 _ => 1
+  | Tint I16 _ => 2
+  | Tint I32 _
+  | Tfloat F32 => 4
+  | Tlong _
+  | Tfloat F64 => 8
+  | Tint IBool _ => 1
   | Tfunction _ _ _ _ _ => 1
-  | Treference _ _ _ _
-  | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tarray t' _ _ => alignof_blockcopy env t'
-  | Tstruct _ id _
-  | Tvariant _ id _ =>
+  | Treference _ _ _
+  | Tbox _ => if Archi.ptr64 then 8 else 4
+  | Tarray t' _ => alignof_blockcopy env t'
+  | Tstruct _ id 
+  | Tvariant _ id  =>
       match env!id with
       | Some co => Z.min 8 (co_alignof co)
       | None => 1
@@ -744,7 +743,7 @@ Qed.
 
 Definition rank_type (ce: composite_env) (t: type) : nat :=
   match t with
-  | Tstruct _ id _ | Tvariant _ id _ =>
+  | Tstruct _ id | Tvariant _ id =>
       match ce!id with
       | None => O
       | Some co => S (co_rank co)
@@ -774,27 +773,27 @@ Fixpoint type_of_params (params: list (ident * type)) : typelist :=
 Definition typ_of_type (t: type) : AST.typ :=
   match t with
   | Tunit => AST.Tint
-  | Tint _ _ _ => AST.Tint
-  | Tlong _ _ => AST.Tlong
-  | Tfloat F32 _ => AST.Tsingle
-  | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tarray _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tptr
+  | Tint _ _ => AST.Tint
+  | Tlong _ => AST.Tlong
+  | Tfloat F32 => AST.Tsingle
+  | Tfloat F64 => AST.Tfloat
+  | Tfunction _ _ _ _ _ | Treference _ _ _ | Tbox _ | Tarray _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
   match t with
   | Tunit => AST.Tvoid
-  | Tint I32 _ _ => AST.Tint
-  | Tint I8 Signed _ => AST.Tint8signed
-  | Tint I8 Unsigned _ => AST.Tint8unsigned
-  | Tint I16 Signed _ => AST.Tint16signed
-  | Tint I16 Unsigned _ => AST.Tint16unsigned
-  | Tint IBool _ _ => AST.Tint8unsigned
-  | Tlong _ _ => AST.Tlong
-  | Tfloat F32 _ => AST.Tsingle
-  | Tfloat F64 _ => AST.Tfloat
-  | Tbox _ _ | Treference _ _ _ _ => Tptr
-  | Tarray _ _ _ | Tfunction _ _ _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tvoid
+  | Tint I32 _ => AST.Tint
+  | Tint I8 Signed => AST.Tint8signed
+  | Tint I8 Unsigned => AST.Tint8unsigned
+  | Tint I16 Signed => AST.Tint16signed
+  | Tint I16 Unsigned => AST.Tint16unsigned
+  | Tint IBool _ => AST.Tint8unsigned
+  | Tlong _ => AST.Tlong
+  | Tfloat F32 => AST.Tsingle
+  | Tfloat F64 => AST.Tfloat
+  | Tbox _ | Treference _ _ _ => Tptr
+  | Tarray _ _ | Tfunction _ _ _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tvoid
   end.
 
 Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=
@@ -1100,7 +1099,7 @@ Hypothesis extends: forall id co, env!id = Some co -> env'!id = Some co.
 Lemma alignof_stable:
   forall t, complete_type env t = true -> alignof env' t = alignof env t.
 Proof.
-  induction t; simpl; intros; f_equal; auto.
+  induction t; simpl; intros; auto.
   destruct (env!i) as [co|] eqn:E; try discriminate.
   erewrite extends by eauto. auto.
   destruct (env!i) as [co|] eqn:E; try discriminate.
@@ -1377,11 +1376,11 @@ Proof.
 Qed.
 
 Lemma rank_struct_member:
-  forall ce id a co m orgs,
+  forall ce id co m orgs,
   composite_env_consistent ce ->
   ce!id = Some co ->
   In m (co_members co) ->
-  (rank_type ce (type_member m) < rank_type ce (Tstruct orgs id a))%nat.
+  (rank_type ce (type_member m) < rank_type ce (Tstruct orgs id))%nat.
 Proof.
   intros; simpl. rewrite H0.
   erewrite co_consistent_rank by eauto.
@@ -1390,11 +1389,11 @@ Proof.
 Qed.
 
 Lemma rank_union_member:
-  forall ce id a co m orgs,
+  forall ce id co m orgs,
   composite_env_consistent ce ->
   ce!id = Some co ->
   In m (co_members co) ->
-  (rank_type ce (type_member m) < rank_type ce (Tvariant orgs id a))%nat.
+  (rank_type ce (type_member m) < rank_type ce (Tvariant orgs id))%nat.
 Proof.
   intros; simpl. rewrite H0.
   erewrite co_consistent_rank by eauto.

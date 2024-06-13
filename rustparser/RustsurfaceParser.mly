@@ -208,7 +208,7 @@ expr:
   | LPAREN; RPAREN { Eunit }
   | i = INT
     { Eval (Values.Vint (Camlcoq.Z.of_sint i),
-            Tint (Ctypes.I32, Ctypes.Signed, Ctypes.noattr)) }
+            Tint (Ctypes.I32, Ctypes.Signed)) }
   | TRUE { Eval (Values.Vint (Camlcoq.Z.one), bool_ty) }
   | FALSE { Eval (Values.Vint (Camlcoq.Z.zero), bool_ty) }
   | x = ID { Evar x }
@@ -273,19 +273,19 @@ params_ty:
   
 ty:
   | LPAREN; RPAREN { Tunit }
-  | BOOL { Tint (Ctypes.IBool, Ctypes.Unsigned, Ctypes.noattr) }
-  | INT32 { Tint (Ctypes.I32, Ctypes.Signed, Ctypes.noattr) }
-  | INT16 { Tint (Ctypes.I16, Ctypes.Signed, Ctypes.noattr) }
-  | INT8 { Tint (Ctypes.I8, Ctypes.Signed, Ctypes.noattr) }
-  | UINT32 { Tint (Ctypes.I32, Ctypes.Unsigned, Ctypes.noattr) }
-  | UINT16 { Tint (Ctypes.I16, Ctypes.Unsigned, Ctypes.noattr) }
-  | UINT8 { Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) }
-  | FLOAT64 { Tfloat (Ctypes.F64, Ctypes.noattr) }
-  | FLOAT32 { Tfloat (Ctypes.F32, Ctypes.noattr) }
+  | BOOL { Tint (Ctypes.IBool, Ctypes.Unsigned) }
+  | INT32 { Tint (Ctypes.I32, Ctypes.Signed) }
+  | INT16 { Tint (Ctypes.I16, Ctypes.Signed) }
+  | INT8 { Tint (Ctypes.I8, Ctypes.Signed) }
+  | UINT32 { Tint (Ctypes.I32, Ctypes.Unsigned) }
+  | UINT16 { Tint (Ctypes.I16, Ctypes.Unsigned) }
+  | UINT8 { Tint (Ctypes.I8, Ctypes.Unsigned) }
+  | FLOAT64 { Tfloat (Ctypes.F64) }
+  | FLOAT32 { Tfloat (Ctypes.F32) }
   | FN; orgs = generic_origins; LPAREN; pt = params_ty; RPAREN; RARROW; rt = ty; rels = origin_relations { Tfunction (pt, rt, orgs, rels) }
-  | BOX; LANGLE; t = ty; RANGLE { Tbox (t, Ctypes.noattr) }
-  | REF; org = origin_opt; MUT; t = ty; { Treference(t, org, Rusttypes.Mutable, Ctypes.noattr) }
-  | REF; org = origin_opt; t = ty; { Treference(t, org, Rusttypes.Immutable, Ctypes.noattr) }
+  | BOX; LANGLE; t = ty; RANGLE { Tbox (t) }
+  | REF; org = origin_opt; MUT; t = ty; { Treference(t, org, Rusttypes.Mutable) }
+  | REF; org = origin_opt; t = ty; { Treference(t, org, Rusttypes.Immutable) }
   | x = ID; orgs = generic_origins { Tadt (x, Ctypes.noattr, orgs) }
 
 match_arm:

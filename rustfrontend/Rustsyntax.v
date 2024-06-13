@@ -158,9 +158,9 @@ Notation "'match' e 'with' 'case' fid1 'as' id1 '=>' stmt1 'case' fid2 'as' id2 
 (* expression is at level 20 *)
 Notation " ( x ) " := x (in custom rustsyntax at level 20) : rustsyntax_scope.
 Notation " x # t " := (Evar x t) (in custom rustsyntax at level 0, x global, t global)  : rustsyntax_scope.
-Notation "'Box' ( e )" := (Ebox e (Tbox (typeof e) noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
-Notation " '&' 'mut' e " := (Eref e Mutable (Treference (typeof e) Mutable noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
-Notation " '&'  e " := (Eref e Immutable (Treference (typeof e) Immutable noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
+Notation "'Box' ( e )" := (Ebox e (Tbox (typeof e) )) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
+Notation " '&' 'mut' e " := (Eref e Mutable (Treference (typeof e) Mutable )) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
+Notation " '&'  e " := (Eref e Immutable (Treference (typeof e) Immutable )) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
 Notation " ! e " := (Ederef e (deref_type (typeof e))) (in custom rustsyntax at level 10, e at level 20) : rustsyntax_scope.
 Notation " 'field' '(' e ',' x ',' t ')' " := (Efield e x t) (in custom rustsyntax at level 10, x global, t global, e at level 20) : rustsyntax_scope.
 Notation " l := r " := (Eassign l r Tunit) (in custom rustsyntax at level 17, r at level 20) : rustsyntax_scope.
@@ -187,7 +187,7 @@ Definition box_a : expr := <{ Box(A # type_int32s) }>.
 (* Definition deref_box_a_global : expr := <{ ! box_a }>. *)
 Definition deref_box_a : expr := <{ ! Box(A # type_int32s) }>.
 
-Definition box_int := Tbox type_int32s noattr.
+Definition box_int := Tbox type_int32s.
 
 (* test match statement notation *)
 
@@ -329,8 +329,8 @@ Definition ex3 : function :=
 
 (* [list] type *)
 Definition list_id := 102%positive.
-Definition list_ty := Tvariant nil list_id noattr.
-Definition box_list := Tbox list_ty noattr.
+Definition list_ty := Tvariant nil list_id .
+Definition box_list := Tbox list_ty .
 
 (* Define [pair] composite *)
 
@@ -357,7 +357,7 @@ Definition cons_id := 101%positive.
 
 Definition rcons (ty: type) := Member_plain cons_id ty.
 
-Definition list_node_ty := (Tstruct nil list_node_id noattr).
+Definition list_node_ty := (Tstruct nil list_node_id ).
 
 Definition list_codef : composite_definition :=
   Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr nil nil.

@@ -150,7 +150,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
          temp.fid2 := agr2;
          ... *)
       match ty with
-      | Tstruct _ struct_id _ =>
+      | Tstruct _ struct_id =>
           if ident_eq struct_id id then
             (* evaluate the structure arguments *)
             match ce!id with
@@ -170,7 +170,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       end
   | Eenum id fid e ty =>
       match ty with
-      | Tvariant _ variant_id _ =>
+      | Tvariant _ variant_id =>
           (* a simple type checking *)
           if ident_eq variant_id id then
             match ce!id with
@@ -522,7 +522,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       (* we want to store e into a place *)
       let ty := Rustsyntax.typeof e in
       match ty with
-      | Tvariant _ id _ =>
+      | Tvariant _ id =>
           match ce!id with
           | Some co =>
               if value_or_place e then
