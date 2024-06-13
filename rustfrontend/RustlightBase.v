@@ -472,6 +472,13 @@ Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
     eval_place_list (p :: lp) (b :: lb) (ofs :: lofs).
 
 
+Definition int_val_casted (v: val) (ty: type) : Prop :=
+  match v, ty with
+  | Vint n, Tint sz sg =>
+      cast_int_int sz sg n = n
+  | _, _ => True
+  end.
+
 
 (* Evaluation of pure expression *)
 
@@ -502,6 +509,10 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
 | eval_Eplace: forall p b ofs ty v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
+    (* adhoc: cast int if v is Vint. This premise is only useful if ty
+    is type_bool and v is i8 which may be non-zero and non-one
+    value. But we want to prove that it is one or zero *)
+    int_val_casted v ty ->
     eval_pexpr (Eplace p ty) v
 | eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
     eval_place p b ofs ->

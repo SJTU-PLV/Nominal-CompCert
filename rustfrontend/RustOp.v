@@ -102,9 +102,22 @@ Definition classify_shift (ty1: type) (ty2: type) :=
 
 Definition numeric_type (ty: type) :=
   match ty with
-  | Tint _ _ 
+  (** NB : We do not support i/u8 i/u16 in binary operation otherwise
+  we need to consider the signed/zero extension of the result, which
+  is conflict with the val_casted properties. A solution is to change
+  the definition of sem_add... to consider signed extension after add
+  operation. But it is complicated. *)
+  | Tint I32 _
   | Tlong _ 
   | Tfloat _ => true
+  | _ => false
+  end.
+
+Definition numeric_ctype (ty: Ctypes.type) :=
+  match ty with
+  | Ctypes.Tint I32 _ _
+  | Ctypes.Tlong _  _
+  | Ctypes.Tfloat _ _ => true
   | _ => false
   end.
 
@@ -360,24 +373,66 @@ Proof.
       1-2: destruct v1; try congruence; inv C; simpl; econstructor.
 Qed.
 
+Lemma binarith_type_ctype: forall t1 t2 t s,
+  binarith_type t1 t2 s = OK t ->
+  Cop.binarith_type (classify_binarith (to_ctype t1) (to_ctype t2)) = to_ctype t.
+Admitted.
+
+Lemma binarith_type_strict: forall t1 t2 t s,
+    binarith_type t1 t2 s = OK t ->
+    to_ctype t1 = to_ctype t /\ to_ctype t2 = to_ctype t.
+Admitted.
+
+Lemma binarith_type_numeric: forall t1 t2 t s,
+    binarith_type t1 t2 s = OK t ->
+    numeric_type t = true.
+Admitted.
+
+Lemma to_ctype_numeric: forall t,
+    numeric_type t = numeric_ctype (to_ctype t).
+Admitted.
+
+
 Lemma binarith_add_casted: forall t1 t2 t v1 v2 v m s,
     binarith_type t1 t2 s = OK t ->
+    val_casted v1 (to_ctype t1) ->
+    val_casted v2 (to_ctype t2) ->
     sem_add_rust v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
     val_casted v (to_ctype t).
 Proof.
   
-  (* unfold sem_add_rust. unfold sem_binarith. *)
-  
-  (* ; intros; DestructCases.  simpl in H0. *)
-  (* unfold sem_binarith in H0. *)
-Admitted.  
-  
+  unfold sem_add_rust. unfold sem_binarith.
+  intros until s. intros BINTY CAST1 CAST2.
+  erewrite binarith_type_ctype;eauto.
+  exploit binarith_type_strict;eauto. intros (T1 & T2).
+  rewrite T1 in *. rewrite T2 in *.
+  erewrite cast_val_casted;eauto. erewrite cast_val_casted;eauto.
+  (* ct is numeric *)
+  exploit to_ctype_numeric. instantiate (1 := t).
+  rewrite (binarith_type_numeric t1 t2 t s).
+  intros NUM. symmetry in NUM.  
+  set (ct:= to_ctype t) in *.
+  destruct (classify_add ct ct); try congruence.
+  destruct ct eqn: CT; simpl; try congruence.
+  destruct i;destruct s0;
+    destruct v1; try congruence; destruct v2;try congruence; intros ADD; inv ADD; try econstructor;simpl in NUM; try congruence.
+  1-2:simpl;auto.
+  destruct s;destruct s0;
+    destruct v1; try congruence; destruct v2;try congruence; intros ADD; inv ADD; try econstructor;simpl in NUM; try congruence.
+  destruct f;destruct v1; try congruence; destruct v2;try congruence; intros ADD; inv ADD; try econstructor;simpl in NUM; try congruence.
+  auto.
+Qed.
+
 Lemma wt_sem_binary_operation_casted: forall bop t1 t2 t v1 v2 v m,
     type_binop bop t1 t2 = OK t ->
+    val_casted v1 (to_ctype t1) ->
+    val_casted v2 (to_ctype t2) ->    
     sem_binary_operation_rust bop v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
     val_casted v (to_ctype t).
 Proof.
   destruct bop; intros until m; simpl.
+  - eapply binarith_add_casted.
+    (* similar to above *)    
 Admitted.
 
 (* To move *)
@@ -418,6 +473,29 @@ Proof.
   - monadInv H0. destruct (type_eq_except_origins);inv EQ3. auto.
 Qed.
 
+Lemma access_mode_ctype: forall ty,
+    access_mode ty = Ctypes.access_mode (to_ctype ty).
+Proof.
+  intros.
+  destruct ty;simpl;auto.
+Qed.
+
+Lemma wt_deref_loc:
+  forall ty m b ofs v,
+  deref_loc ty m b ofs v ->
+  wt_val v (to_ctype ty).
+Proof.
+  induction 1.
+  - simpl in H0. exploit Mem.load_result; eauto. intros EQ; rewrite EQ.
+    apply wt_decode_val. erewrite <-access_mode_ctype. auto.
+  - destruct ty; simpl in *; try discriminate; auto with ty.
+    destruct i; destruct s; discriminate.
+    destruct f; discriminate.
+- (* by copy *)
+  destruct ty; simpl in *; try discriminate; auto with ty.
+  destruct i; destruct s; discriminate.
+  destruct f; discriminate.
+Qed.
 
 Section SEM.
 
@@ -467,8 +545,14 @@ Proof.
     inv H0. simpl. econstructor.
   - monadInv H0. destruct (type_eq_except_origins t x) eqn: TYEQ;try congruence.
     inv EQ0.
-    (* add type checking in after deref_loc in eval_pexpr *)
-    admit.
+  (* add type checking after deref_loc in eval_pexpr *)
+    exploit wt_deref_loc;eauto. intros WT.
+    
+    inv WT; simpl; try econstructor; eauto.
+    (* Three cases unresolved: Tarray, Tfunction and Vundef. We can
+    restrict it in eval_pexpr place case. *)
+    admit. admit. admit. admit.
+    
   - destruct (Int.unsigned tag =? tagz) eqn:CKTAG.
     econstructor. simpl. erewrite Int.eq_false. auto. eapply Int.one_not_zero.
     econstructor. simpl. erewrite Int.eq_true. auto.
@@ -487,7 +571,8 @@ Proof.
   - monadInv H0.
     exploit IHpe1;eauto. intros CASTED1.
     exploit IHpe2;eauto. intros CASTED2.
-Admitted.    
+    destruct type_eq_except_origins; try congruence. inv EQ3.
+Admitted.
 
 End SEM.
 End TYPING.
