@@ -48,7 +48,7 @@ Definition type_unop (op: unary_operation) (ty: Rusttypes.type) : res type :=
   | Onotbool =>
       match classify_bool ty with
       | bool_default => Error (msg "operator !")
-      | _ => OK (Tint I32 Signed noattr)
+      | _ => OK (Tint IBool Signed noattr)
       end
   | Onotint =>
       match classify_notint ty with
@@ -100,22 +100,39 @@ Definition classify_shift (ty1: type) (ty2: type) :=
   | _,_  => shift_default
   end.
 
+Definition numeric_type (ty: type) :=
+  match ty with
+  | Tint _ _ _
+  | Tlong _ _
+  | Tfloat _ _ => true
+  | _ => false
+  end.
 
 Definition binarith_type (ty1 ty2: type) (m: string): res type :=
-  match classify_binarith ty1 ty2 with
-  | bin_case_i sg => OK (Tint I32 sg noattr)
-  | bin_case_l sg => OK (Tlong sg noattr)
-  | bin_case_f => OK (Tfloat F64 noattr)
-  | bin_case_s => OK (Tfloat F32 noattr)
-  | bin_default   => Error (msg m)
-  end.
+  (* To avoid complicated type cast, we restrict that ty1 must be
+  equal to ty2 in binary operation and both of them are numeric
+  type *)
+  if type_eq ty1 ty2 then
+    if numeric_type ty1 then
+      OK ty1
+    else Error (msg m)
+  else Error (msg m).
+  (* match classify_binarith ty1 ty2 with *)
+  (* | bin_case_i sg => OK (Tint I32 sg noattr) *)
+  (* | bin_case_l sg => OK (Tlong sg noattr) *)
+  (* | bin_case_f => OK (Tfloat F64 noattr) *)
+  (* | bin_case_s => OK (Tfloat F32 noattr) *)
+  (* | bin_default   => Error (msg m) *)
+  (* end. *)
 
 Definition binarith_int_type (ty1 ty2: type) (m: string): res type :=
-  match classify_binarith ty1 ty2 with
-  | bin_case_i sg => OK (Tint I32 sg noattr)
-  | bin_case_l sg => OK (Tlong sg noattr)
-  | _ => Error (msg m)
-  end.
+  if type_eq_except_origins ty1 ty2 then
+    
+  (* match classify_binarith ty1 ty2 with *)
+  (* | bin_case_i sg => OK (Tint I32 sg noattr) *)
+  (* | bin_case_l sg => OK (Tlong sg noattr) *)
+  (* | _ => Error (msg m) *)
+  (* end. *)
 
 Definition shift_op_type (ty1 ty2: type) (m: string): res type :=
   match classify_shift ty1 ty2 with
@@ -216,6 +233,11 @@ Fixpoint wt_place (p: place) : res type :=
 Fixpoint wt_pexpr (pe: pexpr) : res type :=
   match pe with
   | Eunit => OK Tunit
+  (* some adhoc case: we do not support non zero/one cast to bool *)
+  | Econst_int i (Tint IBool sg a) =>
+      if Int.eq i Int.zero || Int.eq i Int.one then
+        OK (Tint IBool sg a)
+      else Error (msg "const bool")              
   | Econst_int i (Tint sz sg a) =>
       if wt_int_dec i sz sg then
         OK (Tint sz sg a)
@@ -251,19 +273,216 @@ Fixpoint wt_pexpr (pe: pexpr) : res type :=
   | _ => Error (msg "other type error in pexpr")
   end.
 
-(* Lemma eval_pexpr_casted: forall pe v, *)
-(*     (* wt_pexpr pe -> *) *)
-(*     eval_pexpr pe v -> *)
-(*     val_casted v (to_ctype (typeof_pexpr pe)). *)
-(* Proof. *)
-(*   induction pe; intros; simpl.  *)
-(*   1-8: admit. *)
-(*   - inv H. eapply IHpe in H3. *)
-    
-    
-(*     destruct op;simpl in H1. *)
-(*     + unfold sem_notbool, option_map in H1. *)
-(*       destruct (bool_val v1 aty m) eqn: BVAL; inv H1. *)
-(*       bool_val *)
+Lemma typeof_wt_pexpr: forall pe ty,
+    wt_pexpr pe = OK ty ->
+    typeof_pexpr pe = ty.
+Proof.
+  induction pe;intros ty;simpl;intros WT;inv WT;auto.
+  - destruct t;try congruence. destruct wt_int_dec;try congruence.
+    destruct i0; try congruence.
+    destruct (Int.eq i Int.zero || Int.eq i Int.one);try congruence.
+    destruct i0; try congruence.
+    destruct (Int.eq i Int.zero || Int.eq i Int.one);try congruence.    
+  - destruct t;try congruence. destruct f0;try congruence.
+  - destruct t;try congruence. destruct f0;try congruence.
+  - destruct t;try congruence.
+  - monadInv H0. destruct type_eq_except_origins;try congruence.
+  - monadInv H0. destruct type_eq_except_origins;try congruence.
+  - monadInv H0. destruct type_eq_except_origins;try congruence.
+  - monadInv H0. destruct type_eq_except_origins;try congruence.
+Qed.
 
+
+Lemma sem_notbool_type: forall v1 v2 ty m,
+    sem_notbool v1 ty m = Some v2 ->
+    val_casted v2 (Ctypes.Tint IBool Signed noattr).
+Proof.
+  unfold sem_notbool.
+  intros. destruct (bool_val v1 ty m);simpl in H;inv H.
+  destruct b;simpl; econstructor;auto.
+Qed.
+
+Lemma wt_sem_unary_operation_casted: forall u t1 t2 v1 v2 m,
+    type_unop u t1 = OK t2 ->
+    sem_unary_operation u v1 (to_ctype t1) m = Some v2 ->
+    val_casted v2 (to_ctype t2).
+Proof.
+  intros until m. destruct u;simpl. intros TYOP SEM.
+  - eapply sem_notbool_type in SEM.
+    destruct (classify_bool t1); try congruence; inv TYOP;auto.
+  - destruct (classify_notint t1) eqn: A; try congruence; intros B C;inv B.
+    + destruct t1;simpl in A; try congruence.
+      simpl.
+      unfold sem_notint in C. simpl in C.
+      destruct i; destruct s0; destruct v1; try congruence;inv C; econstructor; auto.
+    + destruct t1;simpl in A; try congruence.
+      simpl.
+      unfold sem_notint in C. simpl in C.
+      destruct i; destruct s0; destruct v1; try congruence;inv C; econstructor; auto.
+      inv A. unfold sem_notint in C. simpl in C.
+      destruct v1; try congruence;inv C; econstructor; auto.
+  - unfold sem_neg. destruct t1; simpl; try congruence; intros B C.
+    + destruct i; inv B.
+      * destruct v1; try congruence. inv C.
+        simpl. econstructor. auto.
+      * destruct v1; try congruence. inv C.
+        simpl. econstructor. auto.
+      * destruct s. inv H0.
+        destruct v1; try congruence. inv C.
+        simpl. econstructor. auto.
+        inv H0. destruct v1; try congruence. inv C.
+        simpl. econstructor. auto.
+      * destruct v1; try congruence. inv C.
+        simpl. econstructor. auto.
+    + inv B. destruct v1; try congruence. inv C.
+      simpl. econstructor.
+    + destruct f; inv B.
+      * destruct v1; try congruence. inv C.
+        simpl. econstructor.
+      * destruct v1; try congruence. inv C.
+        simpl. econstructor.
+  - unfold sem_absfloat. destruct t1; simpl; try congruence; intros B C.
+    + destruct i;destruct s;try congruence; inv B.
+      1-8 : destruct v1; try congruence; inv C; simpl; econstructor. 
+    + inv B. destruct v1; try congruence; inv C; simpl; econstructor.
+    + destruct f;inv B.
+      1-2: destruct v1; try congruence; inv C; simpl; econstructor.
+Qed.
+
+Lemma binarith_add_casted: forall t1 t2 t v1 v2 v m s,
+    binarith_type t1 t2 s = OK t ->
+    sem_add_rust v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
+    val_casted v (to_ctype t).
+Proof.
+  
+  unfold sem_add_rust. unfold sem_binarith.
+  
+  ; intros; DestructCases.  simpl in H0.
+  unfold sem_binarith in H0.
+  
+  
+Lemma wt_sem_binary_operation_casted: forall bop t1 t2 t v1 v2 v m,
+    type_binop bop t1 t2 = OK t ->
+    sem_binary_operation_rust bop v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
+    val_casted v (to_ctype t).
+Proof.
+  destruct bop; intros until m; simpl.
+
+(* To move *)
+Lemma type_eq_except_origins_to_ctype: forall ty1 ty2,
+    type_eq_except_origins ty1 ty2 = true ->
+    to_ctype ty1 = to_ctype ty2.
+Proof.
+  induction ty1;simpl; intros; try eapply proj_sumbool_true in H;subst;auto.
+  - destruct ty2; try eapply proj_sumbool_true in H; try congruence.
+    destruct m; destruct m0.
+    eapply andb_true_iff in H. destruct H as (TYEQ & AEQ).
+    eapply proj_sumbool_true in AEQ;subst. simpl; f_equal. eapply IHty1;auto.
+    congruence. congruence.
+    eapply andb_true_iff in H. destruct H as (TYEQ & AEQ).
+    eapply proj_sumbool_true in AEQ;subst. simpl; f_equal. eapply IHty1;auto.
+  - destruct ty2;try eapply proj_sumbool_true in H; try congruence.
+    eapply andb_true_iff in H. destruct H as (IDEQ & AEQ).
+    eapply proj_sumbool_true in AEQ;subst.
+    eapply proj_sumbool_true in IDEQ;subst. auto.
+  - destruct ty2;try eapply proj_sumbool_true in H; try congruence.
+    eapply andb_true_iff in H. destruct H as (IDEQ & AEQ).
+    eapply proj_sumbool_true in AEQ;subst.
+    eapply proj_sumbool_true in IDEQ;subst. auto.
+Qed.
+
+Lemma wt_pexpr_typeof: forall pe ty,
+    wt_pexpr pe = OK ty ->
+    typeof_pexpr pe = ty.
+Proof.
+  induction pe; simpl; intros ty WT; inv WT;auto.
+  - destruct t; inv H0.
+    destruct i0; inv H1. destruct wt_int_dec; inv H0; auto.
+    destruct wt_int_dec; inv H0; auto.
+    destruct wt_int_dec; inv H0; auto.
+    destruct orb;inv H0;auto.
+  - destruct t; inv H0. destruct f0; inv H1.
+    auto.
+  - destruct t; inv H0. destruct f0; inv H1.
+    auto.
+  - destruct t; inv H0. auto.
+  - monadInv H0. destruct (type_eq_except_origins);inv EQ0. auto.
+  - monadInv H0. destruct (type_eq_except_origins);inv EQ0. auto.
+  - monadInv H0. destruct (type_eq_except_origins);inv EQ2. auto.
+  - monadInv H0. destruct (type_eq_except_origins);inv EQ3. auto.
+Qed.
+
+
+Section SEM.
+
+Variable e: env.
+Variable m: mem.
+
+Lemma wt_int_casted: forall n sz sg,
+    sz <> IBool ->
+    wt_int n sz sg ->
+    cast_int_int sz sg n = n.
+Proof.
+  unfold wt_int, cast_int_int.
+  intros n sz sg.
+  destruct sz;try congruence.
+  destruct sg;auto.
+  destruct sg;auto.
+Qed.
+
+  
+
+Lemma eval_pexpr_casted: forall pe v ety,
+    wt_pexpr pe = OK ety ->
+    eval_pexpr ce e m pe v ->
+    val_casted v (to_ctype (typeof_pexpr pe)).
+Proof.
+  (* induction hypothesis is useless *)
+  induction pe; intros v ety; simpl; intros WT EVAL; inv WT; inv EVAL; auto.
+  - destruct t; try congruence. 
+    destruct i0 eqn: SZ; econstructor.
+    + try destruct wt_int_dec;try congruence. eapply wt_int_casted. congruence. auto.
+    + try destruct wt_int_dec;try congruence. eapply wt_int_casted. congruence. auto.
+    + try destruct wt_int_dec;try congruence. eapply wt_int_casted. congruence. auto.
+    + destruct (Int.eq i Int.zero || Int.eq i Int.one) eqn: EQ; try congruence.
+      inv H0. simpl.
+      eapply orb_true_iff in EQ. destruct EQ.
+      rewrite H. exploit Int.eq_spec. rewrite H. auto.
+      exploit Int.eq_spec. rewrite H. intros.
+      destruct (Int.eq i Int.zero) eqn: EQ;auto.
+      exploit Int.eq_spec. rewrite EQ. intros.
+      exfalso.
+      eapply Int.one_not_zero. subst. auto.
+  - destruct t; try congruence. destruct f0; try congruence.
+    inv H0. simpl. econstructor.
+  - destruct t; try congruence. destruct f0; try congruence.
+    inv H0. simpl. econstructor.
+  - destruct t; try congruence. 
+    inv H0. simpl. econstructor.
+  - monadInv H0. destruct (type_eq_except_origins t x) eqn: TYEQ;try congruence.
+    inv EQ0.
+    (* add type checking in after deref_loc in eval_pexpr *)
+    admit.
+  - destruct (Int.unsigned tag =? tagz) eqn:CKTAG.
+    econstructor. simpl. erewrite Int.eq_false. auto. eapply Int.one_not_zero.
+    econstructor. simpl. erewrite Int.eq_true. auto.
+  - monadInv H0.
+    destruct (type_eq_except_origins t (Treference o m0 x (attr_of_type t))) eqn: TYEQ.
+    admit. congruence.
+  (* unop *)
+  - monadInv H0.
+    (* exploit IHpe;eauto. intros CASTED. *)
+    destruct (type_eq_except_origins t x0) eqn: TYEQ; try congruence.
+    inv EQ2.
+    erewrite type_eq_except_origins_to_ctype;eauto.
+    eapply wt_sem_unary_operation_casted;eauto.
+    erewrite typeof_wt_pexpr in H6;eauto.
+  (* binop *)
+  - monadInv H0.
+    exploit IHpe1;eauto. intros CASTED1.
+    exploit IHpe2;eauto. intros CASTED2.
+    
+    
 End TYPING.
+
+
