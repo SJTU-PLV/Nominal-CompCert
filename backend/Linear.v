@@ -153,6 +153,21 @@ Definition ros_is_ident (ros: mreg + ident) (rs: locset) (i: ident) : Prop :=
   | inr symb => i = symb
   end.
 
+Lemma ros_is_ident_address: forall ros rs id f,
+    ros_is_ident ros rs id ->
+    let vf := ros_address ros rs in
+    Genv.find_funct ge vf = Some f ->
+    vf = Vptr (Global id) Ptrofs.zero.
+Proof.
+  intros.
+  red in H. destr_in H.
+  simpl in vf. unfold Genv.symbol_address in vf.
+  destruct (Genv.find_symbol _ _) eqn:FIND; [|exfalso].
+  subst vf. unfold Genv.find_symbol in FIND. apply Genv.genv_vars_eq in FIND.
+  congruence.
+  subst vf. simpl in H0. congruence.
+Qed.
+
 Inductive step: state -> trace -> state -> Prop :=
   | exec_Lgetstack:
       forall s f sp sl ofs ty dst b rs m rs',

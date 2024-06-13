@@ -1922,8 +1922,7 @@ Inductive match_states: RTL.state -> LTL.state -> Prop :=
       match_states (RTL.State s f sp pc rs m)
                    (LTL.State ts tf sp pc ls m')
   | match_states_call:
-<<<<<<< HEAD
-      forall s f vf args m ts tvf ls m'
+      forall s f vf args m ts tvf ls m' id
         (FIND: Genv.find_funct ge vf = Some f)
         (STACKS: match_stackframes s ts (RTL.funsig f))
         (LF: Val.lessdef vf tvf)
@@ -1931,19 +1930,8 @@ Inductive match_states: RTL.state -> LTL.state -> Prop :=
         (AG: agree_callee_save (parent_locset ts) ls)
         (MEM: Mem.extends m m')
         (WTARGS: Val.has_type_list args (sig_args (RTL.funsig f))),
-      match_states (RTL.Callstate s vf args m)
-                   (LTL.Callstate ts tvf ls m')
-=======
-      forall s f args m ts tf ls m' id
-        (STACKS: match_stackframes s ts (funsig tf))
-        (FUN: transf_fundef f = OK tf)
-        (ARGS: Val.lessdef_list args (map (fun p => Locmap.getpair p ls) (loc_arguments (funsig tf))))
-        (AG: agree_callee_save (parent_locset ts) ls)
-        (MEM: Mem.extends m m')
-        (WTARGS: Val.has_type_list args (sig_args (funsig tf))),
-      match_states (RTL.Callstate s f args m id)
-                   (LTL.Callstate ts tf ls m' id)
->>>>>>> origin/StackAware-new
+      match_states (RTL.Callstate s vf args m id)
+                   (LTL.Callstate ts tvf ls m' id)
   | match_states_return:
       forall s res m ts ls m' sg
         (STACKS: match_stackframes s ts sg)
@@ -1993,11 +1981,7 @@ Qed.
     "plus" kind. *)
 
 Lemma step_simulation:
-<<<<<<< HEAD
-  forall ty S1 t S2, RTL.step ge S1 t S2 -> wt_state prog se ty S1 ->
-=======
-  forall S1 t S2, RTLmach.step fn_stack_requirements ge S1 t S2 -> wt_state S1 ->
->>>>>>> origin/StackAware-new
+  forall ty S1 t S2, RTLmach.step fn_stack_requirements ge S1 t S2 -> wt_state prog se ty S1 ->
   forall S1', match_states S1 S1' ->
   exists S2', plus (LTL.step fn_stack_requirements) tge S1' t S2' /\ match_states S2 S2'.
 Proof.
@@ -2308,7 +2292,7 @@ Proof.
       generalize (B1 (Eq Full r (R m0))). simpl.
       inv Heqo1. simpl.
       rewrite ESF.add_iff. simpl.
-      intros A. rewrite H in A.
+      intros A. rewrite H0 in A.
       specialize (A (or_introl eq_refl)). inversion A.
       eauto.
     - congruence.
@@ -2329,18 +2313,11 @@ Proof.
   exists ls2; split.
   eapply star_right. eexact A2. constructor. traceEq.
   apply satisf_incr with eafter; auto.
-<<<<<<< HEAD
   eapply ros_address_lessdef; eauto. eapply add_equations_args_satisf; eauto.
   eapply add_equations_args_lessdef; eauto.
-  inv WTI. rewrite <- H7. apply wt_regset_list; auto.
-  simpl. red; auto.
-  inv WTI. fold sg. rewrite <- H7. apply wt_regset_list; auto.
-=======
-  rewrite SIG. eapply add_equations_args_lessdef; eauto.
   inv WTI. rewrite <- H8. apply wt_regset_list; auto.
   simpl. red; auto.
-  inv WTI. rewrite SIG. rewrite <- H8. apply wt_regset_list; auto.
->>>>>>> origin/StackAware-new
+  inv WTI. fold sg. rewrite <- H8. apply wt_regset_list; auto.
 
 (* tailcall *)
 - set (sg := RTL.funsig fd) in *.
@@ -2355,9 +2332,7 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_right. eexact A1. econstructor; eauto.
-<<<<<<< HEAD
   rewrite <- E. rewrite ros_address_tailcall; auto.
-=======
   {
     destruct ros, ros'; simpl in *; auto.
     - destruct (is_callee_save m0). discriminate.
@@ -2366,33 +2341,24 @@ Proof.
       generalize (B1 (Eq Full r (Locations.R m0))). simpl.
       inv Heqo. simpl.
       rewrite ESF.add_iff. simpl.
-      intros A. rewrite H in A.
+      intros A. rewrite H0 in A.
       specialize (A (or_introl eq_refl)). inversion A. subst. eauto.
     - congruence.
     - congruence.
     - destr_in Heqo.
   }
-  rewrite <- E. apply find_function_tailcall; auto.
->>>>>>> origin/StackAware-new
   replace (fn_stacksize tf) with (RTL.fn_stacksize f); eauto.
   destruct (transf_function_inv _ _ FUN); auto.
   eauto. traceEq.
   econstructor; eauto.
   eapply match_stackframes_change_sig; eauto. fold sg. rewrite e0. decEq.
   destruct (transf_function_inv _ _ FUN); auto.
-<<<<<<< HEAD
   rewrite ros_address_tailcall; auto.
   eapply ros_address_lessdef; eauto. eapply add_equations_args_satisf; eauto.
   fold sg. rewrite return_regs_arg_values; auto. eapply add_equations_args_lessdef; eauto.
-  inv WTI. rewrite <- H6. apply wt_regset_list; auto.
-  apply return_regs_agree_callee_save.
-  fold sg. inv WTI. rewrite <- H6. apply wt_regset_list; auto.
-=======
-  rewrite SIG. rewrite return_regs_arg_values; auto. eapply add_equations_args_lessdef; eauto.
   inv WTI. rewrite <- H8. apply wt_regset_list; auto.
   apply return_regs_agree_callee_save.
-  rewrite SIG. inv WTI. rewrite <- H8. apply wt_regset_list; auto.
->>>>>>> origin/StackAware-new
+  fold sg. inv WTI. rewrite <- H8. apply wt_regset_list; auto.
 
 (* builtin *)
 - exploit (exec_moves mv1); eauto. intros [ls1 [A1 B1]].
@@ -2490,14 +2456,10 @@ Proof.
   exploit Mem.push_stage_extends. apply V'. intro.
   exploit Mem.record_frame_extends. apply H11. eauto. intros [m'3 [U'' V'']].
   assert (WTRS: wt_regset env (init_regs args (fn_params f))).
-<<<<<<< HEAD
-  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H9. congruence. }
-=======
-  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H10. auto. auto. }
->>>>>>> origin/StackAware-new
+  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H10. congruence. auto. }
   exploit (exec_moves mv). eauto. eauto.
     eapply can_undef_satisf; eauto. eapply compat_entry_satisf; eauto.
-    rewrite call_regs_param_values. rewrite <- H9. eexact ARGS.
+    rewrite call_regs_param_values. rewrite <- H10. eexact ARGS.
     exact WTRS.
   intros [ls1 [A B]].
   econstructor; split.
@@ -2541,60 +2503,35 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-<<<<<<< HEAD
   forall w q1 q2 st1,
     match_query (cc_c ext @ cc_c_locset) (se, w, base_sg) q1 q2 ->
-    RTL.initial_state ge q1 st1 ->
+    RTLmach.initial_state ge q1 st1 ->
     Val.has_type_list (cq_args q1) (sig_args (cq_sg q1)) ->
   exists st2, LTL.initial_state tge q2 st2 /\ match_states st1 st2.
-=======
-  forall st1, RTLmach.initial_state prog st1 ->
-  exists st2, LTL.initial_state tprog st2 /\ match_states st1 st2.
->>>>>>> origin/StackAware-new
 Proof.
   intros w q1 q2 st1 (qi & Hq1i & Hqi2) Hst1 Hwt.
   destruct Hq1i. CKLR.uncklr. destruct H as [vf|]; try congruence.
   inversion Hqi2; clear Hqi2. subst sg. subst. inv Hst1.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
-<<<<<<< HEAD
   monadInv TR. cbn in *. rewrite <- SIG.
   set (rs0 := initial_regs (fn_sig x) rs).
-  exists (LTL.Callstate (Stackbase rs0 :: nil) vf rs0 m2).
+  set (vf := Vptr (Global id) Ptrofs.zero).
+  exists (LTL.Callstate (Stackbase rs0 :: nil) vf rs0 m2 id).
   split; econstructor; eauto.
-  - cbn. rewrite H4. constructor; auto.
+  - cbn. rewrite H3. constructor; auto.
   - cbn. subst rs0. erewrite map_ext_in with (g:= (fun p : rpair loc => Locmap.getpair p rs)); eauto.
-    rewrite H4. eauto.
+    rewrite H3. eauto.
     intros p Hp. cbn. apply getpair_initial_regs; auto. rewrite SIG. eauto.
   - intros l Hl. simpl. reflexivity.
-  - simpl. rewrite H4. eauto.
+  - simpl. rewrite H3. eauto.
 Qed.
 
 Lemma final_states_simulation:
-  forall st1 st2 r1, match_states st1 st2 -> RTL.final_state st1 r1 ->
+  forall st1 st2 r1, match_states st1 st2 -> RTLmach.final_state st1 r1 ->
   exists r2,
     LTL.final_state st2 r2 /\
     match_reply (cc_c ext @ cc_c_locset) (se, tt, base_sg) r1 r2.
-=======
-  exists (LTL.Callstate nil tf (Locmap.init Vundef) m1 (prog_main tprog)); split.
-  econstructor; eauto.
-  eapply (Genv.init_mem_transf_partial TRANSF); eauto.
-  rewrite symbols_preserved.
-  rewrite (match_program_main TRANSF).  auto.
-  congruence.
-  rewrite (match_program_main TRANSF).  auto.
-  constructor; auto.
-  constructor. rewrite SIG; rewrite H3; auto.
-  rewrite SIG, H3, loc_arguments_main. auto.
-  red; auto.
-  apply Mem.extends_refl.
-  rewrite SIG, H3. constructor.
-Qed.
-
-Lemma final_states_simulation:
-  forall st1 st2 r,
-  match_states st1 st2 -> RTLmach.final_state st1 r -> LTL.final_state st2 r.
->>>>>>> origin/StackAware-new
 Proof.
   intros. inv H0. inv H. inv STACKS. cbn in * |- .
   eexists; split. econstructor; eauto.
@@ -2624,9 +2561,9 @@ Proof.
 Qed.
 
 Lemma external_states_simulation:
-  forall st1 st2 q1, match_states st1 st2 -> RTL.at_external ge st1 q1 ->
+  forall st1 st2 q1, match_states st1 st2 -> RTLmach.at_external ge st1 q1 ->
   exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_c ext @ cc_c_locset) w q1 q2 /\
-  forall r1 r2 st1', match_reply (cc_c ext @ cc_c_locset) w r1 r2 -> RTL.after_external st1 r1 st1' ->
+  forall r1 r2 st1', match_reply (cc_c ext @ cc_c_locset) w r1 r2 -> RTLmach.after_external st1 r1 st1' ->
     Val.has_type (cr_retval r1) (proj_sig_res (cq_sg q1)) ->
   exists st2', LTL.after_external tge st2 r2 st2' /\ match_states st1' st2'.
 Proof.
@@ -2637,11 +2574,13 @@ Proof.
   simpl in FUN; inv FUN.
   exists (se, tt, sg), (lq tvf sg ls m'). intuition idtac; cbn in *.
   - econstructor; eauto.
-  - destruct LF; try discriminate.
+    inv LF. auto.
+  - inv LF.
     eexists; split; econstructor; CKLR.uncklr; eauto.
-    destruct v; cbn in *; congruence.
+    congruence.
   - destruct H as (ri & ([ ] & _ & Hr1i) & Hri2).
     inv H0. inv Hr1i. inv Hri2. eexists; split; econstructor; CKLR.uncklr; eauto.
+    + inv LF. auto.
     + rewrite get_result_regs_result.
       assumption.
     + intros l Hl. transitivity (ls l); eauto.
@@ -2661,38 +2600,17 @@ Proof.
 - constructor.
 Qed.
 
-<<<<<<< HEAD
-=======
-Theorem transf_program_correct:
-  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
-                     (LTL.semantics fn_stack_requirements tprog).
-Proof.
-  set (ms := fun s s' => wt_state s /\ match_states s s').
-  eapply forward_simulation_plus with (match_states := ms).
-- apply senv_preserved.
-- intros. exploit initial_states_simulation; eauto. intros [st2 [A B]].
-  exists st2; split; auto. split; auto.
-  apply wt_initial_state with (p := prog); auto. exact wt_prog.
-- intros. destruct H. eapply final_states_simulation; eauto.
-- intros. destruct H0.
-  exploit step_simulation; eauto. intros [s2' [A B]].
-  exists s2'; split. exact A. split.
-  eapply subject_reduction; eauto. eexact wt_prog. eapply H.
-  auto.
-Qed.
-
->>>>>>> origin/StackAware-new
 End PRESERVATION.
 
-Theorem transf_program_correct prog tprog:
+Theorem transf_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
   forward_simulation (wt_c @ cc_c ext @ cc_c_locset) (wt_c @ cc_c ext @ cc_c_locset)
-    (RTL.semantics prog) (LTL.semantics tprog).
+    (RTLmach.semantics fn_stack_requirements prog) (LTL.semantics fn_stack_requirements tprog).
 Proof.
   intros MATCH.
   eapply source_invariant_fsim; eauto using rtl_wt, wt_prog.
   revert MATCH.
-  set (ms := fun se sg s s' => match_states prog tprog se sg s s').
+  set (ms := fun se sg s s' => match_states fn_stack_requirements prog tprog se sg s s').
   fsim eapply forward_simulation_plus with (match_states := ms se1 (snd w));
     cbn -[wt_c] in *; subst; destruct w as [[xse [ ]] [sg rs]], Hse; subst.
 - intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2.

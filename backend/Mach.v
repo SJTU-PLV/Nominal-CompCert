@@ -358,14 +358,15 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (Callstate (Stackframe vf sp (Val.offset_ptr vf ra) c :: s)
                       (ros_address ge ros rs) rs m id)
   | exec_Mtailcall:
-      forall s vf stk soff sig ros c rs m f m' id,
+      forall s vf stk soff sig ros c rs m f m' m'' id,
       Genv.find_funct ge vf = Some (Internal f) ->
       ros_is_ident ros rs id ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk (Ptrofs.unsigned soff) (Ptrofs.unsigned soff + f.(fn_stacksize)) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State s vf (Vptr stk soff) (Mtailcall sig ros :: c) rs m)
-        E0 (Callstate s (ros_address ge ros rs) rs m' id)
+        E0 (Callstate s (ros_address ge ros rs) rs m'' id)
   | exec_Mbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
@@ -421,7 +422,7 @@ Inductive step: state -> trace -> state -> Prop :=
       store_stack m3 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m4 ->
       rs' = undef_regs destroyed_at_function_entry rs ->
       step (Callstate s vf rs m id)
-        E0 (State s vf sp f.(fn_code) rs' m3)
+        E0 (State s vf sp f.(fn_code) rs' m4)
   | exec_function_external:
       forall s vf rs m t rs' ef args res m' id,
       Genv.find_funct ge vf = Some (External ef) ->

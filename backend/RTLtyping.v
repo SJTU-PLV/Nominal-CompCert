@@ -904,20 +904,12 @@ Inductive wt_state: state -> Prop :=
         (WT_RS: wt_regset env rs),
       wt_state (State s f sp pc rs m)
   | wt_state_call:
-<<<<<<< HEAD
-      forall s vf f args m,
+      forall s vf f args m id,
       wt_stackframes ty s (funsig f) ->
       wt_fundef f ->
       Val.has_type_list args (sig_args (funsig f)) ->
       Genv.find_funct ge vf = Some f ->
-      wt_state (Callstate s vf args m)
-=======
-      forall s f args m id,
-      wt_stackframes s (funsig f) ->
-      wt_fundef f ->
-      Val.has_type_list args (sig_args (funsig f)) ->
-      wt_state (Callstate s f args m id)
->>>>>>> origin/StackAware-new
+      wt_state (Callstate s vf args m id)
   | wt_state_return:
       forall s v m sg,
       wt_stackframes ty s sg ->
@@ -933,20 +925,7 @@ Proof.
 - econstructor; eauto. rewrite H3. unfold proj_sig_res. rewrite H. auto.
 Qed.
 
-<<<<<<< HEAD
-=======
-Section SUBJECT_REDUCTION.
-
-Variable p: program.
-
-Hypothesis wt_p: wt_program p.
-
-Let ge := Genv.globalenv p.
-
-Variable fn_stack_requirements : ident -> Z.
-
->>>>>>> origin/StackAware-new
-Lemma subject_reduction:
+Lemma subject_reduction fn_stack_requirements:
   forall st1 t st2, step fn_stack_requirements ge st1 t st2 ->
   forall (WT: wt_state st1), wt_state st2.
 Proof.
@@ -963,36 +942,16 @@ Proof.
   (* Icall *)
   try (generalize (wt_instrs _ _ WT_FN pc _ H0); intros WTI).
   assert (wt_fundef fd).
-<<<<<<< HEAD
     pattern fd. apply Genv.find_funct_prop with unit se p vf.
-    exact wt_p. exact H0.
-=======
-    destruct ros; simpl in H1.
-    pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
     exact wt_p. exact H1.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H2 in H1.
-    pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H1.
-    discriminate.
->>>>>>> origin/StackAware-new
   econstructor; eauto.
   econstructor; eauto. inv WTI; auto.
   inv WTI. rewrite <- H9. apply wt_regset_list. auto.
   (* Itailcall *)
   try (generalize (wt_instrs _ _ WT_FN pc _ H0); intros WTI).
   assert (wt_fundef fd).
-<<<<<<< HEAD
     pattern fd. apply Genv.find_funct_prop with unit se p vf.
-    exact wt_p. exact H0.
-=======
-    destruct ros; simpl in H1.
-    pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
     exact wt_p. exact H1.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H2 in H1.
-    pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H1.
-    discriminate.
->>>>>>> origin/StackAware-new
   econstructor; eauto.
   inv WTI. apply wt_stackframes_change_sig with (fn_sig f); auto.
   inv WTI. rewrite <- H9. apply wt_regset_list. auto.
@@ -1006,16 +965,12 @@ Proof.
   econstructor; eauto.
   inv WTI; simpl. auto. rewrite <- H4. auto.
   (* internal function *)
-<<<<<<< HEAD
-  rewrite FIND in H7. inv H7.
-  simpl in *. inv H5.
-=======
+  rewrite FIND in H9. inv H9.
   simpl in *. inv H7.
->>>>>>> origin/StackAware-new
   econstructor; eauto.
   inv H2. apply wt_init_regs; auto. rewrite wt_params0. auto.
   (* external function *)
-  rewrite FIND in H7. inv H7.
+  rewrite FIND in H8. inv H8.
   econstructor; eauto.
   eapply external_call_well_typed; eauto.
   (* return *)
@@ -1035,9 +990,9 @@ Qed.
 
 End SUBJECT_REDUCTION.
 
-Lemma rtl_wt prog:
+Lemma rtl_wt prog fn_stack_requirements:
   wt_program prog ->
-  preserves (semantics prog) wt_c wt_c
+  preserves (semantics fn_stack_requirements prog) wt_c wt_c
     (fun '(se, sg) => wt_state prog se (sig_res sg)).
 Proof.
   intros PROG_WT [se sg] xse SE_VALID Hxse. destruct Hxse.
@@ -1051,7 +1006,7 @@ Proof.
   - intros s q Hs Hq. destruct Hq. inv Hs.
     assert (f = External (EF_external name sg0)) by congruence. subst. cbn in *.
     eexists (_, _); cbn. intuition eauto.
-    inv H1. econstructor; eauto.
+    inv H2. econstructor; eauto.
   - intros s r Hs Hr. destruct Hr. inv Hs. inv H1. cbn.
     unfold proj_sig_res in *. rewrite H in H3. auto.
 Qed.

@@ -361,22 +361,13 @@ Inductive match_states: state -> state -> Prop :=
       match_states (Block s f sp (Lcond cond args pc1 pc2 :: bb) ls m)
                    (State ts (tunnel_function f) sp (branch_target f pc1) tls tm)
   | match_states_call:
-<<<<<<< HEAD
-      forall s vf ls m ts tvf tls tm
-=======
-      forall s f ls m ts tls tm id
->>>>>>> origin/StackAware-new
+      forall s vf ls m ts tvf tls tm id
         (STK: list_forall2 match_stackframes s ts)
         (LF: Val.lessdef vf tvf)
         (LS: locmap_lessdef ls tls)
         (MEM: Mem.extends m tm),
-<<<<<<< HEAD
-      match_states (Callstate s vf ls m)
-                   (Callstate ts tvf tls tm)
-=======
-      match_states (Callstate s f ls m id)
-                   (Callstate ts (tunnel_fundef f) tls tm id)
->>>>>>> origin/StackAware-new
+      match_states (Callstate s vf ls m id)
+                   (Callstate ts tvf tls tm id)
   | match_states_return:
       forall s ls m ts tls tm
         (STK: list_forall2 match_stackframes s ts)
@@ -607,35 +598,24 @@ Proof.
   exploit ros_address_translated; eauto. intros ROS.
   left; simpl; econstructor; split.
   eapply exec_Lcall with (fd := tunnel_fundef fd); eauto.
-<<<<<<< HEAD
   eapply functions_translated; eauto.
-=======
   destruct ros; simpl in *. generalize (LS (R m0)).
   intro. inv H1. eauto. congruence. auto.
-  eapply find_function_translated; eauto.
->>>>>>> origin/StackAware-new
   rewrite sig_preserved. auto.
   econstructor; eauto.
   constructor; auto.
   constructor; auto.
 - (* Ltailcall *)
-<<<<<<< HEAD
   exploit (ros_address_translated ros (return_regs (parent_locset s) rs)).
     eauto using return_regs_lessdef, match_parent_locset. intros ROS.
   exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
-  left; simpl; econstructor; split.
-  eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
-  eapply functions_translated; eauto.
-=======
-  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
   exploit Mem.pop_stage_extends; eauto. intros (tm''' & POP & MEM''').
   left; simpl; econstructor; split.
   eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
+  eapply functions_translated; eauto.
   eapply ros_is_ident_translated; eauto.
   eapply return_regs_lessdef; eauto.
   eapply match_parent_locset; eauto.
-  eapply find_function_translated; eauto using return_regs_lessdef, match_parent_locset.
->>>>>>> origin/StackAware-new
   apply sig_preserved.
   econstructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* Lbuiltin *)
@@ -643,11 +623,6 @@ Proof.
   exploit external_call_mem_extends; eauto. intros (tvres & tm' & A & B & C & D).
   left; simpl; econstructor; split.
   eapply exec_Lbuiltin; eauto.
-<<<<<<< HEAD
-=======
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
-  eapply external_call_symbols_preserved. apply senv_preserved. eauto.
->>>>>>> origin/StackAware-new
   econstructor; eauto using locmap_setres_lessdef, locmap_undef_regs_lessdef.
 - (* Lbranch (preserved) *)
   left; simpl; econstructor; split.
@@ -715,29 +690,17 @@ Lemma transf_initial_states:
   forall w q1 q2 st1, match_query (cc_locset ext) w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
-<<<<<<< HEAD
   intros [w sg] q1 q2 st1 Hq Hst1. inv Hst1. inv Hq. CKLR.uncklr.
   specialize (initial_regs_inject _ _ _ _ H6).
   setoid_rewrite ext_lessdef. intro.
-  destruct H4 as [vf|]; try congruence.
-  eexists (Callstate _ vf _ m2); split.
+  inv H4; try congruence.
+  remember (Vptr (Global id) _) as vf.
+  eexists (Callstate _ vf _ m2 id); split.
   - setoid_rewrite <- (sig_preserved (Internal f)).
     eapply functions_translated in H; eauto.
     econstructor; eauto.
   - constructor; eauto.
     repeat constructor; eauto.
-=======
-  intros. inversion H.
-  exists (Callstate nil (tunnel_fundef f) (Locmap.init Vundef) m1 (prog_main tprog)); split.
-  econstructor; eauto.
-  apply (Genv.init_mem_transf TRANSL); auto.
-  rewrite (match_program_main TRANSL).
-  rewrite symbols_preserved. eauto.
-  apply function_ptr_translated; auto.
-  rewrite <- H3. apply sig_preserved.
-  rewrite (match_program_main TRANSL).
-  constructor. constructor. red; simpl; auto. apply Mem.extends_refl.
->>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transf_final_states:
@@ -750,38 +713,34 @@ Proof.
   intros r Hr. CKLR.uncklr; auto.
 Qed.
 
-<<<<<<< HEAD
 Lemma transf_external_states:
   forall st1 st2 q1, match_states st1 st2 -> at_external ge st1 q1 ->
   exists w q2, at_external tge st2 q2 /\ match_query (cc_locset ext) w q1 q2 /\ se = se /\
   forall r1 r2 st1', match_reply (cc_locset ext) w r1 r2 -> after_external ge st1 r1 st1' ->
   exists st2', after_external tge st2 r2 st2' /\ match_states st1' st2'.
-=======
-Theorem transf_program_correct:
-  forward_simulation (LTL.semantics fn_stack_requirements prog)
-                     (LTL.semantics fn_stack_requirements tprog).
->>>>>>> origin/StackAware-new
 Proof.
   intros. inv H0. inv H.
   exploit functions_translated; eauto. cbn. intros TFIND.
   exists (sg, tt), (lq tvf sg tls tm); intuition idtac.
   - econstructor; eauto.
+    inv LF. auto.
   - destruct LF; try discriminate. econstructor; CKLR.uncklr; eauto.
     intros l _. setoid_rewrite ext_lessdef. auto.
     destruct v; cbn in *; try congruence.
-  - inv H0. destruct H as ([ ] & _ & H). inv H.
-    rewrite H8 in H1; inv H1. CKLR.uncklr.
+  - inv H2. destruct H0 as ([ ] & _ & H0). inv H0.
+    rewrite H10 in H1; inv H1. CKLR.uncklr.
  (*red in H3. setoid_rewrite ext_lessdef in H3. *)
     eexists; split; econstructor; eauto.
+    inv LF. auto.
     intro. apply ext_lessdef with tt. apply result_regs_inject; auto.
     intro. apply ext_lessdef. auto.
 Qed.
 
 End PRESERVATION.
 
-Theorem transf_program_correct prog tprog:
+Theorem transf_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
-  forward_simulation (cc_locset ext) (cc_locset ext) (LTL.semantics prog) (LTL.semantics tprog).
+  forward_simulation (cc_locset ext) (cc_locset ext) (LTL.semantics fn_stack_requirements prog) (LTL.semantics fn_stack_requirements tprog).
 Proof.
   fsim eapply forward_simulation_opt; destruct w as [sg w], Hse.
   - intros q _ []. CKLR.uncklr. destruct H; try congruence.
