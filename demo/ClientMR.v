@@ -15,6 +15,7 @@ Require Import Server.
 int input[N], result[N];
 int index;
 
+
 void request (int *r){
   if (index == 0) {
     index += 1;
@@ -30,6 +31,65 @@ void request (int *r){
     return;
   }
 }
+
+===========================
+MT-version of request
+
+int input[3], result[3];
+int index;
+
+
+// external function provided by server, i.e. any library
+// it will return the result as (pointed by) the argument
+// of a given callback function
+void encrypt (int input, void(*p)(int*));
+
+// The callback functions
+void process1 (int *r){
+  result[1] = *r;  
+}
+void process2 (int *r){
+  result[2] = *r;  
+}
+void process3 (int *r){
+  result[3] = *r;  
+}
+
+// struct as argument of thread_function
+typedef struct {
+  int ind;
+  void (*callback) (int* __);
+} Arg.
+
+// The thread function for subthreads
+void* thread_function(void* a){
+  Arg* arg = (Arg*) a;
+  encrypt(arg->i,arg->callback);
+  return NULL;
+}
+
+// request function which calls MT primitives
+void request(){
+  pthread_t thread[3];
+  void (*callbacks[3])(int* __) = {process1, process2, process3};
+
+  // create threads
+  for (int i = 0 ; i < 3 ; ++i){
+      Arg* arg = malloc(sizeof(Arg));
+      arg->in = input[i];
+      arg->callback = callbacks[i];
+      pthread_create(&threads[i], thread_function, (void* __) arg);
+  }
+
+  // wait subthreads to complete
+  for (int i = 0; i < 3 ; ++ i){\
+      pthread_join(threads[i]);
+
+  }
+  //complete
+  return 0;
+}
+
 
 *)
 
