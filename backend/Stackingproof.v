@@ -2067,11 +2067,22 @@ Qed.
 - Well-typedness of [f].
 *)
 
+(*defined using only the program *)
 Definition fn_stack_requirements (i: ident) : Z :=
+  match Maps.PTree.get i (prog_defmap tprog) with
+  |Some (Gfun (Internal f)) => fn_stacksize f
+  |_ => 0
+  end.
+
+(** defined using global environment [tge],
+ this two definitions are the same by [Genv.valid_for]
+ as proved later in [fn_stack_requirements_eq]*)
+Definition fn_stack_requirements' (i: ident) : Z :=
   match Genv.find_funct_ptr tge (Global i) with
     | Some (Internal f) => fn_stacksize f
     | _ => 0
   end.
+
 
 Inductive match_states: Linear.state -> Mach.state -> Prop :=
   | match_states_intro:
@@ -2136,7 +2147,7 @@ Proof.
 Qed.
 
 Theorem transf_step_correct:
-  forall s1 t s2, Linear.step fn_stack_requirements ge s1 t s2 ->
+  forall s1 t s2, Linear.step fn_stack_requirements' ge s1 t s2 ->
   forall (WTS: wt_state prog se s1) s1' (MS: match_states s1 s1'),
   exists s2', plus step tge s1' t s2' /\ match_states s2 s2'.
 Proof.
@@ -2439,7 +2450,7 @@ Proof.
   rewrite (sep_swap (minjection j' m'')) in SEP.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
-  unfold fn_stack_requirements in C.
+  unfold fn_stack_requirements' in C.
   inv WTS. inv FINJ. injg H3. simpl in TFIND. destr_in TFIND.
   rewrite TFIND in C. exact C.
   rewrite (unfold_transf_function _ _ TRANSL). unfold fn_code. unfold transl_body.
@@ -2641,12 +2652,39 @@ Qed.
 
 End PRESERVATION.
 
-Theorem transf_program_correct rao prog tprog tge:
+
+Lemma fn_stack_requirements_eq :
+  forall prog se,
+    Genv.valid_for (erase_program prog) se ->
+    fn_stack_requirements' prog se = fn_stack_requirements prog.
+Proof.
+  intros. apply Axioms.extensionality.
+  intros. unfold fn_stack_requirements. unfold fn_stack_requirements'.
+  destruct (Maps.PTree.get x (prog_defmap prog)) eqn: Hmap.
+  + eapply Genv.find_def_symbol in H.
+    apply H in Hmap. unfold Genv.find_funct_ptr.
+    destruct Hmap as [b [A B]].
+    apply Genv.genv_vars_eq in A. subst b. rewrite B.
+    destruct g. reflexivity. auto.
+  + unfold Genv.find_funct_ptr.
+    destruct Genv.find_def eqn: Htge.
+    assert (Maps.PTree.get x  (prog_defmap prog) = Some g ).
+    eapply Genv.find_def_symbol in H.
+    apply H. exists (Global x). split; auto.
+    simpl.
+    rewrite Genv.find_def_spec in Htge.
+    destruct Genv.invert_symbol  eqn:Hinv in Htge; try congruence.
+    apply Genv.invert_find_symbol in Hinv.
+    apply Genv.genv_vars_eq in Hinv as Heq. inv Heq. auto.
+    congruence. auto.
+Qed.
+
+Theorem transf_program_correct rao prog tprog :
   (forall f sg ros c, is_tail (Mcall sg ros :: c) (fn_code f) ->
    exists ofs, rao f c ofs) ->
   match_prog prog tprog ->
   forward_simulation (wt_loc @ cc_stacking injp) (wt_loc @ cc_stacking inj)
-                     (Linear.semantics (fn_stack_requirements tprog tge) prog) (Mach.semantics rao tprog).
+                     (Linear.semantics (fn_stack_requirements tprog) prog) (Mach.semantics rao tprog).
 Proof.
   intros Hrao MATCH.
   eapply source_invariant_fsim; eauto using linear_wt, wt_prog.
@@ -2663,7 +2701,10 @@ Proof.
     exists wx, qx2. intuition auto. destruct H4 as (Hs1' & _).
     edestruct H2 as (st2' & ? & ?); eauto.
   - intros s1 t s1' (Hs1' & [xse ?] & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
-    eapply transf_step_correct; eauto.
-    (* FIXME: what should be the correct tge for fn_stack_requirements? *)
-    give_up.
+    eapply transf_step_correct; eauto. simpl in Hse1.
+    rewrite fn_stack_requirements_eq.
+    auto.
+    eapply Linking.match_program_skel in MATCH as Hskel.
+    rewrite <- Hskel.
+    eapply match_senv_valid_for; eauto.
 Qed.
