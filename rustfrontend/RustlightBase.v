@@ -10,7 +10,7 @@ Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Ctypes Rusttypes.
-Require Import Cop.
+Require Import Cop RustOp.
 Require Import LanguageInterface.
 
 Local Open Scope error_monad_scope.
@@ -512,7 +512,7 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     (* adhoc: cast int if v is Vint. This premise is only useful if ty
     is type_bool and v is i8 which may be non-zero and non-one
     value. But we want to prove that it is one or zero *)
-    int_val_casted v ty ->
+    (* int_val_casted v ty -> *)
     eval_pexpr (Eplace p ty) v
 | eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
     eval_place p b ofs ->
@@ -547,7 +547,7 @@ Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
     (* For now, we does not allow type cast *)
     typeof a = ty ->
     eval_expr a v1 ->
-    (* sem_cast v1 (typeof a) ty m = Some v2 -> *) 
+    sem_cast v1 (typeof a) ty = Some v2 ->
     eval_exprlist bl tyl vl ->
     eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl).
 

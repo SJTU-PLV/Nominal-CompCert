@@ -10,7 +10,7 @@ Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Ctypes Rusttypes.
-Require Import Cop.
+Require Import Cop RustOp.
 Require Import LanguageInterface.
 Require Import Clight RustlightBase.
 
@@ -602,19 +602,25 @@ Definition drop_for_member (p: place) (memb: member) : list statement :=
 
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_assign: forall f e p k le m1 m2 b ofs v,
+| step_assign: forall f e p k le m1 m2 b ofs v v1,
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
     eval_expr ge le m1 e v ->
+    (* sem_cast to simulate Clight *)
+    sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
     assign_loc ge (typeof_place p) m1 b ofs v m2 ->
     step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
-| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v tag bf co fid enum_id,
+| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v v1 tag bf co fid enum_id,
+    ge.(genv_cenv) ! enum_id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr *)
     eval_expr ge le m1 e v ->
+    (* sem_cast to simulate Clight *)
+    sem_cast v (typeof e) ty = Some v1 ->
     (** different from normal assignment: update the tag and assign value *)
     ge.(genv_cenv) ! enum_id = Some co ->
     field_tag fid co.(co_members) = Some tag ->
@@ -622,15 +628,18 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
     variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
-    assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
+    assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 m3 ->
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
-| step_box: forall f e p ty k le m1 m2 m3 m4 b v,
+| step_box: forall f e p ty k le m1 m2 m3 m4 b v v1,
+    typeof_place p = Tbox ty ->
     eval_expr ge le m1 e v ->
     (* Simulate malloc semantics to allocate the memory block *)
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge ty) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge ty))) = Some m3 ->
+    (* sem_cast the value to simulate function call in Clight *)
+    sem_cast v (typeof e) ty = Some v1 ->
     (* assign the value *)
-    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
+    assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
     step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m4)
 
 (** Small-step drop semantics *)
@@ -682,8 +691,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_storagedead: forall f k le m id,
     step (State f (Sstoragedead id) k le m) E0 (State f Sskip k le m)
          
-| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,
-    
+| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -708,12 +716,14 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.free_list m1 lb = Some m2 ->
     (* return unit or Vundef? *)
     step (State f (Sreturn None) k e m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v lb m1 m2 f k ,
+| step_return_1: forall le a v v1 lb m1 m2 f k ,
     eval_expr ge le m1 a v ->
+    (* sem_cast to the return type *)
+    sem_cast v (typeof a) f.(fn_return) = Some v1 ->
     (* drop the stack blocks *)
     blocks_of_env ge le = lb ->
     Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn (Some a)) k le m1) E0 (Returnstate v (call_cont k) m2)
+    step (State f (Sreturn (Some a)) k le m1) E0 (Returnstate v1 (call_cont k) m2)
 (* no return statement but reach the end of the function *)
 | step_skip_call: forall e lb m1 m2 f k,
     is_call_cont k ->
@@ -803,10 +813,11 @@ Inductive step_mem_error : state -> Prop :=
     eval_place ge le m p b ofs ->
     eval_expr_mem_error ge le m e ->
     step_mem_error (State f (Sassign p e) k le m)
-| step_assign_error3: forall f e p k le m b ofs v ty,
+| step_assign_error3: forall f e p k le m b ofs v v1 ty,
     eval_place ge le m p b ofs ->
     eval_expr ge le m e v ->
-    assign_loc_mem_error ge ty m b ofs v ->
+    sem_cast v (typeof e) (typeof_place p) = Some v1 ->
+    assign_loc_mem_error ge ty m b ofs v1 ->
     step_mem_error (State f (Sassign p e) k le m)
 | step_assign_variant_error1: forall f e p k le m enum_id fid,
     eval_place_mem_error ge le m p ->
@@ -820,26 +831,29 @@ Inductive step_mem_error : state -> Prop :=
     eval_expr ge le m e v ->
     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error4: forall f e p k le m1 m2 b ofs ofs' enum_id fid v ty co bf tag,
+| step_assign_variant_error4: forall f e p k le m1 m2 b ofs ofs' enum_id fid v v1 ty co bf tag,
+    ge.(genv_cenv) ! enum_id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
     eval_place ge le m1 p b ofs ->
     eval_expr ge le m1 e v ->
-    ge.(genv_cenv) ! enum_id = Some co ->
+    sem_cast v (typeof e) ty = Some v1 ->
     field_tag fid co.(co_members) = Some tag ->
     (* set the tag *)
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
-    assign_loc_mem_error ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
+    assign_loc_mem_error ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 ->
     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1)
-| step_box_error1: forall le e p k m f, 
+| step_box_error1: forall le e p k m f,
     eval_expr_mem_error ge le m e ->
     step_mem_error (State f (Sbox p e) k le m)
-| step_box_error2: forall le e p k m1 m2 f b ty v, 
-    typeof e = ty ->
+| step_box_error2: forall le e p k m1 m2 f b ty v v1,
+    typeof_place p = Tbox ty ->
     eval_expr ge le m1 e v ->
+    sem_cast v (typeof e) ty = Some v1 ->
     (* allocate the memory block *)
     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
-    assign_loc_mem_error ge ty m2 b Ptrofs.zero v ->
+    assign_loc_mem_error ge ty m2 b Ptrofs.zero v1 ->
     step_mem_error (State f (Sbox p e) k le m1)
 
 | step_calldrop_box_error1: forall p le m k ty ,
@@ -889,7 +903,7 @@ Inductive step_mem_error : state -> Prop :=
     eval_expr_mem_error ge le m a ->
     step_mem_error (State f (Sreturn (Some a)) k le m)
 | step_return_2_error2: forall f a k le m v,
-    eval_expr ge le m a v ->    
+    eval_expr ge le m a v ->
     Mem.free_list m (blocks_of_env ge le) = None ->
     step_mem_error (State f (Sreturn (Some a)) k le m)
 | step_skip_call_error: forall f k le m,
