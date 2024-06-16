@@ -144,6 +144,7 @@ Definition transl_function (f: RustlightBase.function) : function :=
   let vars' := match oretv with | Some v => (local_of_place v, typeof_place v)  :: vars | None => vars end in
   mkfunction f.(RustlightBase.fn_generic_origins)
              f.(RustlightBase.fn_origins_relation)
+             f.(RustlightBase.fn_drop_glue)                     
              f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars'
@@ -164,6 +165,5 @@ Definition transl_program (p: RustlightBase.program) : program :=
     prog_public := AST.prog_public p1;
     prog_main := AST.prog_main p1;
     prog_types := prog_types p;
-    prog_drop_glue := prog_drop_glue p;
     prog_comp_env := prog_comp_env p;
     prog_comp_env_eq := prog_comp_env_eq p |}.

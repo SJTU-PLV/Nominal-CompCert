@@ -77,18 +77,19 @@ with arm_statements : Type :=            (**r cases of a [match] *)
 Record function : Type := mkfunction {
   fn_generic_origins : list origin;
   fn_origins_relation: list (origin * origin);
+  fn_drop_glue: option ident;   (* It indicates that this function is the drop glue for composite id *)
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type); 
   fn_body: statement
 }.  
 
-Definition empty_function := mkfunction [] [] Tunit cc_default [] Sskip.
+Definition empty_drop_function id := mkfunction [] [] (Some id) Tunit cc_default [] Sskip.
 
 Definition fundef := Rusttypes.fundef function.
 
-Definition empty_fundef := Internal empty_function.
-Definition empty_globdef : globdef fundef type := Gfun empty_fundef.
+Definition empty_drop_fundef id := Internal (empty_drop_function id).
+Definition empty_drop_globdef id : globdef fundef type := Gfun (empty_drop_fundef id).
 
 Definition program := Rusttypes.program function.
 
@@ -214,6 +215,7 @@ Definition init_test1 :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
     fn_return := Tunit;
+    fn_drop_glue := None;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := init_test1_body |}.
@@ -231,6 +233,7 @@ Definition init_test2_body :=
 Definition init_test2 :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+    fn_drop_glue := None;
     fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := (C, box_int) :: nil;
@@ -253,6 +256,7 @@ Definition ex1_body :=
 Definition ex1 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+        fn_drop_glue := None;
     fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := (A , type_int32s) :: (B , box_int) :: nil;
@@ -288,6 +292,7 @@ Definition fact (n: Z) :=
 Definition ex2 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+        fn_drop_glue := None;
     fn_return := box_int;
     fn_callconv := cc_default;
     fn_params := nil;
@@ -322,6 +327,7 @@ Definition fact1 (n: Z) :=
 Definition ex3 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+        fn_drop_glue := None;
     fn_return := box_int;
     fn_callconv := cc_default;
     fn_params := nil;
@@ -454,6 +460,7 @@ Definition pop_and_push :=
 Definition pop_and_push_func : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+        fn_drop_glue := None;
     fn_return := box_list;
     fn_callconv := cc_default;
     fn_params := (A, box_list) :: (B, type_int32s) :: nil;
@@ -483,6 +490,7 @@ Definition main_body :=
 Definition main_func : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
+        fn_drop_glue := None;
     fn_return := type_int32s;
     fn_callconv := cc_default;
     fn_params := nil;

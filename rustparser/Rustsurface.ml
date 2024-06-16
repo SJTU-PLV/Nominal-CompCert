@@ -1397,7 +1397,7 @@ module To_syntax = struct
     transl_stmt f.body >>= fun fn_body ->
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
-    return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
+    return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_drop_glue = None; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
   (* Convert state to string tables (Camlcoq.atom_of_string and
   Camcoq.string_of_atom) which are used in the pretty printing in the
@@ -1414,16 +1414,15 @@ module To_syntax = struct
     let name = Printf.sprintf "__drop_in_place_%s" str in
     get_or_new_ident name
 
-  let generate_empty_drop_glues  =
+  let generate_composites_and_empty_drop_glues  =
     get_st >>= fun st ->
     let comp_defs = IdentMap.fold (fun _ c cs -> c::cs) st.composites [] in
     map_m comp_defs 
       (fun (Rusttypes.Composite(id,_,_,_,_,_)) -> 
         create_dropglue_ident id >>= fun drop_id ->
-        return ((id, drop_id), (drop_id, Rustsyntax.empty_globdef))
-      ) >>= fun p ->
-    let (dropm, drops) = List.split p in 
-    return (comp_defs, dropm, drops)
+        return ((drop_id, Rustsyntax.empty_drop_globdef id))
+      ) >>= fun drops ->
+    return (comp_defs, drops)
       
 
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
@@ -1443,7 +1442,7 @@ module To_syntax = struct
          return (i, (AST.Gfun (Rusttypes.Internal f')))) >>= fun fun_defs ->
     get_or_new_ident "main" >>= fun main_ident ->
     (* generate empty drop glues *)
-    generate_empty_drop_glues >>= fun (comp_defs, dropm, empty_drops) ->
+    generate_composites_and_empty_drop_glues >>= fun (comp_defs, empty_drops) ->
     get_st >>= fun st ->
     (* set dummy origin for other use *)
     dummy_origin >>= fun dummy ->
@@ -1452,8 +1451,8 @@ module To_syntax = struct
     convert_strtbls st;
     let var_defs = List.map (fun (ident, gvar) -> (ident, AST.Gvar gvar)) st.gvars in
     (* malloc and free empty functions *)
-    let empty_malloc = (Dropglue.malloc_id, Rustsyntax.empty_globdef) in
-    let empty_free = (Dropglue.free_id, Rustsyntax.empty_globdef) in
+    let empty_malloc = (Dropglue.malloc_id, AST.Gfun(Rusttypes.External([], [], AST.EF_malloc, Rusttypes.Tnil, Rusttypes.Tunit, AST.cc_default))) in
+    let empty_free = (Dropglue.free_id, AST.Gfun(Rusttypes.External([], [], AST.EF_free, Rusttypes.Tnil, Rusttypes.Tunit, AST.cc_default))) in
     (* Print RustAST *)
     Format.fprintf Format.std_formatter "RustAST: @.";
     Format.fprintf Format.std_formatter "@[<v 0>";
@@ -1473,7 +1472,6 @@ module To_syntax = struct
               ; Rusttypes.prog_public = [main_ident]
               ; Rusttypes.prog_main = main_ident
               ; Rusttypes.prog_types = comp_defs
-              ; Rusttypes.prog_drop_glue = dropm
               ; Rusttypes.prog_comp_env = comp_env })
     | Errors.Error msg ->
       Diagnostics.fatal_error Diagnostics.no_loc "%a" Driveraux.print_error msg

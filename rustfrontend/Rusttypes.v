@@ -1420,12 +1420,12 @@ Global Instance rustlight_fundef_is_internal : FundefIsInternal fundef :=
       | _ => false
     end.
 
+
 Record program : Type := {
   prog_defs: list (ident * globdef fundef type);
   prog_public: list ident;
   prog_main: ident;
   prog_types: list composite_definition;
-  prog_drop_glue: list (ident * ident);
   prog_comp_env: composite_env;
   prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
 }.
@@ -1742,8 +1742,6 @@ Definition link_program {F:Type} (p1 p2: program F): option (program F) :=
                       prog_public := p.(AST.prog_public);
                       prog_main := p.(AST.prog_main);
                       prog_types := typs;
-                     (* TODO *)
-                      prog_drop_glue := p1.(prog_drop_glue);
                       prog_comp_env := env;
                       prog_comp_env_eq := P |}
           end
@@ -1751,7 +1749,7 @@ Definition link_program {F:Type} (p1 p2: program F): option (program F) :=
   end.
 
 Definition linkorder_program {F: Type} (p1 p2: program F) : Prop :=
-     linkorder (program_of_program p1) (program_of_program p2)
+  linkorder (program_of_program p1) (program_of_program p2)
   /\ (forall id co, p1.(prog_comp_env)!id = Some co -> p2.(prog_comp_env)!id = Some co).
 
 Global Program Instance Linker_program (F: Type): Linker (program F) := {
@@ -1774,7 +1772,7 @@ Next Obligation.
        (prog_comp_env_eq y) EQ) as (env & P & Q & R).
   destruct (link_linkorder _ _ _ LP). 
   intros X; inv X.
-  split; split; auto.
+  split; split;  auto.
 Defined.
 
 Global Opaque Linker_program.

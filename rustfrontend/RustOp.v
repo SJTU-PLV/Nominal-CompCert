@@ -261,3 +261,29 @@ Definition sem_cast (v: val) (t1 t2: type) : option val :=
       None
   end.
 
+Inductive val_casted : val -> type -> Prop :=
+| val_casted_unit:
+    val_casted (Vint Int.zero) Tunit 
+| val_casted_int: forall sz si n,
+    cast_int_int sz si n = n ->
+    val_casted (Vint n) (Tint sz si)
+| val_casted_float: forall n,
+    val_casted (Vfloat n) (Tfloat F64)
+| val_casted_single: forall n,
+    val_casted (Vsingle n) (Tfloat F32)
+| val_casted_long: forall si n,
+    val_casted (Vlong n) (Tlong si)
+| val_casted_ptr_ptr: forall b ofs ty org mut,
+    val_casted (Vptr b ofs) (Treference org mut ty)
+| val_casted_struct: forall id orgs b ofs,
+    val_casted (Vptr b ofs) (Tstruct orgs id)
+| val_casted_enum: forall id orgs b ofs,
+    val_casted (Vptr b ofs) (Tvariant orgs id).
+
+
+Inductive val_casted_list: list val -> typelist -> Prop :=
+  | vcl_nil:
+      val_casted_list nil Tnil
+  | vcl_cons: forall v1 vl ty1 tyl,
+      val_casted v1 ty1 -> val_casted_list vl tyl ->
+      val_casted_list (v1 :: vl) (Tcons ty1 tyl).

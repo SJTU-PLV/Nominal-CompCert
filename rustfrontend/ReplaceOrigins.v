@@ -260,7 +260,8 @@ Definition replace_origin_function (ce: composite_env) (gvars: list ident) (f: f
     (* we need to check origins are no repeated *)
     Errors.OK (RustIR.mkfunction
                  f.(fn_generic_origins)
-                 f.(fn_origins_relation)                                  
+                 f.(fn_origins_relation)
+                 f.(fn_drop_glue)
                  f.(fn_return)
                  f.(fn_callconv)
                  vars
@@ -291,6 +292,5 @@ Definition transl_program (p: program) : res program :=
               prog_public := AST.prog_public p1;
               prog_main := AST.prog_main p1;
               prog_types := prog_types p;
-              prog_drop_glue := prog_drop_glue p;
               prog_comp_env := prog_comp_env p;
               prog_comp_env_eq := prog_comp_env_eq p |}.

@@ -623,6 +623,7 @@ Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
   | Res stmt g =>
       Errors.OK (mkfunction f.(Rustsyntax.fn_generic_origins)
                             f.(Rustsyntax.fn_origins_relation)
+                            f.(Rustsyntax.fn_drop_glue)
                             f.(Rustsyntax.fn_return)
                             f.(Rustsyntax.fn_callconv)
                             f.(Rustsyntax.fn_params)
@@ -649,7 +650,6 @@ Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
     {| prog_defs := p1.(AST.prog_defs);
     prog_public := p1.(AST.prog_public);
     prog_main := p1.(AST.prog_main);
-    prog_types := p.(prog_types);
-    prog_drop_glue := p.(prog_drop_glue); 
+    prog_types := p.(prog_types);  
     prog_comp_env := p.(prog_comp_env);
     prog_comp_env_eq := p.(prog_comp_env_eq) |}.

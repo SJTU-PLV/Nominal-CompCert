@@ -57,6 +57,7 @@ Inductive statement : Type :=
 Record function : Type := mkfunction {
   fn_generic_origins : list origin;
   fn_origins_relation: list (origin * origin);
+  fn_drop_glue: option ident;
   fn_return: type;
   fn_callconv: calling_convention;
   fn_vars: list (ident * type);
@@ -610,7 +611,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (* sem_cast to simulate Clight *)
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
-    assign_loc ge (typeof_place p) m1 b ofs v m2 ->
+    assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
     step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
 | step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v v1 tag bf co fid enum_id,
     ge.(genv_cenv) ! enum_id = Some co ->
@@ -772,12 +773,12 @@ Inductive step : state -> trace -> state -> Prop :=
 (** Open semantics *)
 
 Inductive initial_state: c_query -> state -> Prop :=
-| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m orgs org_rels,
+| initial_state_intro: forall vf f targs tres tcc vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction orgs org_rels targs tres tcc ->
-    (** TODO: val_casted_list *)
+    val_casted_list vargs targs ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
-    initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
+    initial_state (cq vf (signature_of_type targs tres tcc) vargs m)
                   (Callstate vf vargs Kstop m).
     
 Inductive at_external: state -> c_query -> Prop:=

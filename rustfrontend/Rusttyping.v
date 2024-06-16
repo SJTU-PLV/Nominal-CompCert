@@ -260,7 +260,7 @@ Qed.
 
 Lemma sem_notbool_type: forall v1 v2 ty m,
     sem_notbool v1 ty m = Some v2 ->
-    val_casted v2 (Ctypes.Tint IBool Signed noattr).
+    Cop.val_casted v2 (Ctypes.Tint IBool Signed noattr).
 Proof.
   unfold sem_notbool.
   intros. destruct (bool_val v1 ty m);simpl in H;inv H.
@@ -270,7 +270,7 @@ Qed.
 Lemma wt_sem_unary_operation_casted: forall u t1 t2 v1 v2 m,
     type_unop u t1 = OK t2 ->
     sem_unary_operation u v1 (to_ctype t1) m = Some v2 ->
-    val_casted v2 (to_ctype t2).
+    Cop.val_casted v2 (to_ctype t2).
 Proof.
   intros until m. destruct u;simpl. intros TYOP SEM.
   - eapply sem_notbool_type in SEM.
@@ -336,10 +336,10 @@ Admitted.
 
 Lemma binarith_add_casted: forall t1 t2 t v1 v2 v m s,
     binarith_type t1 t2 s = OK t ->
-    val_casted v1 (to_ctype t1) ->
-    val_casted v2 (to_ctype t2) ->
+    Cop.val_casted v1 (to_ctype t1) ->
+    Cop.val_casted v2 (to_ctype t2) ->
     sem_add_rust v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
-    val_casted v (to_ctype t).
+    Cop.val_casted v (to_ctype t).
 Proof.
   
   unfold sem_add_rust. unfold sem_binarith.
@@ -366,10 +366,10 @@ Qed.
 
 Lemma wt_sem_binary_operation_casted: forall bop t1 t2 t v1 v2 v m,
     type_binop bop t1 t2 = OK t ->
-    val_casted v1 (to_ctype t1) ->
-    val_casted v2 (to_ctype t2) ->    
+    Cop.val_casted v1 (to_ctype t1) ->
+    Cop.val_casted v2 (to_ctype t2) ->    
     sem_binary_operation_rust bop v1 (to_ctype t1) v2 (to_ctype t2) m = Some v ->
-    val_casted v (to_ctype t).
+    Cop.val_casted v (to_ctype t).
 Proof.
   destruct bop; intros until m; simpl.
   - eapply binarith_add_casted.
@@ -460,7 +460,7 @@ Qed.
 Lemma eval_pexpr_casted: forall pe v ety,
     wt_pexpr pe = OK ety ->
     eval_pexpr ce e m pe v ->
-    val_casted v (to_ctype (typeof_pexpr pe)).
+    Cop.val_casted v (to_ctype (typeof_pexpr pe)).
 Proof.
   (* induction hypothesis is useless *)
   induction pe; intros v ety; simpl; intros WT EVAL; inv WT; inv EVAL; auto.

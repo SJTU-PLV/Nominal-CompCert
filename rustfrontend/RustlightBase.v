@@ -116,7 +116,7 @@ with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
        | Tcons ty tyl =>
            Ctypes.Tcons (to_ctype ty) (to_ctypelist tyl)
        end.
-                                   
+                                  
 
 Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
@@ -137,7 +137,8 @@ Inductive statement : Type :=
 
 Record function : Type := mkfunction {
   fn_generic_origins : list origin;
-  fn_origins_relation: list (origin * origin);                              
+  fn_origins_relation: list (origin * origin);
+  fn_drop_glue : option ident;
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type); 
@@ -483,6 +484,8 @@ Definition int_val_casted (v: val) (ty: type) : Prop :=
 (* Evaluation of pure expression *)
 
 Inductive eval_pexpr: pexpr -> val ->  Prop :=
+| eval_Eunit:
+    eval_pexpr Eunit (Vint Int.zero)
 | eval_Econst_int:   forall i ty,
     eval_pexpr (Econst_int i ty) (Vint i)
 | eval_Econst_float:   forall f ty,

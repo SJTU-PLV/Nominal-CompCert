@@ -168,7 +168,7 @@ Definition make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (membs: 
     ((list_length_z membs) - 1, LSnil) membs.
 
 (* m: maps composite id to drop function id *)
-Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members) (attr: attr) : res (option Clight.function) :=
+Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members) (attr: attr) : option Clight.function :=
   (* The only function parameter *)
   let param := fresh_atom tt in
   match sv with
@@ -179,11 +179,11 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct
       (** TODO: use map and concat instead of fold_right *)
       let stmt_list := fold_right (fun elt acc => drop_glue_for_member m deref_param elt ++ acc) nil ms in
       match stmt_list with
-      | nil => OK None
+      | nil => None
       | _ =>
           (* generate function *)
           let stmt := (Clight.Ssequence (makeseq stmt_list) (Clight.Sreturn None)) in
-          OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
+          (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
       end
   | TaggedUnion =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
@@ -203,30 +203,29 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct
               let (_, drop_switch_branches) := make_labelled_drop_stmts m get_union ms in
               (* generate function *)
               let stmt := (Clight.Ssequence (Clight.Sswitch get_tag drop_switch_branches) (Clight.Sreturn None)) in
-              OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
-          | _, _ => Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite")
+              (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
+          (* This is impossible if tce is generated correctly *)
+          | _, _ => None (* Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite") *)
           end
-      | _ => Error (msg "The conversion of variant does not exist in the C composite environment")
+      (* This is impossible if tce is generated correctly *)
+      | _ => None (* Error (msg "The conversion of variant does not exist in the C composite environment") *)
       end
   end.
-                
+
 
 Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.function) :=
   (Ctypes.Internal f).
 
 (** Generate drop glue for each composite that is movable *)
 
-Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : res (list (ident * (Ctypes.fundef Clight.function))) :=
-  do globs <- fold_right (fun '(Composite id sv membs a _ _) acc =>
-                           do acc' <- acc;
-                           do glue <- drop_glue_for_composite dropm id sv membs a;
-                           match glue, dropm!id with
-                           | Some glue', Some glue_id =>
-                               OK ((glue_id, drop_glue_fundef glue') :: acc')
-                           | None, _ => OK acc'
-                           | _, _ => Error [CTX id; MSG " no drop glue or no drop glue ident in generate_drops"]
-                           end) (OK nil) l;
-  OK globs.
+Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : (list (ident * Clight.function)) :=
+  fold_right (fun '(Composite id sv membs a _ _) acc =>                           
+                let glue := drop_glue_for_composite dropm id sv membs a in
+                match glue with
+                | Some glue1 =>
+                    ((id, glue1) :: acc)
+                | None => acc
+                end) nil l.
                           
 End COMPOSITE_ENV.
 
@@ -593,8 +592,7 @@ end.
 
 Definition empty_ce := PTree.empty Ctypes.composite.
 
-(* step 3: translate a single function *)
-Definition transl_function (f: function) : Errors.res Clight.function :=
+Definition transl_function_normal (f: function) : Errors.res Clight.function :=
   match transl_stmt f.(fn_body) initial_generator with
   | Err msg => Errors.Error msg
   | Res stmt' g =>
@@ -614,24 +612,64 @@ Definition transl_function (f: function) : Errors.res Clight.function :=
         Errors.Error [MSG "repeated temporary variables"]
   end.
 
+
+(* step 3: translate a single function *)
+Definition transl_function (glues: PTree.t Clight.function) (f: function) : Errors.res Clight.function :=
+  (* check whether this function is drop glue *)
+  match f.(fn_drop_glue) with
+  | Some comp_id =>
+      match glues!comp_id with
+      | Some glue => Errors.OK glue
+      | _ => transl_function_normal f
+      end
+  | None => transl_function_normal f
+  end.
+
 Local Open Scope error_monad_scope.
 
-Definition transl_fundef (glues: PTree.t (Ctypes.fundef Clight.function)) (id: ident) (fd: fundef) : Errors.res Clight.fundef :=
+Definition transl_fundef (glues: PTree.t Clight.function) (_: ident) (fd: fundef) : Errors.res Clight.fundef :=
   (* Check if this fundef is drop glue *)
-  match glues!id with
-  | Some glue => OK glue
-  | None =>
-      match fd with
-      | Internal f =>
-          do tf <- transl_function f;
-          Errors.OK (Ctypes.Internal tf)
-      | External orgs org_rels ef targs tres cconv =>
-          Errors.OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
-      end
+  match fd with
+  | Internal f =>
+      do tf <- transl_function glues f;
+      Errors.OK (Ctypes.Internal tf)
+  (* generate malloc *)
+  | External orgs org_rels EF_malloc targs tres cconv =>
+      OK malloc_decl
+  | External orgs org_rels EF_free targs tres cconv =>
+      OK free_decl
+  | External orgs org_rels ef targs tres cconv =>
+      OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
   end.
 
 End TRANSL.
 
+(* Extract composite id to drop glue id list *)
+Definition extract_drop_id (g: ident * globdef fundef type) : ident * ident :=
+  let (glue_id, def) := g in
+  match def with
+  | Gfun (Internal f) =>
+      match f.(fn_drop_glue) with
+      | Some comp_id => (comp_id, glue_id)
+      | None => (1%positive, glue_id)
+      end
+  | _ => (1%positive, glue_id)
+  end.
+
+Definition check_drop_glue (g: ident * globdef fundef type) : bool :=
+  let (glue_id, def) := g in
+  match def with
+  | Gfun (Internal f) =>
+      match f.(fn_drop_glue) with
+      | Some comp_id => true
+      | None => false
+      end
+  | _ => false
+  end.
+
+Definition generate_dropm (p: program) :=
+  let drop_glue_ids := map extract_drop_id (filter check_drop_glue p.(prog_defs)) in
+  PTree_Properties.of_list drop_glue_ids.
 
 (* Translation of a whole program *)
 
@@ -641,7 +679,7 @@ Local Open Scope error_monad_scope.
 
 Definition transl_program (p: program) : res Clight.program :=
   (* generate drop glue map: composite id to drop glue id *)
-  let dropm := PTree_Properties.of_list p.(prog_drop_glue) in
+  let dropm := generate_dropm p in
   (* step 1: rust composite to c composite: generate union for each variant *)
   let co_defs := transl_composites p.(prog_types) in
   let tce := Ctypes.build_composite_env co_defs in
@@ -650,14 +688,12 @@ Definition transl_program (p: program) : res Clight.program :=
        fun Hyp =>
          let ce := p.(prog_comp_env) in
          (* step 2: generate drop glue *)
-         do drops <- generate_drops ce tce p.(prog_types) dropm;
-         (* add malloc and free to globs map. Maybe we should check
-         the existence of malloc and free idents *)
-         let globs := PTree_Properties.of_list drops in
-         let globs1 := PTree.set malloc_id malloc_decl globs in
-         let globs2 := PTree.set free_id free_decl globs1 in
+         let drops := generate_drops ce tce p.(prog_types) dropm in
+         (** TODO: Maybe we should check the existence of malloc and
+         free idents *)
+         let globs := PTree_Properties.of_list drops in         
          (* step 3: translate the statement and convert drop glue *)
-         do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs2) transl_globvar p;
+         do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
          OK {| Ctypes.prog_defs := AST.prog_defs p1;
               Ctypes.prog_public := AST.prog_public p1;
               Ctypes.prog_main := AST.prog_main p1;

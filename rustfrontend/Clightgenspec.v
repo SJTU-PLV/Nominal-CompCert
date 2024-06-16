@@ -216,6 +216,7 @@ Section SPEC.
 Variable ce: composite_env.
 Variable tce: Ctypes.composite_env.  
 Variable dropm: PTree.t ident.
+Variable glues: PTree.t Clight.function.
 
 Inductive tr_stmt : statement -> Clight.statement -> Prop :=
 | tr_trivial: forall s ts g,
@@ -251,24 +252,46 @@ Inductive tr_stmt : statement -> Clight.statement -> Prop :=
 .
 
 Inductive tr_function: function -> Clight.function -> Prop :=
-| tr_function_intro: forall f tf,
+| tr_function_normal: forall f tf,
+    f.(fn_drop_glue) = None ->
     tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
     Clight.fn_return tf = to_ctype (fn_return f) ->
     Clight.fn_callconv tf = fn_callconv f ->
     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
-    tr_function f tf.
+    tr_function f tf
+| tr_function_drop_glue1: forall f tf comp_id,
+    f.(fn_drop_glue) = Some comp_id ->
+    dropm!comp_id = None ->
+    tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
+    Clight.fn_return tf = to_ctype (fn_return f) ->
+    Clight.fn_callconv tf = fn_callconv f ->
+    Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
+    Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
+    tr_function f tf
+| tr_function_drop_glue: forall f comp_id glue_id glue,
+    f.(fn_drop_glue) = Some comp_id ->
+    dropm!comp_id = Some glue_id ->
+    glues!glue_id = Some glue ->
+    tr_function f glue .
 
 End SPEC.
 
 Inductive tr_fundef (p: program): fundef -> Clight.fundef -> Prop :=
-| tr_internal: forall f tf co_defs tce dropm,
+| tr_internal: forall f tf co_defs tce,
+    let dropm := generate_dropm p in
+    let drops := generate_drops p.(prog_comp_env) tce p.(prog_types) dropm in
+    let glues := PTree_Properties.of_list drops in
     transl_composites p.(prog_types) = co_defs ->
     Ctypes.build_composite_env co_defs = OK tce ->
-    dropm = PTree_Properties.of_list p.(prog_drop_glue) ->
-    tr_function p.(prog_comp_env) tce dropm f tf ->
+    tr_function p.(prog_comp_env) tce dropm glues f tf ->
     tr_fundef p (Internal f) (Ctypes.Internal tf)
+| tr_external_malloc: forall targs tres cconv orgs rels,    
+    tr_fundef p (External orgs rels EF_malloc targs tres cconv) malloc_decl
+| tr_external_free: forall targs tres cconv orgs rels,    
+    tr_fundef p (External orgs rels EF_free targs tres cconv) free_decl
 | tr_external: forall ef targs tres cconv orgs rels,    
-    tr_fundef p (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
+    tr_fundef p (External orgs rels EF_malloc targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
+
 
       
