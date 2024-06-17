@@ -8,6 +8,8 @@ Require Import CKLR.
 Require Import LanguageInterface.
 Require Import Smallstep.
 
+Set Implicit Arguments.
+
 (* Require Import RelationClasses. *)
 Class Lens (T A: Type) :=
   {
@@ -185,10 +187,18 @@ Section FSIM.
 
   Definition forward_simulation {li1 li2} cc L1 L2 :=
     inhabited (@fsim_components li1 li2 cc L1 L2).
-  
-  Arguments Forward_simulation {_ _ cc L1 L2 fsim_index}.
 
 End GS.
+
+
+
+
+
+
+
+
+
+
 
 (** Definition of new CAinjp *)
 Require Import Conventions Mach Asm.
