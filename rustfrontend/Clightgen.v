@@ -41,7 +41,7 @@ Definition transl_composite_member (m: member) : Ctypes.member :=
 (* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} . In
 other word, the variant name is used as the tagged union struct name,
 the constructor name (a,b,c) are used in the generated union *)
-Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) :(Ctypes.composite_definition * option Ctypes.composite_definition) :=
+Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) : (Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
   | Composite id Struct ms attr _ _ =>
       (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
@@ -67,16 +67,12 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
 (*       Some ((Ctypes.Composite union_id Union (map transl_composite_member ms) noattr), (id,(union_id, noattr))) *)
 (*   end. *)
 
-
-Definition transl_composites (l: list composite_definition) : list Ctypes.composite_definition :=
+(* Use link_composites to leverages existing lemmas *)
+Definition transl_composites (l: list composite_definition) : option (list Ctypes.composite_definition) :=
   (* translate rust composite to C composite *)
-  fold_right (fun elt acc =>
-                let (def, optunion) := transl_composite_def elt in
-                match optunion with
-                | Some union => union :: def :: acc
-                | None => def :: acc
-                end) nil l.
-
+  let (comps, unions_opt) := split (map transl_composite_def l) in
+  let unions :=  flat_map (fun elt => match elt with | Some u => [u] | None => [] end) unions_opt in
+  Ctypes.link_composite_defs comps unions.
 
 
 (** ** Step 2: Generate drop glue for each composite with ownership type *)
@@ -218,7 +214,7 @@ Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.functio
 
 (** Generate drop glue for each composite that is movable *)
 
-Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : (list (ident * Clight.function)) :=
+Definition generate_drops_list (l: list composite_definition) (dropm: PTree.t ident) : (list (ident * Clight.function)) :=
   fold_right (fun '(Composite id sv membs a _ _) acc =>                           
                 let glue := drop_glue_for_composite dropm id sv membs a in
                 match glue with
@@ -226,7 +222,10 @@ Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) 
                     ((id, glue1) :: acc)
                 | None => acc
                 end) nil l.
-                          
+
+Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : PTree.t Clight.function :=
+  PTree_Properties.of_list (generate_drops_list l dropm).
+  
 End COMPOSITE_ENV.
 
 
@@ -681,25 +680,27 @@ Definition transl_program (p: program) : res Clight.program :=
   (* generate drop glue map: composite id to drop glue id *)
   let dropm := generate_dropm p in
   (* step 1: rust composite to c composite: generate union for each variant *)
-  let co_defs := transl_composites p.(prog_types) in
-  let tce := Ctypes.build_composite_env co_defs in
-  (match tce as m return (tce = m) -> res Clight.program with
-   | OK tce =>
-       fun Hyp =>
-         let ce := p.(prog_comp_env) in
-         (* step 2: generate drop glue *)
-         let drops := generate_drops ce tce p.(prog_types) dropm in
-         (** TODO: Maybe we should check the existence of malloc and
-         free idents *)
-         let globs := PTree_Properties.of_list drops in         
-         (* step 3: translate the statement and convert drop glue *)
-         do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
-         OK {| Ctypes.prog_defs := AST.prog_defs p1;
-              Ctypes.prog_public := AST.prog_public p1;
-              Ctypes.prog_main := AST.prog_main p1;
-              Ctypes.prog_types := co_defs;
-              Ctypes.prog_comp_env := tce;
-              Ctypes.prog_comp_env_eq := Hyp |}
-   | Error msg => fun _ => Error msg
-   end) (eq_refl tce).
+  match transl_composites p.(prog_types) with
+  | Some co_defs =>
+      let tce := Ctypes.build_composite_env co_defs in
+      (match tce as m return (tce = m) -> res Clight.program with
+       | OK tce =>
+           fun Hyp =>
+             let ce := p.(prog_comp_env) in
+             (* step 2: generate drop glue *)
+             let globs := generate_drops ce tce p.(prog_types) dropm in
+             (** TODO: Maybe we should check the existence of malloc
+                 and free idents *)      
+             (* step 3: translate the statement and convert drop glue *)
+             do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
+             OK {| Ctypes.prog_defs := AST.prog_defs p1;
+                  Ctypes.prog_public := AST.prog_public p1;
+                  Ctypes.prog_main := AST.prog_main p1;
+                  Ctypes.prog_types := co_defs;
+                  Ctypes.prog_comp_env := tce;
+                  Ctypes.prog_comp_env_eq := Hyp |}
+       | Error msg => fun _ => Error msg
+       end) (eq_refl tce)
+  | _ => Error (msg "error in transl_composites (Clightgen)")
+  end.
 

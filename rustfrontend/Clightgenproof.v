@@ -50,7 +50,7 @@ Hypothesis GE: inj_stbls w se tse.
 Let ce := prog.(prog_comp_env).
 Let tce := tprog.(Ctypes.prog_comp_env).
 Let dropm := generate_dropm prog.
-Let glues := PTree_Properties.of_list (generate_drops ce tce prog.(prog_types) dropm).
+Let glues := generate_drops ce tce prog.(prog_types) dropm.
 
 
 Definition match_env (f: meminj) (e: env) (te: Clight.env) : Prop :=
@@ -63,17 +63,17 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
 | match_Kstop: match_cont RustIR.Kstop Clight.Kstop
 | match_Kseq: forall s ts k tk,
     (* To avoid generator, we need to build the spec *)
-    tr_stmt ce tce dropm s ts ->
+    tr_stmt ce dropm s ts ->
     match_cont k tk ->
     match_cont (RustIR.Kseq s k) (Clight.Kseq ts tk)
 | match_Kloop: forall s ts k tk,
-    tr_stmt ce tce dropm s ts ->
+    tr_stmt ce dropm s ts ->
     match_cont k tk ->
     match_cont (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk)
 | match_Kcall1: forall p f tf e te le k tk cty temp pe j,
     (* we need to consider temp is set to a Clight expr which is
     translated from p *)
-    tr_function ce tce dropm glues f tf ->
+    tr_function ce dropm f tf ->
     cty = to_ctype (typeof_place p) ->
     place_to_cexpr tce p = OK pe ->
     match_cont k tk ->
@@ -81,7 +81,7 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
     match_cont (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk))
 | match_Kcall2: forall f tf e te le k tk,
     (* how to relate le? *)
-    tr_function ce tce dropm glues f tf ->
+    tr_function ce dropm f tf ->
     match_cont k tk ->
     match_cont (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk)
 | match_Kcalldrop: forall id e te le k tk tf co j,
@@ -94,25 +94,31 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
 
 
 Inductive match_states: RustIR.state -> Clight.state -> Prop :=
-| match_regular_state: forall f tf s ts k tk m tm e te le j
-    (MFUN: tr_function ce tce dropm glues f tf)
-    (MSTMT: tr_stmt ce tce dropm s ts)
+| match_regular_state: forall f tf s ts k tk m tm e te le j cu,
+    let ce := cu.(prog_comp_env) in
+    let dropm := generate_dropm cu in
+    forall (LINKORDER: linkorder cu prog)
+    (MFUN: tr_function ce dropm f tf)
+    (MSTMT: tr_stmt ce dropm s ts)    
     (* match continuation *)
     (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm)   
+    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (MENV: match_env j e te),
     match_states (RustIR.State f s k e m) (Clight.State tf ts tk te le tm)
-| match_call_state: forall vf vargs k m tvf tvargs tk tm j fd targs tres cconv orgs rels
-   (MCONT: match_cont k tk)
-   (VINJ: Val.inject j vf tvf)
-   (MINJ: Mem.inject j m tm)
-   (AINJ: Val.inject_list j vargs tvargs)
-   (VFIND: Genv.find_funct ge vf = Some fd)
-   (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv),
+| match_call_state: forall vf vargs k m tvf tvargs tk tm j
+    (MCONT: match_cont k tk)
+    (VINJ: Val.inject j vf tvf)
+    (MINJ: Mem.inject j m tm)
+    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
+    (AINJ: Val.inject_list j vargs tvargs),
+    (* (VFIND: Genv.find_funct ge vf = Some fd) *)
+    (* (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv), *)
     match_states (RustIR.Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
 | match_return_state: forall v k m tv tk tm j
    (MCONT: match_cont k tk)
    (MINJ: Mem.inject j m tm)
+   (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
    (RINJ: Val.inject j v tv),
     match_states (RustIR.Returnstate v k m) (Clight.Returnstate tv tk tm)
 | match_calldrop_box: forall p k e m b ofs tk tm ty j fb
@@ -122,7 +128,8 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (PTY: typeof_place p = Tbox ty)
     (PADDR: eval_place ce e m p b ofs)
     (MCONT: match_cont k tk)
-    (MINJ: Mem.inject j m tm),
+    (MINJ: Mem.inject j m tm)
+    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
 | match_calldrop_composite: forall p k e m b ofs tk tm j fb id fid drop_glue orgs
     (DROPM: dropm!id = Some fid)
@@ -133,13 +140,15 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (PTY: typeof_place p = Tstruct orgs id \/ typeof_place p = Tvariant orgs id)
     (PADDR: eval_place ce e m p b ofs)
     (MCONT: match_cont k tk)
-    (MINJ: Mem.inject j m tm),
+    (MINJ: Mem.inject j m tm)
+    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
 | match_drop_state: forall id s k e m tf ts tk te le tm j co
     (* How to relate e and te? and le? *)
-    (MSTMT: tr_stmt ce tce dropm s ts)
+    (MSTMT: tr_stmt ce dropm s ts)
     (MCONT: match_cont k tk)
-    (MINJ: Mem.inject j m tm),
+    (MINJ: Mem.inject j m tm)
+    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
     ce ! id = Some co ->
     drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) co.(co_attr) = Some tf ->
     match_states (RustIR.Dropstate id s k e m) (Clight.State tf ts tk te le tm)
@@ -200,12 +209,81 @@ Proof.
   intro. inv H.  congruence.
 Qed.
 
+
+Lemma functions_translated (j: meminj) :
+  Genv.match_stbls j se tse ->
+  forall (v tv: val) (f: RustIR.fundef),
+    Genv.find_funct ge v = Some f ->
+    Val.inject j v tv ->
+  exists c tf, Genv.find_funct tge tv = Some tf /\ tr_fundef c f tf /\ linkorder c prog.
+Proof.
+  apply (Genv.find_funct_match (match_prog_def prog tprog TRANSL)).  
+Qed.
+
+Lemma initial_states_simulation:
+  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
+             exists R, Clight.initial_state tge q2 R /\ match_states S R.
+Proof.
+  intros ? ? ? Hq HS.
+  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
+  subst. 
+  inversion HS. clear HS. subst vf sg vargs m.
+  exploit functions_translated;eauto. eapply inj_stbls_match. auto.
+  intros (c & tf & FIND & TRF & LINKORDER).
+  (* inversion TRF to get tf *)
+  inv TRF.
+  eexists. split.
+  - assert (SIG: signature_of_type targs tres tcc = Ctypes.signature_of_type (to_ctypelist targs) (to_ctype tres) tcc) by admit.
+    rewrite SIG. econstructor. eauto.
+    (* type of function *) admit.
+    (* val_casted_list *) admit.
+    (* sup include *) admit.
+  - econstructor; eauto. econstructor.
+Admitted.
+
+Lemma function_entry_inject:
+  forall f tf m1 m2 tm1 j1 vargs tvargs e
+    (VARS:  Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars))
+    (PARAMS: Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params)),
+    function_entry ge f vargs m1 e m2 ->
+    Mem.inject j1 m1 tm1 ->
+    Val.inject_list j1 vargs tvargs ->
+    exists j2 te tm2,
+      Clight.function_entry1 tge tf tvargs tm1 te (create_undef_temps (fn_temps tf)) tm2
+      /\ match_env j2 e te
+      /\ Mem.inject j2 m2 tm2
+      /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
+Admitted.
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros; inv MS.
-  
+
+  (* prove internal step *)
+  18 : {
+    assert (MSTBL: Genv.match_stbls j se tse). {   
+      destruct w. inv GE. simpl in *. inv INCR. 
+      eapply Genv.match_stbls_incr; eauto. 
+      (* disjoint *)
+      intros. exploit H7; eauto. intros (A & B). split; eauto. }
+    
+    edestruct functions_translated as (cu & tfd & FINDT & TF & CU); eauto.
+    inv TF. inv H1;try congruence.
+
+    (* function entry inject *)
+    exploit function_entry_inject; eauto.
+    intros (j' & te & tm' & TENTRY & MENV1 & MINJ1 & INCR1).
+    exists (Clight.State tf tf.(Clight.fn_body) tk te (create_undef_temps (fn_temps tf)) tm').
+    (* step and match states *)
+    split.
+    - eapply plus_one. econstructor;eauto.
+    - econstructor; eauto.
+      eapply tr_function_normal;eauto.
+      etransitivity;eauto.
+  }
+           
   (* assign *)
   - inv MSTMT. simpl in H3.
     monadInv_comb H3.
@@ -359,30 +437,7 @@ Proof.
         
 Admitted.
 
-Lemma functions_translated (j: meminj) :
-  Genv.match_stbls j se tse ->
-  forall (v tv: val) (f: RustIR.fundef),
-    Genv.find_funct ge v = Some f ->
-    Val.inject j v tv ->
-  exists c tf, Genv.find_funct tge tv = Some tf /\ tr_fundef c f tf /\ linkorder c prog.
-Proof.
-  apply (Genv.find_funct_match (match_prog_def prog tprog TRANSL)).  
-Qed.
-
-
-Lemma initial_states_simulation:
-  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
-             exists R, Clight.initial_state tge q2 R /\ match_states S R.
-Proof.
-  intros ? ? ? Hq HS.
-  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
-  subst. 
-  inversion HS. clear HS. subst vf sg vargs m.
-  exploit functions_translated;eauto. 
-
-  
-Admitted.
-
+    
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
   exists r2, Clight.final_state R r2 /\ match_reply (cc_c inj) w r1 r2.

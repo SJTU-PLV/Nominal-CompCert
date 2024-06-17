@@ -701,12 +701,14 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall (Some p) f le k) m)
 
 | step_internal_function: forall vf f vargs k m e m'
-    (FIND: Genv.find_funct ge vf = Some (Internal f)),
+    (FIND: Genv.find_funct ge vf = Some (Internal f))
+    (NORMAL: f.(fn_drop_glue) = None),
     function_entry ge f vargs m e m' ->
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
-    (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc)),
+    (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc))
+    (NORMAL: ef <> EF_malloc /\ ef <> EF_free),
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
