@@ -214,29 +214,28 @@ Admitted.
 Section SPEC.
 
 Variable ce: composite_env.
-(* Variable tce: Ctypes.composite_env.   *)
+Variable tce: Ctypes.composite_env.
 Variable dropm: PTree.t ident.
-(** tr_function only relates normal function  *)
-(* Variable glues: PTree.t Clight.function. *)
+Variable glues: PTree.t Clight.function.
 
 Inductive tr_stmt : statement -> Clight.statement -> Prop :=
 (* We only require there **exists** a [tce] which satisfies the
 tr_composite relation *)
-| tr_trivial: forall s ts g tce (TRCOMP: tr_composite_env ce tce) ,
+| tr_trivial: forall s ts g,
     transl_stmt ce tce dropm s g = Res ts g ->
     tr_stmt s ts
-| tr_box: forall p e stmt lhs e' temp temp_ty tce (TRCOMP: tr_composite_env ce tce) ,
+| tr_box: forall p e stmt lhs e' temp temp_ty,
     temp_ty = Tpointer (to_ctype (typeof e)) noattr ->
     transl_Sbox ce tce temp temp_ty e = OK (stmt, e') ->
     place_to_cexpr tce p = OK lhs ->
     tr_stmt (Sbox p e) (Clight.Ssequence stmt (Clight.Sassign lhs e'))
-| tr_call: forall p e l temp e' l' assign pe tce (TRCOMP: tr_composite_env ce tce) ,
+| tr_call: forall p e l temp e' l' assign pe,
     expr_to_cexpr_list ce tce l = OK l' ->
     expr_to_cexpr ce tce e = OK e' ->
     place_to_cexpr tce p = OK pe ->
     assign = Clight.Sassign pe (Etempvar temp (to_ctype (typeof_place p))) ->
     tr_stmt (Scall p e l) (Clight.Ssequence (Clight.Scall (Some temp) e' l') assign)
-| tr_drop: forall p set_stmt drop_stmt temp pe tce (TRCOMP: tr_composite_env ce tce) ,
+| tr_drop: forall p set_stmt drop_stmt temp pe,
     set_stmt = Clight.Sset temp (Eaddrof pe (Tpointer (to_ctype (typeof_place p)) noattr)) ->
     expand_drop dropm temp (typeof_place p) = Some drop_stmt ->
     tr_stmt (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
@@ -244,7 +243,7 @@ tr_composite relation *)
     tr_stmt s1 s1' ->
     tr_stmt s2 s2' ->
     tr_stmt (Ssequence s1 s2) (Clight.Ssequence s1' s2')
-| Sifthenelse: forall e e' s1 s2 s1' s2' tce (TRCOMP: tr_composite_env ce tce) ,
+| Sifthenelse: forall e e' s1 s2 s1' s2',
     expr_to_cexpr ce tce e = OK e' ->
     tr_stmt s1 s1' ->
     tr_stmt s2 s2' ->
@@ -263,40 +262,40 @@ Inductive tr_function: function -> Clight.function -> Prop :=
     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
     tr_function f tf
-(* | tr_function_drop_glue1: forall f tf comp_id, *)
-(*     f.(fn_drop_glue) = Some comp_id -> *)
-(*     dropm!comp_id = None -> *)
-(*     tr_stmt f.(fn_body) tf.(Clight.fn_body) -> *)
-(*     Clight.fn_return tf = to_ctype (fn_return f) -> *)
-(*     Clight.fn_callconv tf = fn_callconv f -> *)
-(*     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) -> *)
-(*     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) -> *)
-(*     tr_function f tf *)
-(* | tr_function_drop_glue: forall f comp_id glue_id glue, *)
-(*     f.(fn_drop_glue) = Some comp_id -> *)
-(*     dropm!comp_id = Some glue_id -> *)
-(*     glues!glue_id = Some glue -> *)
-(*     tr_function f glue  *)
+| tr_function_drop_glue1: forall f tf comp_id,
+    f.(fn_drop_glue) = Some comp_id ->
+    dropm!comp_id = None ->
+    tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
+    Clight.fn_return tf = to_ctype (fn_return f) ->
+    Clight.fn_callconv tf = fn_callconv f ->
+    Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
+    Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
+    tr_function f tf
+| tr_function_drop_glue2: forall f comp_id glue_id glue,
+    f.(fn_drop_glue) = Some comp_id ->
+    dropm!comp_id = Some glue_id ->
+    glues!glue_id = Some glue ->
+    tr_function f glue
 .
 
 End SPEC.
 
 Inductive tr_fundef (p: program): fundef -> Clight.fundef -> Prop :=
-| tr_internal: forall f tf,
+| tr_internal: forall f tf tce co_defs,
     let dropm := generate_dropm p in
-    (* let glues := generate_drops p.(prog_comp_env) tce p.(prog_types) dropm in *)
-    (* transl_composites p.(prog_types) = Some co_defs -> *)
-    (* Ctypes.build_composite_env co_defs = OK tce -> *)
-    tr_function p.(prog_comp_env) dropm f tf ->
+    let glues := generate_drops p.(prog_comp_env) tce p.(prog_types) dropm in
+    transl_composites p.(prog_types) = Some co_defs ->
+    Ctypes.build_composite_env co_defs = OK tce ->
+    tr_function p.(prog_comp_env) tce dropm glues f tf ->
     tr_fundef p (Internal f) (Ctypes.Internal tf)
-(* | tr_external_malloc: forall targs tres cconv orgs rels,     *)
-(*     tr_fundef p (External orgs rels EF_malloc targs tres cconv) malloc_decl *)
-(* | tr_external_free: forall targs tres cconv orgs rels,     *)
-(*     tr_fundef p (External orgs rels EF_free targs tres cconv) free_decl *)
+| tr_external_malloc: forall targs tres cconv orgs rels,
+    tr_fundef p (External orgs rels EF_malloc targs tres cconv) malloc_decl
+| tr_external_free: forall targs tres cconv orgs rels,
+    tr_fundef p (External orgs rels EF_free targs tres cconv) free_decl
 | tr_external: forall ef targs tres cconv orgs rels,    
     tr_fundef p (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
 
-      
+
 Lemma tr_fundef_linkorder: forall c c' f tf,
     tr_fundef c f tf ->
     linkorder c c' ->
@@ -306,7 +305,7 @@ Proof.
   clear MAIN PUBLIC GDEF.
   inv TR.
   - econstructor.
-    inv H. econstructor; eauto.    
+    inv H. (* econstructor; eauto.     *)
     (** UNPROVABLE! Because c' may contain more enum and we cannot
     ensure that the generated id of the union is compatable. Try to
     add linkorder in match_states *)
