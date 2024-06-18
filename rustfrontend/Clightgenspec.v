@@ -280,35 +280,42 @@ Inductive tr_function: function -> Clight.function -> Prop :=
 
 End SPEC.
 
-Inductive tr_fundef (p: program): fundef -> Clight.fundef -> Prop :=
-| tr_internal: forall f tf tce co_defs,
-    let dropm := generate_dropm p in
-    let glues := generate_drops p.(prog_comp_env) tce p.(prog_types) dropm in
-    transl_composites p.(prog_types) = Some co_defs ->
-    Ctypes.build_composite_env co_defs = OK tce ->
-    tr_function p.(prog_comp_env) tce dropm glues f tf ->
-    tr_fundef p (Internal f) (Ctypes.Internal tf)
+Record clgen_env : Type :=
+  { clgen_src_cenv: Rusttypes.composite_env;
+    clgen_tgt_cenv: Ctypes.composite_env;
+    clgen_dropm: PTree.t ident;
+    clgen_glues: PTree.t Clight.function }.
+                         
+Definition build_clgen_env (p: RustIR.program) (tp: Clight.program) : clgen_env :=
+  let dropm := generate_dropm p in
+  let glues := generate_drops p.(prog_comp_env) tp.(Ctypes.prog_comp_env) dropm in
+  Build_clgen_env p.(prog_comp_env) tp.(Ctypes.prog_comp_env) dropm glues.
+
+Inductive tr_fundef (ctx: clgen_env): fundef -> Clight.fundef -> Prop :=
+| tr_internal: forall f tf,
+    tr_function ctx.(clgen_src_cenv) ctx.(clgen_tgt_cenv) ctx.(clgen_dropm) ctx.(clgen_glues) f tf ->
+    tr_fundef ctx (Internal f) (Ctypes.Internal tf)
 | tr_external_malloc: forall targs tres cconv orgs rels,
-    tr_fundef p (External orgs rels EF_malloc targs tres cconv) malloc_decl
+    tr_fundef ctx (External orgs rels EF_malloc targs tres cconv) malloc_decl
 | tr_external_free: forall targs tres cconv orgs rels,
-    tr_fundef p (External orgs rels EF_free targs tres cconv) free_decl
+    tr_fundef ctx (External orgs rels EF_free targs tres cconv) free_decl
 | tr_external: forall ef targs tres cconv orgs rels,    
-    tr_fundef p (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
+    tr_fundef ctx (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
 
 
-Lemma tr_fundef_linkorder: forall c c' f tf,
-    tr_fundef c f tf ->
-    linkorder c c' ->
-    tr_fundef c' f tf.
-Proof.
-  intros until tf. intros TR ((MAIN & PUBLIC & GDEF) & COMP).
-  clear MAIN PUBLIC GDEF.
-  inv TR.
-  - econstructor.
-    inv H. (* econstructor; eauto.     *)
-    (** UNPROVABLE! Because c' may contain more enum and we cannot
-    ensure that the generated id of the union is compatable. Try to
-    add linkorder in match_states *)
+(* Lemma tr_fundef_linkorder: forall c c' f tf, *)
+(*     tr_fundef c f tf -> *)
+(*     linkorder c c' -> *)
+(*     tr_fundef c' f tf. *)
+(* Proof. *)
+(*   intros until tf. intros TR ((MAIN & PUBLIC & GDEF) & COMP). *)
+(*   clear MAIN PUBLIC GDEF. *)
+(*   inv TR. *)
+(*   - econstructor. *)
+(*     inv H. (* econstructor; eauto.     *) *)
+(*     (** UNPROVABLE! Because c' may contain more enum and we cannot *)
+(*     ensure that the generated id of the union is compatable. Try to *)
+(*     add linkorder in match_states *) *)
     
-Admitted.
+(* Admitted. *)
 

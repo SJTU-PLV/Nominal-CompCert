@@ -19,14 +19,96 @@ Local Open Scope gensym_monad_scope.
 
 (** Correctness proof for the generation of Clight *)
 
+Definition match_glob (ctx: clgen_env) gd tgd : Prop :=
+  match gd, tgd with
+  | Gvar v1, Gvar v2 =>
+      match_globvar (fun ty ty' => to_ctype ty = ty') v1 v2
+  | Gfun fd1, Gfun fd2 =>
+      tr_fundef ctx fd1 fd2
+  | _, _ => False
+  end.
+
 Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
+    match_prog_main:
+    tp.(prog_main) = p.(prog_main);
+    match_prog_public:
+    tp.(prog_public) = p.(prog_public);
     match_prog_comp_env:
     tr_composite_env p.(prog_comp_env) tp.(Ctypes.prog_comp_env);
-    match_prog_def:    
-    match_program_gen tr_fundef (fun ty ty' => to_ctype ty = ty') p p tp;
+    match_prog_def:
+    (* match_program_gen tr_fundef (fun ty ty' => to_ctype ty = ty') p p tp; *)
+    forall id, Coqlib.option_rel (match_glob (build_clgen_env p tp)) ((prog_defmap p)!id) ((prog_defmap tp)!id);
     match_prog_skel:
     erase_program tp = erase_program p
   }.
+
+(* Prove match_genv for this specific match_prog *)
+
+Section MATCH_PROGRAMS.
+
+Variable p: RustIR.program.
+Variable tp: Clight.program.
+Let build_ctx := build_clgen_env p tp.
+Hypothesis TRANSL: match_prog p tp.
+
+Section INJECT.
+
+Variable j: meminj.
+Variable se: Genv.symtbl.
+Variable tse: Genv.symtbl.
+Hypothesis sematch: Genv.match_stbls j se tse.
+
+Lemma globalenvs_match:
+  Genv.match_genvs j (match_glob build_ctx) (Genv.globalenv se p) (Genv.globalenv tse tp).
+Proof.
+  intros. split; auto. intros. cbn [Genv.globalenv Genv.genv_defs NMap.get].
+  assert (Hd:forall i, Coqlib.option_rel (match_glob build_ctx) (prog_defmap p)!i (prog_defmap tp)!i).
+  {
+    intro. apply TRANSL.
+  }
+  rewrite !PTree.fold_spec.
+  apply PTree.elements_canonical_order' in Hd. revert Hd.
+  generalize (prog_defmap p), (prog_defmap tp). intros d1 d2 Hd.
+  (*   cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2). *)
+  cut (Coqlib.option_rel (match_glob build_ctx)
+         (NMap.get _ b1 (NMap.init (option (globdef (Rusttypes.fundef function) type)) None))
+         (NMap.get _ b2 (NMap.init (option (globdef (Ctypes.fundef Clight.function) Ctypes.type)) None ))).
+  - generalize (NMap.init (option (globdef (Rusttypes.fundef function) type)) None),
+      (NMap.init (option (globdef (Ctypes.fundef Clight.function) Ctypes.type)) None).
+    induction Hd as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
+    intros t1 t2 Ht. eapply IH. eauto. rewrite Hi.
+    eapply Genv.add_globdef_match; eauto.
+  - unfold NMap.get. rewrite !NMap.gi. constructor.
+Qed.
+
+Theorem find_def_match:
+  forall b tb delta g,
+  Genv.find_def (Genv.globalenv se p) b = Some g ->
+  j b = Some (tb, delta) ->
+  exists tg,
+  Genv.find_def (Genv.globalenv tse tp) tb = Some tg /\
+  match_glob (build_ctx) g tg /\
+  delta = 0.
+Proof.
+  apply Genv.find_def_match_genvs, globalenvs_match.
+Qed.
+
+Theorem find_funct_match:
+  forall v tv f,
+  Genv.find_funct (Genv.globalenv se p) v = Some f ->
+  Val.inject j v tv ->
+  exists tf,
+  Genv.find_funct (Genv.globalenv tse tp) tv = Some tf /\ tr_fundef build_ctx f tf.
+Proof.
+  intros. exploit Genv.find_funct_inv; eauto. intros [b EQ]. subst v. inv H0.
+  rewrite Genv.find_funct_find_funct_ptr in H. unfold Genv.find_funct_ptr in H.
+  destruct Genv.find_def as [[|]|] eqn:Hf; try congruence. inv H.
+  edestruct find_def_match as (tg & ? & ? & ?); eauto. subst.
+  simpl in H0. destruct tg.
+  rewrite Genv.find_funct_find_funct_ptr. unfold Genv.find_funct_ptr. rewrite H. eauto.
+  contradiction.
+Qed.
+
 
 Section PRESERVATION.
 

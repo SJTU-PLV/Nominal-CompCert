@@ -214,18 +214,29 @@ Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.functio
 
 (** Generate drop glue for each composite that is movable *)
 
-Definition generate_drops_list (l: list composite_definition) (dropm: PTree.t ident) : (list (ident * Clight.function)) :=
-  fold_right (fun '(Composite id sv membs a _ _) acc =>                           
-                let glue := drop_glue_for_composite dropm id sv membs a in
-                match glue with
-                | Some glue1 =>
-                    ((id, glue1) :: acc)
-                | None => acc
-                end) nil l.
+(* Definition generate_drops_list (l: list composite_definition) (dropm: PTree.t ident) : (list (ident * Clight.function)) := *)
+(*   fold_right (fun '(Composite id sv membs a _ _) acc =>                            *)
+(*                 let glue := drop_glue_for_composite dropm id sv membs a in *)
+(*                 match glue with *)
+(*                 | Some glue1 => *)
+(*                     ((id, glue1) :: acc) *)
+(*                 | None => acc *)
+(*                 end) nil l. *)
 
-Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : PTree.t Clight.function :=
-  PTree_Properties.of_list (generate_drops_list l dropm).
+(* Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : PTree.t Clight.function := *)
+(*   PTree_Properties.of_list (generate_drops_list l dropm). *)
+
+Definition generate_drops_acc (dropm: PTree.t ident) (drops: PTree.t Clight.function) (id: ident) (co: composite) : PTree.t Clight.function :=
+  let glue := drop_glue_for_composite dropm id co.(co_sv) co.(co_members) co.(co_attr) in
+  match glue with
+  | Some glue1 =>
+      PTree.set id glue1 drops
+  | None => drops
+  end.                           
   
+Definition generate_drops (dropm: PTree.t ident) : PTree.t Clight.function :=
+  PTree.fold (generate_drops_acc dropm) ce (PTree.empty Clight.function).
+
 End COMPOSITE_ENV.
 
 
@@ -688,7 +699,7 @@ Definition transl_program (p: program) : res Clight.program :=
            fun Hyp =>
              let ce := p.(prog_comp_env) in
              (* step 2: generate drop glue *)
-             let globs := generate_drops ce tce p.(prog_types) dropm in
+             let globs := generate_drops ce tce dropm in
              (** TODO: Maybe we should check the existence of malloc
                  and free idents *)      
              (* step 3: translate the statement and convert drop glue *)
