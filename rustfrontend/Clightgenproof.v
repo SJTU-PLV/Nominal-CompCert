@@ -42,6 +42,9 @@ Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     erase_program tp = erase_program p;
     match_prog_malloc:
     exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_malloc tyl rety cc));
+    match_prog_free:
+    exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_free tyl rety cc));
+
   }.
 
 (* Prove match_genv for this specific match_prog *)
@@ -111,6 +114,49 @@ Proof.
   contradiction.
 Qed.
 
+
+Theorem find_funct_none:
+  forall v tv,
+  Genv.find_funct (globalenv se p) v = None ->
+  Val.inject j v tv ->
+  v <> Vundef ->
+  Genv.find_funct (Clight.globalenv tse tp) tv = None.
+Proof.
+  intros v tv Hf1 INJ Hv. destruct INJ; auto; try congruence.
+  destruct (Mem.sup_dec b1 se.(Genv.genv_sup)).
+  - edestruct Genv.mge_dom; eauto. rewrite H1 in H. inv H.
+    rewrite Ptrofs.add_zero. revert Hf1.
+    unfold Genv.find_funct, Genv.find_funct_ptr, Genv.find_def.
+    destruct Ptrofs.eq_dec; auto.
+    generalize (Genv.mge_defs globalenvs_match b1 H1). intros REL. simpl.
+    inv REL. auto.
+    destruct x. congruence. simpl in H2.
+    destruct y. contradiction. auto.    
+  - unfold Genv.find_funct, Genv.find_funct_ptr, Genv.find_def.
+    destruct Ptrofs.eq_dec; auto.
+    destruct NMap.get as [[|]|] eqn:Hdef; auto. exfalso.
+    apply Genv.genv_defs_range in Hdef.
+    eapply Genv.mge_separated in H; eauto. cbn in *.
+    apply n,H,Hdef.
+Qed.
+
+Theorem is_internal_match :
+  (forall c f tf, tr_fundef c f tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v tv,
+    Val.inject j v tv ->
+    v <> Vundef ->
+    Genv.is_internal (Clight.globalenv tse tp) tv = Genv.is_internal (globalenv se p) v.
+Proof.
+  intros Hmatch v tv INJ DEF. unfold Genv.is_internal.
+  destruct (Genv.find_funct _ v) eqn:Hf.
+  - edestruct find_funct_match as (tf & Htf & ?); try eassumption.
+    unfold Clight.fundef.
+    simpl. rewrite Htf. eauto.
+  - erewrite find_funct_none; eauto.
+Qed.
+
+
 End INJECT.
 
 End MATCH_PROGRAMS.
@@ -145,22 +191,49 @@ Hypothesis GE: inj_stbls w se tse.
 (* Let dropm := generate_dropm prog. *)
 (* Let glues := generate_drops ce tce prog.(prog_types) dropm. *)
 
+Definition var_block_rel (f: meminj) (s: block * type) (t: block * Ctypes.type) : Prop :=
+  let (b, ty) := s in
+  let (tb, cty) := t in
+  f b = Some (tb, 0) /\ cty = to_ctype ty.
 
 Definition match_env (f: meminj) (e: env) (te: Clight.env) : Prop :=
   (* me_mapped in Simpllocalproof.v *)
-  forall id b ty, e!id = Some (b, ty) ->
-          exists tb, te!id = Some (tb, to_ctype ty) /\ f b = Some (tb, 0).
-
+  forall id, Coqlib.option_rel (var_block_rel f) e!id te!id.
+  
 Lemma match_env_incr: forall e te j1 j2,
     match_env j1 e te ->
     inject_incr j1 j2 ->
     match_env j2 e te.
 Proof.
   unfold match_env.
-  intros. eapply H in H1. destruct H1 as (tb & TE & INJ).
-  eapply H0 in INJ. exists tb. eauto.
+  intros. generalize (H id). intros REL.
+  inv REL. constructor. constructor.
+  destruct x. destruct y.
+  red. red in H3. destruct H3.
+  split; eauto.
 Qed.
-  
+
+
+(* We need to maintain the well-formedness of local environment in the
+simulation *)
+Definition well_formed_env (f: function) (e: env) : Prop :=
+  forall id, ~ In id (var_names f.(fn_vars)) -> e!id = None.
+
+Lemma wf_env_target_none: forall j e te l id f,
+    match_env j e te ->
+    well_formed_env f e ->
+    list_disjoint (var_names (f.(fn_params) ++ f.(fn_vars))) l ->
+    In id l ->
+    te!id = None.
+Proof.
+Admitted.
+
+Lemma function_entry_wf_env: forall ge f vargs e m1 m2,
+    function_entry ge f vargs m1 e m2 ->
+    well_formed_env f e.
+Admitted.
+
+
 Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
 | match_Kstop: match_cont RustIR.Kstop Clight.Kstop
 | match_Kseq: forall s ts k tk,
@@ -172,7 +245,9 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
     tr_stmt ce tce dropm s ts ->
     match_cont k tk ->
     match_cont (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk)
-| match_Kcall1: forall p f tf e te le k tk cty temp pe j,
+| match_Kcall1: forall p f tf e te le k tk cty temp pe j
+    (WFENV: well_formed_env f e)
+    (NORMALF: f.(fn_drop_glue) = None),
     (* we need to consider temp is set to a Clight expr which is
     translated from p *)
     tr_function ce tce dropm glues f tf ->
@@ -181,7 +256,9 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
     match_cont k tk ->
     match_env j e te ->
     match_cont (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk))
-| match_Kcall2: forall f tf e te le k tk,
+| match_Kcall2: forall f tf e te le k tk
+    (WFENV: well_formed_env f e)
+    (NORMALF: f.(fn_drop_glue) = None),
     (* how to relate le? *)
     tr_function ce tce dropm glues f tf ->
     match_cont k tk ->
@@ -193,12 +270,15 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
     glues ! id = Some tf ->
     (* drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) co.(co_attr) = Some tf -> *)
     match_env j e te ->
-    match_cont (RustIR.Kcalldrop id e k) (Clight.Kcall None tf te le tk)
+    match_cont (RustIR.Kcalldrop id empty_env k) (Clight.Kcall None tf te le tk)
 .
 
 
 Inductive match_states: RustIR.state -> Clight.state -> Prop :=
 | match_regular_state: forall f tf s ts k tk m tm e te le j
+    (WFENV: well_formed_env f e)
+    (* maintain that this function is a normal function *)
+    (NORMALF: f.(fn_drop_glue) = None)
     (MFUN: tr_function ce tce dropm glues f tf)
     (MSTMT: tr_stmt ce tce dropm s ts)    
     (* match continuation *)
@@ -364,36 +444,15 @@ Lemma function_entry_inject:
       /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
 Admitted.
 
+    
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   unfold build_clgen_env in *. unfold ctx in *. simpl in *.
   induction 1; intros; inv MS.
-
-  (* prove internal step *)
-  18 : {
-    assert (MSTBL: Genv.match_stbls j se tse). {   
-      destruct w. inv GE. simpl in *. inv INCR. 
-      eapply Genv.match_stbls_incr; eauto. 
-      (* disjoint *)
-      intros. exploit H7; eauto. intros (A & B). split; eauto. }
-    
-    edestruct find_funct_match as (tfd & FINDT & TF); eauto.
-    inv TF. inv H1;try congruence.
-
-    (* function entry inject *)
-    exploit function_entry_inject; eauto.
-    intros (j' & te & tm' & TENTRY & MENV1 & MINJ1 & INCR1).
-    exists (Clight.State tf tf.(Clight.fn_body) tk te (create_undef_temps (fn_temps tf)) tm').
-    (* step and match states *)
-    split.
-    - eapply plus_one. econstructor;eauto.
-    - econstructor; eauto.
-      eapply tr_function_normal;eauto.
-      etransitivity;eauto.
-  }
-           
+          
   (* assign *)
   - inv MSTMT. simpl in H3.
     monadInv_comb H3.
@@ -526,8 +585,10 @@ Proof.
       { eapply Clight.step_call.
         * simpl. eauto.
         * eapply eval_Elvalue. eapply eval_Evar_global.
-          (** We have to ensure that e!malloc_id = None *)
-          admit.
+          (* We have to ensure that e!malloc_id = None *)
+          eapply wf_env_target_none; eauto. simpl. auto.
+          inv MFUN; try congruence.
+          eauto. simpl. eauto.
           eauto.
           simpl. eapply Clight.deref_loc_reference. auto.
         * repeat econstructor.
@@ -657,8 +718,28 @@ Proof.
   (* step_internal_function *)
   - (* how to prove tr_function f tf because we should guarantee that
     f is not a drop glue *)
-    admit.
+    assert (MSTBL: Genv.match_stbls j se tse). {   
+      destruct w. inv GE. simpl in *. inv INCR. 
+      eapply Genv.match_stbls_incr; eauto. 
+      (* disjoint *)
+      intros. exploit H7; eauto. intros (A & B). split; eauto. }
+    
+    edestruct find_funct_match as (tfd & FINDT & TF); eauto.
+    inv TF. inv H1;try congruence.
 
+    (* function entry inject *)
+    exploit function_entry_inject; eauto.
+    intros (j' & te & tm' & TENTRY & MENV1 & MINJ1 & INCR1).
+    exists (Clight.State tf tf.(Clight.fn_body) tk te (create_undef_temps (fn_temps tf)) tm').
+    (* step and match states *)
+    split.
+    + eapply plus_one. econstructor;eauto.
+    + econstructor; eauto.
+      (* initial env is well_formed *)
+      eapply function_entry_wf_env. eauto.
+      eapply tr_function_normal;eauto.
+      etransitivity;eauto.
+      
   (* step_external_function *)
   - admit.
 
@@ -711,16 +792,16 @@ Theorem transl_program_correct prog tprog:
 Proof.
   fsim eapply forward_simulation_plus. 
   - inv MATCH. auto.
-  - intros. destruct Hse, H.
-    eapply Genv.is_internal_match. eapply MATCH.
+  - intros. destruct Hse, H. simpl.
+    eapply is_internal_match. eapply MATCH.
     eauto.
     (* tr_fundef relates internal function to internal function *)
     intros. inv H3;auto.
     auto. auto.
   (* initial state *)
-  - eapply initial_states_simulation;auto. 
+  - eapply initial_states_simulation; eauto. 
   (* final state *)
-  - eapply final_states_simulation; auto.
+  - eapply final_states_simulation; eauto.
   (* external state *)
   - eapply external_states_simulation; eauto.
   (* step *)

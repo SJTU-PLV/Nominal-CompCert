@@ -255,7 +255,9 @@ tr_composite relation *)
 .
 
 Inductive tr_function: function -> Clight.function -> Prop :=
-| tr_function_normal: forall f tf,
+| tr_function_normal: forall f tf
+    (* It is necessary to prove te!drop_id = None in eval_Evar_global *)
+    (WFNAMES: list_disjoint (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm)))),
     f.(fn_drop_glue) = None ->
     tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
     Clight.fn_return tf = to_ctype (fn_return f) ->
