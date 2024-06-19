@@ -438,20 +438,25 @@ Fixpoint expr_to_cexpr_list (l: list expr) : res (list Clight.expr) :=
       OK (e' :: l')
   end.
 
-Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (e: expr) : res (Clight.statement * Clight.expr) :=
+Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.type) (e: expr) : res (Clight.statement * Clight.expr) :=
   (* temp = malloc(sz);
      *temp = e;
      temp *)
   do e' <- expr_to_cexpr e;
   let e_ty := Clight.typeof e' in
   let sz := Ctypes.sizeof tce e_ty in
-  let tempvar := Clight.Etempvar temp temp_ty in
-  let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctypes.type_int32s Ctypes.Tnil) temp_ty cc_default)) in
-  let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in
-  let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
-  let assign_deref_temp := Clight.Sassign (Ederef tempvar e_ty) e' in
-  OK (Clight.Ssequence call_malloc assign_deref_temp, tempvar)
-.
+  (* check sz is in the range of ptrofs.max_unsigned which is used in
+  proof *)
+  if (0 <=? sz) && (sz <=? Ptrofs.max_unsigned) then
+    let tempvar := Clight.Etempvar temp temp_ty in
+    let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default)) in
+    let sz_expr := if Archi.ptr64
+                   then Clight.Econst_long (Ptrofs.to_int64 (Ptrofs.repr sz)) Ctyping.size_t
+                   else Clight.Econst_int (Ptrofs.to_int (Ptrofs.repr sz)) Ctyping.size_t in
+    let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
+    let assign_deref_temp := Clight.Sassign (Ederef tempvar deref_ty) e' in
+    OK (Clight.Ssequence call_malloc assign_deref_temp, tempvar)
+  else Error (msg "Size of type is not in range (transl_Sbox)").
 
 (* expand drop_in_place(temp), temp is a reference, ty is the type of
 [*temp]. It is different from drop_glue_for_type because the expansion
@@ -534,9 +539,10 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       (* temp = malloc(sizeof(e));
        *temp = e;
        p = temp *)
-      let temp_ty := Tpointer (to_ctype (typeof e)) noattr in
+      let temp_ty := to_ctype (typeof_place p) in
+      let deref_ty := to_ctype (deref_type (typeof_place p)) in
       dosym temp <- gensym temp_ty;
-      docomb (stmt, e') <- transl_Sbox temp temp_ty e;
+      docomb (stmt, e') <- transl_Sbox temp temp_ty deref_ty e;
       docomb pe <- place_to_cexpr p;
       ret (Clight.Ssequence stmt (Clight.Sassign pe e'))
   | Sstoragelive _

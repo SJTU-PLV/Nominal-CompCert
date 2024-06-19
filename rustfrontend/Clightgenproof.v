@@ -39,7 +39,9 @@ Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     (* match_program_gen tr_fundef (fun ty ty' => to_ctype ty = ty') p p tp; *)
     forall id, Coqlib.option_rel (match_glob (build_clgen_env p tp)) ((prog_defmap p)!id) ((prog_defmap tp)!id);
     match_prog_skel:
-    erase_program tp = erase_program p
+    erase_program tp = erase_program p;
+    match_prog_malloc:
+    exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_malloc tyl rety cc));
   }.
 
 (* Prove match_genv for this specific match_prog *)
@@ -109,18 +111,27 @@ Proof.
   contradiction.
 Qed.
 
+End INJECT.
+
+End MATCH_PROGRAMS.
 
 Section PRESERVATION.
 
 Variable prog: RustIR.program.
 Variable tprog: Clight.program.
+Let ctx := build_clgen_env prog tprog.
+Let ce := ctx.(clgen_src_cenv).
+Let tce := ctx.(clgen_tgt_cenv).
+Let dropm := ctx.(clgen_dropm).
+Let glues := ctx.(clgen_glues).
+
 Hypothesis TRANSL: match_prog prog tprog.
 Variable w: inj_world.
 
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 (* injp or inj ? *)
-
+Hypothesis SEVALID: Genv.valid_for (erase_program prog) se.
 
 Let ge := RustIR.globalenv se prog.
 Let tge := Clight.globalenv tse tprog.
@@ -130,7 +141,7 @@ Hypothesis GE: inj_stbls w se tse.
 (* Simulation relation *)
 
 (* Let ce := prog.(prog_comp_env). *)
-Let tce := tprog.(Ctypes.prog_comp_env).
+(* Let tce := tprog.(Ctypes.prog_comp_env). *)
 (* Let dropm := generate_dropm prog. *)
 (* Let glues := generate_drops ce tce prog.(prog_types) dropm. *)
 
@@ -140,64 +151,65 @@ Definition match_env (f: meminj) (e: env) (te: Clight.env) : Prop :=
   forall id b ty, e!id = Some (b, ty) ->
           exists tb, te!id = Some (tb, to_ctype ty) /\ f b = Some (tb, 0).
 
-
-Inductive match_cont : composite_env -> PTree.t ident -> RustIR.cont -> Clight.cont -> Prop :=
-| match_Kstop: forall ce dropm,
-    match_cont ce dropm RustIR.Kstop Clight.Kstop
-| match_Kseq: forall s ts k tk ce dropm,
+Lemma match_env_incr: forall e te j1 j2,
+    match_env j1 e te ->
+    inject_incr j1 j2 ->
+    match_env j2 e te.
+Proof.
+  unfold match_env.
+  intros. eapply H in H1. destruct H1 as (tb & TE & INJ).
+  eapply H0 in INJ. exists tb. eauto.
+Qed.
+  
+Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
+| match_Kstop: match_cont RustIR.Kstop Clight.Kstop
+| match_Kseq: forall s ts k tk,
     (* To avoid generator, we need to build the spec *)
-    tr_stmt ce dropm s ts ->
-    match_cont ce dropm k tk ->
-    match_cont ce dropm (RustIR.Kseq s k) (Clight.Kseq ts tk)
-| match_Kloop: forall s ts k tk ce dropm,
-    tr_stmt ce dropm s ts ->
-    match_cont ce dropm k tk ->
-    match_cont ce dropm (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk)
-| match_Kcall1: forall p f tf e te le k tk cty temp pe j ce dropm cu,
+    tr_stmt ce tce dropm s ts ->
+    match_cont k tk ->
+    match_cont (RustIR.Kseq s k) (Clight.Kseq ts tk)
+| match_Kloop: forall s ts k tk,
+    tr_stmt ce tce dropm s ts ->
+    match_cont k tk ->
+    match_cont (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk)
+| match_Kcall1: forall p f tf e te le k tk cty temp pe j,
     (* we need to consider temp is set to a Clight expr which is
     translated from p *)
-    linkorder cu prog ->
-    tr_function cu.(prog_comp_env) (generate_dropm cu) f tf ->
+    tr_function ce tce dropm glues f tf ->
     cty = to_ctype (typeof_place p) ->
     place_to_cexpr tce p = OK pe ->
-    match_cont cu.(prog_comp_env) (generate_dropm cu) k tk ->
+    match_cont k tk ->
     match_env j e te ->
-    match_cont ce dropm (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk))
-| match_Kcall2: forall f tf e te le k tk ce dropm cu,
+    match_cont (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk))
+| match_Kcall2: forall f tf e te le k tk,
     (* how to relate le? *)
-    linkorder cu prog ->
-    tr_function cu.(prog_comp_env) (generate_dropm cu) f tf ->
-    match_cont cu.(prog_comp_env) (generate_dropm cu) k tk ->
-    match_cont ce dropm (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk)
-| match_Kcalldrop: forall id e te le k tk tf j cu drops ce dropm,
+    tr_function ce tce dropm glues f tf ->
+    match_cont k tk ->
+    match_cont (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk)
+| match_Kcalldrop: forall id e te le k tk tf j,
     (* Is it correct? *)
     (* ce ! id = Some co -> *)
     (* Use PTree.fold in generate_drops instead of fold right ? *)
-    linkorder cu prog ->
-    generate_drops cu.(prog_comp_env) tce cu.(prog_types) (generate_dropm cu) = drops ->
-    drops ! id = Some tf ->
+    glues ! id = Some tf ->
     (* drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) co.(co_attr) = Some tf -> *)
     match_env j e te ->
-    match_cont ce dropm (RustIR.Kcalldrop id e k) (Clight.Kcall None tf te le tk)
+    match_cont (RustIR.Kcalldrop id e k) (Clight.Kcall None tf te le tk)
 .
 
 
 Inductive match_states: RustIR.state -> Clight.state -> Prop :=
-| match_regular_state: forall f tf s ts k tk m tm e te le j cu,
-    let ce := cu.(prog_comp_env) in
-    let dropm := generate_dropm cu in
-    forall (LINKORDER: linkorder cu prog)
-    (MFUN: tr_function ce dropm f tf)
-    (MSTMT: tr_stmt ce dropm s ts)    
+| match_regular_state: forall f tf s ts k tk m tm e te le j
+    (MFUN: tr_function ce tce dropm glues f tf)
+    (MSTMT: tr_stmt ce tce dropm s ts)    
     (* match continuation *)
-    (MCONT: match_cont ce dropm k tk)
+    (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm)   
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (MENV: match_env j e te),
     match_states (RustIR.State f s k e m) (Clight.State tf ts tk te le tm)
 | match_call_state: forall vf vargs k m tvf tvargs tk tm j
     (* match_kcall is independent of ce and dropm  *)
-    (MCONT: forall ce dropm, match_cont ce dropm k tk)
+    (MCONT: match_cont k tk)
     (VINJ: Val.inject j vf tvf)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
@@ -206,73 +218,51 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (* (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv), *)
     match_states (RustIR.Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
 | match_return_state: forall v k m tv tk tm j
-   (MCONT: forall ce dropm, match_cont ce dropm k tk)
+   (MCONT: match_cont k tk)
    (MINJ: Mem.inject j m tm)
    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
    (RINJ: Val.inject j v tv),
     match_states (RustIR.Returnstate v k m) (Clight.Returnstate tv tk tm)
-| match_calldrop_box: forall p k e m b ofs tk tm ty j fb cu,
+| match_calldrop_box: forall p k e m b ofs tk tm ty j fb
     (* we can store the address of p in calldrop and build a local env
        in Drop state according to this address *)
-    let ce := cu.(prog_comp_env) in
-    let dropm := generate_dropm cu in
-    forall (LINKORDER: linkorder cu prog)
     (VFIND: Genv.find_def tge fb = Some (Gfun malloc_decl))
     (PTY: typeof_place p = Tbox ty)
     (PADDR: eval_place ce e m p b ofs)
-    (MCONT: match_cont ce dropm k tk)
+    (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
-| match_calldrop_composite: forall p k e m b ofs tk tm j fb id fid drop_glue orgs cu,
-    let ce := cu.(prog_comp_env) in
-    let dropm := generate_dropm cu in
-    let drops := generate_drops ce tce cu.(prog_types) dropm in
-    forall (LINKORDER: linkorder cu prog)
-    (GLUE: drops ! id = Some drop_glue)
+| match_calldrop_composite: forall p k e m b ofs tk tm j fb id fid drop_glue orgs
+    (GLUE: glues ! id = Some drop_glue)
     (DROPM: dropm ! id = Some fid)
     (VFIND: Genv.find_funct tge (Vptr fb Ptrofs.zero) = Some (Ctypes.Internal drop_glue))
     (SYMB: Genv.find_symbol tge fid = Some fb)
     (PTY: typeof_place p = Tstruct orgs id \/ typeof_place p = Tvariant orgs id)
     (PADDR: eval_place ce e m p b ofs)
-    (MCONT: match_cont ce dropm k tk)
+    (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
-| match_drop_state: forall id s k e m tf ts tk te le tm j cu,
-    let ce := cu.(prog_comp_env) in
-    let dropm := generate_dropm cu in
-    let drops := generate_drops ce tce cu.(prog_types) dropm in
-    forall (LINKORDER: linkorder cu prog)
+| match_drop_state: forall id s k e m tf ts tk te le tm j
       (* How to relate e and te? and le? *)
-    (MSTMT: tr_stmt ce dropm s ts)
-    (MCONT: match_cont ce dropm k tk)
+    (MSTMT: tr_stmt ce tce dropm s ts)
+    (MCONT: match_cont k tk)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
-    (GLUE: drops ! id = Some tf),
+    (GLUE: glues ! id = Some tf),
     match_states (RustIR.Dropstate id s k e m) (Clight.State tf ts tk te le tm)
 .
-
-
-Section TRANSLATION.
-
-Variable cunit: RustIR.program.
-Hypothesis LINKORDER: linkorder cunit prog.
-Let ce := cunit.(prog_comp_env).
-
-Variable ctce : Ctypes.composite_env.
-
-Hypothesis TRCOMP: tr_composite_env ce ctce.
 
 (* Type preservation in translation *)
 
 Lemma place_to_cexpr_type: forall p e,
-    place_to_cexpr ctce p = OK e ->
+    place_to_cexpr tce p = OK e ->
     to_ctype (typeof_place p) = Clight.typeof e.
 Admitted.
 
 Lemma expr_to_cexpr_type: forall e e',
-    expr_to_cexpr ce ctce e = OK e' ->
+    expr_to_cexpr ce tce e = OK e' ->
     to_ctype (typeof e) = Clight.typeof e'.
 Admitted.
 
@@ -280,7 +270,7 @@ Admitted.
 (* Injection is preserved during evaluation *)
 
 Lemma eval_expr_inject: forall e te j a a' m tm v le,
-    expr_to_cexpr ce ctce a = OK a' ->
+    expr_to_cexpr ce tce a = OK a' ->
     eval_expr ce e m a v ->
     match_env j e te ->
     Mem.inject j m tm ->
@@ -290,7 +280,7 @@ Lemma eval_expr_inject: forall e te j a a' m tm v le,
 Admitted.
 
 Lemma eval_place_inject: forall e te j p lv m tm le b ofs,
-    place_to_cexpr ctce p = OK lv ->
+    place_to_cexpr tce p = OK lv ->
     eval_place ce e m p b ofs ->
     match_env j e te ->
     Mem.inject j m tm ->
@@ -301,16 +291,16 @@ Lemma eval_place_inject: forall e te j p lv m tm le b ofs,
     exists b' ofs', Clight.eval_lvalue tge te le tm lv b' ofs' Full /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
 Admitted.
 
-End TRANSLATION.
 
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->
     Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
     Val.inject f v v' ->
     Mem.inject f m tm ->
-    exists tm',
+    exists f' tm',
       Clight.assign_loc tge (to_ctype ty) tm loc' ofs' Full v' tm'
-      /\ Mem.inject f m' tm'.
+      /\ Mem.inject f' m' tm'
+      /\ inj_incr (injw f (Mem.support m) (Mem.support tm)) (injw f' (Mem.support m') (Mem.support tm')).
 Admitted.
 
 Lemma sem_cast_to_ctype_inject: forall f v1 v1' v2 t1 t2 m,
@@ -318,22 +308,24 @@ Lemma sem_cast_to_ctype_inject: forall f v1 v1' v2 t1 t2 m,
     Val.inject f v1 v1' ->
     exists v2', Cop.sem_cast v1' (to_ctype t1) (to_ctype t2) m = Some v2' /\ Val.inject f v2 v2'.
 Admitted.
-  
+
+(* use injp_acc to prove inj_incr *)
+Lemma injp_acc_inj_incr: forall f f' m1 m2 m1' m2' Hm Hm',
+          injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm') ->
+          inj_incr (injw f (Mem.support m1) (Mem.support m2)) (injw f' (Mem.support m1') (Mem.support m2')).
+Proof.
+  intros. inv H.
+  econstructor. eauto.
+  red. red in H13. unfold Mem.valid_block in H13. eauto.
+  eapply (Mem.unchanged_on_support _ _ _ H10).
+  eapply (Mem.unchanged_on_support _ _ _ H11).
+Qed.
+
+
 Remark list_cons_neq: forall A (a: A) l, a :: l <> l.
 Proof.
   intros. induction l. intro. congruence.
   intro. inv H.  congruence.
-Qed.
-
-
-Lemma functions_translated (j: meminj) :
-  Genv.match_stbls j se tse ->
-  forall (v tv: val) (f: RustIR.fundef),
-    Genv.find_funct ge v = Some f ->
-    Val.inject j v tv ->
-  exists c tf, Genv.find_funct tge tv = Some tf /\ tr_fundef c f tf /\ linkorder c prog.
-Proof.
-  apply (Genv.find_funct_match (match_prog_def prog tprog TRANSL)).  
 Qed.
 
 Lemma initial_states_simulation:
@@ -344,8 +336,8 @@ Proof.
   inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
   subst. 
   inversion HS. clear HS. subst vf sg vargs m.
-  exploit functions_translated;eauto. eapply inj_stbls_match. auto.
-  intros (c & tf & FIND & TRF & LINK).
+  exploit find_funct_match;eauto. eapply inj_stbls_match. eauto. eauto.
+  intros (tf & FIND & TRF).
   (* inversion TRF to get tf *)
   inv TRF.
   eexists. split.
@@ -355,6 +347,7 @@ Proof.
     (* val_casted_list *) admit.
     (* sup include *) admit.
   - econstructor; eauto. econstructor.
+    inv Hm. simpl. reflexivity.
 Admitted.
 
 Lemma function_entry_inject:
@@ -375,6 +368,7 @@ Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
+  unfold build_clgen_env in *. unfold ctx in *. simpl in *.
   induction 1; intros; inv MS.
 
   (* prove internal step *)
@@ -385,8 +379,8 @@ Proof.
       (* disjoint *)
       intros. exploit H7; eauto. intros (A & B). split; eauto. }
     
-    edestruct functions_translated as (cu & tfd & FINDT & TF & CU); eauto.
-    inv TF. inv H1.    
+    edestruct find_funct_match as (tfd & FINDT & TF); eauto.
+    inv TF. inv H1;try congruence.
 
     (* function entry inject *)
     exploit function_entry_inject; eauto.
@@ -403,9 +397,7 @@ Proof.
   (* assign *)
   - inv MSTMT. simpl in H3.
     monadInv_comb H3.
-    (* eval place and expr *)
-    
-    
+    (* eval place and expr *)       
     exploit eval_place_inject;eauto. instantiate (1:= le0).
     intros (b' & ofs' & EL & INJL).
     exploit eval_expr_inject; eauto. instantiate (1:= le0).
@@ -413,7 +405,7 @@ Proof.
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
     intros (v1' & CASTINJ & INJV2).
     exploit assign_loc_inject. eauto. eauto. eapply INJV2. eauto.
-    intros (tm2 & TASS & INJA).
+    intros (j2 & tm2 & TASS & INJA & INCR2).
     erewrite place_to_cexpr_type in *;eauto.
     erewrite expr_to_cexpr_type in *;eauto.
     eexists. split.
@@ -425,9 +417,12 @@ Proof.
          2. evaluation of well typed expression produces casted value (val_casted)
          3. use cast_val_casted *)
     (* match state *)
-    + eapply match_regular_state;eauto.
+    + assert (INCR3: inj_incr w (injw j2 (Mem.support m2) (Mem.support tm2))).
+      etransitivity. eauto. eauto.      
+      eapply match_regular_state;eauto.
       econstructor. simpl. instantiate (1 := g). eauto.
-
+      eapply match_env_incr;eauto. inv INCR2. auto.
+      
   (* assign_variant *)
   - inv MSTMT. simpl in H9.
     monadInv_comb H9.
@@ -453,8 +448,147 @@ Proof.
     admit.
 
   (* box *)
-  - admit.
-
+  - inv MSTMT. simpl in H7.
+    monadInv_sym H7. unfold gensym in EQ. inv EQ.    
+    monadInv_comb EQ0.
+    destruct g. simpl in H9. inv H9. eapply list_cons_neq in H8.
+    contradiction.
+    unfold transl_Sbox in H11. monadInv H11.
+    destruct andb eqn: ANDB in EQ0;try congruence.
+    eapply andb_true_iff in ANDB. destruct ANDB as (SZGT & SZLT).
+    eapply Z.leb_le in SZGT. eapply Z.leb_le in SZLT.
+    inv EQ0.
+    (* find_symbol malloc = Some b *)
+    destruct (match_prog_malloc _ _ TRANSL) as (orgs & rels & tyl & rety & cc & MALLOC).    
+    exploit Genv.find_def_symbol. eauto. intros A.
+    eapply A in MALLOC as (mb & FINDSYMB & FINDMALLOC). clear A.    
+    edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB).
+    eapply inj_stbls_match. eauto. eauto.
+    (* find_funct tge tb = Some malloc_decl *)
+    assert (TFINDFUN: Genv.find_funct tge (Vptr tmb Ptrofs.zero) = Some malloc_decl).
+    { edestruct find_funct_match as (malloc & TFINDFUN & TRMALLOC).
+      eauto. 
+      eapply inj_stbls_match. eauto.
+      instantiate (2 := (Vptr mb Ptrofs.zero)). simpl.
+      destruct Ptrofs.eq_dec; try congruence.
+      eapply Genv.find_funct_ptr_iff. eauto.
+      econstructor. eauto. eauto.
+      erewrite Ptrofs.add_zero_l in TFINDFUN. unfold tge.
+      inv TRMALLOC. eauto. intuition. }
+    (* mem alloc in target *)
+    exploit Mem.alloc_parallel_inject. eapply MINJ.
+    eauto. eapply Z.le_refl. eapply Z.le_refl. 
+    intros (j2 & tm2 & tb & TALLOC & INJ2 & INCR2 & A & B).
+    cut (match_env j2 le te).
+    2: { eapply match_env_incr;eauto. }
+    intros MENV2.
+    (* store in malloc *)
+    exploit Mem.store_mapped_inject. eapply INJ2. eauto.
+    eapply A. instantiate (1:= (Vptrofs (Ptrofs.repr (sizeof ge (typeof e))))).
+    econstructor. rewrite Z.add_0_r.
+    intros (tm3 & STORE & INJ3).
+    (* evaluate the expression which is stored in the malloc pointer *)
+    exploit eval_expr_inject. eauto. eauto.
+    eapply match_env_incr. eapply match_env_incr.
+    eauto. eauto. eauto. eauto.
+    instantiate (1:= (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
+    intros (tv & EXPR & VINJ). 
+    (* sem_cast *)
+    exploit sem_cast_to_ctype_inject. eauto. eauto. instantiate (1 := tm3).
+    intros (tv1 & CAST1 & INJCAST).
+    (* assign_loc for *temp *)
+    exploit assign_loc_inject. eapply H4. instantiate (3 := j2).
+    econstructor;eauto. eauto. eauto.
+    rewrite Ptrofs.add_zero_l.
+    intros (j3 & tm4 & ASSIGNLOC1 & INJ4 & INCR3).
+    cut (match_env j3 le te).
+    2: { eapply match_env_incr;eauto. inv INCR3. eauto. }
+    intros MENV3.
+    (* eval_lvalue lhs *)
+    exploit eval_place_inject. eauto. eauto.
+    eauto. eauto.
+    instantiate (1 := (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
+    intros (tpb & tpofs & ELHS & VINJ3).
+    (* assign_loc for lhs *)
+    exploit assign_loc_inject. eapply H6. instantiate (3 := j3).
+    eauto. 
+    econstructor. inv INCR3. eapply H12. eauto. eauto.
+    eauto. rewrite Ptrofs.add_zero_l.
+    intros (j4 & tm5 & ASSIGNLOC2 & INJ5 & INCR4).
+    cut (match_env j4 le te).
+    2: { eapply match_env_incr;eauto. inv INCR4. eauto. }
+    intros MENV4.
+    
+    eexists. split.
+    + econstructor. econstructor. eapply star_step.
+      econstructor. eapply star_left.
+      (* step_call to malloc *)
+      { eapply Clight.step_call.
+        * simpl. eauto.
+        * eapply eval_Elvalue. eapply eval_Evar_global.
+          (** We have to ensure that e!malloc_id = None *)
+          admit.
+          eauto.
+          simpl. eapply Clight.deref_loc_reference. auto.
+        * repeat econstructor.
+        * eauto.          
+        * auto. }
+      eapply star_step.
+      (* evaluate malloc *)
+      { eapply Clight.step_external_function.
+        eauto.
+        econstructor. erewrite Ptrofs.unsigned_repr; try lia.
+        (* alloc *)
+        instantiate (1 := tb).
+        erewrite <- TALLOC. f_equal. symmetry.
+        eapply to_ctype_sizeof. eapply expr_to_cexpr_type;eauto.
+        eapply TRANSL.
+        (* store sz *)        
+        erewrite <- STORE. repeat f_equal. symmetry.
+        eapply to_ctype_sizeof. eapply expr_to_cexpr_type;eauto.
+        eapply TRANSL. }
+      eapply star_step.
+      (* returnstate to regular state *)
+      eapply Clight.step_returnstate.
+      eapply star_step.
+      eapply Clight.step_skip_seq.
+      eapply star_step.
+      (* assign to the malloc pointer *)
+      { eapply Clight.step_assign.
+        eapply eval_Ederef. eapply eval_Etempvar.
+        simpl. eapply PTree.gss.
+        eauto.
+        (* sem_cast in C side *)
+        erewrite <- CAST1. rewrite H. f_equal. symmetry.
+        eapply expr_to_cexpr_type;eauto.
+        rewrite H. eauto. }
+      eapply star_step.
+      eapply Clight.step_skip_seq.
+      eapply star_one.
+      (* assign temp to p *)
+      { eapply Clight.step_assign.
+        eauto.
+        econstructor. eapply PTree.gss.
+        instantiate (1 := (Vptr tb Ptrofs.zero)).
+        erewrite <- (place_to_cexpr_type p lhs). rewrite H. simpl.
+        eapply cast_val_casted. econstructor.
+        eauto.
+        erewrite <- (place_to_cexpr_type p lhs). eauto.
+        auto. }
+      1-8: eauto.
+    (* match_states *)
+    + econstructor; eauto.
+      econstructor. simpl. eauto.
+      exploit Mem.support_alloc. eapply H0. intros SUPM2.
+      exploit Mem.support_alloc. eapply TALLOC. intros SUPTM2.      
+      etransitivity. eauto.
+      etransitivity. instantiate (1 := injw j2 (Mem.support m2) (Mem.support tm2)).
+      eapply injp_acc_inj_incr. eapply injp_acc_alloc;eauto.
+      exploit Mem.support_store. eapply H1.
+      exploit Mem.support_store. eapply STORE. intros S1 S2.
+      rewrite <- S1. rewrite <- S2.
+      etransitivity. eauto. eauto.
+            
   (* step_drop1 *)
   - inv MSTMT. simpl in H.
     monadInv_sym H. unfold gensym in EQ. inv EQ.

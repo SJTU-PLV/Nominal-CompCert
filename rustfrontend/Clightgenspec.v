@@ -224,9 +224,10 @@ tr_composite relation *)
 | tr_trivial: forall s ts g,
     transl_stmt ce tce dropm s g = Res ts g ->
     tr_stmt s ts
-| tr_box: forall p e stmt lhs e' temp temp_ty,
-    temp_ty = Tpointer (to_ctype (typeof e)) noattr ->
-    transl_Sbox ce tce temp temp_ty e = OK (stmt, e') ->
+| tr_box: forall p e stmt lhs e' temp temp_ty deref_ty,
+    temp_ty = to_ctype (typeof_place p) ->
+    deref_ty = to_ctype (deref_type (typeof_place p)) ->
+    transl_Sbox ce tce temp temp_ty deref_ty e = OK (stmt, e') ->
     place_to_cexpr tce p = OK lhs ->
     tr_stmt (Sbox p e) (Clight.Ssequence stmt (Clight.Sassign lhs e'))
 | tr_call: forall p e l temp e' l' assign pe,
@@ -299,7 +300,8 @@ Inductive tr_fundef (ctx: clgen_env): fundef -> Clight.fundef -> Prop :=
     tr_fundef ctx (External orgs rels EF_malloc targs tres cconv) malloc_decl
 | tr_external_free: forall targs tres cconv orgs rels,
     tr_fundef ctx (External orgs rels EF_free targs tres cconv) free_decl
-| tr_external: forall ef targs tres cconv orgs rels,    
+| tr_external: forall ef targs tres cconv orgs rels,
+    ef <> EF_malloc /\ ef <> EF_free ->
     tr_fundef ctx (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
 
 

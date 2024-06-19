@@ -631,17 +631,21 @@ Inductive step : state -> trace -> state -> Prop :=
     (* set the value *)
     assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 m3 ->
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
-| step_box: forall f e p ty k le m1 m2 m3 m4 b v v1,
+| step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs,
     typeof_place p = Tbox ty ->
-    eval_expr ge le m1 e v ->
     (* Simulate malloc semantics to allocate the memory block *)
-    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge ty) = (m2, b) ->
-    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge ty))) = Some m3 ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    (* evaluate the expression after malloc to simulate*)
+    eval_expr ge le m3 e v ->
     (* sem_cast the value to simulate function call in Clight *)
     sem_cast v (typeof e) ty = Some v1 ->
-    (* assign the value *)
+    (* assign the value to the allocated location *)
     assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
-    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m4)
+    (* assign the address to p *)
+    eval_place ge le m4 p pb pofs ->
+    assign_loc ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) m5 ->
+    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m5)
 
 (** Small-step drop semantics *)
 | step_drop1: forall f p k le m,
