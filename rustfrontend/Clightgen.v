@@ -392,7 +392,11 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
   | Econst_float f ty => OK (Clight.Econst_float f (to_ctype ty))
   | Econst_single f ty => OK (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => OK (Clight.Econst_long l (to_ctype ty))
-  | Eplace p _ => (place_to_cexpr p)
+  | Eplace p ty =>
+      if type_eq_except_origins ty (typeof_place p) then        
+        (place_to_cexpr p)
+      else
+        Error (msg "type error in Eplace (pexpr_to_cexpr)")
   | Eref _ _ p ty =>
       do e <- place_to_cexpr p;
       OK (Clight.Eaddrof e (to_ctype ty)) 

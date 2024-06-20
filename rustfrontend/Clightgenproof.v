@@ -344,6 +344,7 @@ Admitted.
 Lemma expr_to_cexpr_type: forall e e',
     expr_to_cexpr ce tce e = OK e' ->
     to_ctype (typeof e) = Clight.typeof e'.
+Proof.  
 Admitted.
 
 
