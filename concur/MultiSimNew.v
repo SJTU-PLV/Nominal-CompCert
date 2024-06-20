@@ -1103,10 +1103,10 @@ Qed.
        inversion FSIM.
        clear fsim_simulation fsim_match_initial_states
             fsim_match_final_states.
-       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & wp' & GW_ACC & GETwp & MQ & MS & MR).
+       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & GW_ACC & MQ & MS & MR).
        assert (wP = wPcur). congruence. subst wP.
        assert (tp : Mem.range_prop target (Mem.support(tm_q))).
-       red. red in p. inv MQ. simpl in p. inv Hm0.
+       red. red in p. simpl in p. inv MQ. inv Hm0.
        inv mi_thread. setoid_rewrite <- H. auto.
        set (tm' := Mem.yield tm_q target tp).
        inv MQ. simpl.
@@ -1180,7 +1180,7 @@ Qed.
        inversion FSIM.
        clear fsim_simulation fsim_match_initial_states
             fsim_match_final_states.
-       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & wp' & GW_ACC & GETwp & MQ & MS & MR).
+       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & GW_ACC & MQ & MS & MR).
        assert (wP = wPcur). congruence. subst wP.
        inv Q_JOIN. inv MQ. red in MS. inv MS.
        subst targs tvf.
@@ -1200,7 +1200,7 @@ Qed.
        set (wp := injpw j m tm_q Hm). simpl.
        set (m' := Mem.yield m target p).
        assert (Hm': Mem.inject j m' tm'). eapply yield_inject; eauto.
-       set (wp' := injpw j m' tm' Hm').
+       set (wp'' := injpw j m' tm' Hm').
        eexists. exists tm'. exists (NatMap.set cur (Some wp) worldsP). exists wp,j,Hm'.
        repeat apply conj; try rewrite NatMap.gss; eauto.
        + (*step*)
@@ -1993,7 +1993,7 @@ Qed.
           clear fsim_match_initial_states
             fsim_match_final_states fsim_simulation.
           exploit fsim_match_external. eauto. eauto.
-          intros (wA & qa_ptc & AT_PTC & wp' & APP & GET & MQ_PTC & MS & MR).
+          intros (wA & qa_ptc & AT_PTC & APP & MQ_PTC & MS & MR).
           exploit trans_pthread_create__start_routine; eauto.
           intros (wA'c & qa_str & PTR_TO_STR_ASM & MQ_STR & WORLDS).
           inv WORLDS.

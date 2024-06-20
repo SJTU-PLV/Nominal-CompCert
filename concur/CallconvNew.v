@@ -95,6 +95,9 @@ Section FSIM.
            (index: Type) (order: index -> index -> Prop)
            (match_states: gw_type -> index -> state1 -> state2 -> Prop) :=
       {
+        fsim_match_valid_query:
+        forall q1 q2, match_query cc wb q1 q2 ->
+                 valid_query L2 q2 = valid_query L1 q1;
         fsim_match_initial_states:
           forall q1 q2 s1, match_query cc wb q1 q2 -> initial_state L1 q1 s1 ->
           match_senv cc wb se1 se2 ->
@@ -105,9 +108,9 @@ Section FSIM.
           match_reply cc (set wb gw) r1 r2;
         fsim_match_external:
           forall gw i s1 s2 q1, match_states gw i s1 s2 -> at_external L1 s1 q1 ->
-          exists wa q2 , at_external L2 s2 q2 /\ exists gw', gw *-> gw' /\ get wa = gw' /\
+          exists wa q2 , at_external L2 s2 q2 /\ gw *-> (get wa) /\
           match_query cc wa q1 q2 /\ match_senv cc wa se1 se2 /\
-          forall r1 r2 s1' gw'', gw' o-> gw'' -> match_reply cc (set wa gw'') r1 r2 ->
+          forall r1 r2 s1' gw'', (get wa) o-> gw'' -> match_reply cc (set wa gw'') r1 r2 ->
           after_external L1 s1 r1 s1' ->
           exists i' s2', after_external L2 s2 r2 s2' /\
           exists gw''' , gw'' *-> gw''' /\ match_states gw''' i' s1' s2';
