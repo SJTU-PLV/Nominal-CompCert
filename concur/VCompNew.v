@@ -210,6 +210,43 @@ Proof.
   firstorder.
 Qed.
 
+
+Lemma open_fsim_ccref {li1 li2: language_interface}:
+  forall (cc1 cc2: callconv li1 li2) L1 L2,
+    forward_simulation cc1 L1 L2 ->
+    cceqv cc1 cc2 ->
+    forward_simulation cc2 L1 L2.
+Proof.
+  intros. inv H. destruct H0 as [HA HB].
+  destruct X as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
+         exists w wp,
+           match_states se1 se2 w wp idx s1 s2 /\
+           match_senv cc1 w se1 se2 /\
+           forall r1 r2, match_reply cc1 w r1 r2 -> match_reply cc2 w' r1 r2).
+  eapply Forward_simulation with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
+  split.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply fsim_match_valid_query; eauto.
+  - intros q1 q2 s1 Hq' Hs1.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
+    exists i, s2. split; auto. exists wB,(get wB); auto.
+  - intros gw i s1 s2 r1 (wB & wP & Hs & Hse & Hr') Hr1.
+    edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
+    exists r2. split. auto. split. auto. admit. admit.
+  - intros gw i s1 s2 qA1 (wB & Hs & Hse & Hr') HqA1.
+    edestruct @fsim_match_external as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', qA2. intuition auto.
+    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto.
+  - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
+    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto.
 (** ** Relation to forward simulations *)
 
 Global Instance open_fsim_ccref:
@@ -250,3 +287,5 @@ Proof.
     edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
     exists i', s2'. split; auto. exists wB; eauto.
 Qed.
+
+
