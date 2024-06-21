@@ -336,18 +336,63 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
 
 (* Type preservation in translation *)
 
+Print  to_ctype.
+
+Lemma type_eq_except_origins_to_ctype: forall ty1 ty2,
+    type_eq_except_origins ty1 ty2 = true ->
+    to_ctype ty1 = to_ctype ty2.
+Proof.
+  induction ty1; destruct ty2;simpl; try congruence;
+    intros TYEQ; try eapply proj_sumbool_true in TYEQ; try congruence.
+    erewrite IHty1. eauto.
+    destruct m; destruct m0; auto.
+    congruence. congruence.
+Qed.
+
 Lemma place_to_cexpr_type: forall p e,
     place_to_cexpr tce p = OK e ->
     to_ctype (typeof_place p) = Clight.typeof e.
-Admitted.
+  Proof.
+  induction p; simpl; intros; simpl in *.
+  -  monadInv H. auto.
+  - monadInv H. auto.
+  - monadInv H. auto.
+  - destruct (typeof_place _); inversion H.
+    destruct (tce ! i0);  inversion H.
+    destruct (co_su c);  inversion H.
+    destruct (Ctypes.co_members c );  inversion H.
+    destruct m;
+    destruct m0; inversion H;
+    try destruct m; try destruct m0;
+    monadInv H4; try monadInv H; auto.  
+  Qed.
 
 Lemma expr_to_cexpr_type: forall e e',
     expr_to_cexpr ce tce e = OK e' ->
     to_ctype (typeof e) = Clight.typeof e'.
-Proof.  
-Admitted.
-
-
+Proof.
+    induction e. 
+    - simpl. 
+      destruct (type_eq_except_origins) eqn:Horg.
+      intros.
+      assert ((to_ctype t)  = to_ctype (typeof_place p)) as EQtp.
+      { 
+        eapply type_eq_except_origins_to_ctype.
+        auto.
+      }
+      rewrite EQtp. apply place_to_cexpr_type. auto.
+      intros. monadInv H.
+    - simpl; destruct p;  intros ; simpl in *; try (monadInv H); auto.
+      destruct (type_eq_except_origins t (typeof_place p)) eqn : Htype_eq_org; simpl in *.
+      apply type_eq_except_origins_to_ctype in Htype_eq_org.
+      rewrite Htype_eq_org. apply place_to_cexpr_type. auto.
+      inversion H.
+      destruct (typeof_place p); try (inversion H).
+      destruct (ce ! i0); try (inversion H).
+      destruct (field_tag i (co_members c)); try inversion H.
+      destruct (get_variant_tag tce i0); try inversion H.
+      monadInv H4. auto.
+      Qed.
 (* Injection is preserved during evaluation *)
 
 Lemma eval_expr_inject: forall e te j a a' m tm v le,
