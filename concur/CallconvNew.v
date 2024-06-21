@@ -10,7 +10,9 @@ Require Import Smallstep.
 
 Set Implicit Arguments.
 
-(* Require Import RelationClasses. *)
+Require Import RelationClasses.
+Require Import Relations.
+
 Class Lens (T A: Type) :=
   {
     get : T -> A;
@@ -38,6 +40,32 @@ Program Instance lens_snd {U V} : Lens (U * V) V :=
     set '(u, _) v := (u, v);
   }.
 
+Program Instance lens_unit {T} : Lens T unit :=
+  {
+    get _ := tt;
+    set t tt := t;
+  }.
+Next Obligation. intros; try easy. now destruct a. Defined.
+
+Program Instance lens_prod {T S A B: Type} `(Lens T A) `(Lens S B) : Lens (T * S) (A * B) :=
+  {
+    get '(t, s) := (get t, get s);
+    set '(t, s) '(a, b) := (set t a, set s b);
+  }.
+Next Obligation. now rewrite !get_set. Defined.
+Next Obligation. now rewrite !set_get. Defined.
+Next Obligation. now rewrite !set_set. Defined.
+
+Program Instance lens_comp {U V W: Type} `(Lens U V) `(Lens V W) : Lens U W :=
+  {
+    get u := get (get u);
+    set u w := set u (set (get u) w);
+  }.
+Next Obligation. now rewrite !get_set. Defined.
+Next Obligation. now rewrite !set_get. Defined.
+Next Obligation. rewrite !get_set. rewrite !set_set. reflexivity. Defined.
+
+
 Class World (T: Type) :=
   {
     w_state : Type;
@@ -55,6 +83,52 @@ Arguments w_acce {_ _}.
 
 Infix "*->" := w_acci (at level 60, no associativity).
 Infix "o->" := w_acce (at level 55, no associativity).
+
+Section PROD.
+  Context {A: Type} {B:Type} (WA: World A) (WB: World B).
+
+  Program Instance world_prod: World (A * B) :=
+    {
+      w_state := @w_state A _ * @w_state B _;
+      w_lens := lens_prod w_lens w_lens;
+      w_acci := Relators.prod_rel (w_acci) (w_acci) ;
+      w_acce := Relators.prod_rel w_acce w_acce;
+    }.
+
+  Lemma ext_step_prod (a1 a2: w_state WA) (b1 b2: w_state WB):
+    (a1, b1) o-> (a2, b2) <-> a1 o-> a2 /\ b1 o-> b2.
+  Proof.
+    split.
+    - intros H. inv H. cbn in *. split; eauto.
+    - intros [X Y]. split; eauto.
+  Qed.
+
+  Lemma int_step_prod (a1 a2: w_state WA) (b1 b2: w_state WB):
+    (a1, b1) *-> (a2, b2) <-> a1 *-> a2 /\ b1 *-> b2.
+  Proof.
+    split.
+    - intros H. inv H. cbn in *. split; eauto.
+    - intros [X Y]. split; eauto.
+  Qed.
+
+End PROD.
+Arguments world_prod {_} {_} _ _.
+
+Section SYMTBL.
+
+  Context {T: Type} {W: World T}.
+
+  Instance symtbl_world  : World (Genv.symtbl * T) :=
+    {
+      w_state := @w_state T _;
+      w_lens := lens_comp lens_snd w_lens;
+      w_acci := w_acci;
+      w_acce := w_acce;
+    }.
+
+End SYMTBL.
+
+
 Module GS.
 
   Record callconv {li1 li2} :=
@@ -80,6 +154,29 @@ Module GS.
   (* Existing Instance ccworld_world | 3. *)
   
   Definition gworld {li1 li2}(cc: callconv li1 li2) := w_state (ccworld_world cc).
+
+  Program Definition cc_compose {li1 li2 li3}
+          (cc12: callconv li1 li2) (cc23: callconv li2 li3) :=
+    {|
+      ccworld := Genv.symtbl * (ccworld cc12 * ccworld cc23);
+      ccworld_world := @symtbl_world _ (world_prod (ccworld_world cc12) (ccworld_world cc23));
+      match_senv '(se2, (w12, w23)) se1 se3 :=
+        match_senv cc12 w12 se1 se2 /\ match_senv cc23 w23 se2 se3;
+      match_query '(se2, (w12, w23)) q1 q3 :=
+      exists q2, match_query cc12 w12 q1 q2 /\ match_query cc23 w23 q2 q3;
+      match_reply '(se2, (w12, w23)) r1 r3 :=
+      exists r2, match_reply cc12 w12 r1 r2 /\ match_reply cc23 w23 r2 r3;
+    |}.
+  Next Obligation.
+    etransitivity; eapply match_senv_public_preserved ; eauto.
+  Qed.
+  Next Obligation.
+    eapply match_senv_valid_for; eauto.
+    eapply match_senv_valid_for; eauto.
+  Qed.
+
+  Declare Scope gc_cc_scope.
+  Infix "@" := cc_compose (at level 30, right associativity) : gs_cc_scope.
   
 Section FSIM.
 
@@ -164,6 +261,41 @@ Section FSIM.
         all: etransitivity; eauto.
       Qed.
 
+      Lemma simulation_plus:
+        forall s1 t s1', Plus L1 s1 t s1' ->
+        forall gw i s2, match_states gw i s1 s2 ->
+        exists gw' i', gw *-> gw' /\
+        ((exists s2', Plus L2 s2 t s2' /\ match_states gw' i' s1' s2') \/
+        clos_trans _ order i' i /\ t = E0 /\ match_states gw' i' s1' s2).
+      Proof.
+        induction 1 using plus_ind2; intros.
+        (* base case *)
+        - exploit fsim_simulation'; eauto.
+          intros (i' & gw' & Hw & A).
+          exists gw', i'. repeat split; eauto.
+          destruct A.
+          left; auto.
+          right; intuition.
+        (* inductive case *)
+        - exploit fsim_simulation'; eauto.
+          intros (i' & gw' & Hw' & A).
+          destruct A as [[s2' [A B]] | [A [B C]]].
+          + exploit simulation_star. apply plus_star; eauto. eauto.
+            intros (gw'' & i'' & s2'' & P & Hw & Q).
+            exists gw'', i''. repeat split. etransitivity; eauto.
+            left; exists s2''; split; auto. eapply plus_star_trans; eauto.
+
+          + exploit IHplus; eauto.
+            intros (gw'' & i'' & hw & P).
+            destruct P as [[s2'' [P Q]] | [P [Q R]]].
+            * subst.
+              exists gw'', i''. repeat split. etransitivity; eauto.
+              left; exists s2''; auto.
+            * subst.
+              exists gw'', i''. repeat split. etransitivity; eauto.
+              right; intuition auto.
+              eapply t_trans; eauto. eapply t_step; eauto.
+      Qed.
       
     End SIMULATION_SEQUENCES.
   End FSIM.
