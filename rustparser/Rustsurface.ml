@@ -1252,6 +1252,7 @@ module To_syntax = struct
             dummy_origins (List.length orgs) >>= fun dummy_orgs ->
             return (Rustsyntax.Eenum
                       (ienum, ivar, e', Rusttypes.Tvariant (dummy_orgs, ienum)))
+          (* TODO: support multiple args to constructor *)
           | _ -> throw (Emulti_args_to_constructor (args, xenum, xvar))))
       | _ ->
         transl_expr callee >>= fun callee' ->
