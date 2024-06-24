@@ -499,7 +499,7 @@ Inductive cont : Type :=
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
 | Kcall: option place -> function -> env -> cont -> cont
-| Kcalldrop: ident -> env -> cont -> cont
+| Kdropcall: ident -> val -> members -> cont -> cont
 .
 
 
@@ -538,18 +538,17 @@ Inductive state: Type :=
     (k: cont)
     (m: mem) : state
 | Calldrop
-    (p: place)
-    (k: cont)
-    (* we need to compute the address of p *)
-    (e: env)
+    (* It is necessary for reducing the number of states transition *)
+    (v: val)
+    (ty: type)
+    (k: cont)  
     (m: mem): state
 | Dropstate
     (* composite name *)
     (c: ident)
-    (s: statement)
+    (v: val)
+    (ms: members)
     (k: cont)
-    (* we need to compute the address of [p.f] *)
-    (e: env)
     (m: mem): state.
 
 
@@ -648,48 +647,66 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m5)
 
 (** Small-step drop semantics *)
-| step_drop1: forall f p k le m,
-    step (State f (Sdrop p) k le m) E0 (Calldrop p (Kcall None f le k) le m)
-| step_drop2: forall id p k le m,
+| step_drop_normal: forall f p k le m b ofs,    
+    eval_place ge le m p b ofs ->
+    step (State f (Sdrop p) k le m) E0 (Calldrop (Vptr b ofs) (typeof_place p) (Kcall None f le k) m)
+| step_drop_struct_member: forall k m ty b ofs fofs bf co_id co fid membs
     (* drop in Dropstate *)
-    step (Dropstate id (Sdrop p) k le m) E0 (Calldrop p (Kcalldrop id le k) le m)
-| step_drop_seq:  forall id s1 s2 k e m,
-    step (Dropstate id (Ssequence s1 s2) k e m)
-      E0 (Dropstate id s1 (Kseq s2 k) e m)   
-| step_calldrop_box: forall p le m m' k ty b b' ofs ofs' sz,
+    (OWNTY: own_type ge ty = true)
+    (SCO: ge.(genv_cenv) ! co_id = Some co)
+    (STRUCT: co.(co_sv) = Struct)
+    (FOFS: field_offset ge fid co.(co_members) = OK (fofs, bf)),
+    step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: membs) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) ty (Kdropcall co_id (Vptr b ofs) membs k) m)
+(* | step_drop_enum_member: forall k m ty b ofs fofs bf co_id co fid *)
+(*     (* drop in Dropstate *) *)
+(*     (OWNTY: own_type ge ty = true) *)
+(*     (SCO: ge.(genv_cenv) ! co_id = Some co) *)
+(*     (ENUM: co.(co_sv) = TaggedUnion) *)
+(*     (FOFS: variant_field_offset ge fid co.(co_members) = OK (fofs, bf)), *)
+(*     step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: nil) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) ty (Kdropcall co_id (Vptr b ofs) nil k) m) *)
+| step_drop_skip: forall k m ty b ofs co_id fid membs
+    (* drop in Dropstate *)
+    (OWNTY: own_type ge ty = false),
+    step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: membs) k m) E0 (Dropstate co_id (Vptr b ofs) membs k m)
+| step_calldrop_box: forall le m m' k ty b' ofs' sz f b ofs
     (* We assume that drop(p) where p is box type has been expanded in
     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
-    typeof_place p = Tbox ty ->
-    eval_place ge le m p b ofs ->
-    (* p stores a pointer *)
-    Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
+    (DEREF: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
     (* Simulate free semantics *)
-    Mem.load Mptr m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) = Some (Vptrofs sz) ->
-    Ptrofs.unsigned sz > 0 ->
-    Mem.free m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) (Ptrofs.unsigned ofs' + Ptrofs.unsigned sz) = Some m' ->
-    step (Calldrop p k le m) E0 (Returnstate Vundef k m')
-| step_calldrop_struct: forall p le m k  orgs co id drop_stmt,
+    (LOAD: Mem.load Mptr m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) = Some (Vptrofs sz))
+    (SZGT: Ptrofs.unsigned sz > 0)
+    (FREE: Mem.free m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) (Ptrofs.unsigned ofs' + Ptrofs.unsigned sz) = Some m'),
+    step (Calldrop (Vptr b ofs) (Tbox ty) (Kcall None f le k) m) E0 (State f Sskip k le m')
+| step_calldrop_struct: forall m k orgs co id v
     (* It corresponds to the call step to the drop glue of this struct *)
-    typeof_place p = Tstruct orgs id  ->
-    ge.(genv_cenv) ! id = Some co ->
-    (* expand the drop statement *)
-    drop_stmt = makeseq (concat (map (drop_for_member p) co.(co_members))) ->    
-    step (Calldrop p k le m) E0 (Dropstate id (Ssequence drop_stmt (Sreturn None)) k le m)
-| step_calldrop_enum: forall p le m k  orgs co id fid fty tag b ofs,
-    typeof_place p = Tvariant orgs id  ->
-    ge.(genv_cenv) ! id = Some co ->
-    eval_place ge le m p b ofs ->
+    (SCO: ge.(genv_cenv) ! id = Some co),
+    step (Calldrop v (Tstruct orgs id) k m) E0 (Dropstate id v co.(co_members) k m)
+| step_drop_enum1: forall m k  orgs co id fid fty tag b ofs fofs bf
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (ENUM: co.(co_sv) = TaggedUnion)
     (* big step to evaluate the switch statement *)
     (* load tag  *)
-    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
     (* use tag to choose the member *)
-    list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
-    step (Calldrop p k le m) E0 (Dropstate id (Ssequence (Sdrop (Pdowncast p fid fty)) (Sreturn None)) k le m)
-| step_drop_return: forall id k e m,
-    step (Dropstate id (Sreturn None) k e m) E0 (Returnstate Vundef k m)
-| step_returnstate_drop: forall id e k m,
-    (* return to another drop glue *)
-    step (Returnstate Vundef (Kcalldrop id e k) m) E0 (Dropstate id Sskip k e m)
+    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty))
+    (OWNTY: own_type ge fty = true)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK (fofs, bf)),
+    step (Calldrop (Vptr b ofs) (Tvariant orgs id) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) fty (Kdropcall id (Vptr b ofs) nil k) m)
+| step_drop_enum2: forall m k  orgs co id fid fty tag b ofs
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (ENUM: co.(co_sv) = TaggedUnion)
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
+    (* use tag to choose the member *)
+    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty))
+    (OWNTY: own_type ge fty = false),
+    step (Calldrop (Vptr b ofs) (Tvariant orgs id) k m) E0 (Dropstate id (Vptr b ofs) nil k m)
+| step_drop_return1: forall id k e m f v,
+    step (Dropstate id v nil (Kcall None f e k) m) E0 (State f Sskip k e m)
+| step_drop_return2: forall id id' k m v v' membs,
+    (* return to another dropstate *)
+    step (Dropstate id v nil (Kdropcall id' v' membs k) m) E0 (Dropstate id' v' membs k m)
                                
 | step_storagelive: forall f k le m id,
     step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
@@ -812,123 +829,123 @@ Inductive function_entry_mem_error (f: function) (vargs: list val) (m: mem) (e: 
       bind_parameters_mem_error ge e m1 f.(fn_params) vargs ->
       function_entry_mem_error f vargs m e.
 
-Inductive step_mem_error : state -> Prop :=
-| step_assign_error1: forall f e p k le m,
-    eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_error2: forall f e p k le m b ofs,
-    eval_place ge le m p b ofs ->
-    eval_expr_mem_error ge le m e ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_error3: forall f e p k le m b ofs v v1 ty,
-    eval_place ge le m p b ofs ->
-    eval_expr ge le m e v ->
-    sem_cast v (typeof e) (typeof_place p) = Some v1 ->
-    assign_loc_mem_error ge ty m b ofs v1 ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_variant_error1: forall f e p k le m enum_id fid,
-    eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error2: forall f e p k le m b ofs enum_id fid,
-    eval_place ge le m p b ofs ->
-    eval_expr_mem_error ge le m e ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error3: forall f e p k le m b ofs enum_id fid v,
-    eval_place ge le m p b ofs ->
-    eval_expr ge le m e v ->
-    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error4: forall f e p k le m1 m2 b ofs ofs' enum_id fid v v1 ty co bf tag,
-    ge.(genv_cenv) ! enum_id = Some co ->
-    field_type fid co.(co_members) = OK ty ->
-    eval_place ge le m1 p b ofs ->
-    eval_expr ge le m1 e v ->
-    sem_cast v (typeof e) ty = Some v1 ->
-    field_tag fid co.(co_members) = Some tag ->
-    (* set the tag *)
-    Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    field_offset ge fid co.(co_members) = OK (ofs', bf) ->
-    (* set the value *)
-    assign_loc_mem_error ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1)
-| step_box_error1: forall le e p k m f,
-    eval_expr_mem_error ge le m e ->
-    step_mem_error (State f (Sbox p e) k le m)
-| step_box_error2: forall le e p k m1 m2 f b ty v v1,
-    typeof_place p = Tbox ty ->
-    eval_expr ge le m1 e v ->
-    sem_cast v (typeof e) ty = Some v1 ->
-    (* allocate the memory block *)
-    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
-    assign_loc_mem_error ge ty m2 b Ptrofs.zero v1 ->
-    step_mem_error (State f (Sbox p e) k le m1)
+(* Inductive step_mem_error : state -> Prop := *)
+(* | step_assign_error1: forall f e p k le m, *)
+(*     eval_place_mem_error ge le m p -> *)
+(*     step_mem_error (State f (Sassign p e) k le m) *)
+(* | step_assign_error2: forall f e p k le m b ofs, *)
+(*     eval_place ge le m p b ofs -> *)
+(*     eval_expr_mem_error ge le m e -> *)
+(*     step_mem_error (State f (Sassign p e) k le m) *)
+(* | step_assign_error3: forall f e p k le m b ofs v v1 ty, *)
+(*     eval_place ge le m p b ofs -> *)
+(*     eval_expr ge le m e v -> *)
+(*     sem_cast v (typeof e) (typeof_place p) = Some v1 -> *)
+(*     assign_loc_mem_error ge ty m b ofs v1 -> *)
+(*     step_mem_error (State f (Sassign p e) k le m) *)
+(* | step_assign_variant_error1: forall f e p k le m enum_id fid, *)
+(*     eval_place_mem_error ge le m p -> *)
+(*     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m) *)
+(* | step_assign_variant_error2: forall f e p k le m b ofs enum_id fid, *)
+(*     eval_place ge le m p b ofs -> *)
+(*     eval_expr_mem_error ge le m e -> *)
+(*     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m) *)
+(* | step_assign_variant_error3: forall f e p k le m b ofs enum_id fid v, *)
+(*     eval_place ge le m p b ofs -> *)
+(*     eval_expr ge le m e v -> *)
+(*     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable -> *)
+(*     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m) *)
+(* | step_assign_variant_error4: forall f e p k le m1 m2 b ofs ofs' enum_id fid v v1 ty co bf tag, *)
+(*     ge.(genv_cenv) ! enum_id = Some co -> *)
+(*     field_type fid co.(co_members) = OK ty -> *)
+(*     eval_place ge le m1 p b ofs -> *)
+(*     eval_expr ge le m1 e v -> *)
+(*     sem_cast v (typeof e) ty = Some v1 -> *)
+(*     field_tag fid co.(co_members) = Some tag -> *)
+(*     (* set the tag *) *)
+(*     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 -> *)
+(*     field_offset ge fid co.(co_members) = OK (ofs', bf) -> *)
+(*     (* set the value *) *)
+(*     assign_loc_mem_error ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 -> *)
+(*     step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1) *)
+(* | step_box_error1: forall le e p k m f, *)
+(*     eval_expr_mem_error ge le m e -> *)
+(*     step_mem_error (State f (Sbox p e) k le m) *)
+(* | step_box_error2: forall le e p k m1 m2 f b ty v v1, *)
+(*     typeof_place p = Tbox ty -> *)
+(*     eval_expr ge le m1 e v -> *)
+(*     sem_cast v (typeof e) ty = Some v1 -> *)
+(*     (* allocate the memory block *) *)
+(*     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) -> *)
+(*     assign_loc_mem_error ge ty m2 b Ptrofs.zero v1 -> *)
+(*     step_mem_error (State f (Sbox p e) k le m1) *)
 
-| step_calldrop_box_error1: forall p le m k ty ,
-    typeof_place p = Tbox ty  ->
-    eval_place_mem_error ge le m p ->
-    step_mem_error (Calldrop p k le m)
-| step_calldrop_box_error2: forall p le m k ty  b ofs,    
-    typeof_place p = Tbox ty  ->
-    eval_place ge le m p b ofs ->
-    ~ Mem.valid_access m Mptr b (Ptrofs.unsigned ofs) Readable ->
-    step_mem_error (Calldrop p k le m)
-| step_calldrop_box_error3: forall p le m k ty  b b' ofs ofs',    
-    typeof_place p = Tbox ty  ->
-    eval_place ge le m p b ofs ->
-    Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
-    ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) Cur Freeable ->
-    step_mem_error (Calldrop p k le m)
+(* | step_calldrop_box_error1: forall p le m k ty , *)
+(*     typeof_place p = Tbox ty  -> *)
+(*     eval_place_mem_error ge le m p -> *)
+(*     step_mem_error (Calldrop p k le m) *)
+(* | step_calldrop_box_error2: forall p le m k ty  b ofs,     *)
+(*     typeof_place p = Tbox ty  -> *)
+(*     eval_place ge le m p b ofs -> *)
+(*     ~ Mem.valid_access m Mptr b (Ptrofs.unsigned ofs) Readable -> *)
+(*     step_mem_error (Calldrop p k le m) *)
+(* | step_calldrop_box_error3: forall p le m k ty  b b' ofs ofs',     *)
+(*     typeof_place p = Tbox ty  -> *)
+(*     eval_place ge le m p b ofs -> *)
+(*     Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') -> *)
+(*     ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) Cur Freeable -> *)
+(*     step_mem_error (Calldrop p k le m) *)
 
-| step_calldrop_enum_error1: forall p le m k  orgs co id,
-    typeof_place p = Tvariant orgs id  ->
-    ge.(genv_cenv) ! id = Some co ->
-    eval_place_mem_error ge le m p ->
-    step_mem_error (Calldrop p k le m)
-| step_calldrop_enum_error2: forall p le m k  orgs co id b ofs,
-    typeof_place p = Tvariant orgs id  ->
-    ge.(genv_cenv) ! id = Some co ->
-    eval_place ge le m p b ofs ->
-    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
-    step_mem_error (Calldrop p k le m)
+(* | step_calldrop_enum_error1: forall p le m k  orgs co id, *)
+(*     typeof_place p = Tvariant orgs id  -> *)
+(*     ge.(genv_cenv) ! id = Some co -> *)
+(*     eval_place_mem_error ge le m p -> *)
+(*     step_mem_error (Calldrop p k le m) *)
+(* | step_calldrop_enum_error2: forall p le m k  orgs co id b ofs, *)
+(*     typeof_place p = Tvariant orgs id  -> *)
+(*     ge.(genv_cenv) ! id = Some co -> *)
+(*     eval_place ge le m p b ofs -> *)
+(*     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable -> *)
+(*     step_mem_error (Calldrop p k le m) *)
 
                    
-| step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels,
-    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf ->
-    eval_exprlist_mem_error ge le m al tyargs ->
-    Genv.find_funct ge vf = Some fd ->
-    type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step_mem_error (State f (Scall p a al) k le m)
-| step_internal_function_error: forall vf f vargs k m e
-    (FIND: Genv.find_funct ge vf = Some (Internal f)),
-    function_entry_mem_error f vargs m e ->
-    step_mem_error (Callstate vf vargs k m)
-| step_return_0_error: forall f k le m,
-    Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn None) k le m)
-| step_return_1_error1: forall f a k le m,
-    eval_expr_mem_error ge le m a ->
-    step_mem_error (State f (Sreturn (Some a)) k le m)
-| step_return_2_error2: forall f a k le m v,
-    eval_expr ge le m a v ->
-    Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn (Some a)) k le m)
-| step_skip_call_error: forall f k le m,
-    is_call_cont k ->
-    Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f Sskip k le m)
-| step_returnstate_error1: forall p v m f k e,
-    eval_place_mem_error ge e m p ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
-| step_returnstate_error2: forall p v m f k e b ofs ty,
-    ty = typeof_place p ->
-    eval_place ge e m p b ofs ->
-    assign_loc_mem_error ge ty m b ofs v ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
-| step_ifthenelse_error:  forall f a s1 s2 k e m,
-    eval_expr_mem_error ge e m a ->
-    step_mem_error (State f (Sifthenelse a s1 s2) k e m)
-.                   
+(* | step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels, *)
+(*     classify_fun (typeof a) = fun_case_f tyargs tyres cconv -> *)
+(*     eval_expr ge le m a vf -> *)
+(*     eval_exprlist_mem_error ge le m al tyargs -> *)
+(*     Genv.find_funct ge vf = Some fd -> *)
+(*     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv -> *)
+(*     step_mem_error (State f (Scall p a al) k le m) *)
+(* | step_internal_function_error: forall vf f vargs k m e *)
+(*     (FIND: Genv.find_funct ge vf = Some (Internal f)), *)
+(*     function_entry_mem_error f vargs m e -> *)
+(*     step_mem_error (Callstate vf vargs k m) *)
+(* | step_return_0_error: forall f k le m, *)
+(*     Mem.free_list m (blocks_of_env ge le) = None -> *)
+(*     step_mem_error (State f (Sreturn None) k le m) *)
+(* | step_return_1_error1: forall f a k le m, *)
+(*     eval_expr_mem_error ge le m a -> *)
+(*     step_mem_error (State f (Sreturn (Some a)) k le m) *)
+(* | step_return_2_error2: forall f a k le m v, *)
+(*     eval_expr ge le m a v -> *)
+(*     Mem.free_list m (blocks_of_env ge le) = None -> *)
+(*     step_mem_error (State f (Sreturn (Some a)) k le m) *)
+(* | step_skip_call_error: forall f k le m, *)
+(*     is_call_cont k -> *)
+(*     Mem.free_list m (blocks_of_env ge le) = None -> *)
+(*     step_mem_error (State f Sskip k le m) *)
+(* | step_returnstate_error1: forall p v m f k e, *)
+(*     eval_place_mem_error ge e m p -> *)
+(*     step_mem_error (Returnstate v (Kcall (Some p) f e k) m) *)
+(* | step_returnstate_error2: forall p v m f k e b ofs ty, *)
+(*     ty = typeof_place p -> *)
+(*     eval_place ge e m p b ofs -> *)
+(*     assign_loc_mem_error ge ty m b ofs v -> *)
+(*     step_mem_error (Returnstate v (Kcall (Some p) f e k) m) *)
+(* | step_ifthenelse_error:  forall f a s1 s2 k e m, *)
+(*     eval_expr_mem_error ge e m a -> *)
+(*     step_mem_error (State f (Sifthenelse a s1 s2) k e m) *)
+(* .                    *)
          
 
 End SMALLSTEP.
