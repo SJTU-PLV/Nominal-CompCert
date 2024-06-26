@@ -233,6 +233,45 @@ Lemma function_entry_wf_env: forall ge f vargs e m1 m2,
     well_formed_env f e.
 Admitted.
 
+(* Can be proved by tr_composite *)
+Definition enum_consistent (eid fid uid ufid: ident) : Prop :=
+  forall co,
+    ce ! eid = Some co ->
+    co.(co_sv) = TaggedUnion ->
+    exists tco utco, tce ! eid = Some tco
+                /\ tce ! uid = Some utco
+                /\ forall fofs bf, variant_field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+                  exists cfofs1 cfofs2,
+                    Ctypes.field_offset tce ufid tco.(Ctypes.co_members) = OK (cfofs1, Full)
+                    /\ Ctypes.union_field_offset tce fid utco.(Ctypes.co_members) = OK (cfofs2, Full)
+                    /\ fofs = cfofs1 + cfofs2.
+    
+Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_variant -> option drop_member_state -> Clight.statement -> Prop :=
+| match_drop_in_struct_comp: forall id fid fty tys drop_id ts,
+    let field_param := Efield arg fid (to_ctype fty) in
+    forall (GLUE: dropm ! id = Some drop_id)
+    (MSTMT: makeseq (drop_glue_for_box_rec field_param tys) = ts),
+    match_dropmemb_stmt co_id arg Struct (Some (drop_member_comp fid fty id tys))
+      (Clight.Ssequence (call_composite_drop_glue (deref_arg_rec field_param tys) fty drop_id) ts)
+| match_drop_in_enum_comp: forall id fid fty tys drop_id ts uid ufid,
+    let field_param := Efield (Efield arg ufid (Tunion uid noattr)) fid (to_ctype fty) in
+    forall (ECONSIST: enum_consistent co_id fid uid ufid)
+    (GLUE: dropm ! id = Some drop_id)
+    (MSTMT: makeseq (drop_glue_for_box_rec field_param tys) = ts),
+    match_dropmemb_stmt co_id arg TaggedUnion (Some (drop_member_comp fid fty id tys))
+    (Clight.Ssequence (call_composite_drop_glue (deref_arg_rec field_param tys) fty drop_id) ts)
+| match_drop_box_struct: forall fid fty tys,
+    let field_param := Efield arg fid (to_ctype fty) in
+    match_dropmemb_stmt co_id arg Struct (Some (drop_member_box fid fty tys))
+      (makeseq (drop_glue_for_box_rec field_param tys))
+| match_drop_box_enum: forall fid fty tys uid ufid,
+    let field_param := Efield (Efield arg ufid (Tunion uid noattr)) fid (to_ctype fty) in
+    forall (ECONSIST: enum_consistent co_id fid uid ufid),
+    match_dropmemb_stmt co_id arg Struct (Some (drop_member_box fid fty tys))
+    (makeseq (drop_glue_for_box_rec field_param tys))
+| match_drop_none: forall sv,
+    match_dropmemb_stmt co_id arg sv None Clight.Sskip
+.
 
 Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> Prop :=
 | match_Kstop: forall m tm,
@@ -264,14 +303,16 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> P
     (TRFUN: tr_function ce tce dropm glues f tf)
     (MCONT: forall m tm, match_cont j k tk m tm),
     match_cont j (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk) m tm
-| match_Kdropcall_struct: forall id te le k tk tf b ofs b' ofs' pb m tm co membs s,
+| match_Kdropcall_struct: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 ts2 fid fty tys,
     (* invariant that needed to be preserved *)
     let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
+    (* let field_param := Efield deref_param fid (to_ctype fty) in *)
     forall (CO: ce ! id = Some co)
     (STRUCT: co.(co_sv) = Struct)
-    (MSTMT: drop_glue_for_members ce dropm deref_param membs = s)
+    (MSTMT1: match_dropmemb_stmt id deref_param Struct (Some (drop_member_box fid fty tys)) ts1)
+    (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2)
     (MCONT: match_cont j k tk m tm)
     (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env ))
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
@@ -280,14 +321,20 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> P
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
     (GLUE: glues ! id = Some tf)
     (MINJ: Mem.inject j m tm),
-      match_cont j (RustIR.Kdropcall id (Vptr b ofs) membs k) (Clight.Kcall None tf te le (Clight.Kseq s tk)) m tm
-| match_Kdropcall_enum: forall id te le k tk tf b ofs b' ofs' pb m tm co,
+      match_cont j
+        (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k)
+        (Clight.Kcall None tf te le (Clight.Kseq ts1 (Clight.Kseq ts2 tk))) m tm
+| match_Kdropcall_enum: forall id te le k tk tf b ofs b' ofs' pb m tm co tys ts fid fty,
     (* invariant that needed to be preserved *)
     let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
     let pty := Tpointer co_ty noattr in
+    let deref_param := Ederef (Evar param_id pty) co_ty in
+    (* we do not know the union_id and union_type *)
+    (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *)
     forall (CO: ce ! id = Some co)
-    (ENUM: co.(co_sv) = TaggedUnion)
+    (ENUM: co.(co_sv) = TaggedUnion)      
     (MCONT: match_cont j k tk m tm)
+    (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion (Some (drop_member_box fid fty tys)) ts)
     (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env ))
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
@@ -295,9 +342,11 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> P
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
     (GLUE: glues ! id = Some tf)
     (MINJ: Mem.inject j m tm),
-    match_cont j (RustIR.Kdropcall id (Vptr b ofs) nil k) (Clight.Kcall None tf te le (Clight.Kseq Clight.Sbreak tk)) m tm
+      match_cont j
+        (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) nil k)
+        (Clight.Kcall None tf te le (Clight.Kseq ts (Clight.Kseq Clight.Sbreak (Clight.Kswitch tk)))) m tm
 .
- 
+
 
 Inductive match_states: RustIR.state -> Clight.state -> Prop :=
 | match_regular_state: forall f tf s ts k tk m tm e te le j
@@ -329,35 +378,35 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
    (RINJ: Val.inject j v tv),
     match_states (RustIR.Returnstate v k m) (Clight.Returnstate tv tk tm)
-| match_calldrop_box: forall k m b ofs tk tm ty j fb tb tofs
-    (* we can store the address of p in calldrop and build a local env
-       in Drop state according to this address *)
-    (VFIND: Genv.find_def tge fb = Some (Gfun free_decl))
-    (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
-    (* Because k may contain Kdropcall, we must consider the specific
-    m and tm *)
-    (MCONT: match_cont j k tk m tm)
-    (MINJ: Mem.inject j m tm)
-    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
-    match_states (RustIR.Calldrop (Vptr b ofs) (Tbox ty) k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm)
-| match_calldrop_composite: forall k m b ofs tb tofs tk tm j fb id fid drop_glue orgs ty
-    (GLUE: glues ! id = Some drop_glue)
-    (DROPM: dropm ! id = Some fid)
-    (VFIND: Genv.find_funct tge (Vptr fb Ptrofs.zero) = Some (Ctypes.Internal drop_glue))
-    (SYMB: Genv.find_symbol tge fid = Some fb)
-    (TY: ty = Tstruct orgs id \/ ty = Tvariant orgs id)
-    (MCONT: match_cont j k tk m tm)
-    (MINJ: Mem.inject j m tm)
-    (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
-    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))),
-    match_states (RustIR.Calldrop (Vptr b ofs) ty k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm)
-| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co memb membs pb b' ofs' b ofs,
+(* | match_calldrop_box: forall k m b ofs tk tm ty j fb tb tofs *)
+(*     (* we can store the address of p in calldrop and build a local env *)
+(*        in Drop state according to this address *) *)
+(*     (VFIND: Genv.find_def tge fb = Some (Gfun free_decl)) *)
+(*     (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)) *)
+(*     (* Because k may contain Kdropcall, we must consider the specific *)
+(*     m and tm *) *)
+(*     (MCONT: match_cont j k tk m tm) *)
+(*     (MINJ: Mem.inject j m tm) *)
+(*     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))), *)
+(*     match_states (RustIR.Calldrop (Vptr b ofs) (Tbox ty) k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm) *)
+(* | match_calldrop_composite: forall k m b ofs tb tofs tk tm j fb id fid drop_glue orgs ty *)
+(*     (GLUE: glues ! id = Some drop_glue) *)
+(*     (DROPM: dropm ! id = Some fid) *)
+(*     (VFIND: Genv.find_funct tge (Vptr fb Ptrofs.zero) = Some (Ctypes.Internal drop_glue)) *)
+(*     (SYMB: Genv.find_symbol tge fid = Some fb) *)
+(*     (TY: ty = Tstruct orgs id \/ ty = Tvariant orgs id) *)
+(*     (MCONT: match_cont j k tk m tm) *)
+(*     (MINJ: Mem.inject j m tm) *)
+(*     (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)) *)
+(*     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))), *)
+(*     match_states (RustIR.Calldrop (Vptr b ofs) ty k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm) *)
+| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co membs pb b' ofs' b ofs s,
     let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
     forall (CO: ce ! id = Some co)
     (STRUCT: co.(co_sv) = Struct)
-    (MSTMT1: drop_glue_for_member ce dropm deref_param memb = ts1)
+    (MSTMT1: match_dropmemb_stmt id deref_param Struct s ts1)
     (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2)
     (MCONT: match_cont j k tk m tm)
     (MINJ: Mem.inject j m tm)
@@ -368,11 +417,17 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
     (UNREACH: forall ofs, loc_out_of_reach j m pb ofs),
-      match_states (RustIR.Dropstate id (Vptr b ofs) (memb :: membs) k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
-| match_dropstate_nil: forall id k m tf tk te le tm j co pb b' ofs' b ofs,
+      match_states (RustIR.Dropstate id (Vptr b ofs) s membs k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
+| match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts,
     let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
     let pty := Tpointer co_ty noattr in
-    forall (MCONT: match_cont j k tk m tm)
+    let deref_param := Ederef (Evar param_id pty) co_ty in
+    (* we do not know the union_id and union_type *)
+    (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *)
+    forall (CO: ce ! id = Some co)
+    (ENUM: co.(co_sv) = TaggedUnion)
+    (MCONT: match_cont j k tk m tm)
+    (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion s ts)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (GLUE: glues ! id = Some tf)
@@ -381,7 +436,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
     (UNREACH: forall ofs, loc_out_of_reach j m pb ofs),
-      match_states (RustIR.Dropstate id (Vptr b ofs) nil k m) (Clight.State tf Clight.Sskip tk te le tm)
+      match_states (RustIR.Dropstate id (Vptr b ofs) s nil k m) (Clight.State tf ts (Kswitch tk) te le tm)
 .
 
 
