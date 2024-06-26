@@ -481,16 +481,58 @@ End COMPOSITE_ENV.
 Close Scope cfg_monad_scope.
 Local Open Scope error_monad_scope.
 
+(** Genenrate drop map which maps composite id to its drop glue id *)
+
+
+(* Extract composite id to drop glue id list *)
+Definition extract_drop_id (g: ident * globdef fundef type) : ident * ident :=
+  let (glue_id, def) := g in
+  match def with
+  | Gfun (Internal f) =>
+      match f.(fn_drop_glue) with
+      | Some comp_id => (comp_id, glue_id)
+      | None => (1%positive, glue_id)
+      end
+  | _ => (1%positive, glue_id)
+  end.
+
+Definition check_drop_glue (g: ident * globdef fundef type) : bool :=
+  let (glue_id, def) := g in
+  match def with
+  | Gfun (Internal f) =>
+      match f.(fn_drop_glue) with
+      | Some comp_id => true
+      | None => false
+      end
+  | _ => false
+  end.
+
+Definition generate_dropm (p: program) :=
+  let drop_glue_ids := map extract_drop_id (filter check_drop_glue p.(prog_defs)) in
+  PTree_Properties.of_list drop_glue_ids.
+
+
 (** ** Operational semantics for RustIR after drop elabration *)
 
 Section SEMANTICS.
 
 (** Global environment  *)
 
-Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
+Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env; genv_dropm :> PTree.t ident }.
   
 Definition globalenv (se: Genv.symtbl) (p: program) :=
-  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
+  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
+
+(** Substate for member drop *)
+Inductive drop_member_state : Type :=
+| drop_member_comp
+    (fid: ident)
+    (co_id: ident)
+    (tys: list type): drop_member_state   
+| drop_member_box
+    (fid: ident)
+    (tys: list type): drop_member_state
+.
 
 (** Continuation *)
   
@@ -499,7 +541,7 @@ Inductive cont : Type :=
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
 | Kcall: option place -> function -> env -> cont -> cont
-| Kdropcall: ident -> val -> members -> cont -> cont
+| Kdropcall: ident -> val -> option drop_member_state -> members -> cont -> cont
 .
 
 
@@ -537,19 +579,20 @@ Inductive state: Type :=
     (res: val)
     (k: cont)
     (m: mem) : state
-| Calldrop
-    (* It is necessary for reducing the number of states transition *)
-    (v: val)
-    (ty: type)
-    (k: cont)  
-    (m: mem): state
+(* | Calldrop *)
+(*     (* It is necessary for reducing the number of states transition *) *)
+(*     (v: val) *)
+(*     (ty: type) *)
+(*     (k: cont)   *)
+(*     (m: mem): state *)
 | Dropstate
     (* composite name *)
     (c: ident)
     (v: val)
+    (ds: option drop_member_state)
     (ms: members)
     (k: cont)
-    (m: mem): state.
+    (m: mem): state.              
 
 
 (** Allocate memory blocks for function parameters/variables and build
@@ -578,6 +621,92 @@ Section SMALLSTEP.
 
 Variable ge: genv.
 
+(* list of ownership types which are the children of [ty] *)
+Fixpoint drop_glue_children_types (m: PTree.t ident) (ty: type) : list type :=
+  match ty with
+  | Tbox ty' =>
+      drop_glue_children_types m ty' ++ [ty]
+  | Tstruct _ id 
+  | Tvariant _ id  =>
+      match m!id with
+      | None => nil
+      | Some _ => ty :: nil
+      end
+  | _ => nil
+  end.
+
+(* It corresponds to drop_glue_for_member in Clightgen *)
+Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_member_state :=
+  if own_type ge fty then
+    let tys := drop_glue_children_types ge.(genv_dropm) fty in
+    match tys with
+    | nil => None
+    | Tvariant _ id :: tys'
+    | Tstruct _ id :: tys' =>
+        Some (drop_member_comp fid id tys')
+    | _ => Some (drop_member_box fid tys)
+    end
+  else None.
+
+(* Load the value of [ty1] with the address of the starting block
+(with type ty_k) from [ty1;ty2;ty3;...;ty_k] where ty_n points to
+ty_{n-1} *)
+Inductive deref_loc_rec (m: mem) (b: block) (ofs: ptrofs) : list type -> val -> Prop :=
+| deref_loc_rec_nil:
+    deref_loc_rec m b ofs nil (Vptr b ofs)
+| deref_loc_rec_cons: forall ty tys b1 ofs1 v,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    deref_loc ty m b1 ofs1 v ->
+    deref_loc_rec m b ofs (ty::tys) v
+.
+
+(* big step to recursively drop boxes [Tbox (Tbox (Tbox
+...))]. (b,ofs) is the address of the starting block *)
+Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Prop :=
+| drop_box_rec_nil: forall m,
+    drop_box_rec b ofs m nil m
+| drop_box_rec_cons: forall m m1 m2 b1 ofs1 ty tys,
+    (* (b1, ofs1) is the address of [ty] *)
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    extcall_free_sem ge [Vptr b1 ofs1] m E0 Vundef m1 ->
+    drop_box_rec b ofs m1 tys m2 ->
+    drop_box_rec b ofs m (ty :: tys) m2
+.
+
+
+Inductive step_drop : state -> trace -> state -> Prop :=
+| step_dropstate_init: forall id b ofs fid fty membs k m,
+    step_drop (Dropstate id (Vptr b ofs) None ((Member_plain fid fty) :: membs) k m) E0 (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) membs k m)
+| step_dropstate_composite: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fofs bf
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument of the drop glue for id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co1.(co_members)
+           end = OK (fofs, bf))
+    (* (cb, cofs is the address of composite id2) *)
+    (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
+    (CO2: ge.(genv_cenv) ! id2 = Some co2),
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid id2 tys)) membs k m) E0
+      (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid tys)) membs k) m)
+| step_dropstate_box: forall b ofs id co fid fofs bf m m' tys k membs
+    (CO1: ge.(genv_cenv) ! id = Some co)
+    (* evaluate the value of the argument of the drop glue for id2 *)
+    (FOFS: field_offset ge fid co.(co_members) = OK (fofs, bf))
+    (DROPB: drop_box_rec b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys m'),
+    step_drop
+      (Dropstate id (Vptr b ofs) (Some (drop_member_box fid tys)) membs k m) E0
+      (Dropstate id (Vptr b ofs) None membs k m')
+| step_dropstate_return1: forall b ofs id m f e k,
+    step_drop
+      (Dropstate id (Vptr b ofs) None nil (Kcall None f e k) m) E0
+      (State f Sskip k e m)
+| step_dropstate_return2: forall b1 b2 ofs1 ofs2 id1 id2 m k membs s,
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) None nil (Kdropcall id2 (Vptr b2 ofs2) s membs k) m) E0
+      (Dropstate id2 (Vptr b2 ofs2) s membs k m)
+.
 
 (* Some functions similar to Clightgen and are used in semantics  *)
 
@@ -647,67 +776,41 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m5)
 
 (** Small-step drop semantics *)
-| step_drop_normal: forall f p k le m b ofs,    
-    eval_place ge le m p b ofs ->
-    step (State f (Sdrop p) k le m) E0 (Calldrop (Vptr b ofs) (typeof_place p) (Kcall None f le k) m)
-| step_drop_struct_member: forall k m ty b ofs fofs bf co_id co fid membs
-    (* drop in Dropstate *)
-    (OWNTY: own_type ge ty = true)
-    (SCO: ge.(genv_cenv) ! co_id = Some co)
-    (STRUCT: co.(co_sv) = Struct)
-    (FOFS: field_offset ge fid co.(co_members) = OK (fofs, bf)),
-    step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: membs) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) ty (Kdropcall co_id (Vptr b ofs) membs k) m)
-(* | step_drop_enum_member: forall k m ty b ofs fofs bf co_id co fid *)
-(*     (* drop in Dropstate *) *)
-(*     (OWNTY: own_type ge ty = true) *)
-(*     (SCO: ge.(genv_cenv) ! co_id = Some co) *)
-(*     (ENUM: co.(co_sv) = TaggedUnion) *)
-(*     (FOFS: variant_field_offset ge fid co.(co_members) = OK (fofs, bf)), *)
-(*     step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: nil) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) ty (Kdropcall co_id (Vptr b ofs) nil k) m) *)
-| step_drop_skip: forall k m ty b ofs co_id fid membs
-    (* drop in Dropstate *)
-    (OWNTY: own_type ge ty = false),
-    step (Dropstate co_id (Vptr b ofs) (Member_plain fid ty :: membs) k m) E0 (Dropstate co_id (Vptr b ofs) membs k m)
-| step_calldrop_box: forall le m m' k ty b' ofs' sz f b ofs
+| step_drop_box: forall le m m' k ty b' ofs' f b ofs p
     (* We assume that drop(p) where p is box type has been expanded in
     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
-    (DEREF: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
     (* Simulate free semantics *)
-    (LOAD: Mem.load Mptr m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) = Some (Vptrofs sz))
-    (SZGT: Ptrofs.unsigned sz > 0)
-    (FREE: Mem.free m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) (Ptrofs.unsigned ofs' + Ptrofs.unsigned sz) = Some m'),
-    step (Calldrop (Vptr b ofs) (Tbox ty) (Kcall None f le k) m) E0 (State f Sskip k le m')
-| step_calldrop_struct: forall m k orgs co id v
+    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
+    step (State f (Sdrop p) k le m) E0 (State f Sskip k le m')
+| step_drop_struct: forall m k orgs co id p b ofs f le
     (* It corresponds to the call step to the drop glue of this struct *)
-    (SCO: ge.(genv_cenv) ! id = Some co),
-    step (Calldrop v (Tstruct orgs id) k m) E0 (Dropstate id v co.(co_members) k m)
-| step_drop_enum1: forall m k  orgs co id fid fty tag b ofs fofs bf
+    (PTY: typeof_place p = Tstruct orgs id)
     (SCO: ge.(genv_cenv) ! id = Some co)
-    (ENUM: co.(co_sv) = TaggedUnion)
+    (COSTRUCT: co.(co_sv) = Struct)
+    (PADDR: eval_place ge le m p b ofs),
+    step
+      (State f (Sdrop p) k le m) E0
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kcall None f le k) m)
+| step_drop_enum: forall m k p orgs co id fid fty tag b ofs f le
+    (PTY: typeof_place p = Tvariant orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COENUM: co.(co_sv) = TaggedUnion)
+    (PADDR: eval_place ge le m p b ofs)
     (* big step to evaluate the switch statement *)
     (* load tag  *)
     (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
     (* use tag to choose the member *)
-    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty))
-    (OWNTY: own_type ge fty = true)
-    (FOFS: variant_field_offset ge fid co.(co_members) = OK (fofs, bf)),
-    step (Calldrop (Vptr b ofs) (Tvariant orgs id) k m) E0 (Calldrop (Vptr b (Ptrofs.add ofs (Ptrofs.repr fofs))) fty (Kdropcall id (Vptr b ofs) nil k) m)
-| step_drop_enum2: forall m k  orgs co id fid fty tag b ofs
-    (SCO: ge.(genv_cenv) ! id = Some co)
-    (ENUM: co.(co_sv) = TaggedUnion)
-    (* big step to evaluate the switch statement *)
-    (* load tag  *)
-    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
-    (* use tag to choose the member *)
-    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty))
-    (OWNTY: own_type ge fty = false),
-    step (Calldrop (Vptr b ofs) (Tvariant orgs id) k m) E0 (Dropstate id (Vptr b ofs) nil k m)
-| step_drop_return1: forall id k e m f v,
-    step (Dropstate id v nil (Kcall None f e k) m) E0 (State f Sskip k e m)
-| step_drop_return2: forall id id' k m v v' membs,
-    (* return to another dropstate *)
-    step (Dropstate id v nil (Kdropcall id' v' membs k) m) E0 (Dropstate id' v' membs k m)
-                               
+    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
+    step
+    (State f (Sdrop p) k le m) E0
+    (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) nil (Kcall None f le k) m)
+| step_dropstate: forall id v s membs k m S E
+    (SDROP: step_drop (Dropstate id v s membs k m) E S),
+    step (Dropstate id v s membs k m) E S
+    
 | step_storagelive: forall f k le m id,
     step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
 | step_storagedead: forall f k le m id,

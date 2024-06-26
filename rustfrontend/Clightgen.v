@@ -102,13 +102,12 @@ Definition malloc_decl : (Ctypes.fundef Clight.function) :=
 Definition free_decl : (Ctypes.fundef Clight.function) :=
   (Ctypes.External EF_free (Ctypes.Tcons (Tpointer Ctypes.Tvoid noattr) Ctypes.Tnil) Tvoid cc_default).
 
-Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
-  let argty := (Ctypes.Tpointer ty noattr) in
+Definition free_fun_expr (argty: Ctypes.type) : Clight.expr :=
   Evar free_id (Ctypes.Tfunction (Ctypes.Tcons argty Ctypes.Tnil) Ctypes.Tvoid cc_default).
 
 (* return [free(arg)], ty is the type arg points to, i.e. [arg: *ty] *)
-Definition call_free (ty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
-  Clight.Scall None (free_fun_expr ty) (arg :: nil).
+Definition call_free (argty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
+  Clight.Scall None (free_fun_expr argty) (arg :: nil).
 
 
 Section COMPOSITE_ENV.
@@ -116,30 +115,55 @@ Section COMPOSITE_ENV.
 Variable ce: composite_env.
 Variable tce: Ctypes.composite_env.
 
-
-Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) :  Clight.statement :=
-  match ty with
-  | Tbox ty'  =>
-      let cty' := (to_ctype ty') in
-      (* free(arg) *)
-      let stmt := call_free cty' arg in
-      (* return [...; ... ; drop_in_place(deref arg); free(arg)] *)
-      (** TODO: it is time consuming, we can just generate a sequence statement *)
-      Clight.Ssequence (drop_glue_for_type m (Ederef arg cty') ty') stmt
-  | Tstruct _ id 
-  | Tvariant _ id  =>
-      match m ! id with
-      | None => Clight.Sskip
-      | Some id' =>
-          (* call the drop glue of this struct: what is the type of this drop glue ? *)
-          let ref_arg_ty := (Ctypes.Tpointer (to_ctype ty) noattr ) in
-          let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_arg_ty Ctypes.Tnil) Tvoid cc_default in
-          (* drop_in_place_xxx(&arg) *)
-          let call_stmt := Clight.Scall None (Evar id' glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
-          call_stmt
-      end
-  | _ => Clight.Sskip
+(* simulate deref_loc_rec *)
+Fixpoint deref_arg_rec (arg: Clight.expr) (tys: list type) : Clight.expr :=
+  match tys with
+  | nil => arg
+  | ty :: tys' =>
+      (* load the value of ty *)
+      deref_arg_rec (Ederef arg (to_ctype ty)) tys'
   end.
+
+(* simulate drop_box_rec *)
+Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight.statement :=
+  match tys with
+  | nil => nil
+  | ty :: tys1 =>
+      (* the value of ty *)
+      let arg1 := deref_arg_rec arg tys1 in
+      (* free(arg1) *)
+      let free_stmt := call_free (to_ctype ty) arg1 in
+      (* free the parent of arg1 *)
+      free_stmt :: drop_glue_for_box_rec arg tys1
+  end.
+
+Definition call_composite_drop_glue (arg: Clight.expr) (ty: type) (drop_id: ident) :=
+  let ref_arg_ty := (Ctypes.Tpointer (to_ctype ty) noattr) in
+  let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_arg_ty Ctypes.Tnil) Tvoid cc_default in
+  (* drop_in_place_xxx(&arg) *)
+  let call_stmt := Clight.Scall None (Evar drop_id glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
+  call_stmt.
+
+Definition drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : Clight.statement :=
+  (* we need to drop the value inside the tys = [ty1;ty2...;ty_n]. Evaluate
+  arg would produce the value of ty_n *)
+  let tys := drop_glue_children_types m ty in
+  match tys with
+  | nil => Clight.Sskip
+  | ty :: tys1 =>
+      match ty with
+      | Tvariant _ id
+      | Tstruct _ id =>
+          let arg1 := deref_arg_rec arg tys1 in
+          match m ! id with
+          | None => Clight.Sskip
+          | Some id' =>
+              Clight.Ssequence (call_composite_drop_glue arg1 ty id') (makeseq (drop_glue_for_box_rec arg tys1))
+          end
+      | _ => makeseq (drop_glue_for_box_rec arg tys)
+      end
+  end.
+  
 
 (* Some example: 
 drop_in_place_xxx(&Struct{a,b,c} param) {
@@ -240,7 +264,7 @@ Definition generate_drops_acc (dropm: PTree.t ident) (drops: PTree.t Clight.func
   | Some glue1 =>
       PTree.set id glue1 drops
   | None => drops
-  end.                           
+  end.
   
 Definition generate_drops (dropm: PTree.t ident) : PTree.t Clight.function :=
   PTree.fold (generate_drops_acc dropm) ce (PTree.empty Clight.function).
@@ -482,9 +506,8 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
       (* free(cty (deref temp)), deref temp has type [cty] and [deref
       temp] points to type [cty'] *)      
       let cty := to_ctype ty in
-      let cty' := to_ctype ty' in
       let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
-      Some (call_free cty' deref_temp)
+      Some (call_free cty deref_temp)
   | Tstruct _ id 
   | Tvariant _ id  =>
       match dropm ! id with
@@ -672,32 +695,6 @@ Definition transl_fundef (glues: PTree.t Clight.function) (_: ident) (fd: fundef
 
 End TRANSL.
 
-(* Extract composite id to drop glue id list *)
-Definition extract_drop_id (g: ident * globdef fundef type) : ident * ident :=
-  let (glue_id, def) := g in
-  match def with
-  | Gfun (Internal f) =>
-      match f.(fn_drop_glue) with
-      | Some comp_id => (comp_id, glue_id)
-      | None => (1%positive, glue_id)
-      end
-  | _ => (1%positive, glue_id)
-  end.
-
-Definition check_drop_glue (g: ident * globdef fundef type) : bool :=
-  let (glue_id, def) := g in
-  match def with
-  | Gfun (Internal f) =>
-      match f.(fn_drop_glue) with
-      | Some comp_id => true
-      | None => false
-      end
-  | _ => false
-  end.
-
-Definition generate_dropm (p: program) :=
-  let drop_glue_ids := map extract_drop_id (filter check_drop_glue p.(prog_defs)) in
-  PTree_Properties.of_list drop_glue_ids.
 
 (* Translation of a whole program *)
 

@@ -43,7 +43,7 @@ Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     match_prog_malloc:
     exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_malloc tyl rety cc));
     match_prog_free:
-    exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_free tyl rety cc));
+    exists orgs rels tyl rety cc, (prog_defmap p) ! free_id = Some (Gfun (Rusttypes.External orgs rels EF_free tyl rety cc));
 
   }.
 
@@ -574,8 +574,10 @@ Proof.
     (* match state *)
     + assert (INCR3: inj_incr w (injw j2 (Mem.support m2) (Mem.support tm2))).
       etransitivity. eauto. eauto.      
-      eapply match_regular_state;eauto.
+      eapply match_regular_state. eauto. eauto. eauto.
       econstructor. simpl. instantiate (1 := g). eauto.
+      instantiate (1 := j2). admit.   (* inject_incr and match_cont *)
+      eauto. eauto.
       eapply match_env_incr;eauto. inv INCR2. auto.
       
   (* assign_variant *)
@@ -682,7 +684,7 @@ Proof.
         * simpl. eauto.
         * eapply eval_Elvalue. eapply eval_Evar_global.
           (* We have to ensure that e!malloc_id = None *)
-          eapply wf_env_target_none; eauto. simpl. auto.
+          eapply wf_env_target_none; eauto.
           inv MFUN; try congruence.
           eauto. simpl. eauto.
           eauto.
@@ -734,8 +736,10 @@ Proof.
         auto. }
       1-8: eauto.
     (* match_states *)
-    + econstructor; eauto.
+    + econstructor. 1-3 : eauto.      
       econstructor. simpl. eauto.
+      instantiate (1 := j4). admit.   (* inject_incr and match_cont *)
+      apply INJ5.
       exploit Mem.support_alloc. eapply H0. intros SUPM2.
       exploit Mem.support_alloc. eapply TALLOC. intros SUPTM2.      
       etransitivity. eauto.
@@ -745,16 +749,62 @@ Proof.
       exploit Mem.support_store. eapply STORE. intros S1 S2.
       rewrite <- S1. rewrite <- S2.
       etransitivity. eauto. eauto.
-            
-  (* step_drop1: drop in normal state *)
-  - inv MSTMT. simpl in H.
-    monadInv_sym H. unfold gensym in EQ. inv EQ.
+      apply MENV4.
+      
+  (* step_drop_normal: drop in normal state *)
+  - inv MSTMT. simpl in H0.
+    monadInv_sym H0. unfold gensym in EQ. inv EQ.
     monadInv_comb EQ0. destruct expand_drop in EQ1;[|inv EQ1].
-    inv EQ1. destruct g. simpl in H1. inv H1. eapply list_cons_neq in H0.
+    inv EQ1. destruct g. simpl in H2. inv H2. eapply list_cons_neq in H1.
     contradiction.
-    unfold expand_drop in H1. destruct (typeof_place p) eqn: TYP; try congruence.
+    unfold expand_drop in H3.
+    (* eval_place inject *)
+    exploit eval_place_inject; eauto. instantiate (1 := le0).
+    intros (pb & pofs & EVALPE & VINJ1).
+    destruct (typeof_place p) eqn: TYP; try congruence.
+    inv H3.
     (* three cases: box, struct and enum *)
-    + inv H1.
+    + (* find_symbol free = Some b *)
+      destruct (match_prog_free _ _ TRANSL) as (orgs & rels & tyl & rety & cc & MFREE).    
+      exploit Genv.find_def_symbol. eauto. intros A.
+      eapply A in MFREE as (mb & FINDSYMB & FINDFREE). clear A.
+      edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB).
+      eapply inj_stbls_match. eauto. eauto.
+      (* find_funct tge tb = Some free_decl *)
+      assert (TFINDFUN: Genv.find_funct tge (Vptr tmb Ptrofs.zero) = Some free_decl).
+      { edestruct find_funct_match as (free & TFINDFUN & TRFREE).
+        eauto. 
+        eapply inj_stbls_match. eauto.
+        instantiate (2 := (Vptr mb Ptrofs.zero)). simpl.
+        destruct Ptrofs.eq_dec; try congruence.
+        eapply Genv.find_funct_ptr_iff. eauto.
+        econstructor. eauto. eauto.
+        erewrite Ptrofs.add_zero_l in TFINDFUN. unfold tge.
+        inv TRFREE. eauto. intuition. }
+      
+      eexists. split.
+      (* step *)
+      * econstructor.
+        econstructor.
+        (* set *)
+        eapply star_step. econstructor.
+        econstructor. eauto.
+        eapply star_step. econstructor.
+        eapply star_step.
+        (* step to call drop *)
+        { econstructor. simpl. eauto.
+          econstructor. eapply eval_Evar_global.
+          (* We have to ensure that e!free_id = None *)
+          eapply wf_env_target_none; eauto.
+          inv MFUN; try congruence.
+          eauto. simpl. eauto.
+          eauto.
+          simpl. eapply Clight.deref_loc_reference. auto.
+          econstructor. econstructor. econstructor. econstructor.                   
+          eapply PTree.gss. simpl.
+          eauto.
+          auto. }
+
       
       
     + destruct (dropm ! i) eqn: DROPM;inv H1.
