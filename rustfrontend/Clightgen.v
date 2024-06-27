@@ -102,12 +102,12 @@ Definition malloc_decl : (Ctypes.fundef Clight.function) :=
 Definition free_decl : (Ctypes.fundef Clight.function) :=
   (Ctypes.External EF_free (Ctypes.Tcons (Tpointer Ctypes.Tvoid noattr) Ctypes.Tnil) Tvoid cc_default).
 
-Definition free_fun_expr (argty: Ctypes.type) : Clight.expr :=
-  Evar free_id (Ctypes.Tfunction (Ctypes.Tcons argty Ctypes.Tnil) Ctypes.Tvoid cc_default).
+Definition free_fun_expr : Clight.expr :=
+  Evar free_id (Ctypes.Tfunction (Ctypes.Tcons (Tpointer Tvoid noattr) Ctypes.Tnil) Ctypes.Tvoid cc_default).
 
 (* return [free(arg)], ty is the type arg points to, i.e. [arg: *ty] *)
-Definition call_free (argty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
-  Clight.Scall None (free_fun_expr argty) (arg :: nil).
+Definition call_free (arg: Clight.expr) : Clight.statement :=
+  Clight.Scall None free_fun_expr (arg :: nil).
 
 
 Section COMPOSITE_ENV.
@@ -132,7 +132,7 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
       (* the value of ty *)
       let arg1 := deref_arg_rec arg tys1 in
       (* free(arg1) *)
-      let free_stmt := call_free (to_ctype ty) arg1 in
+      let free_stmt := call_free arg1 in
       (* free the parent of arg1 *)
       free_stmt :: drop_glue_for_box_rec arg tys1
   end.
@@ -200,22 +200,16 @@ Definition make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (membs: 
     ((list_length_z membs) - 1, LSnil) membs.
 
 (* m: maps composite id to drop function id *)
-Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members) (attr: attr) : option Clight.function :=
+Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members): option Clight.function :=
   (* The only function parameter *)
-  let co_ty := (Ctypes.Tstruct co_id attr) in
+  let co_ty := (Ctypes.Tstruct co_id noattr) in
   let param_ty := Tpointer co_ty noattr in
   let deref_param := Ederef (Evar param_id param_ty) co_ty in
   match sv with
   | Struct =>
-      (** TODO: use map and concat instead of fold_right *)
       let stmt_list := drop_glue_for_members m deref_param ms in
-      match stmt_list with
-      | Clight.Sskip => None
-      | _ =>
-          (* generate function *)
-          (* let stmt := (Clight.Ssequence stmt_list (Clight.Sreturn None)) in *)
-          (Some (Clight.mkfunction Tvoid cc_default ((param_id, param_ty)::nil) nil nil stmt_list))
-      end
+      (* an additonal skip statement to simulate the source semantics *)
+      (Some (Clight.mkfunction Tvoid cc_default ((param_id, param_ty)::nil) nil nil (Clight.Ssequence Clight.Sskip stmt_list)))
   | TaggedUnion =>
       (* check tag and then call corresponded drop glue *)
       match tce ! co_id with
@@ -230,7 +224,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct
               (* let drops_list := fold_right (fun elt acc => (drop_glue_for_member m get_union elt) :: acc) (@nil (list Clight.statement)) ms in *)
               let (_, drop_switch_branches) := make_labelled_drop_stmts m get_union ms in
               (* generate function *)
-              let stmt := (Clight.Ssequence (Clight.Sswitch get_tag drop_switch_branches) (Clight.Sreturn None)) in
+              let stmt := Clight.Sswitch get_tag drop_switch_branches in
               (Some (Clight.mkfunction Tvoid cc_default ((param_id, param_ty)::nil) nil nil stmt))
           (* This is impossible if tce is generated correctly *)
           | _, _ => None (* Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite") *)
@@ -259,7 +253,7 @@ Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.functio
 (*   PTree_Properties.of_list (generate_drops_list l dropm). *)
 
 Definition generate_drops_acc (dropm: PTree.t ident) (drops: PTree.t Clight.function) (id: ident) (co: composite) : PTree.t Clight.function :=
-  let glue := drop_glue_for_composite dropm id co.(co_sv) co.(co_members) co.(co_attr) in
+  let glue := drop_glue_for_composite dropm id co.(co_sv) co.(co_members) in
   match glue with
   | Some glue1 =>
       PTree.set id glue1 drops
@@ -499,6 +493,7 @@ Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.ty
 is in the caller side. We need to use the reference to build the call
 statement *)
 Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
+  if own_type ce ty then
   match ty with
   (* drop a box only drop the memory it points to, we do not care
   about the point-to type *)
@@ -507,7 +502,7 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
       temp] points to type [cty'] *)      
       let cty := to_ctype ty in
       let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
-      Some (call_free cty deref_temp)
+      Some (call_free deref_temp)
   | Tstruct _ id 
   | Tvariant _ id  =>
       match dropm ! id with
@@ -519,9 +514,11 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
           (* drop_in_place_xxx(temp) *)
           let call_stmt := Clight.Scall None (Evar id' glue_ty) ((Clight.Etempvar temp ref_cty) :: nil) in
           Some call_stmt
-      end
+      end 
   | _ => None
-  end.
+  end
+  (* expand_drop must expand own_type *)
+  else None.
 
 Definition transl_assign_variant (p: place) (ty: type) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
   (* lhs.1 = tag;
@@ -665,7 +662,7 @@ Definition transl_function_normal (f: function) : Errors.res Clight.function :=
 
 
 (* step 3: translate a single function *)
-Definition transl_function (glues: PTree.t Clight.function) (f: function) : Errors.res Clight.function :=
+Definition transl_function glues (f: function) : Errors.res Clight.function :=
   (* check whether this function is drop glue *)
   match f.(fn_drop_glue) with
   | Some comp_id =>
@@ -678,7 +675,7 @@ Definition transl_function (glues: PTree.t Clight.function) (f: function) : Erro
 
 Local Open Scope error_monad_scope.
 
-Definition transl_fundef (glues: PTree.t Clight.function) (_: ident) (fd: fundef) : Errors.res Clight.fundef :=
+Definition transl_fundef glues (_: ident) (fd: fundef) : Errors.res Clight.fundef :=
   (* Check if this fundef is drop glue *)
   match fd with
   | Internal f =>

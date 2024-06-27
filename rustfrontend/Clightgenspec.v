@@ -239,7 +239,7 @@ tr_composite relation *)
 | tr_drop: forall p set_stmt drop_stmt temp pe,
     set_stmt = Clight.Sset temp (Eaddrof pe (Tpointer (to_ctype (typeof_place p)) noattr)) ->
     place_to_cexpr tce p = OK pe ->
-    expand_drop dropm temp (typeof_place p) = Some drop_stmt ->
+    expand_drop ce dropm temp (typeof_place p) = Some drop_stmt ->
     tr_stmt (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
 | tr_seq: forall s1 s2 s1' s2',
     tr_stmt s1 s1' ->
@@ -266,19 +266,21 @@ Inductive tr_function: function -> Clight.function -> Prop :=
     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
     tr_function f tf
-| tr_function_drop_glue1: forall f tf comp_id,
+(* | tr_function_drop_glue1: forall f tf comp_id, *)
+(*     f.(fn_drop_glue) = Some comp_id -> *)
+(*     glues!comp_id = None -> *)
+(*     tr_stmt f.(fn_body) tf.(Clight.fn_body) -> *)
+(*     Clight.fn_return tf = to_ctype (fn_return f) -> *)
+(*     Clight.fn_callconv tf = fn_callconv f -> *)
+(*     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) -> *)
+(*     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) -> *)
+(*     tr_function f tf *)
+| tr_function_drop_glue2: forall f comp_id glue,
     f.(fn_drop_glue) = Some comp_id ->
-    dropm!comp_id = None ->
-    tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
-    Clight.fn_return tf = to_ctype (fn_return f) ->
-    Clight.fn_callconv tf = fn_callconv f ->
-    Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
-    Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) ->
-    tr_function f tf
-| tr_function_drop_glue2: forall f comp_id glue_id glue,
-    f.(fn_drop_glue) = Some comp_id ->
-    dropm!comp_id = Some glue_id ->
-    glues!glue_id = Some glue ->
+    (* We can ensure that every composite has a drop glue in Clightgen
+    because if ce!id = Some co and tr_composite ce tce then
+    drop_glue_for_composite does not return None *)
+    glues!comp_id = Some glue ->
     tr_function f glue
 .
 
@@ -308,19 +310,15 @@ Inductive tr_fundef (ctx: clgen_env): fundef -> Clight.fundef -> Prop :=
     tr_fundef ctx (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
 
 
-(* Lemma tr_fundef_linkorder: forall c c' f tf, *)
-(*     tr_fundef c f tf -> *)
-(*     linkorder c c' -> *)
-(*     tr_fundef c' f tf. *)
-(* Proof. *)
-(*   intros until tf. intros TR ((MAIN & PUBLIC & GDEF) & COMP). *)
-(*   clear MAIN PUBLIC GDEF. *)
-(*   inv TR. *)
-(*   - econstructor. *)
-(*     inv H. (* econstructor; eauto.     *) *)
-(*     (** UNPROVABLE! Because c' may contain more enum and we cannot *)
-(*     ensure that the generated id of the union is compatable. Try to *)
-(*     add linkorder in match_states *) *)
-    
-(* Admitted. *)
+Lemma generate_dropm_inv: forall p id gid,
+    (generate_dropm p) ! id = Some gid ->
+    exists f, (prog_defmap p) ! gid = Some (Gfun (Internal f)) /\ f.(fn_drop_glue) = Some id.
+Admitted.
+
+(* Is it enough? *)
+Lemma generate_drops_inv: forall ce tce dropm id co f,
+    (generate_drops ce tce dropm) ! id = Some f ->
+    ce ! id = Some co ->
+    drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) = Some f.
+Admitted.
 
