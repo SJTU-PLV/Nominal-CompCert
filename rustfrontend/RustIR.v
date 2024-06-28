@@ -624,29 +624,33 @@ Section SMALLSTEP.
 Variable ge: genv.
 
 (* list of ownership types which are the children of [ty] *)
-Fixpoint drop_glue_children_types (m: PTree.t ident) (ty: type) : list type :=
+Fixpoint drop_glue_children_types (ty: type) : list type :=
   match ty with
   | Tbox ty' =>
-      drop_glue_children_types m ty' ++ [ty]
+      drop_glue_children_types ty' ++ [ty]
   | Tstruct _ id 
-  | Tvariant _ id  =>
-      match m!id with
-      | None => nil
-      | Some _ => ty :: nil
-      end
+  | Tvariant _ id  => ty::nil
   | _ => nil
   end.
 
 (* It corresponds to drop_glue_for_member in Clightgen *)
 Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_member_state :=
   if own_type ge fty then
-    let tys := drop_glue_children_types ge.(genv_dropm) fty in
+    let tys := drop_glue_children_types fty in
     match tys with
     | nil => None
-    | Tvariant _ id :: tys'
-    | Tstruct _ id :: tys' =>
-        Some (drop_member_comp fid fty id tys')
-    | _ => Some (drop_member_box fid fty tys)
+    | ty :: tys' =>
+        match ty with       
+        | Tvariant _ id
+        | Tstruct _ id =>
+            (* provide evidence for the simulation *)
+            match ge.(genv_dropm) ! id with
+            | Some _ =>
+                Some (drop_member_comp fid fty id tys')
+            | None => None
+            end
+        | _ => Some (drop_member_box fid fty tys)
+        end
     end
   else None.
 
@@ -692,7 +696,7 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     step_drop
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty id2 tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid fty tys)) membs k) m)
-| step_dropstate_box: forall b ofs id co fid fty fofs bf m m' tys k membs
+| step_dropstate_box: forall b ofs id co fid fofs bf m m' tys k membs fty
     (CO1: ge.(genv_cenv) ! id = Some co)
     (* evaluate the value of the argument of the drop glue for id2 *)
     (FOFS: field_offset ge fid co.(co_members) = OK (fofs, bf))

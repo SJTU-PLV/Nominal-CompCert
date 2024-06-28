@@ -137,8 +137,8 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
       free_stmt :: drop_glue_for_box_rec arg tys1
   end.
 
-Definition call_composite_drop_glue (arg: Clight.expr) (ty: type) (drop_id: ident) :=
-  let ref_arg_ty := (Ctypes.Tpointer (to_ctype ty) noattr) in
+Definition call_composite_drop_glue (arg: Clight.expr) (ty: Ctypes.type) (drop_id: ident) :=
+  let ref_arg_ty := (Ctypes.Tpointer ty noattr) in
   let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_arg_ty Ctypes.Tnil) Tvoid cc_default in
   (* drop_in_place_xxx(&arg) *)
   let call_stmt := Clight.Scall None (Evar drop_id glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
@@ -147,7 +147,7 @@ Definition call_composite_drop_glue (arg: Clight.expr) (ty: type) (drop_id: iden
 Definition drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : Clight.statement :=
   (* we need to drop the value inside the tys = [ty1;ty2...;ty_n]. Evaluate
   arg would produce the value of ty_n *)
-  let tys := drop_glue_children_types m ty in
+  let tys := drop_glue_children_types ty in
   match tys with
   | nil => Clight.Sskip
   | ty :: tys1 =>
@@ -155,10 +155,11 @@ Definition drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) :
       | Tvariant _ id
       | Tstruct _ id =>
           let arg1 := deref_arg_rec arg tys1 in
+          (* We must guarantee that ty = typeof arg *)
           match m ! id with
           | None => Clight.Sskip
           | Some id' =>
-              Clight.Ssequence (call_composite_drop_glue arg1 ty id') (makeseq (drop_glue_for_box_rec arg tys1))
+              Clight.Ssequence (call_composite_drop_glue arg1 (Clight.typeof arg1) id') (makeseq (drop_glue_for_box_rec arg tys1))
           end
       | _ => makeseq (drop_glue_for_box_rec arg tys)
       end
@@ -193,12 +194,14 @@ Fixpoint drop_glue_for_members (m: PTree.t ident) (p: Clight.expr) (membs: membe
       Clight.Ssequence (drop_glue_for_member m p memb) (drop_glue_for_members m p membs')
   end.
 
-Definition make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (membs: members) :=
-  let branch idx memb ls := LScons (Some idx) (Clight.Ssequence (drop_glue_for_member m p memb) Clight.Sbreak) ls in
-  fold_right
-    (fun elt acc => let '(idx, ls) := acc in (idx-1, branch idx elt ls))
-    ((list_length_z membs) - 1, LSnil) membs.
-
+Fixpoint make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (idx: Z) (membs: members) :=
+  match membs with
+  | [] => LSnil
+  | memb :: membs' =>
+      let ls := make_labelled_drop_stmts m p (idx+1) membs' in 
+      LScons (Some idx) (Clight.Ssequence (drop_glue_for_member m p memb) Clight.Sbreak) ls
+  end.
+  
 (* m: maps composite id to drop function id *)
 Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members): option Clight.function :=
   (* The only function parameter *)
@@ -222,7 +225,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct
               (* use switch statements to model the pattern match? *)
               (* drops_list is [[case 0: drop(m1)];[case 1: drop(m2)]]*)
               (* let drops_list := fold_right (fun elt acc => (drop_glue_for_member m get_union elt) :: acc) (@nil (list Clight.statement)) ms in *)
-              let (_, drop_switch_branches) := make_labelled_drop_stmts m get_union ms in
+              let drop_switch_branches := make_labelled_drop_stmts m get_union 0 ms in
               (* generate function *)
               let stmt := Clight.Sswitch get_tag drop_switch_branches in
               (Some (Clight.mkfunction Tvoid cc_default ((param_id, param_ty)::nil) nil nil stmt))
@@ -668,7 +671,7 @@ Definition transl_function glues (f: function) : Errors.res Clight.function :=
   | Some comp_id =>
       match glues!comp_id with
       | Some glue => Errors.OK glue
-      | _ => transl_function_normal f
+      | _ => Errors.Error [MSG "no drop glue for "; CTX comp_id; MSG " , it is invalid composite"]
       end
   | None => transl_function_normal f
   end.

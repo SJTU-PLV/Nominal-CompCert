@@ -275,7 +275,7 @@ Inductive tr_function: function -> Clight.function -> Prop :=
 (*     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) -> *)
 (*     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) -> *)
 (*     tr_function f tf *)
-| tr_function_drop_glue2: forall f comp_id glue,
+| tr_function_drop_glue: forall f comp_id glue,
     f.(fn_drop_glue) = Some comp_id ->
     (* We can ensure that every composite has a drop glue in Clightgen
     because if ce!id = Some co and tr_composite ce tce then
@@ -317,8 +317,75 @@ Admitted.
 
 (* Is it enough? *)
 Lemma generate_drops_inv: forall ce tce dropm id co f,
-    (generate_drops ce tce dropm) ! id = Some f ->
+    tr_composite_env ce tce ->
     ce ! id = Some co ->
-    drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) = Some f.
+    (generate_drops ce tce dropm) ! id = Some f ->
+    let co_ty := Ctypes.Tstruct id noattr in
+    let param_ty := Tpointer co_ty noattr in
+    let deref_param := Ederef (Evar param_id param_ty) co_ty in
+    match co.(co_sv) with
+    | Struct =>
+        let stmt_list := drop_glue_for_members ce dropm deref_param co.(co_members) in
+        f = {| Clight.fn_return := Tvoid;
+              Clight.fn_callconv := cc_default;
+              Clight.fn_params := [(param_id, param_ty)];
+              Clight.fn_vars := [];
+              fn_temps := [];
+              Clight.fn_body := Clight.Ssequence Clight.Sskip stmt_list |}
+    | TaggedUnion =>
+        exists union_id tag_fid union_fid tco uco,
+        let get_tag := Efield deref_param tag_fid Ctypes.type_int32s in
+        let get_union := Efield deref_param union_fid (Tunion union_id noattr) in
+        let drop_switch_branches :=
+          (make_labelled_drop_stmts ce dropm get_union 0 co.(co_members)) in
+        let stmt := Sswitch get_tag drop_switch_branches in
+        f = {| Clight.fn_return := Tvoid;
+              Clight.fn_callconv := cc_default;
+              Clight.fn_params := [(param_id, param_ty)];
+              Clight.fn_vars := [];
+              fn_temps := [];
+              Clight.fn_body := stmt |}
+        (* compute the field offset *)
+        /\ tce ! id = Some tco
+        /\ tce ! union_id = Some uco
+        (* tag field offset is 0 *)
+        /\ Ctypes.field_offset tce tag_fid tco.(Ctypes.co_members) = OK (0, Full)
+        (** TODO: put it in tr_composite? enum constructor offset *)
+        /\ (forall fid ofs bf,
+              variant_field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+              exists ofs1 ofs2,
+                Ctypes.field_offset tce union_fid tco.(Ctypes.co_members) = OK (ofs1, Full)
+                /\ Ctypes.union_field_offset tce fid uco.(Ctypes.co_members) = OK (ofs2, Full)
+                /\ ofs = ofs1 + ofs2)
+    end.
 Admitted.
 
+Lemma select_switch_sem_match_aux: forall ce dropm param membs tag memb idx,
+    list_nth_z membs (tag - idx) = Some memb ->
+    exists s, seq_of_labeled_statement (select_switch tag (make_labelled_drop_stmts ce dropm param idx membs)) = (Clight.Ssequence (Clight.Ssequence (drop_glue_for_member ce dropm param memb) Clight.Sbreak) s).
+Proof.
+  induction membs.
+  simpl. congruence.
+  simpl. intros. destruct zeq in H.
+  assert (tag = idx) by lia. inv H.
+  unfold select_switch. simpl. rewrite zeq_true.
+  simpl. eauto.
+  unfold select_switch. simpl.
+  rewrite zeq_false; try lia.
+  assert (Z.pred (tag - idx) = tag - (idx + 1)) by lia. rewrite H0 in *.
+  exploit IHmembs.
+  eauto. 
+  intros (s & A).
+  unfold select_switch in A.
+  destruct (select_switch_case tag (make_labelled_drop_stmts ce dropm param (idx + 1) membs)) eqn: SEL.
+  eauto. eauto.
+Qed.
+
+Lemma select_switch_sem_match: forall ce dropm param membs tag memb,
+    list_nth_z membs tag = Some memb ->
+    exists s, seq_of_labeled_statement (select_switch tag (make_labelled_drop_stmts ce dropm param 0 membs)) = (Clight.Ssequence (Clight.Ssequence (drop_glue_for_member ce dropm param memb) Clight.Sbreak) s).
+Proof.
+  intros. 
+  eapply select_switch_sem_match_aux. rewrite Z.sub_0_r.
+  auto.
+Qed.
