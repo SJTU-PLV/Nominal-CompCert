@@ -275,19 +275,21 @@ Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_vari
     match_dropmemb_stmt co_id arg sv None Clight.Sskip
 .
 
-Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> Prop :=
-| match_Kstop: forall m tm,
-    match_cont j RustIR.Kstop Clight.Kstop m tm
-| match_Kseq: forall s ts k tk m tm
+(* We need to record the list of stack block for the parameter of the
+drop glue *)
+Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> list block -> Prop :=
+| match_Kstop: forall m tm bs,
+    match_cont j RustIR.Kstop Clight.Kstop m tm bs
+| match_Kseq: forall s ts k tk m tm bs
     (* To avoid generator, we need to build the spec *)
     (MSTMT: tr_stmt ce tce dropm s ts)
-    (MCONT: forall m tm, match_cont j k tk m tm),
-    match_cont j (RustIR.Kseq s k) (Clight.Kseq ts tk) m tm
-| match_Kloop: forall s ts k tk m tm
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs),
+    match_cont j (RustIR.Kseq s k) (Clight.Kseq ts tk) m tm bs
+| match_Kloop: forall s ts k tk m tm bs
     (MSTMT: tr_stmt ce tce dropm s ts)
-    (MCONT: forall m tm, match_cont j k tk m tm),
-    match_cont j (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm
-| match_Kcall1: forall p f tf e te le k tk cty temp pe m tm
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs),
+    match_cont j (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm bs
+| match_Kcall1: forall p f tf e te le k tk cty temp pe m tm bs
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
     (* we need to consider temp is set to a Clight expr which is
@@ -295,59 +297,76 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> P
     (TRFUN: tr_function ce tce dropm glues f tf)
     (CTY: cty = to_ctype (typeof_place p))
     (PE: place_to_cexpr tce p = OK pe)
-    (MCONT: forall m tm, match_cont j k tk m tm)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
     (MENV: match_env j e te),
-    match_cont j (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm
-| match_Kcall2: forall f tf e te le k tk m tm
+    match_cont j (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm bs
+| match_Kcall2: forall f tf e te le k tk m tm bs
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
     (* how to relate le? *)
     (TRFUN: tr_function ce tce dropm glues f tf)
-    (MCONT: forall m tm, match_cont j k tk m tm),
-    match_cont j (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk) m tm
-| match_Kdropcall_struct: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 ts2 fid fty tys,
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+    (MENV: match_env j e te),
+    match_cont j (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk) m tm bs
+| match_Kdropcall_composite: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 kts fid fty tys bs,
     (* invariant that needed to be preserved *)
-    let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
+    let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
     (* let field_param := Efield deref_param fid (to_ctype fty) in *)
     forall (CO: ce ! id = Some co)
-    (STRUCT: co.(co_sv) = Struct)
-    (MSTMT1: match_dropmemb_stmt id deref_param Struct (Some (drop_member_box fid fty tys)) ts1)
-    (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2)
-    (MCONT: match_cont j k tk m tm)
+      (MSTMT:
+        match_dropmemb_stmt id deref_param co.(co_sv) (Some (drop_member_box fid fty tys)) ts1 /\
+        match co.(co_sv) with
+        | Struct =>
+            exists ts2,            
+              drop_glue_for_members ce dropm deref_param membs = ts2 /\
+              kts = (Clight.Kseq ts2 tk)
+        | TaggedUnion =>
+            exists uts,
+              kts = (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Clight.Kswitch tk))) /\
+              membs = nil
+        end)
+    (* (STRUCT: co.(co_sv) = Struct) *)
+    (* (MSTMT1: match_dropmemb_stmt id deref_param Struct (Some (drop_member_box fid fty tys)) ts1) *)
+    (* (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2) *)
+    (MCONT: match_cont j k tk m tm bs)
     (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env ))
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
     (UNREACH: forall ofs, loc_out_of_reach j m pb ofs)
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
+    (* Free pb does not affect bs *)
+    (NOTIN: ~ In pb bs)
     (GLUE: glues ! id = Some tf)
     (MINJ: Mem.inject j m tm),
       match_cont j
         (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k)
-        (Clight.Kcall None tf te le (Clight.Kseq ts1 (Clight.Kseq ts2 tk))) m tm
-| match_Kdropcall_enum: forall id te le k tk tf b ofs b' ofs' pb m tm co tys ts fid fty uts,
-    (* invariant that needed to be preserved *)
-    let co_ty := (Ctypes.Tstruct id co.(co_attr)) in
-    let pty := Tpointer co_ty noattr in
-    let deref_param := Ederef (Evar param_id pty) co_ty in
-    (* we do not know the union_id and union_type *)
-    (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *)
-    forall (CO: ce ! id = Some co)
-    (ENUM: co.(co_sv) = TaggedUnion)      
-    (MCONT: match_cont j k tk m tm)
-    (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion (Some (drop_member_box fid fty tys)) ts)
-    (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env ))
-    (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
-    (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
-    (UNREACH: forall ofs, loc_out_of_reach j m pb ofs)
-    (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
-    (GLUE: glues ! id = Some tf)
-    (MINJ: Mem.inject j m tm),
-      match_cont j
-        (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) nil k)
-        (Clight.Kcall None tf te le (Clight.Kseq ts (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Clight.Kswitch tk))))) m tm
+        (Clight.Kcall None tf te le (Clight.Kseq ts1 kts)) m tm (pb :: bs)
 .
+
+(* | match_Kdropcall_enum: forall id te le k tk tf b ofs b' ofs' pb m tm co tys ts fid fty uts, *)
+(*     (* invariant that needed to be preserved *) *)
+(*     let co_ty := (Ctypes.Tstruct id co.(co_attr)) in *)
+(*     let pty := Tpointer co_ty noattr in *)
+(*     let deref_param := Ederef (Evar param_id pty) co_ty in *)
+(*     (* we do not know the union_id and union_type *) *)
+(*     (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *) *)
+(*     forall (CO: ce ! id = Some co) *)
+(*     (ENUM: co.(co_sv) = TaggedUnion)       *)
+(*     (MCONT: match_cont j k tk m tm) *)
+(*     (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion (Some (drop_member_box fid fty tys)) ts) *)
+(*     (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env )) *)
+(*     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs')) *)
+(*     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs')) *)
+(*     (UNREACH: forall ofs, loc_out_of_reach j m pb ofs) *)
+(*     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable) *)
+(*     (GLUE: glues ! id = Some tf) *)
+(*     (MINJ: Mem.inject j m tm), *)
+(*       match_cont j *)
+(*         (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) nil k) *)
+(*         (Clight.Kcall None tf te le (Clight.Kseq ts (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Clight.Kswitch tk))))) m tm *)
+(* . *)
 
 
 Inductive match_states: RustIR.state -> Clight.state -> Prop :=
@@ -359,14 +378,14 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (MSTMT: tr_stmt ce tce dropm s ts)    
     (* match continuation: we do not care about m and tm because they
     must be unused in the continuation of normal state *)
-    (MCONT: forall m tm, match_cont j k tk m tm)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
     (MINJ: Mem.inject j m tm)   
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (MENV: match_env j e te),
     match_states (RustIR.State f s k e m) (Clight.State tf ts tk te le tm)
 | match_call_state: forall vf vargs k m tvf tvargs tk tm j
     (* match_kcall is independent of ce and dropm  *)
-    (MCONT: forall m tm, match_cont j k tk m tm)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
     (VINJ: Val.inject j vf tvf)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
@@ -375,7 +394,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (* (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv), *)
     match_states (RustIR.Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
 | match_return_state: forall v k m tv tk tm j
-   (MCONT: forall m tm, match_cont j k tk m tm)
+   (MCONT: forall m tm bs, match_cont j k tk m tm bs)
    (MINJ: Mem.inject j m tm)
    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
    (RINJ: Val.inject j v tv),
@@ -402,7 +421,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
 (*     (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)) *)
 (*     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))), *)
 (*     match_states (RustIR.Calldrop (Vptr b ofs) ty k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm) *)
-| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co membs pb b' ofs' b ofs s,
+| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co membs pb b' ofs' b ofs s bs,
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
@@ -410,7 +429,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (STRUCT: co.(co_sv) = Struct)
     (MSTMT1: match_dropmemb_stmt id deref_param Struct s ts1)
     (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2)
-    (MCONT: match_cont j k tk m tm)
+    (MCONT: match_cont j k tk m tm bs)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (GLUE: glues ! id = Some tf)
@@ -418,9 +437,11 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
-    (UNREACH: forall ofs, loc_out_of_reach j m pb ofs),
+    (UNREACH: forall ofs, loc_out_of_reach j m pb ofs)
+    (VALIDBS: forall b, In b bs -> Mem.valid_block tm b)
+    (NOTIN: ~ In pb bs),
       match_states (RustIR.Dropstate id (Vptr b ofs) s membs k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
-| match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts uts,
+| match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts uts bs,
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
@@ -428,7 +449,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *)
     forall (CO: ce ! id = Some co)
     (ENUM: co.(co_sv) = TaggedUnion)
-    (MCONT: match_cont j k tk m tm)
+    (MCONT: match_cont j k tk m tm bs)
     (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion s ts)
     (MINJ: Mem.inject j m tm)
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
@@ -437,7 +458,11 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
     (FREE: Mem.range_perm tm pb 0 (Ctypes.sizeof tce pty) Cur Freeable)
-    (UNREACH: forall ofs, loc_out_of_reach j m pb ofs),
+    (* It is used to preserve pb during (m,tm) injected move *)
+    (UNREACH: forall ofs, loc_out_of_reach j m pb ofs)
+    (* Use VALIDBS to prove NOTIN in Dropstate tansitions *)
+    (VALIDBS: forall b, In b bs -> Mem.valid_block tm b)
+    (NOTIN: ~ In pb bs),
       match_states (RustIR.Dropstate id (Vptr b ofs) s nil k m) (Clight.State tf ts (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Kswitch tk))) te le tm)
 .
 
@@ -614,7 +639,266 @@ Lemma function_entry_inject:
       /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
 Admitted.
 
+Lemma PTree_elements_one (A: Type) : forall id (elt: A),
+    PTree.elements (PTree.set id elt (PTree.empty A)) = (id, elt) :: nil.
+Proof.
+  intros.
+  generalize (PTree.elements_correct (PTree.set id elt (PTree.empty A)) id (PTree.gss _ _ _)).
+  intros IN.
+  generalize (PTree.elements_keys_norepet (PTree.set id elt (PTree.empty A))).
+  intros NOREPEAT.
+  destruct (PTree.elements (PTree.set id elt (PTree.empty A))) eqn: LIST.
+  inv IN.
+  destruct p. 
+  inv IN.
+  - inv H.
+    destruct l. auto. destruct p.
+    assert (IN1: In (p,a) ((id,elt)::(p,a)::l)).
+    eapply in_cons. econstructor. auto.
+    simpl in NOREPEAT. inv NOREPEAT. 
+    generalize (PTree.elements_complete (PTree.set id elt (PTree.empty A)) p a).
+    rewrite LIST. intros B. apply B in IN1.
+    erewrite PTree.gsspec in IN1.
+    destruct (peq p id) eqn: PEQ. inv IN1.
+    exfalso. eapply H1. econstructor. auto.
+    rewrite PTree.gempty in IN1. congruence.
+  - simpl in NOREPEAT. inv NOREPEAT.
+    assert (GP: (PTree.set id elt (PTree.empty A))! p = Some a).
+    eapply PTree.elements_complete. rewrite LIST.
+    econstructor. auto.
+    erewrite PTree.gsspec in GP.
+    destruct (peq p id) eqn: PEQ. inv GP.
+    exfalso. eapply H2. replace id with (fst (id, a)). eapply in_map.
+    auto. auto.
+    rewrite PTree.gempty in GP. congruence.
+Qed.
 
+Lemma step_drop_simulation:
+  forall S1 t S2, step_drop ge S1 t S2 ->
+  forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
+Proof.
+  unfold build_clgen_env in *. unfold ctx in *. simpl in *.
+  induction 1; intros; inv MS.
+
+  (* step_dropstate_init *)
+  - admit.
+
+  (* step_dropstate_composite *)
+  - admit.
+  (* step_dropstate_composite *)
+  - admit.
+
+  (* step_dropstate_box *)
+  - admit.
+  (* step_dropstate_box *)
+  - admit.
+
+  (* step_drop_return1 *)
+  - inv MSTMT1. simpl.
+    inv MCONT.
+    (* free function arguments success *)   
+    assert (MFREE: {tm1 | Mem.free tm pb 0 (Ctypes.sizeof tce pty) = Some tm1}).
+    eapply Mem.range_perm_free. auto.
+    destruct MFREE as (tm1 & MFREE).
+    
+    eexists. split.    
+    (* step *)
+    + eapply plus_left.
+      econstructor.
+      eapply star_step.
+      econstructor. simpl. auto.
+      unfold Clight.blocks_of_env.
+      erewrite PTree_elements_one.
+      simpl. unfold pty in *.
+      simpl in MFREE. rewrite MFREE.
+      eauto.
+      eapply star_step.
+      econstructor. simpl.
+      eapply star_refl.
+      1-3: eauto.
+    (* match_states *)
+    + econstructor; auto. econstructor.
+      instantiate (1 := initial_generator). auto.
+      
+      (* Mem.inject *)
+      eapply Mem.free_right_inject; eauto.
+      intros. eapply UNREACH. eauto. instantiate (1 := ofs0 + delta).
+      replace (ofs0 + delta - delta) with ofs0 by lia.
+      eapply Mem.perm_max. eapply Mem.perm_implies.
+      eauto. econstructor.
+      (* inj_incr *)
+      erewrite Mem.support_free with (m2:= tm1); eauto.
+            
+  (* step_drop_return1 (in enum) *)
+  - inv MSTMT.
+    inv MCONT.
+    (* free function arguments success *)   
+    assert (MFREE: {tm1 | Mem.free tm pb 0 (Ctypes.sizeof tce pty) = Some tm1}).
+    eapply Mem.range_perm_free. auto.
+    destruct MFREE as (tm1 & MFREE).
+    
+    eexists. split.    
+    (* step *)
+    + eapply plus_left.
+      econstructor.
+      eapply star_step.
+      (* evaluate Sbreak *)
+      econstructor. eapply star_step.
+      econstructor. auto.
+      (* evaluate Kcall *)
+      eapply star_step.
+      econstructor. simpl. auto.
+      unfold Clight.blocks_of_env.
+      erewrite PTree_elements_one.
+      simpl. unfold pty in *.
+      simpl in MFREE. rewrite MFREE.
+      eauto.
+      eapply star_step.
+      econstructor. simpl.
+      eapply star_refl.
+      1-5: eauto.
+    (* match_states *)
+    + econstructor; auto. econstructor.
+      instantiate (1 := initial_generator). auto.
+      (* Mem.inject *)
+      eapply Mem.free_right_inject; eauto.
+      intros. eapply UNREACH. eauto. instantiate (1 := ofs0 + delta).
+      replace (ofs0 + delta - delta) with ofs0 by lia.
+      eapply Mem.perm_max. eapply Mem.perm_implies.
+      eauto. econstructor.
+      (* inj_incr *)
+      erewrite Mem.support_free with (m2:= tm1); eauto.
+      
+  (* step_drop_return2 (in struct) *)
+  - inv MSTMT1. simpl.
+    (* free function arguments success *)   
+    assert (MFREE: {tm1 | Mem.free tm pb 0 (Ctypes.sizeof tce pty) = Some tm1}).
+    eapply Mem.range_perm_free. auto.
+    destruct MFREE as (tm1 & MFREE).
+    inv MCONT.
+    
+    eexists. split.
+    (* step *)
+    + eapply plus_left.
+      econstructor.
+      eapply star_step.
+      econstructor. simpl. auto.
+      unfold Clight.blocks_of_env.
+      erewrite PTree_elements_one.
+      simpl. unfold pty in *.
+      simpl in MFREE. rewrite MFREE.
+      eauto.
+      eapply star_step.
+      econstructor. simpl.
+      eapply star_step.
+      econstructor.
+      eapply star_refl.
+      1-4: eauto.
+    (* match_states *)
+    + assert (MINJ3: Mem.inject j m tm1).
+      eapply Mem.free_right_inject; eauto.
+      intros. eapply UNREACH. eauto. instantiate (1 := ofs + delta).
+      replace (ofs + delta - delta) with ofs by lia.
+      eapply Mem.perm_max. eapply Mem.perm_implies.
+      eauto. econstructor.
+      assert (INCR3: inj_incr w (injw j (Mem.support m) (Mem.support tm1))).
+      erewrite Mem.support_free with (m2:= tm1); eauto.
+      assert (UNCHANGE: Mem.unchanged_on (fun b ofs => pb <> b) tm tm1).
+      { eapply Mem.free_unchanged_on; eauto. }        
+      assert (MCONT3: match_cont j k tk0 m tm1 bs0) by admit.
+      assert (LOADV3: Mem.loadv Mptr tm1 (Vptr pb0 Ptrofs.zero) = Some (Vptr b'0 ofs'0)).
+      { eapply Mem.load_unchanged_on; eauto.
+        rewrite Ptrofs.unsigned_zero. intros.         
+        eapply not_in_cons. eauto. }
+      assert (PERM3: Mem.range_perm tm1 pb0 0 (Ctypes.sizeof tce (Tpointer (Ctypes.Tstruct id2 noattr) noattr)) Cur Freeable).
+      { red. intros.
+        (* range_perm *)
+        erewrite <- Mem.unchanged_on_perm; eauto. simpl. eapply not_in_cons.
+        eauto. eapply VALIDBS. constructor; auto. }
+      assert (VALIDBS3: forall b : block, In b bs0 -> Mem.valid_block tm1 b).
+      { (* validbs *)
+        intros.
+        eapply Mem.valid_block_unchanged_on; eauto.
+        eapply VALIDBS. eapply in_cons. auto. }
+      
+      (* case 1: co_sv co0 = Struct. Return to a struct drop glue*)      
+      destruct (co_sv co0) eqn: SV.
+      * destruct MSTMT as (MEMBST & ts2 & TS2 & KTS). subst.
+        eapply match_dropstate_struct; eauto.
+        
+      (* case 2: co_sv co0 = Taggedunion. Return to a enum drop glue*)      
+      * destruct MSTMT as (MEMBST & uts & KTS & MEMBS). subst.
+        eapply match_dropstate_enum; eauto.
+        
+  (* step_drop_return2 (in enum) *)
+   -inv MSTMT.
+    inv MCONT.
+    (* free function arguments success *)   
+    assert (MFREE: {tm1 | Mem.free tm pb 0 (Ctypes.sizeof tce pty) = Some tm1}).
+    eapply Mem.range_perm_free. auto.
+    destruct MFREE as (tm1 & MFREE).
+    
+    eexists. split.    
+    (* step *)
+    + eapply plus_left.
+      econstructor.
+      eapply star_step.
+      (* evaluate Sbreak *)
+      econstructor. eapply star_step.
+      econstructor. auto.
+      (* evaluate Kcall *)
+      eapply star_step.
+      econstructor. simpl. auto.
+      unfold Clight.blocks_of_env.
+      erewrite PTree_elements_one.
+      simpl. unfold pty in *.
+      simpl in MFREE. rewrite MFREE.
+      eauto.
+      eapply star_step.
+      econstructor. simpl.
+      eapply star_step.
+      econstructor.      
+      eapply star_refl.
+      1-6: eauto.
+    (* match_states *)
+    + assert (MINJ3: Mem.inject j m tm1).
+      eapply Mem.free_right_inject; eauto.
+      intros. eapply UNREACH. eauto. instantiate (1 := ofs + delta).
+      replace (ofs + delta - delta) with ofs by lia.
+      eapply Mem.perm_max. eapply Mem.perm_implies.
+      eauto. econstructor.
+      assert (INCR3: inj_incr w (injw j (Mem.support m) (Mem.support tm1))).
+      erewrite Mem.support_free with (m2:= tm1); eauto.
+      assert (UNCHANGE: Mem.unchanged_on (fun b ofs => pb <> b) tm tm1).
+      { eapply Mem.free_unchanged_on; eauto. }        
+      assert (MCONT3: match_cont j k tk0 m tm1 bs0) by admit.
+      assert (LOADV3: Mem.loadv Mptr tm1 (Vptr pb0 Ptrofs.zero) = Some (Vptr b'0 ofs'0)).
+      { eapply Mem.load_unchanged_on; eauto.
+        rewrite Ptrofs.unsigned_zero. intros.         
+        eapply not_in_cons. eauto. }
+      assert (PERM3: Mem.range_perm tm1 pb0 0 (Ctypes.sizeof tce (Tpointer (Ctypes.Tstruct id2 noattr) noattr)) Cur Freeable).
+      { red. intros.
+        (* range_perm *)
+        erewrite <- Mem.unchanged_on_perm; eauto. simpl. eapply not_in_cons.
+        eauto. eapply VALIDBS. constructor; auto. }
+      assert (VALIDBS3: forall b : block, In b bs0 -> Mem.valid_block tm1 b).
+      { (* validbs *)
+        intros.
+        eapply Mem.valid_block_unchanged_on; eauto.
+        eapply VALIDBS. eapply in_cons. auto. }
+      
+      (* case 1: co_sv co0 = Struct. Return to a struct drop glue*)      
+      destruct (co_sv co0) eqn: SV.
+      * destruct MSTMT as (MEMBST & ts2 & TS2 & KTS). subst.
+        eapply match_dropstate_struct; eauto.
+        
+      (* case 2: co_sv co0 = Taggedunion. Return to a enum drop glue*)      
+      * destruct MSTMT as (MEMBST & uts1 & KTS & MEMBS). subst.
+        eapply match_dropstate_enum; eauto.
+        
+Admitted.
+
+       
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
@@ -1018,7 +1302,7 @@ Proof.
       1-5: eauto.
 
     (* match_states *)
-    + eapply match_dropstate_struct; eauto.      
+    + eapply match_dropstate_struct with (bs := nil);eauto.
       econstructor.
       econstructor; eauto.
       exploit Mem.support_store. eapply STORETM1.
@@ -1029,6 +1313,7 @@ Proof.
       eauto.
       simpl. erewrite Mem.load_store_same.
       instantiate (1 := (Vptr pb pofs)). eauto. eauto.
+      intros. inv H.
       
   (* step_drop_enum *)
   - (** The following code is mostly the same as that in step_drop_struct *)
@@ -1178,7 +1463,7 @@ Proof.
       econstructor. eapply star_refl.
       1-8 : eauto.
 
-    + eapply match_dropstate_enum; eauto.
+    + eapply match_dropstate_enum with (bs := nil); eauto.
       econstructor; eauto.
       unfold pty.
       set (param := (Ederef (Evar param_id (Tpointer (Ctypes.Tstruct comp_id noattr) noattr))
@@ -1213,33 +1498,15 @@ Proof.
       (* prove loadv in match_cont *)
       simpl. erewrite Mem.load_store_same.
       instantiate (1 := (Vptr pb pofs)). eauto. eauto.
-        
-  (* step_drop_seq *)
-  - admit.
+      intros. inv H.
+            
+  (* step_dropstate (in struct) *)
+  - eapply step_drop_simulation. eauto.
+    eapply match_dropstate_struct; eauto.
+  (* step_dropstate (in enum) *)
+  - eapply step_drop_simulation. eauto.
+    eapply match_dropstate_enum; eauto.
 
-  (* step_calldrop_box: simulate [free] semantics *)
-  - admit.
-
-  (* impossible *)
-  - destruct PTY. congruence. congruence.
-  (* impossible *)
-  - congruence.
-
-  (* step_drop_struct *)
-  - destruct PTY; try congruence. rewrite H in H1. inv H1.
-    (* how to prove drop_glue is generated from drop_glue_for_composite *)
-    admit.
-
-  (* impossible *)
-  - congruence.
-    
-  (* step_drop_enum *)
-  - destruct PTY; try congruence. rewrite H in H4. inv H4.
-    admit.
-  (* step_drop_return *)
-  - admit.
-  (* step_returnstate_drop *)
-  - admit.
   (* step_storagelive *)
   - admit.
   (* step_storagedead *)
@@ -1271,12 +1538,14 @@ Proof.
     (* step and match states *)
     split.
     + eapply plus_one. econstructor;eauto.
-    + econstructor; eauto.
+    + econstructor.
       (* initial env is well_formed *)
-      eapply function_entry_wf_env. eauto.
+      eapply function_entry_wf_env. eauto. eauto.
       eapply tr_function_normal;eauto.
-      etransitivity;eauto.
-
+      eauto.
+      instantiate (1 := j'). admit.   (* inject_incr and match_cont *)
+      eauto.
+      etransitivity;eauto. auto.
       
   (* step_external_function *)
   - admit.
