@@ -432,13 +432,13 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     eval_place (Plocal id ty) b Ptrofs.zero
 | eval_Pfield_struct: forall p ty b ofs delta id i co bf orgs,
     eval_place p b ofs ->
-    ty = Tstruct orgs id ->
+    typeof_place p = Tstruct orgs id ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
 | eval_Pdowncast: forall  p ty b ofs delta id fid co bf orgs,
     eval_place p b ofs ->
-    ty = Tvariant orgs id ->
+    typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     (* Is it considered memory error? No! Because we can write any kind of place to trigger this error. *)
     variant_field_offset ce fid (co_members co) = OK (delta, bf) ->
