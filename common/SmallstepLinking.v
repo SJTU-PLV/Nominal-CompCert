@@ -51,7 +51,7 @@ Section LINK.
           valid_query (L i se) q = true ->
           Smallstep.initial_state (L i se) q s ->
           initial_state q (st i s :: nil).
-
+    
     Inductive at_external: state -> query li -> Prop :=
       | at_external_intro i s q k:
           Smallstep.at_external (L i se) s q ->

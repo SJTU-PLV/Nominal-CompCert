@@ -174,9 +174,11 @@ Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
     exists w',
       match_senv cc' w' se1 se2 /\
       match_query cc' w' q1 q2 /\
-      forall r1 r2,
-        match_reply cc' w' r1 r2 ->
-        match_reply cc w r1 r2.
+      forall r1 r2 (wp': gworld cc'),
+        get w' o-> wp' ->
+        match_reply cc' (set w' wp') r1 r2 ->
+        exists (wp: gworld cc), get w o-> wp /\
+        match_reply cc (set w wp) r1 r2.
 
 Definition cceqv {li1 li2} (cc cc': callconv li1 li2) :=
   ccref cc cc' /\ ccref cc' cc.
@@ -185,11 +187,16 @@ Global Instance ccref_preo li1 li2:
   PreOrder (@ccref li1 li2).
 Proof.
   split.
-  - intros cc w q1 q2 Hq.
-    eauto.
+  - intros cc w se1 se2 q1 q2 Hse Hq.
+    exists w. repeat apply conj; eauto.
   - intros cc cc' cc'' H' H'' w se1 se2 q1 q2 Hse Hq.
     edestruct H' as (w' & Hse' & Hq' & Hr'); eauto.
-    edestruct H'' as (w'' & Hse'' & Hq'' & Hr''); eauto 10.
+    edestruct H'' as (w'' & Hse'' & Hq'' & Hr''); eauto.
+    exists w''. repeat apply conj; eauto.
+    intros r1 r2 wp'' HAcc2 Hr2.
+    exploit Hr''; eauto.
+    intros (wp' & HAcc1 & Hr1).
+    eauto.
 Qed.
 
 Global Instance cceqv_equiv li1 li2:
@@ -211,7 +218,7 @@ Proof.
 Qed.
 
 
-Lemma open_fsim_ccref {li1 li2: language_interface}:
+Lemma open_fsim_cceqv {li1 li2: language_interface}:
   forall (cc1 cc2: callconv li1 li2) L1 L2,
     forward_simulation cc1 L1 L2 ->
     cceqv cc1 cc2 ->
@@ -223,30 +230,36 @@ Proof.
   set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
          exists w wp,
            match_states se1 se2 w wp idx s1 s2 /\
-           match_senv cc1 w se1 se2 /\
-           forall r1 r2, match_reply cc1 w r1 r2 -> match_reply cc2 w' r1 r2).
+             match_senv cc1 w se1 se2 /\
+             forall r1 r2, (get w) o-> wp -> match_reply cc1 (set w wp) r1 r2 ->
+                          (get w') o-> wp' /\ match_reply cc2 (set w' wp') r1 r2).
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
   - intros q1 q2 Hq'.
     destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     eapply fsim_match_valid_query; eauto.
-  - intros q1 q2 s1 Hq' Hs1.
+  - intros q1 q2 s1 Hq' Hs1 Ho.
     destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2. split; auto. exists wB,(get wB); auto.
+    exists i, s2. split; auto. exists wB,(get wB). repeat apply conj; eauto.
+    intros. exploit Hr. apply H. simpl. eauto.
+    intros (wp' & HAcc & Hr1). admit.
   - intros gw i s1 s2 r1 (wB & wP & Hs & Hse & Hr') Hr1.
     edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
-    exists r2. split. auto. split. auto. admit. admit.
-  - intros gw i s1 s2 qA1 (wB & Hs & Hse & Hr') HqA1.
-    edestruct @fsim_match_external as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
+  - (* admit. (*the most tricky part*) *)
+    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hr') HqA1.
+    edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
     edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
     exists wA', qA2. intuition auto.
     edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto.
-  - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
-    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto.
+    exists i', s2'. split; auto. exists wB; eauto. *)
+  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
+    edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
+    exists i', s2'. split; auto. (*how to get this new "outside smallstep world?"*)
+    eexists. split. admit. econstructor; eauto. exists gw1'.
+    split. eauto. split. auto.
+    exists wB; eauto.
 (** ** Relation to forward simulations *)
 
 Global Instance open_fsim_ccref:
