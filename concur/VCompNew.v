@@ -167,6 +167,94 @@ Notation "1" := cc_id : gs_cc_scope.
   refined by the calling convention [cc'], meaning that any
   [cc']-simulation is also a [cc]-simulation. *)
 
+(*Section CCTRANS.
+
+  Context {li1 li2} (cc1 cc2: callconv li1 li2)
+    Context (se1)
+*)
+
+Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
+  (trans1 : gworld cc -> gworld cc')
+  (trans2 : gworld cc -> gworld cc' -> gworld cc' -> gworld cc):=
+  forall w se1 se2 q1 q2,
+    match_senv cc w se1 se2 ->
+    match_query cc w q1 q2 ->
+    exists w',
+      match_senv cc' w' se1 se2 /\
+      match_query cc' w' q1 q2 /\
+      get w' = trans1 (get w) /\
+      forall r1 r2 (wp': gworld cc'),
+        get w' o-> wp' ->
+        match_reply cc' (set w' wp') r1 r2 ->
+        let wp := trans2 (get w) (get w') wp' in
+        get w o-> wp /\
+        match_reply cc (set w wp) r1 r2.
+
+  Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
+    Callconv_Trans{
+        trans_12 : gworld cc1 -> gworld cc2;
+        trans_21_acc : gworld cc1 -> gworld cc2 -> gworld cc2 -> gworld cc1;
+        trans_21 : gworld cc2 -> gworld cc1;
+        trans_12_acc :  gworld cc2 -> gworld cc1 -> gworld cc1 -> gworld cc2;
+        bigstep_12 : ccref_bigstep cc1 cc2 trans_12 trans_21_acc;
+        bigstep_21 : ccref_bigstep cc2 cc1 trans_21 trans_12_acc;
+      }.
+
+
+  Lemma open_fsim_cctrans {li1 li2: language_interface}:
+  forall (cc1 cc2: callconv li1 li2) L1 L2,
+    forward_simulation cc1 L1 L2 ->
+    cctrans cc1 cc2 ->
+    forward_simulation cc2 L1 L2.
+Proof.
+  intros. destruct X as [trans12 trans21_acc trans21 trans12_acc Big12 Big21]. inv H.
+  destruct X as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
+         exists w wp,
+           (* wp = trans21 wp' /\ *)
+           match_states se1 se2 w wp idx s1 s2 /\
+             match_senv cc1 w se1 se2 /\
+             forall r1 r2, (get w) o-> wp -> match_reply cc1 (set w wp) r1 r2 ->
+                          (get w') o-> wp' /\ match_reply cc2 (set w' wp') r1 r2).
+  eapply Forward_simulation with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
+  split.
+  - intros q1 q2 Hq'.
+    destruct (Big21 wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply fsim_match_valid_query; eauto.
+  - intros q1 q2 s1 Hq' Hs1 Ho.
+    destruct (Big21 wB' se1 se2 q1 q2) as (wB & Hse & Hq & Htrans & Hr); auto.
+    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
+    exists i, s2. split; auto. exists wB,(get wB). repeat apply conj; eauto.
+    intros.
+    exploit Hr. apply H. simpl. eauto.
+    intros. simpl in H1.
+    assert (trans12_acc (get wB') (get wB) (get wB) = get wB').
+    admit. (*this condition can be fulfilled by the injp construction algorithm *)
+    rewrite H2 in H1. auto.
+  - intros gw i s1 s2 r1 (wB & wP & Hs & Hse & Hr') Hr1.
+    edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
+  - admit. (*the most tricky part*) 
+    (* intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hr') HqA1.
+    edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', qA2. intuition auto.
+    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto. *)
+  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
+    edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
+    exists i', s2'. split; auto.
+    exists (trans12_acc gw2 gw1 gw1').
+    split.
+    admit. (*the relation between gw1 and gw2 defined in ms need more exploration *)
+    econstructor; eauto. exists gw1'.
+    split. eauto. split. eauto.
+    intros.
+    (*This is another requirement of the [ms] design*)
+    admit.
+Admitted.
+(*  
 Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
   forall w se1 se2 q1 q2,
     match_senv cc w se1 se2 ->
@@ -216,7 +304,7 @@ Global Instance ccref_po li1 li2:
 Proof.
   firstorder.
 Qed.
-
+*)
 
 Lemma open_fsim_cceqv {li1 li2: language_interface}:
   forall (cc1 cc2: callconv li1 li2) L1 L2,
