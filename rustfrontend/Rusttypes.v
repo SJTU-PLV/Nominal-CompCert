@@ -1075,16 +1075,11 @@ Qed.
     bitfield designator for accessing a member named [id] of a variant
     whose members are [ms].  The byte offset is always 0. *)
 
-Fixpoint variant_field_offset (env: composite_env) (id: ident) (ms: members)
-                          {struct ms} : res (Z * bitfield) :=
-  match ms with
-  | nil => Error (MSG "Unknown field " :: CTX id :: nil)
-  | m :: ms =>
-      if ident_eq id (name_member m)
-      then layout_field env 4 m
-      else variant_field_offset env id ms
-  end.
-
+Definition variant_field_offset (env: composite_env) (id: ident) (ms: members) : res (Z * bitfield) :=
+  if existsb (fun m => proj_sumbool (ident_eq id (name_member m))) ms then
+    (* align all the members *)
+    OK (align 32 (alignof_composite' env ms * 8) / 8 , Full)
+  else Error (MSG "Unknown field " :: CTX id :: nil).
 
 
 (** Stability properties for alignments, sizes, and ranks.  If the type is
@@ -1136,6 +1131,14 @@ Proof.
   destruct (env!i) as [co|] eqn:E; try discriminate.
   erewrite extends by eauto. auto.
 Qed.
+
+Lemma alignof_composite_stable':
+  forall ms , complete_members env ms = true -> alignof_composite' env' ms = alignof_composite' env ms.
+Proof.
+  induction ms as [|m ms]; simpl; intros.
+  auto.
+  InvBooleans. rewrite alignof_stable by auto. rewrite IHms by auto. auto.
+Qed.  
 
 Lemma alignof_composite_stable:
   forall ms sv, complete_members env ms = true -> alignof_composite env' sv ms = alignof_composite env sv ms.
@@ -1226,14 +1229,13 @@ Proof.
   rewrite next_field_stable by auto. apply IHms; auto.
 Qed.
 
-Lemma union_field_offset_stable:
+Lemma variant_field_offset_stable:
   forall f ms, complete_members env ms = true -> variant_field_offset env' f ms = variant_field_offset env f ms.
 Proof.
-  induction ms as [|m ms]; simpl; intros.
-- auto.
-- InvBooleans. destruct (ident_eq f (name_member m)).
-  apply layout_field_stable; auto.
-  apply IHms; auto.
+  simpl; intros. unfold variant_field_offset.
+  destruct (existsb (fun m : member => ident_eq f (name_member m)) ms); auto.
+  do 5 f_equal.
+  eapply alignof_composite_stable'. auto.
 Qed.
 
 End STABILITY.

@@ -683,23 +683,48 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
 Inductive step_drop : state -> trace -> state -> Prop :=
 | step_dropstate_init: forall id b ofs fid fty membs k m,
     step_drop (Dropstate id (Vptr b ofs) None ((Member_plain fid fty) :: membs) k m) E0 (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) membs k m)
-| step_dropstate_composite: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs bf
+| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs bf
+    (* step to another struct drop glue *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
-    (* evaluate the value of the argument of the drop glue for id2 *)
+    (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid co1.(co_members)
            end = OK (fofs, bf))
     (* (cb, cofs is the address of composite id2) *)
     (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
-    (CO2: ge.(genv_cenv) ! id2 = Some co2),
+    (CO2: ge.(genv_cenv) ! id2 = Some co2)
+    (STRUCT: co2.(co_sv) = Struct),
     step_drop
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty id2 tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid fty tys)) membs k) m)
+| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs bf tag
+    (* step to another enum drop glue: remember to evaluate the switch statements *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid1 co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
+           end = OK (fofs, bf))
+    (* (cb, cofs is the address of composite id2) *)
+    (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
+    (CO2: ge.(genv_cenv) ! id2 = Some co2)
+    (ENUM: co2.(co_sv) = TaggedUnion)
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    (TAG: Mem.loadv Mint32 m (Vptr cb cofs) = Some (Vint tag))
+    (* use tag to choose the member *)
+    (MEMB: list_nth_z co2.(co_members) (Int.unsigned tag) = Some (Member_plain fid2 fty2)),
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 id2 tys)) membs k m) E0
+      (Dropstate id2 (Vptr cb cofs) (type_to_drop_member_state fid2 fty2) nil (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid1 fty1 tys)) membs k) m)
 | step_dropstate_box: forall b ofs id co fid fofs bf m m' tys k membs fty
     (CO1: ge.(genv_cenv) ! id = Some co)
     (* evaluate the value of the argument of the drop glue for id2 *)
-    (FOFS: field_offset ge fid co.(co_members) = OK (fofs, bf))
+    (FOFS: match co.(co_sv) with
+           | Struct => field_offset ge fid co.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co.(co_members)
+           end = OK (fofs, bf))
     (DROPB: drop_box_rec b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys m'),
     step_drop
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m) E0

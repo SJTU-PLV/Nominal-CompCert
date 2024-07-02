@@ -44,21 +44,25 @@ Definition transl_composite_member (m: member) : Ctypes.member :=
 (* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} . In
 other word, the variant name is used as the tagged union struct name,
 the constructor name (a,b,c) are used in the generated union *)
-Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) : (Ctypes.composite_definition * option Ctypes.composite_definition) :=
+Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) : option (Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
   | Composite id Struct ms attr _ _ =>
-      (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
+      Some (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
   | Composite id TaggedUnion ms attr _ _ =>
       (* generate a Struct with two fields, one for the tag field and
       the other for the union *)
       let '(union_id, tag_fid, union_fid) := create_union_idents id in
       let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
-      (* generate the union *)
-      (** TODO: specify the attr  *)
-      let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
-      let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
-      (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) attr, Some union)
-  end.
+      (* check the inequality between tag_fid and union_fid *)
+      if ident_eq tag_fid union_fid then
+        (* generate the union *)
+        (** TODO: specify the attr  *)
+        let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
+        let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
+        Some (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) attr, Some union)
+      else
+        None
+        end.
 
 
 (* Definition variant_to_union (co: composite_definition) : option (Ctypes.composite_definition * (ident * (ident * attr))) := *)
@@ -73,9 +77,14 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
 (* Use link_composites to leverages existing lemmas *)
 Definition transl_composites (l: list composite_definition) : option (list Ctypes.composite_definition) :=
   (* translate rust composite to C composite *)
-  let (comps, unions_opt) := split (map transl_composite_def l) in
-  let unions :=  flat_map (fun elt => match elt with | Some u => [u] | None => [] end) unions_opt in
-  Ctypes.link_composite_defs comps unions.
+  let defs := (map transl_composite_def l) in
+  if existsb (fun elt => match elt with | None => true | Some _ => false end) defs then
+    None
+  else
+    let defs := flat_map (fun elt => match elt with | Some u => [u] | None => [] end) defs in
+    let (comps, unions_opt) := split defs in
+    let unions :=  flat_map (fun elt => match elt with | Some u => [u] | None => [] end) unions_opt in
+    Ctypes.link_composite_defs comps unions.
 
 
 (** ** Step 2: Generate drop glue for each composite with ownership type *)
@@ -116,13 +125,34 @@ Variable ce: composite_env.
 Variable tce: Ctypes.composite_env.
 
 (* simulate deref_loc_rec *)
-Fixpoint deref_arg_rec (arg: Clight.expr) (tys: list type) : Clight.expr :=
+Fixpoint deref_arg_rec (headty: type) (arg: Clight.expr) (tys: list type) : Clight.expr :=
   match tys with
   | nil => arg
   | ty :: tys' =>
       (* load the value of ty *)
-      deref_arg_rec (Ederef arg (to_ctype ty)) tys'
+      (Ederef (deref_arg_rec ty arg tys') (to_ctype headty))
   end.
+
+Lemma last_default_unrelate: forall A (l: list A) a d1 d2,
+    last (a::l) d1 = last (a::l) d2
+.
+Proof.
+  induction l;simpl; intros; auto.
+  simpl in IHl.
+  auto.
+Qed.  
+  
+Lemma deref_arg_rec_app: forall tys1 tys2 hty arg,
+    deref_arg_rec hty arg (tys1 ++ tys2) = deref_arg_rec hty (deref_arg_rec (last tys1 hty) arg tys2) tys1.
+Proof.
+  induction tys1.
+  simpl. auto.
+  simpl. intros. f_equal.
+  destruct tys1.
+  simpl. auto. erewrite IHtys1.
+  erewrite last_default_unrelate. eauto.
+Qed.
+
 
 (* simulate drop_box_rec *)
 Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight.statement :=
@@ -130,7 +160,7 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
   | nil => nil
   | ty :: tys1 =>
       (* the value of ty *)
-      let arg1 := deref_arg_rec arg tys1 in
+      let arg1 := deref_arg_rec ty arg tys1 in
       (* free(arg1) *)
       let free_stmt := call_free arg1 in
       (* free the parent of arg1 *)
@@ -154,7 +184,7 @@ Definition drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) :
       match ty with
       | Tvariant _ id
       | Tstruct _ id =>
-          let arg1 := deref_arg_rec arg tys1 in
+          let arg1 := deref_arg_rec ty arg tys1 in
           (* We must guarantee that ty = typeof arg *)
           match m ! id with
           | None => Clight.Sskip
@@ -397,17 +427,17 @@ Fixpoint place_to_cexpr (p: place) : res Clight.expr :=
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
       | Tvariant _ id =>
-          match tce!id with
-          | Some tco =>
+          match ce!id, tce!id with
+          | Some co, Some tco =>
               (** FIXME: the following code appears multiple times *)
-              match tco.(co_su), tco.(Ctypes.co_members) with
-              | Ctypes.Struct, Ctypes.Member_plain _ _ :: Ctypes.Member_plain union_id union_ty :: nil =>
+              match co.(co_sv), tco.(Ctypes.co_members) with
+              | TaggedUnion, Ctypes.Member_plain _ _ :: Ctypes.Member_plain union_id union_ty :: nil =>
                   (* pe.union_id.fid *)
                   do pe <- place_to_cexpr p;
                   OK (Efield (Efield pe union_id union_ty) fid (to_ctype ty))
               | _, _ => Error [CTX id; MSG ": it is not a correct tagged union"]
               end
-          | _ => Error [CTX id; MSG ": Cannot find its composite in C composite environment : place_to_cexpr"]
+          | _, _ => Error [CTX id; MSG ": Cannot find its composite in C composite environment : place_to_cexpr"]
           end
       | _ => Error (msg "Type error in Pdowncast: place_to_cexpr ")
       end

@@ -175,7 +175,7 @@ Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Pr
              exists tco, tce!id = Some tco /\
              tco.(Ctypes.co_su) = Ctypes.Struct /\
              map transl_composite_member co.(co_members) = tco.(Ctypes.co_members) /\
-             co.(co_attr) = tco.(Ctypes.co_attr) /\
+             (* co.(co_attr) = tco.(Ctypes.co_attr) /\ *)
              co.(co_sizeof) = tco.(Ctypes.co_sizeof) /\
              co.(co_alignof) = tco.(Ctypes.co_alignof) /\
              co.(co_rank) = tco.(Ctypes.co_rank)
@@ -187,6 +187,7 @@ Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Pr
              tce!id = Some tco /\ tce!union_id = Some union /\
              tco.(Ctypes.co_su) = Ctypes.Struct /\
              tco.(Ctypes.co_members) = [tag_member; union_member] /\
+             tag_fid <> union_fid /\
              tco.(Ctypes.co_sizeof) = co.(co_sizeof) /\
              tco.(Ctypes.co_alignof) = co.(co_alignof) /\
              tco.(Ctypes.co_rank) = co.(co_rank) /\
@@ -198,12 +199,127 @@ Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Pr
              union.(Ctypes.co_rank) = Ctypes.rank_members tce m
          end.
 
-Lemma to_ctype_sizeof: forall ce tce ty cty,
-    to_ctype ty = cty ->
-    tr_composite_env ce tce ->
-    sizeof ce ty = Ctypes.sizeof tce cty.
+Lemma alignof_match: forall ce tce ty,
+      tr_composite_env ce tce ->
+      Ctypes.alignof tce (to_ctype ty) = alignof ce ty.
 Admitted.
 
+Lemma sizeof_match: forall ce tce ty,
+    tr_composite_env ce tce ->
+    Ctypes.sizeof tce (to_ctype ty) = sizeof ce ty.
+Admitted.
+
+
+Lemma field_offset_rec_match: forall ce tce membs fid ofs bf start,
+    tr_composite_env ce tce ->
+    field_offset_rec ce fid membs start = OK (ofs, bf) ->
+    Ctypes.field_offset_rec tce fid (map transl_composite_member membs) start = OK (ofs, Full).
+Proof.
+  induction membs; simpl; intros fid ofs bf start TR FOFS.
+  inv FOFS.
+  destruct a. simpl in *.  
+  destruct (ident_eq fid id). subst.
+  unfold Ctypes.bitalignof, bitalignof in *. inv FOFS.
+  erewrite alignof_match; eauto. 
+  erewrite IHmembs;eauto.
+  unfold Ctypes.bitalignof, Ctypes.bitsizeof.
+  erewrite alignof_match; eauto. erewrite sizeof_match; eauto.
+Qed.
+
+Lemma field_offset_match: forall ce tce membs fid ofs bf,
+    tr_composite_env ce tce ->
+    field_offset ce fid membs = OK (ofs, bf) ->
+    Ctypes.field_offset tce fid (map transl_composite_member membs) = OK (ofs, Full).
+Proof.
+  unfold Ctypes.field_offset, field_offset.
+  intros.
+  eapply field_offset_rec_match with (start := 0); eauto.
+Qed.
+
+Lemma struct_field_offset_match: forall ce tce id fid co ofs bf,
+    tr_composite_env ce tce ->
+    ce ! id = Some co ->
+    co.(co_sv) = Struct ->
+    field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+    exists tco, tce ! id = Some tco /\
+           Ctypes.field_offset tce fid tco.(Ctypes.co_members) = OK (ofs, Full).
+Proof.
+  intros until bf.
+  intros TR CO STRUCT FOFS.
+  red in TR. generalize (TR id co CO).
+  rewrite STRUCT. intros (tco & A & B & C & D).
+  exists tco. split; auto.
+  rewrite <- C.
+  eapply field_offset_match; eauto.
+Qed.
+
+Lemma alignof_composite_match: forall ce tce ms,
+    tr_composite_env ce tce ->
+    Ctypes.alignof_composite tce (map transl_composite_member ms) = alignof_composite' ce ms.
+Proof.
+  induction ms; intros; simpl; auto.
+  rewrite IHms. destruct a. simpl.
+  erewrite alignof_match. eauto.
+  auto. auto.
+Qed.
+
+Lemma union_field_offset_eq: forall ms tce fid,
+    existsb (fun m : member => ident_eq fid (name_member m)) ms = true ->
+    union_field_offset tce fid (map transl_composite_member ms) = OK (0, Full).
+Proof.
+  induction ms; simpl. congruence.
+  intros tce fid. destruct a. simpl.
+  destruct (ident_eq fid id); simpl.
+  intros. rewrite align_same. f_equal.
+  unfold Ctypes.bitalignof.
+  generalize  (Ctypes.alignof_pos tce (to_ctype t)). lia.
+  eapply Z.divide_0_r.
+  eauto.
+Qed.
+
+Lemma variant_field_offset_match: forall ce tce co bf id,
+    tr_composite_env ce tce ->
+    ce ! id = Some co ->
+    co.(co_sv) = TaggedUnion ->
+    exists tco union_id tag_fid union_fid union,
+      let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
+      let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in
+      tce!id = Some tco /\ tce!union_id = Some union /\
+        tco.(Ctypes.co_members) = [tag_member; union_member] /\
+        tag_fid <> union_fid /\
+        (forall fid ofs, variant_field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+                    exists ofs1 ofs2,
+                      Ctypes.field_offset tce union_fid tco.(Ctypes.co_members) = OK (ofs1, Full)
+                      /\ union_field_offset tce fid union.(Ctypes.co_members) = OK (ofs2, Full)
+                      /\ ofs = ofs1 + ofs2)
+.
+Proof.
+  intros until id. intros TR CO ENUM.
+  generalize (TR id co CO). rewrite ENUM.
+  intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E & F & G & H & I & J & K & L & M).
+  exists tco, union_id, tag_fid, union_fid, union. simpl.
+  repeat split;auto.
+  unfold variant_field_offset.
+  intros fid ofs.
+  destruct (existsb (fun m : member => ident_eq fid (name_member m)) (co_members co)) eqn: EB; try congruence.
+  intros. inv H0.
+  exists (align 32 (alignof_composite' ce (co_members co) * 8) / 8), 0.
+  split; try split.
+  - rewrite D. unfold Ctypes.field_offset.
+    simpl.
+    destruct (ident_eq union_fid tag_fid). subst. contradiction.
+    destruct (ident_eq union_fid union_fid); try contradiction.
+    unfold Ctypes.bitalignof. simpl.
+    rewrite B. unfold Ctypes.align_attr. simpl.
+    rewrite L. 
+    erewrite alignof_composite_match. unfold Ctypes.bitsizeof.
+    simpl. eauto.
+    auto.
+  - rewrite J. eapply union_field_offset_eq. auto.
+  - lia.
+Qed.    
+          
+    
 Lemma transl_composites_meet_spec: forall co_defs tco_defs ce tce,
     transl_composites co_defs = Some tco_defs ->
     build_composite_env co_defs = OK ce ->
@@ -228,17 +344,17 @@ tr_composite relation *)
     temp_ty = to_ctype (typeof_place p) ->
     deref_ty = to_ctype (deref_type (typeof_place p)) ->
     transl_Sbox ce tce temp temp_ty deref_ty e = OK (stmt, e') ->
-    place_to_cexpr tce p = OK lhs ->
+    place_to_cexpr ce tce p = OK lhs ->
     tr_stmt (Sbox p e) (Clight.Ssequence stmt (Clight.Sassign lhs e'))
 | tr_call: forall p e l temp e' l' assign pe,
     expr_to_cexpr_list ce tce l = OK l' ->
     expr_to_cexpr ce tce e = OK e' ->
-    place_to_cexpr tce p = OK pe ->
+    place_to_cexpr ce tce p = OK pe ->
     assign = Clight.Sassign pe (Etempvar temp (to_ctype (typeof_place p))) ->
     tr_stmt (Scall p e l) (Clight.Ssequence (Clight.Scall (Some temp) e' l') assign)
 | tr_drop: forall p set_stmt drop_stmt temp pe,
     set_stmt = Clight.Sset temp (Eaddrof pe (Tpointer (to_ctype (typeof_place p)) noattr)) ->
-    place_to_cexpr tce p = OK pe ->
+    place_to_cexpr ce tce p = OK pe ->
     expand_drop ce dropm temp (typeof_place p) = Some drop_stmt ->
     tr_stmt (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
 | tr_seq: forall s1 s2 s1' s2',
@@ -349,8 +465,7 @@ Lemma generate_drops_inv: forall ce tce dropm id co f,
         /\ tce ! id = Some tco
         /\ tce ! union_id = Some uco
         (* tag field offset is 0 *)
-        /\ Ctypes.field_offset tce tag_fid tco.(Ctypes.co_members) = OK (0, Full)
-        (** TODO: put it in tr_composite? enum constructor offset *)
+        /\ Ctypes.field_offset tce tag_fid tco.(Ctypes.co_members) = OK (0, Full)        
         /\ (forall fid ofs bf,
               variant_field_offset ce fid co.(co_members) = OK (ofs, bf) ->
               exists ofs1 ofs2,
