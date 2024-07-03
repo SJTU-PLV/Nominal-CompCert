@@ -255,22 +255,24 @@ Definition enum_consistent (eid fid uid ufid: ident) : Prop :=
                     /\ fofs = cfofs1 + cfofs2.
     
 Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_variant -> option drop_member_state -> Clight.statement -> Prop :=
-| match_drop_in_struct_comp: forall id fid fty tys drop_id ts call_arg headty,
+| match_drop_in_struct_comp: forall id fid fty tys drop_id ts call_arg orgs co_ty,
     let field_param := Efield arg fid (to_ctype fty) in
     forall (GLUE: dropm ! id = Some drop_id)
+      (COTY: co_ty = Tstruct orgs id \/ co_ty = Tvariant orgs id)
       (MSTMT: makeseq (drop_glue_for_box_rec field_param tys) = ts)
-      (CHILDTY: drop_glue_children_types fty = headty :: tys)
-      (CALLARG: call_arg = (deref_arg_rec headty field_param tys)),
-    match_dropmemb_stmt co_id arg Struct (Some (drop_member_comp fid fty id tys))
+      (CHILDTY: drop_glue_children_types fty = co_ty :: tys)
+      (CALLARG: call_arg = (deref_arg_rec co_ty field_param tys)),
+    match_dropmemb_stmt co_id arg Struct (Some (drop_member_comp fid fty co_ty tys))
       (Clight.Ssequence (call_composite_drop_glue call_arg (Clight.typeof call_arg) drop_id) ts)
-| match_drop_in_enum_comp: forall id fid fty tys drop_id ts uid ufid call_arg headty,
+| match_drop_in_enum_comp: forall id fid fty tys drop_id ts uid ufid call_arg orgs co_ty,
     let field_param := Efield (Efield arg ufid (Tunion uid noattr)) fid (to_ctype fty) in
     forall (ECONSIST: enum_consistent co_id fid uid ufid)
     (GLUE: dropm ! id = Some drop_id)
+    (COTY: co_ty = Tstruct orgs id \/ co_ty = Tvariant orgs id)
     (MSTMT: makeseq (drop_glue_for_box_rec field_param tys) = ts)
-    (CHILDTY: drop_glue_children_types fty = headty :: tys)
-    (CALLARG: call_arg = (deref_arg_rec  headty field_param tys)),
-    match_dropmemb_stmt co_id arg TaggedUnion (Some (drop_member_comp fid fty id tys))
+    (CHILDTY: drop_glue_children_types fty = co_ty :: tys)
+    (CALLARG: call_arg = (deref_arg_rec co_ty field_param tys)),
+    match_dropmemb_stmt co_id arg TaggedUnion (Some (drop_member_comp fid fty co_ty tys))
     (Clight.Ssequence (call_composite_drop_glue call_arg (Clight.typeof call_arg) drop_id) ts)
 | match_drop_box_struct: forall fid fty tys,
     let field_param := Efield arg fid (to_ctype fty) in
@@ -1039,7 +1041,23 @@ Proof.
   eauto.
 Qed.
 
-  
+Lemma drop_glue_children_types_last: forall tys ty hty,
+    drop_glue_children_types ty = hty :: tys ->
+    ty = last tys hty.
+Proof.
+  destruct tys.
+  simpl. intros.
+  destruct ty; simpl in H; inv H; auto.
+  destruct (drop_glue_children_types ty). simpl in *. inv H1. auto.
+  simpl in H1. inv H1. exfalso.
+  eapply app_cons_not_nil. eauto.
+  intros.
+  intros. destruct ty; simpl in H; inv H.
+  assert (last (hty::t::tys) hty = Tbox ty).
+  rewrite <- H1. eapply last_last.
+  simpl in *. auto.
+Qed.
+
 Lemma step_drop_simulation:
   forall S1 t S2, step_drop ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
@@ -1064,7 +1082,7 @@ Proof.
   (* step_dropstate_composite (from struct to struct) *)
   - simpl in CO1. unfold ce in CO. rewrite CO in CO1. inv CO1.
     rewrite STRUCT0 in FOFS.
-    inv MSTMT1.
+    inv MSTMT1. destruct COTY; try congruence. inv H.
     (* the field offset *)
     exploit struct_field_offset_match; eauto. eapply (match_prog_comp_env _ _ TRANSL).
     intros (tco1 & TCO1 & TFOFS).
@@ -1077,28 +1095,116 @@ Proof.
       simpl. unfold co_ty. auto.
       eauto. auto.
     }
-    (** TODO: evaluate (deref_arg_rec field_param tys)  *)
-    exploit
-      eval_lvalue
-        last
+    (* type of (deref_arg_rec headty field_param tys) *)
+(*     assert (DERARGTY: Clight.typeof  *)
 
+(* Lemma deref_arg_rec_type:  *)
+                        
+    (* evaluate (deref_arg_rec field_param tys)  *)
+    exploit deref_loc_rec_inject; eauto. instantiate (1:= Tstruct orgs0 id).
+    simpl. f_equal. eapply drop_glue_children_types_last;eauto.
+    inv VINJ.
+    econstructor; eauto. do 2 rewrite Ptrofs.add_assoc. f_equal.
+    eapply Ptrofs.add_commut.
+    intros (tcb & tcofs & TEVAL & VINJ2).
     
     (* use find_dropm_sound to get the drop glue *)
     exploit find_dropm_sound. eauto.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eapply CO2. eauto. rewrite STRUCT. simpl.
-    intros DGLUE. inv DGLUE.
+    intros (DISJOINT & DGLUE). inv DGLUE.
     (* alloc stack block in function entry *)
     exploit drop_glue_function_entry_step; eauto.
-    instantiate (1:= Mptr). instantiate (1 := Vptr cb cofs).
+    instantiate (1:= Mptr). instantiate (1 := Vptr tcb tcofs).
     intros (psb & tm1 & tm2 & ALLOC & STORETM1 & PERMFREE2 & OUTREACH1 & MINJ2).
-    
-    
-    (* Clight.eval_expr *)
-    
-    (* admit. *)
 
+    eexists. split.
+    (* step *)
+    + econstructor.
+      econstructor.
+      eapply star_step.
+      (* to callstate *)
+      { econstructor. simpl. eauto.
+        econstructor. eapply eval_Evar_global.
+        (* prove te!glue_id = None *)
+        { erewrite PTree.gso.
+          eapply PTree.gempty.
+          intro. subst. eapply DISJOINT.
+          econstructor. reflexivity.
+          instantiate (1:= param_id).
+          eapply in_cons. eapply in_cons.
+          (* prove glue_id in dropm's codomain *)
+          eapply in_map_iff. exists (id, param_id). split;auto.
+          eapply PTree.elements_correct. auto. auto. }
+        eauto.        
+        simpl. eapply Clight.deref_loc_reference. auto.
+        econstructor. econstructor. eauto.
+        (* sem_cast *)
+        eapply cast_val_casted. econstructor.
+        econstructor.
+        eauto.
+        (* type of drop glue *)
+        unfold Clight.type_of_fundef, Clight.type_of_function. simpl.
+        repeat f_equal.
+        destruct tys. simpl. exploit drop_glue_children_types_last.
+        eauto. simpl. intros. subst. auto.
+        auto. }                
+      eapply star_step. econstructor.
+      (* call internal function *)
+      eauto. econstructor;simpl.
+      econstructor. intuition. econstructor.
+      econstructor. eauto. econstructor.
+      econstructor. eapply PTree.gss.
+      econstructor. unfold pty. simpl. eauto.
+      eauto. econstructor.
+      reflexivity.
+      simpl.
+      eapply star_one.
+      econstructor.
+      1-3: eauto.
+
+    (* match_states *)
+    +  assert (VALIDPB: Mem.valid_block tm pb).
+      { eapply Mem.valid_access_valid_block.
+        eapply Mem.valid_access_implies.
+        eapply Mem.load_valid_access; eauto. econstructor. }
+      assert (NOTIN2: ~ In psb (pb :: bs)).
+      { intro. inv H. eapply Mem.fresh_block_alloc. eapply ALLOC. auto.
+        eapply Mem.fresh_block_alloc. eapply ALLOC. auto. }      
+      assert (UNCHANGE: Mem.unchanged_on (fun b ofs => In b (pb :: bs)) tm tm2).
+      { eapply Mem.unchanged_on_trans.
+        eapply Mem.alloc_unchanged_on; eauto.
+        eapply Mem.store_unchanged_on; eauto. }
+      eapply match_dropstate_struct with (bs := pb :: bs);eauto.
+      econstructor.      
+      (* match_cont *)
+      { econstructor; eauto.
+        rewrite STRUCT0. instantiate (1 := tk).
+        split.
+        econstructor. eexists. split.
+        reflexivity. f_equal.
+        (* unchanged_on *)
+        eapply  unchanged_on_blocks_match_cont.
+        eapply Mem.unchanged_on_implies; eauto.
+        simpl. intros. auto.
+        auto.
+        eapply Mem.load_unchanged_on; eauto. simpl. auto.
+        red.  intros. eapply Mem.perm_unchanged_on; eauto.
+        simpl. auto. }
+      
+      exploit Mem.support_store. eapply STORETM1.
+      intros SUP. rewrite SUP.
+      inv INCR. econstructor. auto. auto.
+      auto. erewrite Mem.support_alloc. eapply Mem.sup_include_trans.
+      eauto. eapply Mem.sup_include_incr.
+      eauto.
+      simpl. erewrite Mem.load_store_same.
+      instantiate (1 := (Vptr tcb tcofs)). eauto. eauto.
+      intros. eapply Mem.valid_block_unchanged_on; eauto.
+      inv H; auto.
+      
+    
   (* step_dropstate_composite (from enum to struct) *)
   - simpl in CO1. unfold ce in CO. rewrite CO in CO1. inv CO1.
     rewrite ENUM in FOFS.
@@ -1637,7 +1743,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).    
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eauto. eauto. rewrite COSTRUCT. simpl.
-    intros DGLUE. inv DGLUE.
+    intros (DISJOINT & DGLUE). inv DGLUE.
         
     (* alloc stack block in function entry *)
     set (pty := Tpointer (Ctypes.Tstruct id noattr) noattr) in *.
@@ -1721,7 +1827,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eauto. eauto. rewrite COENUM.
-    simpl. intros (union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
+    simpl. intros (DISJOINT & union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
     inv DGLUE.
     
     (* alloc stack block in function entry *)
@@ -1824,11 +1930,11 @@ Proof.
         destruct ((generate_dropm prog) ! i) eqn: DM.
         set (field_param := (Efield (Efield param union_fid (Tunion union_id noattr)) fid (to_ctype fty))).
         econstructor. eauto. eauto. eauto.
-        eauto. econstructor.
+        eauto. eauto. econstructor. econstructor.
         destruct ((generate_dropm prog) ! i) eqn: DM.
         set (field_param := (Efield (Efield param union_fid (Tunion union_id noattr)) fid (to_ctype fty))).
         econstructor. eauto. eauto. eauto.
-        eauto. econstructor. }
+        eauto. eauto. econstructor. econstructor. }
       (* prove inj_incr *)
       exploit Mem.support_store. eapply STORETM1.
       intros SUP. rewrite SUP.

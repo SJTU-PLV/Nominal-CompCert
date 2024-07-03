@@ -391,7 +391,8 @@ Inductive tr_function: function -> Clight.function -> Prop :=
 (*     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) -> *)
 (*     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) -> *)
 (*     tr_function f tf *)
-| tr_function_drop_glue: forall f comp_id glue,
+| tr_function_drop_glue: forall f comp_id glue
+    (WFNAMES: list_disjoint (Clight.var_names (glue.(Clight.fn_params) ++ glue.(Clight.fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm)))),
     f.(fn_drop_glue) = Some comp_id ->
     (* We can ensure that every composite has a drop glue in Clightgen
     because if ce!id = Some co and tr_composite ce tce then
@@ -439,6 +440,7 @@ Lemma generate_drops_inv: forall ce tce dropm id co f,
     let co_ty := Ctypes.Tstruct id noattr in
     let param_ty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id param_ty) co_ty in
+    list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements dropm))) /\
     match co.(co_sv) with
     | Struct =>
         let stmt_list := drop_glue_for_members ce dropm deref_param co.(co_members) in

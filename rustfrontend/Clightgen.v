@@ -681,6 +681,7 @@ Definition transl_function_normal (f: function) : Errors.res Clight.function :=
       let vars := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) in
       (* check that temporaries are not repeated *)
       if list_norepet_dec ident_eq (Clight.var_names g.(gen_trail)) then
+        if list_disjoint_dec ident_eq (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
       (* update the next atom *)
         Errors.OK (Clight.mkfunction
               (to_ctype f.(fn_return))
@@ -689,7 +690,9 @@ Definition transl_function_normal (f: function) : Errors.res Clight.function :=
               vars
               g.(gen_trail)
               stmt')
-      else
+        else
+          Errors.Error [MSG "parameter and variable names are not disjoint with drop id"]
+        else
         Errors.Error [MSG "repeated temporary variables"]
   end.
 
@@ -700,7 +703,10 @@ Definition transl_function glues (f: function) : Errors.res Clight.function :=
   match f.(fn_drop_glue) with
   | Some comp_id =>
       match glues!comp_id with
-      | Some glue => Errors.OK glue
+      | Some glue =>
+          if list_disjoint_dec ident_eq (Clight.var_names (glue.(Clight.fn_params) ++ glue.(Clight.fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
+            Errors.OK glue
+          else Errors.Error [MSG "param_id is not disjoint with drop id"]
       | _ => Errors.Error [MSG "no drop glue for "; CTX comp_id; MSG " , it is invalid composite"]
       end
   | None => transl_function_normal f

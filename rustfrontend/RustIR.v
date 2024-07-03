@@ -528,7 +528,7 @@ Inductive drop_member_state : Type :=
 | drop_member_comp
     (fid: ident)
     (fty: type)
-    (co_id: ident)
+    (co_ty: type)
     (tys: list type): drop_member_state   
 | drop_member_box
     (fid: ident)
@@ -646,7 +646,7 @@ Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_memb
             (* provide evidence for the simulation *)
             match ge.(genv_dropm) ! id with
             | Some _ =>
-                Some (drop_member_comp fid fty id tys')
+                Some (drop_member_comp fid fty ty tys')
             | None => None
             end
         | _ => Some (drop_member_box fid fty tys)
@@ -683,7 +683,7 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
 Inductive step_drop : state -> trace -> state -> Prop :=
 | step_dropstate_init: forall id b ofs fid fty membs k m,
     step_drop (Dropstate id (Vptr b ofs) None ((Member_plain fid fty) :: membs) k m) E0 (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) membs k m)
-| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs bf
+| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs bf orgs
     (* step to another struct drop glue *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
@@ -696,9 +696,9 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     (CO2: ge.(genv_cenv) ! id2 = Some co2)
     (STRUCT: co2.(co_sv) = Struct),
     step_drop
-      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty id2 tys)) membs k m) E0
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty (Tstruct orgs id2) tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid fty tys)) membs k) m)
-| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs bf tag
+| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs bf tag orgs
     (* step to another enum drop glue: remember to evaluate the switch statements *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
@@ -716,7 +716,7 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     (* use tag to choose the member *)
     (MEMB: list_nth_z co2.(co_members) (Int.unsigned tag) = Some (Member_plain fid2 fty2)),
     step_drop
-      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 id2 tys)) membs k m) E0
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) (type_to_drop_member_state fid2 fty2) nil (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid1 fty1 tys)) membs k) m)
 | step_dropstate_box: forall b ofs id co fid fofs bf m m' tys k membs fty
     (CO1: ge.(genv_cenv) ! id = Some co)
