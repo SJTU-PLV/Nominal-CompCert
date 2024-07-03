@@ -175,7 +175,7 @@ Notation "1" := cc_id : gs_cc_scope.
 
 Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
   (trans1 : gworld cc -> gworld cc')
-  (trans2 : gworld cc -> gworld cc' -> gworld cc' -> gworld cc):=
+  (trans2 : gworld cc' -> gworld cc):=
   forall w se1 se2 q1 q2,
     match_senv cc w se1 se2 ->
     match_query cc w q1 q2 ->
@@ -186,18 +186,20 @@ Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
       forall r1 r2 (wp': gworld cc'),
         get w' o-> wp' ->
         match_reply cc' (set w' wp') r1 r2 ->
-        let wp := trans2 (get w) (get w') wp' in
+        let wp := trans2 wp' in
         get w o-> wp /\
         match_reply cc (set w wp) r1 r2.
 
   Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
     Callconv_Trans{
-        trans_12 : gworld cc1 -> gworld cc2;
+        trans_12 : gworld cc1 -> gworld cc2; (* compose m1<->m2<->m3 into m1<->m3*)
         trans_21_acc : gworld cc1 -> gworld cc2 -> gworld cc2 -> gworld cc1;
-        trans_21 : gworld cc2 -> gworld cc1;
+        trans_21 : gworld cc2 -> gworld cc1; (* split m1<-> m3 into m1<->m1<->m3*)
         trans_12_acc :  gworld cc2 -> gworld cc1 -> gworld cc1 -> gworld cc2;
-        bigstep_12 : ccref_bigstep cc1 cc2 trans_12 trans_21_acc;
-        bigstep_21 : ccref_bigstep cc2 cc1 trans_21 trans_12_acc;
+        trans_initial : forall (gw: gworld cc2), trans_12 (trans_21 gw) = gw;
+        trans_acci : forall (gw1 gw1' : gworld cc1), gw1 *-> gw1' -> (trans_12 gw1) *-> (trans_12 gw1');
+        bigstep_12 : ccref_bigstep cc1 cc2 trans_12 trans_21;
+        bigstep_21 : ccref_bigstep cc2 cc1 trans_21 trans_12;
       }.
 
 
@@ -206,17 +208,22 @@ Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
     forward_simulation cc1 L1 L2 ->
     cctrans cc1 cc2 ->
     forward_simulation cc2 L1 L2.
+  (*cc1 : injp @ injp cc2: injp*)
 Proof.
-  intros. destruct X as [trans12 trans21_acc trans21 trans12_acc Big12 Big21]. inv H.
+  intros.
+  destruct X as [trans12 trans21_acc trans21 trans12_acc trans_initial trans_acci Big12 Big21].
+  inv H.
   destruct X as [index order match_states SKEL PROP WF].
   constructor.
   set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
          exists w wp,
-           (* wp = trans21 wp' /\ *)
+           wp' = trans12 wp /\
+           get w = trans21 (get w') /\
            match_states se1 se2 w wp idx s1 s2 /\
              match_senv cc1 w se1 se2 /\
-             forall r1 r2, (get w) o-> wp -> match_reply cc1 (set w wp) r1 r2 ->
-                          (get w') o-> wp' /\ match_reply cc2 (set w' wp') r1 r2).
+             forall r1 r2 wpf, (get w) o-> wpf -> match_reply cc1 (set w wpf) r1 r2 ->
+                          let wpf' := trans12 wpf in
+                          (get w') o-> wpf' /\ match_reply cc2 (set w' wpf') r1 r2).
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
@@ -226,167 +233,32 @@ Proof.
   - intros q1 q2 s1 Hq' Hs1 Ho.
     destruct (Big21 wB' se1 se2 q1 q2) as (wB & Hse & Hq & Htrans & Hr); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2. split; auto. exists wB,(get wB). repeat apply conj; eauto.
-    intros.
-    exploit Hr. apply H. simpl. eauto.
-    intros. simpl in H1.
-    assert (trans12_acc (get wB') (get wB) (get wB) = get wB').
-    admit. (*this condition can be fulfilled by the injp construction algorithm *)
-    rewrite H2 in H1. auto.
-  - intros gw i s1 s2 r1 (wB & wP & Hs & Hse & Hr') Hr1.
+    exists i, s2. split; auto. red. exists wB,(get wB). repeat apply conj; eauto.
+    rewrite Htrans. eauto.
+  - intros gw i s1 s2 r1 (wB & gw' & Htransw & HtranswB & Hs & Hse & Hr') Hr1.
     edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
-  - admit. (*the most tricky part*) 
-    (* intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hr') HqA1.
+    exploit Hr'; eauto. intros. exists r2. simpl in H. destruct H.
+    split. auto. split. rewrite Htransw. auto. rewrite Htransw. auto.
+  - (*the most tricky part*) 
+    intros gw2 i s1 s2 qA1 (wB & gw1 & Htransw & HtranswB &  Hs & Hse & Hr') HqA1.
     edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    edestruct Big12 as (wA' & HseA' & HqA' & Hr); eauto.
     exists wA', qA2. intuition auto.
+    rewrite Htransw. setoid_rewrite H0.
+    apply trans_acci. auto. exploit H1; eauto.
+    intros [A B].
     edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto. *)
-  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
+    exists i', s2'. split; auto. destruct Hs' as [gw1'' [C D]].
+    rename gw'' into gw2'.
+    exists (trans12 gw1''). split.
+    replace (gw2') with (trans12 (trans21 gw2')) by eauto.
+    eauto.
+    exists wB, gw1''. intuition auto.
+  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Htransw & HtranswB & Hs & Hse & Hr').
     edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
     exists i', s2'. split; auto.
-    exists (trans12_acc gw2 gw1 gw1').
-    split.
-    admit. (*the relation between gw1 and gw2 defined in ms need more exploration *)
-    econstructor; eauto. exists gw1'.
-    split. eauto. split. eauto.
-    intros.
-    (*This is another requirement of the [ms] design*)
-    admit.
-Admitted.
-(*  
-Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
-  forall w se1 se2 q1 q2,
-    match_senv cc w se1 se2 ->
-    match_query cc w q1 q2 ->
-    exists w',
-      match_senv cc' w' se1 se2 /\
-      match_query cc' w' q1 q2 /\
-      forall r1 r2 (wp': gworld cc'),
-        get w' o-> wp' ->
-        match_reply cc' (set w' wp') r1 r2 ->
-        exists (wp: gworld cc), get w o-> wp /\
-        match_reply cc (set w wp) r1 r2.
-
-Definition cceqv {li1 li2} (cc cc': callconv li1 li2) :=
-  ccref cc cc' /\ ccref cc' cc.
-
-Global Instance ccref_preo li1 li2:
-  PreOrder (@ccref li1 li2).
-Proof.
-  split.
-  - intros cc w se1 se2 q1 q2 Hse Hq.
-    exists w. repeat apply conj; eauto.
-  - intros cc cc' cc'' H' H'' w se1 se2 q1 q2 Hse Hq.
-    edestruct H' as (w' & Hse' & Hq' & Hr'); eauto.
-    edestruct H'' as (w'' & Hse'' & Hq'' & Hr''); eauto.
-    exists w''. repeat apply conj; eauto.
-    intros r1 r2 wp'' HAcc2 Hr2.
-    exploit Hr''; eauto.
-    intros (wp' & HAcc1 & Hr1).
-    eauto.
+    exists (trans12 gw1'). (*here what we do is just [ignore] the middle part in gw1'*)
+    split. rewrite Htransw. eauto.
+    econstructor; eauto. exists gw1'. repeat apply conj; eauto.
 Qed.
-
-Global Instance cceqv_equiv li1 li2:
-  Equivalence (@cceqv li1 li2).
-Proof.
-  split.
-  - intros cc.
-    split; reflexivity.
-  - intros cc1 cc2. unfold cceqv.
-    tauto.
-  - intros cc1 cc2 cc3 [H12 H21] [H23 H32].
-    split; etransitivity; eauto.
-Qed.
-
-Global Instance ccref_po li1 li2:
-  PartialOrder (@cceqv li1 li2) (@ccref li1 li2).
-Proof.
-  firstorder.
-Qed.
-*)
-
-Lemma open_fsim_cceqv {li1 li2: language_interface}:
-  forall (cc1 cc2: callconv li1 li2) L1 L2,
-    forward_simulation cc1 L1 L2 ->
-    cceqv cc1 cc2 ->
-    forward_simulation cc2 L1 L2.
-Proof.
-  intros. inv H. destruct H0 as [HA HB].
-  destruct X as [index order match_states SKEL PROP WF].
-  constructor.
-  set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
-         exists w wp,
-           match_states se1 se2 w wp idx s1 s2 /\
-             match_senv cc1 w se1 se2 /\
-             forall r1 r2, (get w) o-> wp -> match_reply cc1 (set w wp) r1 r2 ->
-                          (get w') o-> wp' /\ match_reply cc2 (set w' wp') r1 r2).
-  eapply Forward_simulation with order ms; auto.
-  intros se1 se2 wB' Hse' Hse1.
-  split.
-  - intros q1 q2 Hq'.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    eapply fsim_match_valid_query; eauto.
-  - intros q1 q2 s1 Hq' Hs1 Ho.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2. split; auto. exists wB,(get wB). repeat apply conj; eauto.
-    intros. exploit Hr. apply H. simpl. eauto.
-    intros (wp' & HAcc & Hr1). admit.
-  - intros gw i s1 s2 r1 (wB & wP & Hs & Hse & Hr') Hr1.
-    edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
-  - (* admit. (*the most tricky part*) *)
-    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hr') HqA1.
-    edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
-    exists wA', qA2. intuition auto.
-    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto. *)
-  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
-    edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
-    exists i', s2'. split; auto. (*how to get this new "outside smallstep world?"*)
-    eexists. split. admit. econstructor; eauto. exists gw1'.
-    split. eauto. split. auto.
-    exists wB; eauto.
-(** ** Relation to forward simulations *)
-
-Global Instance open_fsim_ccref:
-  Monotonic
-    (@forward_simulation)
-    (forallr - @ liA1, forallr - @ liA2, ccref ++>
-     forallr - @ liB1, forallr - @ liB2, ccref -->
-     subrel).
-Proof.
-  
-  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
-  destruct FS as [index order match_states SKEL PROP WF].
-  constructor.
-  set (ms se1 se2 w' idx s1 s2 :=
-         exists w : ccworld ccB,
-           match_states se1 se2 w idx s1 s2 /\
-           match_senv ccB w se1 se2 /\
-           forall r1 r2, match_reply ccB w r1 r2 -> match_reply ccB' w' r1 r2).
-  eapply Forward_simulation with order ms; auto.
-  intros se1 se2 wB' Hse' Hse1.
-  split.
-  - intros q1 q2 Hq'.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    eapply fsim_match_valid_query; eauto.
-  - intros q1 q2 s1 Hq' Hs1.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2. split; auto. exists wB; auto.
-  - intros i s1 s2 r1 (wB & Hs & Hse & Hr') Hr1.
-    edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
-  - intros i s1 s2 qA1 (wB & Hs & Hse & Hr') HqA1.
-    edestruct @fsim_match_external as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
-    exists wA', qA2. intuition auto.
-    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto.
-  - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
-    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB; eauto.
-Qed.
-
 
