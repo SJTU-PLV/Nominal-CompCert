@@ -173,7 +173,24 @@ Notation "1" := cc_id : gs_cc_scope.
     Context (se1)
 *)
 
-Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
+Definition ccref_outgoing {li1 li2} (cc cc': callconv li1 li2)
+  (trans1 : gworld cc -> gworld cc')
+  (trans2 : gworld cc -> gworld cc' -> gworld cc' -> gworld cc):=
+  forall w se1 se2 q1 q2,
+    match_senv cc w se1 se2 ->
+    match_query cc w q1 q2 ->
+    exists w',
+      match_senv cc' w' se1 se2 /\
+      match_query cc' w' q1 q2 /\
+      get w' = trans1 (get w) /\
+      forall r1 r2 (wp': gworld cc'),
+        get w' o-> wp' ->
+        match_reply cc' (set w' wp') r1 r2 ->
+        let wp := trans2 (get w) (get w') wp' in
+        get w o-> wp /\
+        match_reply cc (set w wp) r1 r2.
+
+Definition ccref_incoming {li1 li2} (cc cc': callconv li1 li2)
   (trans1 : gworld cc -> gworld cc')
   (trans2 : gworld cc' -> gworld cc):=
   forall w se1 se2 q1 q2,
@@ -194,12 +211,16 @@ Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
     Callconv_Trans{
         trans_12 : gworld cc1 -> gworld cc2; (* compose m1<->m2<->m3 into m1<->m3*)
         trans_21_acc : gworld cc1 -> gworld cc2 -> gworld cc2 -> gworld cc1;
+        (*the injp_construction operation which keeps accessibility*)
         trans_21 : gworld cc2 -> gworld cc1; (* split m1<-> m3 into m1<->m1<->m3*)
-        trans_12_acc :  gworld cc2 -> gworld cc1 -> gworld cc1 -> gworld cc2;
         trans_initial : forall (gw: gworld cc2), trans_12 (trans_21 gw) = gw;
+        (*split the outer-side world and compose it back *)
+        trans_acc_eq : forall gw1 gw2 gw2', trans_12 (trans_21_acc gw1 gw2 gw2') = gw2';
         trans_acci : forall (gw1 gw1' : gworld cc1), gw1 *-> gw1' -> (trans_12 gw1) *-> (trans_12 gw1');
-        bigstep_12 : ccref_bigstep cc1 cc2 trans_12 trans_21;
-        bigstep_21 : ccref_bigstep cc2 cc1 trans_21 trans_12;
+        (*the accessibility of internal world (containing mid-level information) can derive
+         the accessibility of composed world*)
+        bigstep_12 : ccref_outgoing cc1 cc2 trans_12 trans_21_acc; (*the hard part*)
+        bigstep_21 : ccref_incoming cc2 cc1 trans_21 trans_12; (*the easy part*)
       }.
 
 
@@ -211,7 +232,7 @@ Definition ccref_bigstep {li1 li2} (cc cc': callconv li1 li2)
   (*cc1 : injp @ injp cc2: injp*)
 Proof.
   intros.
-  destruct X as [trans12 trans21_acc trans21 trans12_acc trans_initial trans_acci Big12 Big21].
+  destruct X as [trans12 trans21_acc trans21 trans_acc_eq trans_initial trans_acci Big12 Big21].
   inv H.
   destruct X as [index order match_states SKEL PROP WF].
   constructor.
@@ -251,8 +272,8 @@ Proof.
     exists i', s2'. split; auto. destruct Hs' as [gw1'' [C D]].
     rename gw'' into gw2'.
     exists (trans12 gw1''). split.
-    replace (gw2') with (trans12 (trans21 gw2')) by eauto.
-    eauto.
+    assert (trans12 ( trans21_acc (get wA) (get wA') gw2') = gw2'). eauto.
+    rewrite <- H5. eauto.
     exists wB, gw1''. intuition auto.
   - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Htransw & HtranswB & Hs & Hse & Hr').
     edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
@@ -261,4 +282,16 @@ Proof.
     split. rewrite Htransw. eauto.
     econstructor; eauto. exists gw1'. repeat apply conj; eauto.
 Qed.
+
+Inductive
+(** TODOs*)
+(** 1.Definition of c_injp as a callconv *)
+(** 2.Achieve [cctrans (injp@injp) (injp)] *)
+(** 3.Introduce callconv with empty world (ext, inj, CLLMMA) *)
+(** 4.Try the composition of these trivial callconv using cctrans *)
+(** 4.1 The self-simulation mechniasm? *)  
+(** 4.Modify the proofs of each pass *)
+(** 5.Compose the compiler *)
+
+
 
