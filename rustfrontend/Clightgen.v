@@ -553,17 +553,17 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
   (* expand_drop must expand own_type *)
   else None.
 
-Definition transl_assign_variant (p: place) (ty: type) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
+Definition transl_assign_variant (p: place) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
   (* lhs.1 = tag;
          lhs.2. = e'; *)
   match ce!enum_id with
   | Some co =>
       match co.(co_sv) with
       | TaggedUnion =>          
-          match field_tag arm_id co.(co_members) with
+          match field_tag arm_id co.(co_members), field_type arm_id co.(co_members) with
           (* an invariant: arm_id in co is the same as the field
               of type ty in generated union in C code *)
-          | Some tagz =>
+          | Some tagz, OK ty =>
               match tce!enum_id with
               | Some tco =>
                   match tco.(Ctypes.co_members) with
@@ -576,11 +576,11 @@ Definition transl_assign_variant (p: place) (ty: type) (enum_id arm_id: ident) (
                           ret (Clight.Ssequence assign_tag assign_body)
                       | _ => error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
                       end
-                  | _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
+                  | _ => error [CTX enum_id; MSG ": cannot get its tag or body id when translating the variant assignement"]
                   end
               | _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
               end
-          | _ => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
+          | _, _  => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
           end
       | _ => error [CTX enum_id; MSG ": assign variant to a non-variant place"]
       end
@@ -598,8 +598,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Sassign_variant p enum_id arm_id e =>
       docomb e' <- expr_to_cexpr e;
       docomb lhs <- place_to_cexpr p;
-      let ty := typeof e in
-      transl_assign_variant p ty enum_id arm_id e' lhs
+      (* let ty := typeof e in *)
+      transl_assign_variant p enum_id arm_id e' lhs
   | Sbox p e =>
       (* temp = malloc(sizeof(e));
        *temp = e;

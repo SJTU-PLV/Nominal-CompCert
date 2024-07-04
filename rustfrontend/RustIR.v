@@ -772,13 +772,13 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign to p *)
     assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
     step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
-| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v v1 tag bf co fid enum_id,
+| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs
+    (* necessary for clightgen simulation *)
+    (TYP: typeof_place p = Tvariant orgs enum_id),
     ge.(genv_cenv) ! enum_id = Some co ->
     field_type fid co.(co_members) = OK ty ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
-    (* evaluate the expr *)
-    eval_expr ge le m1 e v ->
     (* sem_cast to simulate Clight *)
     sem_cast v (typeof e) ty = Some v1 ->
     (** different from normal assignment: update the tag and assign value *)
@@ -786,9 +786,15 @@ Inductive step : state -> trace -> state -> Prop :=
     field_tag fid co.(co_members) = Some tag ->
     (* set the tag *)
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    (* evaluate the expr (in memory m2) *)
+    eval_expr ge le m2 e v ->
+    (* eval downcast to simulate the target statement: because we
+    cannot guarantee that store tag in m1 does not change the address
+    of p! (Non-interference is a difficult problem!) *)
+    eval_place ge le m2 (Pdowncast p fid ty) b1 ofs1 ->
+    (* variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->- *)
     (* set the value *)
-    assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v1 m3 ->
+    assign_loc ge ty m2 b1 ofs1 v1 m3 ->
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs,
     typeof_place p = Tbox ty ->

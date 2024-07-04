@@ -568,7 +568,7 @@ Qed.
 
 
 Lemma eval_place_inject: forall p lv e te j m tm le b ofs,
-    place_to_cexpr tce p = OK lv ->
+    place_to_cexpr ce tce p = OK lv ->
     eval_place ce e m p b ofs ->
     match_env j e te ->
     Mem.inject j m tm ->
@@ -662,57 +662,58 @@ Proof.
                 (* instantiate (1:= ) *)
                 admit.
                 admit.
+                admit.
             *** destruct x. destruct y. simpl in H4. destruct H4. 
                 esplit. split. econstructor. econstructor.
                 instantiate (1:= b1).  congruence.
                 simpl.
-    Proof.
-  induction p.
-  4: { intros lv m tm le b ofs PEXPR EVALP MENV MINJ.
-       simpl in PEXPR. inv EVALP.
-       rewrite H3 in PEXPR. rewrite H6 in PEXPR.
-       assert (ENUM: co_sv co = TaggedUnion).
-       destruct (co_sv co). 
-       destruct tce!id; inv PEXPR. auto.
-       exploit variant_field_offset_match.
-       eapply match_prog_comp_env; eauto.
-       eauto.
-       auto.
-       intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
-       generalize (E _ _ H7). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.       
-       unfold tce in PEXPR. simpl in PEXPR.
-       rewrite A in PEXPR.
-       rewrite ENUM in PEXPR.
-       rewrite C in PEXPR.
-       monadInv PEXPR.
-       exploit IHp; eauto.
-       instantiate (1 := le).
-       intros (pb & pofs & EVAL1 & VINJ1).
-       do 2 eexists.
-       split.
-       assert (TYX: Clight.typeof x = Ctypes.Tstruct id noattr).
-       erewrite <- place_to_cexpr_type; eauto.
-       rewrite H3. auto.
-       
-       eapply eval_Efield_union. eapply eval_Elvalue.
-       eapply eval_Efield_struct. eapply eval_Elvalue.
-       eauto. rewrite TYX.
-       simpl. eapply Clight.deref_loc_copy.
-       auto. eauto.
-       simpl. eauto. eauto.
 
-       simpl. eapply Clight.deref_loc_copy.
-       auto. simpl. eauto.
-       simpl. eauto. eauto.
-       inv VINJ1.
-       econstructor; eauto.
-       rewrite add_repr. 
-       rewrite <- (Ptrofs.add_assoc ofs0 _ _).
-       rewrite (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _).
-       rewrite (Ptrofs.add_commut (Ptrofs.repr ofs2) (Ptrofs.repr delta)).
-       rewrite <- (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _).
-       f_equal. do 2 rewrite Ptrofs.add_assoc.
-       f_equal. eapply Ptrofs.add_commut. }
+  (* induction p. *)
+  (* 4: { intros lv m tm le b ofs PEXPR EVALP MENV MINJ. *)
+  (*      simpl in PEXPR. inv EVALP. *)
+  (*      rewrite H3 in PEXPR. rewrite H6 in PEXPR. *)
+  (*      assert (ENUM: co_sv co = TaggedUnion). *)
+  (*      destruct (co_sv co).  *)
+  (*      destruct tce!id; inv PEXPR. auto. *)
+  (*      exploit variant_field_offset_match. *)
+  (*      eapply match_prog_comp_env; eauto. *)
+  (*      eauto. *)
+  (*      auto. *)
+  (*      intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E). *)
+  (*      generalize (E _ _ H7). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.        *)
+  (*      unfold tce in PEXPR. simpl in PEXPR. *)
+  (*      rewrite A in PEXPR. *)
+  (*      rewrite ENUM in PEXPR. *)
+  (*      rewrite C in PEXPR. *)
+  (*      monadInv PEXPR. *)
+  (*      exploit IHp; eauto. *)
+  (*      instantiate (1 := le). *)
+  (*      intros (pb & pofs & EVAL1 & VINJ1). *)
+  (*      do 2 eexists. *)
+  (*      split. *)
+  (*      assert (TYX: Clight.typeof x = Ctypes.Tstruct id noattr). *)
+  (*      erewrite <- place_to_cexpr_type; eauto. *)
+  (*      rewrite H3. auto. *)
+       
+  (*      eapply eval_Efield_union. eapply eval_Elvalue. *)
+  (*      eapply eval_Efield_struct. eapply eval_Elvalue. *)
+  (*      eauto. rewrite TYX. *)
+  (*      simpl. eapply Clight.deref_loc_copy. *)
+  (*      auto. eauto. *)
+  (*      simpl. eauto. eauto. *)
+
+  (*      simpl. eapply Clight.deref_loc_copy. *)
+  (*      auto. simpl. eauto. *)
+  (*      simpl. eauto. eauto. *)
+  (*      inv VINJ1. *)
+  (*      econstructor; eauto. *)
+  (*      rewrite add_repr.  *)
+  (*      rewrite <- (Ptrofs.add_assoc ofs0 _ _). *)
+  (*      rewrite (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _). *)
+  (*      rewrite (Ptrofs.add_commut (Ptrofs.repr ofs2) (Ptrofs.repr delta)). *)
+  (*      rewrite <- (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _). *)
+  (*      f_equal. do 2 rewrite Ptrofs.add_assoc. *)
+  (*      f_equal. eapply Ptrofs.add_commut. } *)
 
   Admitted.     
     
@@ -844,13 +845,59 @@ Proof.
   eapply Mem.load_unchanged_on; eauto. simpl. auto.
   red. intros. eapply Mem.perm_unchanged_on; eauto. simpl. auto.
 Qed.
-  
-(* This lemma is too strong, but it is convenient to use *)
+
+Lemma match_cont_inj_incr: forall j j' k tk,
+    (* m tm bs are unrealated to this match_cont *)
+    (forall m tm bs, match_cont j k tk m tm bs) ->
+    inject_incr j j' ->
+    forall m tm bs, match_cont j' k tk m tm bs.
+Proof.
+  induction k; intros until tk; intros MCONT INCR; intros m1 tm1 bs1.
+  1-4:
+    generalize (MCONT m1 tm1 bs1); intros MCONT1;
+    inv MCONT1; econstructor; eauto.
+  1-2: eapply match_env_incr; eauto.
+  destruct tk.
+  1-5: generalize (MCONT m1 tm1 bs1); intros MCONT1; inv MCONT1.
+  (* premise is impossible *)
+  generalize (MCONT m1 tm1 nil).
+  intros MCONT1. inv MCONT1.
+Qed.
+
+
+(* This lemma is too strong, but it is easy to use *)
 Lemma injp_acc_match_cont: forall j1 j2 m1 m2 tm1 tm2 Hm1 Hm2 k tk bs,
     match_cont j1 k tk m1 tm1 bs ->
     injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
     match_cont j2 k tk m2 tm2 bs.
-Admitted.
+Proof.
+  induction 1.
+  - intros INJP; econstructor; eauto.
+  - intros INJP; econstructor; eauto.
+    inv INJP; eapply match_cont_inj_incr; eauto.
+  - intros INJP; econstructor; eauto.
+    inv INJP; eapply match_cont_inj_incr; eauto.
+  - intros INJP; inv INJP. econstructor; eauto.
+    eapply match_cont_inj_incr; eauto.
+    eapply match_env_incr; eauto.
+  - intros INJP; inv INJP. econstructor; eauto.
+    eapply match_cont_inj_incr; eauto.
+    eapply match_env_incr; eauto.
+  - intros INJP. (* inv INJP. *) econstructor; eauto.
+    inv INJP.
+    eapply Mem.load_unchanged_on; eauto.
+    inv INJP. inv VINJ. econstructor. eapply H12. eauto.
+    auto.
+    intros. inv INJP.
+    eapply loc_out_of_reach_incr; eauto.
+    eapply inject_implies_dom_in; eauto.
+    eapply Mem.perm_valid_block. eapply FREE. instantiate (1 := 0).
+    simpl. destruct Archi.ptr64; lia.
+    (* perm unchanged *)
+    inv INJP.
+    red. intros. eapply Mem.perm_unchanged_on; eauto.
+Qed.
+
 
 Lemma PTree_elements_one (A: Type) : forall id (elt: A),
     PTree.elements (PTree.set id elt (PTree.empty A)) = (id, elt) :: nil.
@@ -2232,7 +2279,9 @@ Proof.
       etransitivity. eauto. eauto.      
       eapply match_regular_state. eauto. eauto. eauto.
       econstructor. simpl. instantiate (1 := g). eauto.
-      instantiate (1 := j2). admit.   (* inject_incr and match_cont *)
+      instantiate (1 := j2).
+      (* inject_incr and match_cont *)
+      { eapply match_cont_inj_incr; auto. inv INCR2. auto. }
       eauto. eauto.
       eapply match_env_incr;eauto. inv INCR2. auto.
       
@@ -2240,26 +2289,100 @@ Proof.
   - inv MSTMT. simpl in H9.
     monadInv_comb H9.
     unfold transl_assign_variant in EQ2.
-    rename H4 into SENUM.
+    rename H3 into SENUM.
     unfold ge in SENUM. simpl in SENUM. fold ce in SENUM.
     rewrite SENUM in EQ2.
     destruct (co_sv co) eqn: SCV; [inv EQ2|].
-    rename H5 into TAG. rewrite TAG in EQ2. 
-    destruct TRANSL. eapply match_prog_comp_env0 in SENUM as MATCHCOMP.
-    rewrite SCV in MATCHCOMP.
-    destruct MATCHCOMP as (tco & union_id & tag_fid & union_fid & union & MATCHCOMP).
-    cbn in MATCHCOMP.
-    destruct MATCHCOMP as (A & B & C & D & MATCHCOMP).
-    fold tce in A. rewrite A in EQ2.
-    rewrite D in EQ2.
-    inv EQ2.
+    (* variant_field_offset *)
+    exploit variant_field_offset_match.
+    eapply match_prog_comp_env; eauto.
+    eauto.
+    auto.
+    intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
+    clear E.
+    (* rewrite to_cstmt *)
+    rename H4 into TAG. rewrite TAG in EQ2.
+    unfold tce in EQ2. rewrite A in EQ2. rewrite C in EQ2.
+    rewrite H0 in EQ2.
+    monadInv_sym EQ2.
+    (* eval_lvalue (Efield x0 tag_fid Ctypes.type_int32s) *)
+    exploit eval_place_inject; eauto. instantiate (1 := le0).
+    intros (tb & tofs & TEVALP & VINJ1).
+    assert (TYTP: Clight.typeof x0 = Ctypes.Tstruct enum_id noattr).
+    exploit place_to_cexpr_type; eauto. intros CTYP.
+    rewrite <- CTYP. rewrite TYP. simpl. auto.    
+    assert (EVALTAG: eval_lvalue tge te le0 tm (Efield x0 tag_fid Ctypes.type_int32s) tb (Ptrofs.add tofs (Ptrofs.zero)) Full).
+    { eapply eval_Efield_struct. eapply eval_Elvalue; eauto.
+      rewrite TYTP. eapply Clight.deref_loc_copy; eauto.
+      eauto. eauto.
+      (* tag field offset *)
+      rewrite C. unfold Ctypes.field_offset. simpl.
+      destruct ident_eq; try congruence.
+      f_equal. }
+    (* store tag to tm *)
+    inv VINJ1.
+    exploit Mem.store_mapped_inject; eauto.
+    intros (tm2 & TSTORETAG & VINJ2).
+    (* eval_lvalue (Efield (Efield x0 union_fid (Tunion union_id noattr)) fid
+       (to_ctype (typeof e))) in tm2 *)    
+    exploit eval_place_inject. 2: eapply H7. simpl.
+    rewrite TYP. simpl in H. unfold ce. rewrite H.
+    unfold tce. rewrite A.  rewrite SCV. rewrite C.
+    unfold ce, tce in EQ1. rewrite EQ1. simpl. eauto.
+    eauto. eauto.
+    instantiate (1 := le0).
+    intros (tb1 & tofs1 & TEVALP1 & VINJ3).
+    (* eval_expr_inject  *)
+    exploit eval_expr_inject; eauto. instantiate (1 := le0).
+    intros (tv & TEVAL & VINJ4).
+    (* sem_cast inject *)
+    exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm2).
+    intros (tv1 & SEMCAST & VINJ5).
+    (* assign_loc inject *)
+    exploit assign_loc_inject; eauto.
+    intros (j1 & tm3 & TASSLOC & MINJ3 & INCR3).
+    
     (* step in target *)
-    (* eexists. split. *)
-    (* + eapply plus_left. *)
-    (*   eapply Clight.step_seq. *)
-    (*   eapply star_step. eapply Clight.step_assign. *)
-    admit.
+    eexists. split.
+    + eapply plus_left.
+      eapply Clight.step_seq.
+      (* assign tag *)
+      eapply star_step. eapply Clight.step_assign.
+      eauto. econstructor.
+      simpl. eapply cast_val_casted. econstructor.
+      auto.
+      econstructor. simpl. eauto.
+      rewrite Ptrofs.add_zero. simpl.
+      erewrite Mem.address_inject. eauto.
+      eapply MINJ.
+      exploit Mem.store_valid_access_3. eapply H5.
+      intros. eapply Mem.valid_access_perm. eauto.
+      eauto.
+      (* assign body *)
+      eapply star_step. econstructor.
+      eapply star_step. econstructor.
+      instantiate (1 := Full). instantiate (1 := tofs1).
+      instantiate (1 := tb1).
+      inv TEVALP1. simpl in H12.  inv H12.
+      eapply eval_Efield_union;eauto.
+      eauto. simpl. erewrite expr_to_cexpr_type in *; eauto.
+      simpl. eauto.
+      econstructor.
+      1-4 : eauto.
 
+    + eapply match_regular_state with (j := j1);eauto.
+      econstructor. instantiate (1 := initial_generator).
+      auto. 
+      (* inject_incr and match_cont *)
+      { eapply match_cont_inj_incr; auto. inv INCR3. auto. }
+      (* inj_incr *)
+      etransitivity. eauto.
+      replace (Mem.support m1) with (Mem.support m2).
+      replace (Mem.support tm) with (Mem.support tm2). auto.
+      eapply Mem.support_store; eauto.
+      eapply Mem.support_store; eauto.
+      inv INCR3. eapply match_env_incr; eauto. 
+      
   (* box *)
   - inv MSTMT. simpl in H7.
     monadInv_sym H7. unfold gensym in EQ. inv EQ.    
@@ -2398,7 +2521,12 @@ Proof.
     (* match_states *)
     + econstructor. 1-3 : eauto.      
       econstructor. simpl. instantiate (1 := initial_generator). eauto.
-      instantiate (1 := j4). admit.   (* inject_incr and match_cont *)
+      instantiate (1 := j4).
+      (* inject_incr and match_cont *)
+      assert (inject_incr j j4).
+      { inv INCR3. inv INCR4. eapply inject_incr_trans. eauto.
+        eapply inject_incr_trans. eauto. auto. }
+      { eapply match_cont_inj_incr; auto. }
       apply INJ5.
       exploit Mem.support_alloc. eapply H0. intros SUPM2.
       exploit Mem.support_alloc. eapply TALLOC. intros SUPTM2.      
@@ -2742,7 +2870,9 @@ Proof.
       eapply function_entry_wf_env. eauto. eauto.
       eapply tr_function_normal;eauto.
       eauto.
-      instantiate (1 := j'). admit.   (* inject_incr and match_cont *)
+      instantiate (1 := j').
+      (* inject_incr and match_cont *)
+      { eapply match_cont_inj_incr. auto. inv INCR1. auto. }
       eauto.
       etransitivity;eauto. auto.
       
