@@ -939,6 +939,8 @@ Inductive initial_state: c_query -> state -> Prop :=
 | initial_state_intro: forall vf f targs tres tcc vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction orgs org_rels targs tres tcc ->
+    (* This function must not be drop glue *)
+    f.(fn_drop_glue) = None ->
     val_casted_list vargs targs ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
     initial_state (cq vf (signature_of_type targs tres tcc) vargs m)

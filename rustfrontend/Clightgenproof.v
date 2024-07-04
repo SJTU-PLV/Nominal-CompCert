@@ -184,14 +184,6 @@ Let tge := Clight.globalenv tse tprog.
 
 Hypothesis GE: inj_stbls w se tse.
 
-(* Lemma comp_env_preserved:
-   tge =  ce.
-Proof.
-  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSF as [_ EQ]. simpl in EQ. congruence.
-Qed.  *)
-
-
-
 (* Simulation relation *)
 
 (* Let ce := prog.(prog_comp_env). *)
@@ -610,7 +602,54 @@ Proof.
       *   admit.
       * (*Ctypes.field_offset tge i (Ctypes.co_members ?co) = OK (delta, Full) *) admit.
     + econstructor. eauto. repeat rewrite Ptrofs.add_assoc. decEq. apply Ptrofs.add_commut.
-  - admit.
+  - rename Hplaceok into PEXPR.
+    rename Hevalp into EVALP.
+    rename Hmatch into MENV.
+    rename Hmem_inj into MINJ.
+    simpl in PEXPR.
+    rewrite H in PEXPR. rewrite H0 in PEXPR.
+    assert (ENUM: co_sv co = TaggedUnion).
+    destruct (co_sv co).
+    destruct tce!id; inv PEXPR. auto.
+    exploit variant_field_offset_match.
+    eapply match_prog_comp_env; eauto.
+    eauto.
+    auto.
+    intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
+    generalize (E _ _ H1). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.
+    unfold tce in PEXPR. simpl in PEXPR.
+    rewrite A in PEXPR.
+    rewrite ENUM in PEXPR.
+    rewrite C in PEXPR.
+    monadInv PEXPR.
+    exploit IHHevalp; eauto.
+    intros (pb & pofs & EVAL1 & VINJ1).
+    do 2 eexists.
+    split.
+    assert (TYX: Clight.typeof x = Ctypes.Tstruct id noattr).
+    erewrite <- place_to_cexpr_type; eauto.
+    rewrite H. auto.
+       
+    eapply eval_Efield_union. eapply eval_Elvalue.
+    eapply eval_Efield_struct. eapply eval_Elvalue.
+    eauto. rewrite TYX.
+    simpl. eapply Clight.deref_loc_copy.
+    auto. eauto.
+    simpl. eauto. eauto.
+
+    simpl. eapply Clight.deref_loc_copy.
+    auto. simpl. eauto.
+    simpl. eauto. eauto.
+    inv VINJ1.
+    econstructor; eauto.
+    rewrite add_repr.
+    rewrite <- (Ptrofs.add_assoc ofs _ _).
+    rewrite (Ptrofs.add_assoc (Ptrofs.add ofs (Ptrofs.repr ofs1)) _ _).
+    rewrite (Ptrofs.add_commut (Ptrofs.repr ofs2) (Ptrofs.repr delta)).
+    rewrite <- (Ptrofs.add_assoc (Ptrofs.add ofs (Ptrofs.repr ofs1)) _ _).
+    f_equal. do 2 rewrite Ptrofs.add_assoc.
+    f_equal. eapply Ptrofs.add_commut.
+    
   - monadInv Hplaceok.
     exploit IHHevalp; eauto.
     intros [b' [ofs'' [A B]]]. 
@@ -667,56 +706,8 @@ Proof.
                 esplit. split. econstructor. econstructor.
                 instantiate (1:= b1).  congruence.
                 simpl.
+Admitted.
 
-  (* induction p. *)
-  (* 4: { intros lv m tm le b ofs PEXPR EVALP MENV MINJ. *)
-  (*      simpl in PEXPR. inv EVALP. *)
-  (*      rewrite H3 in PEXPR. rewrite H6 in PEXPR. *)
-  (*      assert (ENUM: co_sv co = TaggedUnion). *)
-  (*      destruct (co_sv co).  *)
-  (*      destruct tce!id; inv PEXPR. auto. *)
-  (*      exploit variant_field_offset_match. *)
-  (*      eapply match_prog_comp_env; eauto. *)
-  (*      eauto. *)
-  (*      auto. *)
-  (*      intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E). *)
-  (*      generalize (E _ _ H7). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.        *)
-  (*      unfold tce in PEXPR. simpl in PEXPR. *)
-  (*      rewrite A in PEXPR. *)
-  (*      rewrite ENUM in PEXPR. *)
-  (*      rewrite C in PEXPR. *)
-  (*      monadInv PEXPR. *)
-  (*      exploit IHp; eauto. *)
-  (*      instantiate (1 := le). *)
-  (*      intros (pb & pofs & EVAL1 & VINJ1). *)
-  (*      do 2 eexists. *)
-  (*      split. *)
-  (*      assert (TYX: Clight.typeof x = Ctypes.Tstruct id noattr). *)
-  (*      erewrite <- place_to_cexpr_type; eauto. *)
-  (*      rewrite H3. auto. *)
-       
-  (*      eapply eval_Efield_union. eapply eval_Elvalue. *)
-  (*      eapply eval_Efield_struct. eapply eval_Elvalue. *)
-  (*      eauto. rewrite TYX. *)
-  (*      simpl. eapply Clight.deref_loc_copy. *)
-  (*      auto. eauto. *)
-  (*      simpl. eauto. eauto. *)
-
-  (*      simpl. eapply Clight.deref_loc_copy. *)
-  (*      auto. simpl. eauto. *)
-  (*      simpl. eauto. eauto. *)
-  (*      inv VINJ1. *)
-  (*      econstructor; eauto. *)
-  (*      rewrite add_repr.  *)
-  (*      rewrite <- (Ptrofs.add_assoc ofs0 _ _). *)
-  (*      rewrite (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _). *)
-  (*      rewrite (Ptrofs.add_commut (Ptrofs.repr ofs2) (Ptrofs.repr delta)). *)
-  (*      rewrite <- (Ptrofs.add_assoc (Ptrofs.add ofs0 (Ptrofs.repr ofs1)) _ _). *)
-  (*      f_equal. do 2 rewrite Ptrofs.add_assoc. *)
-  (*      f_equal. eapply Ptrofs.add_commut. } *)
-
-  Admitted.     
-    
        
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->
@@ -790,11 +781,74 @@ Proof.
 Qed.
 
 
+Lemma typ_of_type_to_ctype: forall ty,
+    typ_of_type ty = Ctypes.typ_of_type (to_ctype ty).
+Proof.
+  destruct ty; simpl; auto.
+Qed.
+
+Lemma rettype_of_type_to_ctype: forall ty,
+    rettype_of_type ty = Ctypes.rettype_of_type (to_ctype ty).
+Proof.
+  destruct ty; simpl; auto.
+Qed.
+
+
+Lemma typlist_of_typelist_to_ctype: forall tyl,
+    typlist_of_typelist tyl = Ctypes.typlist_of_typelist (to_ctypelist tyl).
+  induction tyl; simpl; auto.
+  rewrite IHtyl.
+  rewrite typ_of_type_to_ctype. auto.
+Qed.
+
+Lemma type_of_params_to_ctype: forall l,
+    Ctypes.type_of_params (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) l) = to_ctypelist (type_of_params l).
+Proof.
+  induction l; simpl; auto.
+  rewrite IHl. destruct a. simpl. auto.
+Qed.
+
 Remark list_cons_neq: forall A (a: A) l, a :: l <> l.
 Proof.
   intros. induction l. intro. congruence.
   intro. inv H.  congruence.
 Qed.
+
+(* move to RustOp *)
+Lemma val_casted_to_ctype: forall ty v,
+    val_casted v ty ->
+    Cop.val_casted v (to_ctype ty).
+Proof.
+  destruct ty; intros v CAST; simpl in *; inv CAST; econstructor.
+  unfold cast_int_int. auto.
+  auto.
+Qed.
+
+Lemma val_casted_list_to_ctype: forall tyl vl,
+    val_casted_list vl tyl ->
+    Cop.val_casted_list vl (to_ctypelist tyl).
+Proof.
+  induction tyl; simpl; intros vl CAST; inv CAST; econstructor; eauto.
+  eapply val_casted_to_ctype. auto.  
+Qed.
+
+Lemma val_casted_inject: forall ty v1 v2 j,
+    val_casted v1 ty ->
+    Val.inject j v1 v2 ->
+    val_casted v2 ty.
+Proof.
+  destruct ty; intros v1 v2 j CAST INJ; inv CAST; inv INJ; econstructor; auto.
+Qed.
+
+Lemma val_casted_inject_list: forall tyl vl1 vl2 j,
+    val_casted_list vl1 tyl ->
+    Val.inject_list j vl1 vl2 ->
+    val_casted_list vl2 tyl.
+Proof.
+  induction tyl; intros vl1 vl2 j CAST INJ; inv CAST; inv INJ; econstructor; eauto.
+  eapply val_casted_inject; eauto.
+Qed.
+
 
 Lemma initial_states_simulation:
   forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
@@ -809,15 +863,28 @@ Proof.
   (* inversion TRF to get tf *)
   inv TRF.
   eexists. split.
-  - assert (SIG: signature_of_type targs tres tcc = Ctypes.signature_of_type (to_ctypelist targs) (to_ctype tres) tcc). admit.
+  - assert (SIG: signature_of_type targs tres tcc = Ctypes.signature_of_type (to_ctypelist targs) (to_ctype tres) tcc).
+    { unfold signature_of_type, Ctypes.signature_of_type. f_equal.
+      eapply typlist_of_typelist_to_ctype.
+      eapply rettype_of_type_to_ctype. }      
     rewrite SIG. econstructor. eauto.
-    (* type of function *) admit.
-    (* val_casted_list *) admit.
+    (* type of function *)
+    { unfold Clight.type_of_function. 
+      inv H0; try congruence.
+      unfold type_of_function in H4. inv H4.
+      f_equal.
+      rewrite H9.
+      eapply type_of_params_to_ctype.
+      rewrite H2. auto.
+      auto. }        
+    (* val_casted_list *)
+    eapply val_casted_list_to_ctype.
+    eapply val_casted_inject_list;eauto.
     (* sup include *)
     simpl. inv Hm. inv GE. simpl in *. auto.
   - econstructor; eauto. econstructor.
     inv Hm. simpl. reflexivity.
-Admitted.
+Qed.
 
 Lemma function_entry_inject:
   forall f tf m1 m2 tm1 j1 vargs tvargs e
@@ -2910,15 +2977,43 @@ Admitted.
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
   exists r2, Clight.final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
-Admitted.
+Proof.
+  intros. inv H0. inv H.
+  generalize (MCONT m tm nil). intros MCONT1.
+  inv MCONT1.
+  eexists. split. econstructor; split; eauto.
+  simpl.
+  econstructor. split.
+  eauto. econstructor. eauto.
+  constructor; eauto.
+Qed.
+
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
   exists wx q2, Clight.at_external tge R q2 /\ cc_c_query inj wx q1 q2 /\ match_stbls inj wx se tse /\
   forall r1 r2 S', match_reply (cc_c inj) wx r1 r2 -> after_external S r1 S' ->
   exists R', Clight.after_external R r2 R' /\ match_states S' R'.
-Admitted.
-
+Proof.
+  intros S R q1 HSR Hq1.
+  destruct Hq1; inv HSR.
+  exploit (match_stbls_acc inj). eauto. eauto. intros GE1.
+  (* target find external function *)  
+  simpl in H. exploit find_funct_match; eauto.
+  inv GE1. simpl in *. eauto.
+  intros (tf & TFINDF & TRFUN). inv TRFUN. 
+  (* vf <> Vundef *)
+  assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
+  eexists (injw j (Mem.support m) (Mem.support tm)), _. intuition idtac.
+  - econstructor; eauto.
+  - econstructor; eauto. constructor. auto.
+  - inv H3. destruct H2 as (wx' & ACC & REP). inv ACC. inv REP. inv H10. eexists. split.
+    + econstructor; eauto.
+    + econstructor. instantiate (1 := f').
+      eapply match_cont_inj_incr; eauto.
+      auto. etransitivity; eauto.
+      auto.
+Qed.
 
 End PRESERVATION.
 

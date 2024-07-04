@@ -782,7 +782,7 @@ Definition typ_of_type (t: type) : AST.typ :=
 
 Definition rettype_of_type (t: type) : AST.rettype :=
   match t with
-  | Tunit => AST.Tvoid
+  | Tunit => AST.Tint
   | Tint I32 _ => AST.Tint
   | Tint I8 Signed => AST.Tint8signed
   | Tint I8 Unsigned => AST.Tint8unsigned
