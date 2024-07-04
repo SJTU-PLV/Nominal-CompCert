@@ -184,6 +184,14 @@ Let tge := Clight.globalenv tse tprog.
 
 Hypothesis GE: inj_stbls w se tse.
 
+(* Lemma comp_env_preserved:
+   tge =  ce.
+Proof.
+  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSF as [_ EQ]. simpl in EQ. congruence.
+Qed.  *)
+
+
+
 (* Simulation relation *)
 
 (* Let ce := prog.(prog_comp_env). *)
@@ -482,8 +490,8 @@ Qed.
 Lemma place_to_cexpr_type: forall p e,
     place_to_cexpr tce p = OK e ->
     to_ctype (typeof_place p) = Clight.typeof e.
-  Proof.
-  induction p; simpl; intros; simpl in *.
+    Proof.
+    induction p; simpl; intros; simpl in *.
   -  monadInv H. auto.
   - monadInv H. auto.
   - monadInv H. auto.
@@ -531,20 +539,29 @@ Lemma deref_loc_inject: forall ty m tm b ofs b' ofs' v j,
     Mem.inject j m tm ->
     Val.inject j (Vptr b ofs) (Vptr b' ofs') ->
     exists v', Clight.deref_loc (to_ctype ty) tm b' ofs' Full v' /\ Val.inject j v v'.
-Admitted.    
+Proof.
+  intros.
+  inv H.
+  - (*by value*)
+    exploit Mem.loadv_inject; eauto. intros [tv [A B]].
+    exists tv. split. econstructor. 
+    instantiate (1:= chunk). 
+    destruct ty; simpl in *; congruence.
+    auto. auto.
+  - (* by ref*)
+    exists ((Vptr b' ofs')). split. 
+    eapply Clight.deref_loc_reference. 
+    destruct ty; simpl in *; congruence.
+    auto. 
+  - (*by copy*)
+    exists (Vptr b' ofs'). split. eapply Clight.deref_loc_copy.
+    destruct ty; simpl in *; congruence.
+    auto.
+Qed.
 
 
-Lemma eval_expr_inject: forall e te j a a' m tm v le,
-    expr_to_cexpr ce tce a = OK a' ->
-    eval_expr ce e m a v ->
-    match_env j e te ->
-    Mem.inject j m tm ->
-    exists v', Clight.eval_expr tge te le tm a' v' /\ Val.inject j v v'.
-(* To prove this lemma, we need to support type checking in the
-   evaluation of expression in RustIR *)
-Admitted.
 
-Lemma eval_place_inject: forall e te j p lv m tm le b ofs,
+Lemma eval_place_inject: forall p lv e te j m tm le b ofs,
     place_to_cexpr tce p = OK lv ->
     eval_place ce e m p b ofs ->
     match_env j e te ->
@@ -554,8 +571,97 @@ Lemma eval_place_inject: forall e te j p lv m tm le b ofs,
     tge.(cenv)!id because we have ce!id and tr_composte ce tge.(cenv)
     and tr_composite ce ctce *)
     exists b' ofs', Clight.eval_lvalue tge te le tm lv b' ofs' Full /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
+Proof. 
+  intros p;
+  intros lv e te j m tm le b ofs.
+  intros Hplaceok Hevalp. 
+  generalize dependent lv.
+  induction Hevalp; intros lv Hplaceok Hmatch Hmem_inj; intros.   
+  - (* p = Plocal i t *)
+    monadInv Hplaceok.
+    generalize (Hmatch id). intros REL. inv REL.
+    + rewrite <- H1 in H. inv H.
+    + destruct x. destruct y. simpl in H2. destruct H2. 
+      subst. 
+      rewrite <- H0 in H. inv H.
+      esplit. esplit. 
+      split. econstructor. eauto. 
+      econstructor. eauto. eauto.
+  - (* p = Pfield p i t *)  
+    simpl in Hplaceok. 
+    inv Hplaceok. simpl in *.  monadInv H3. 
+    exploit IHHevalp; eauto.
+    intros[b' [ofs' [A B]]].
+    inv B. 
+    exists b'.
+    exists (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr delta0)) (Ptrofs.repr delta)). 
+    split.
+    + exploit place_to_cexpr_type; eauto. intro Htpx. rewrite H in Htpx. simpl in Htpx.
+      eapply eval_Efield_struct. eapply Clight.eval_Elvalue. 
+      apply A.  rewrite <- Htpx. apply Clight.deref_loc_copy.   
+      auto.
+      rewrite <- Htpx.  eauto. 
+      *   admit.
+      * (*Ctypes.field_offset tge i (Ctypes.co_members ?co) = OK (delta, Full) *) admit.
+    + econstructor. eauto. repeat rewrite Ptrofs.add_assoc. decEq. apply Ptrofs.add_commut.
+  - admit.
+  - monadInv Hplaceok.
+    exploit IHHevalp; eauto.
+    intros [b' [ofs'' [A B]]]. 
+    exploit deref_loc_inject; eauto. intros [tv [C D]].
+    inv D. 
+    esplit. esplit. 
+    split. eapply Clight.eval_Ederef. 
+    eapply eval_Elvalue. apply A. 
+    + exploit place_to_cexpr_type. eauto. intro Hctypex. rewrite <- Hctypex.
+      eauto.
+    + eauto.
 Admitted.
 
+
+Lemma eval_expr_inject: forall e te j a a' m tm v le,
+    eval_expr ce e m a v ->
+    expr_to_cexpr ce tce a = OK a' ->
+    match_env j e te ->
+    Mem.inject j m tm ->
+    exists v', Clight.eval_expr tge te le tm a' v' /\ Val.inject j v v'.  
+(* To prove this lemma, we need to support type checking in the
+   evaluation of expression in RustIR *)
+Proof. 
+  destruct a.
+  - admit. 
+  - simpl. 
+    intros. 
+    induction p eqn:Hp. 
+    + simpl. intros. simpl in *. inv H. inv H0. 
+      esplit. split. econstructor.
+      inv H4. auto. 
+    + intros. simpl in *. inv H. inv H4. exists (Vint i). 
+      split. inv H0. constructor. auto.
+    + intros. simpl in *. inv H. inv H4. exists (Vfloat f).
+      split. inv H0. constructor. auto.
+    + intros. simpl in *. inv H. inv H4. exists (Vsingle f).
+      split. inv H0. constructor. auto.
+    + intros. simpl in *. inv H. inv H4. exists (Vlong i).
+      split. inv H0. constructor. auto.
+    + (* Eplace p0 t *)
+      intros. 
+      * simpl in *. destruct (type_eq_except_origins t (typeof_place p0) ) eqn:Horg. 
+        inv H. inv H4.  inv H5. inv H0.      
+        ** generalize (H1 id). intros REL. inv REL.
+            *** esplit. split. econstructor. econstructor. 
+                instantiate (1:= b). congruence.
+                simpl in *.
+                exploit deref_loc_inject; eauto.
+                (* instantiate (1:= ) *)
+                admit.
+                admit.
+            *** destruct x. destruct y. simpl in H4. destruct H4. 
+                esplit. split. econstructor. econstructor.
+                instantiate (1:= b1).  congruence.
+                simpl.
+    Admitted.     
+    
 
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->

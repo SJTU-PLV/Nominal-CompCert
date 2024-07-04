@@ -445,7 +445,7 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
 | eval_Pderef: forall p ty l ofs l' ofs',
     eval_place p l ofs ->
-    deref_loc ty m l ofs (Vptr l' ofs') ->
+    deref_loc (typeof_place p) m l ofs (Vptr l' ofs') ->
     eval_place (Pderef p ty) l' ofs'.
 
 Inductive eval_place_mem_error : place -> Prop :=
