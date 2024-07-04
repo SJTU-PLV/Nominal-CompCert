@@ -90,14 +90,12 @@ Definition transl_composites (l: list composite_definition) : option (list Ctype
 (** ** Step 2: Generate drop glue for each composite with ownership type *)
 
 
-Fixpoint makeseq_rec (s: Clight.statement) (l: list Clight.statement) : Clight.statement :=
+Fixpoint makeseq (l: list Clight.statement) : Clight.statement :=
   match l with
-  | nil => s
-  | s' :: l' => makeseq_rec (Clight.Ssequence s s') l'
+  (* To ensure that target program must move at least one step *)
+  | nil => (Clight.Ssequence Clight.Sskip Clight.Sskip)
+  | s :: l' => Clight.Ssequence s (makeseq l')
   end.
-
-Definition makeseq (l: list Clight.statement) : Clight.statement :=
-  makeseq_rec Clight.Sskip l.
 
 
 (* To specify *)
@@ -161,8 +159,10 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
   | ty :: tys1 =>
       (* the value of ty *)
       let arg1 := deref_arg_rec ty arg tys1 in
-      (* free(arg1) *)
-      let free_stmt := call_free arg1 in
+      (* free(&arg1): because arg1 is the lvalue of the memory
+      location to be freed, so we should pass the address of arg1 to
+      free *)
+      let free_stmt := call_free (Eaddrof arg1 (Ctypes.Tpointer (Clight.typeof arg1) noattr)) in
       (* free the parent of arg1 *)
       free_stmt :: drop_glue_for_box_rec arg tys1
   end.
