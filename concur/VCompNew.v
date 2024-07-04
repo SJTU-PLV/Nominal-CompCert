@@ -283,7 +283,7 @@ Proof.
     econstructor; eauto. exists gw1'. repeat apply conj; eauto.
 Qed.
 
-Inductive
+
 (** TODOs*)
 (** 1.Definition of c_injp as a callconv *)
 (** 2.Achieve [cctrans (injp@injp) (injp)] *)
@@ -292,6 +292,58 @@ Inductive
 (** 4.1 The self-simulation mechniasm? *)  
 (** 4.Modify the proofs of each pass *)
 (** 5.Compose the compiler *)
+
+  
+Require Import InjectFootprint.
+
+Program Instance injp_world_id : World injp_world :=
+    {
+      w_state := injp_world;
+      w_lens := lens_id;
+      w_acci := injp_acci;
+      w_acce := injp_acce;
+      w_acci_trans := injp_acci_preo;
+    }.
+
+Program Definition c_injp : callconv li_c li_c :=
+  {|
+    ccworld := injp_world;
+    ccworld_world := injp_world_id;
+    match_senv w := CKLR.match_stbls injp w;
+    match_query := cc_c_query injp;
+    match_reply := cc_c_reply injp;    
+  |}.
+Next Obligation.
+  inv H. inv H0. auto.
+Qed.
+Next Obligation.
+  intros. inv H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
+
+Compute (gworld (cc_compose c_injp c_injp)).
+Program Definition trans12 : injp_world * injp_world -> injp_world.
+Proof.
+  intros. inv X. destruct X0,X1.
+  econstructor.
+  eapply Mem.inject_compose.
+Abort. (** SOOOO BAD: It can not be defined.. I Need match_query to get m1<->m2<->m3*)
+
+Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
+Proof.
+  econstructor.
+Admitted.
+
+Theorem injp_pass_compose: forall (L1 L2 L3: semantics li_c li_c),
+    forward_simulation c_injp L1 L2 ->
+    forward_simulation c_injp L2 L3 ->
+    forward_simulation c_injp L1 L3.
+Proof.
+  intros.
+  assert (forward_simulation (cc_compose c_injp c_injp) L1 L3).
+  eapply st_fsim_vcomp; eauto.
+  eapply open_fsim_cctrans; eauto.
+  apply cctrans_injp_comp.
+Qed.
 
 
 
