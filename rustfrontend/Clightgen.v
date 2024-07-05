@@ -55,14 +55,14 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
       let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
       (* check the inequality between tag_fid and union_fid *)
       if ident_eq tag_fid union_fid then
+        None
+      else
         (* generate the union *)
         (** TODO: specify the attr  *)
         let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
         let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
         Some (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) attr, Some union)
-      else
-        None
-        end.
+  end.
 
 
 (* Definition variant_to_union (co: composite_definition) : option (Ctypes.composite_definition * (ident * (ident * attr))) := *)
@@ -74,18 +74,25 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
 (*       Some ((Ctypes.Composite union_id Union (map transl_composite_member ms) noattr), (id,(union_id, noattr))) *)
 (*   end. *)
 
+Definition flat_def (d: option (Ctypes.composite_definition * option Ctypes.composite_definition)) :=
+  match d with
+  (* utco must be afront of tco to make tco complete *)
+  | Some (tco, Some utco) => [utco; tco]
+  | Some (tco, None) => [tco]
+  | None => []
+  end.
+
 (* Use link_composites to leverages existing lemmas *)
 Definition transl_composites (l: list composite_definition) : option (list Ctypes.composite_definition) :=
   (* translate rust composite to C composite *)
   let defs := (map transl_composite_def l) in
-  if existsb (fun elt => match elt with | None => true | Some _ => false end) defs then
-    None
+  if forallb (fun elt => match elt with | Some _ => true | None => false end) defs then
+    Some (flat_map flat_def defs)
+    (* let (comps, unions_opt) := split defs in *)
+    (* let unions :=  flat_map (fun elt => match elt with | Some u => [u] | None => [] end) unions_opt in *)
+    (* Ctypes.link_composite_defs comps unions *)
   else
-    let defs := flat_map (fun elt => match elt with | Some u => [u] | None => [] end) defs in
-    let (comps, unions_opt) := split defs in
-    let unions :=  flat_map (fun elt => match elt with | Some u => [u] | None => [] end) unions_opt in
-    Ctypes.link_composite_defs comps unions.
-
+    None.
 
 (** ** Step 2: Generate drop glue for each composite with ownership type *)
 
@@ -518,21 +525,23 @@ Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.ty
   (* temp = malloc(sz);
      *temp = e;
      temp *)
-  do e' <- expr_to_cexpr e;
-  let e_ty := Clight.typeof e' in
-  let sz := Ctypes.sizeof tce e_ty in
-  (* check sz is in the range of ptrofs.max_unsigned which is used in
+  if complete_type ce (typeof e) then
+    do e' <- expr_to_cexpr e;
+    let e_ty := Clight.typeof e' in
+    let sz := Ctypes.sizeof tce e_ty in
+    (* check sz is in the range of ptrofs.max_unsigned which is used in
   proof *)
-  if (0 <=? sz) && (sz <=? Ptrofs.max_unsigned) then
-    let tempvar := Clight.Etempvar temp temp_ty in
-    let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default)) in
-    let sz_expr := if Archi.ptr64
-                   then Clight.Econst_long (Ptrofs.to_int64 (Ptrofs.repr sz)) Ctyping.size_t
-                   else Clight.Econst_int (Ptrofs.to_int (Ptrofs.repr sz)) Ctyping.size_t in
-    let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
-    let assign_deref_temp := Clight.Sassign (Ederef tempvar deref_ty) e' in
-    OK (Clight.Ssequence call_malloc assign_deref_temp, tempvar)
-  else Error (msg "Size of type is not in range (transl_Sbox)").
+    if (0 <=? sz) && (sz <=? Ptrofs.max_unsigned) then
+      let tempvar := Clight.Etempvar temp temp_ty in
+      let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default)) in
+      let sz_expr := if Archi.ptr64
+                     then Clight.Econst_long (Ptrofs.to_int64 (Ptrofs.repr sz)) Ctyping.size_t
+                     else Clight.Econst_int (Ptrofs.to_int (Ptrofs.repr sz)) Ctyping.size_t in
+      let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
+      let assign_deref_temp := Clight.Sassign (Ederef tempvar deref_ty) e' in
+      OK (Clight.Ssequence call_malloc assign_deref_temp, tempvar)
+    else Error (msg "Size of type is not in range (transl_Sbox)")
+  else Error (msg "malloc type is not complete (transl_Sbox)").
 
 (* expand drop_in_place(temp), temp is a reference, ty is the type of
 [*temp]. It is different from drop_glue_for_type because the expansion

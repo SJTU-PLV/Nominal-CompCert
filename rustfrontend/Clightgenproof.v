@@ -2467,7 +2467,9 @@ Proof.
     monadInv_comb EQ0.
     destruct g. simpl in H9. inv H9. eapply list_cons_neq in H8.
     contradiction.
-    unfold transl_Sbox in H11. monadInv H11.
+    unfold transl_Sbox in H11.
+    destruct (complete_type ce (typeof e)) eqn: COMPLETE; try congruence.
+    monadInv H11.
     destruct andb eqn: ANDB in EQ0;try congruence.
     eapply andb_true_iff in ANDB. destruct ANDB as (SZGT & SZLT).
     eapply Z.leb_le in SZGT. eapply Z.leb_le in SZLT.
@@ -2560,13 +2562,13 @@ Proof.
         erewrite <- sizeof_match. f_equal.
         symmetry.
         eapply expr_to_cexpr_type;eauto.
-        eapply TRANSL.
+        eapply TRANSL. auto.
         (* store sz *)        
         erewrite <- STORE. repeat f_equal.
         erewrite <- sizeof_match. f_equal.
         symmetry.
         eapply expr_to_cexpr_type;eauto.
-        eapply TRANSL. }
+        eapply TRANSL. auto. }
       eapply star_step.
       (* returnstate to regular state *)
       eapply Clight.step_returnstate.

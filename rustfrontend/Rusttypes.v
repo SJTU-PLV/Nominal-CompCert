@@ -265,15 +265,10 @@ Definition complete_or_function_type (env: composite_env) (t: type) : bool :=
   to the type.  If an "alignas" attribute is given, use it as alignment
   in preference to [al]. *)
 
-Definition align_attr (a: attr) (al: Z) : Z :=
-  match attr_alignas a with
-  | Some l => two_p (Z.of_N l)
-  | None => al
-  end.
 
 Fixpoint alignof (env: composite_env) (t: type) : Z :=
    (match t with
-    | Tunit => 1
+    | Tunit => 4
     | Tint I8 _ => 1
     | Tint I16 _ => 2
     | Tint I32 _ => 4
@@ -289,21 +284,12 @@ Fixpoint alignof (env: composite_env) (t: type) : Z :=
           match env!id with Some co => co_alignof co | None => 1 end
     end).
 
-Remark align_attr_two_p:
-  forall al a,
-  (exists n, al = two_power_nat n) ->
-  (exists n, align_attr a al = two_power_nat n).
-Proof.
-  intros. unfold align_attr. destruct (attr_alignas a).
-  exists (N.to_nat n). rewrite two_power_nat_two_p. rewrite N_nat_Z. auto.
-  auto.
-Qed.
 
 Lemma alignof_two_p:
   forall env t, exists n, alignof env t = two_power_nat n.
 Proof.
   induction t; simpl.
-  exists 0%nat; auto.
+  exists 2%nat; auto.
   destruct i.
     exists 0%nat; auto.
     exists 1%nat; auto.
@@ -438,7 +424,7 @@ Definition own_type (ce: composite_env) : type -> bool :=
 
 Fixpoint sizeof (env: composite_env) (t: type) : Z :=
   match t with
-  | Tunit => 1
+  | Tunit => 4
   | Tint I8 _ => 1
   | Tint I16 _ => 2
   | Tint I32 _
@@ -658,7 +644,6 @@ Fixpoint bitsizeof_struct (env: composite_env) (cur: Z) (ms: members) : Z :=
   | m :: ms => bitsizeof_struct env (next_field env cur m) ms
   end.
 
-Definition bytes_of_bits (n: Z) := (n + 7) / 8.
 
 Definition sizeof_struct (env: composite_env) (m: members) : Z :=
   bytes_of_bits (bitsizeof_struct env 0 m).
@@ -673,7 +658,7 @@ Fixpoint sizeof_variant' (env: composite_env) (ms: members) : Z :=
   end).
 
 Definition sizeof_variant (env: composite_env) (ms: members) : Z :=
-  align 4 (sizeof_variant' env ms) + sizeof_variant' env ms.
+  bytes_of_bits (align 32 ((alignof_composite' env ms) * 8) + (align (sizeof_variant' env ms) (alignof_composite' env ms) * 8)).
 
 (** Some properties *)
 
@@ -726,11 +711,14 @@ Proof.
   intros. unfold sizeof_variant.
   generalize (sizeof_variant'_pos env m).
   intros.
-  apply Z.le_lteq in H as LELT. destruct LELT.
-  apply Z.gt_lt_iff in H0.
-  generalize (align_le 4 (sizeof_variant' env m)). intros.
-  lia.
-  rewrite <- H0. simpl. lia.
+  (* apply Z.le_lteq in H as LELT. destruct LELT. *)
+  (* apply Z.gt_lt_iff in H0. *)
+  generalize (alignof_composite_two_p' env m). intros (n & A).
+  generalize (two_power_nat_pos n). rewrite A. intros B.
+  generalize (align_le 32 (two_power_nat n * 8) B). intros.
+  generalize (align_le (sizeof_variant' env m) (two_power_nat n) B). intros.
+  unfold bytes_of_bits.
+  change 0 with (0 / 8) at 1. apply Z.div_le_mono; lia.
 Qed.
   
 (** Type ranks *)
@@ -1183,7 +1171,11 @@ Lemma sizeof_variant_stable:
   forall ms, complete_members env ms = true -> sizeof_variant env' ms = sizeof_variant env ms.
 Proof.
   unfold sizeof_variant. intros. rewrite sizeof_variant_stable'.
-  auto. auto.
+  f_equal. f_equal. f_equal. f_equal. eapply alignof_composite_stable'.
+  auto.
+  f_equal. f_equal. eapply alignof_composite_stable'.
+  auto.
+  auto.
 Qed.
 
 

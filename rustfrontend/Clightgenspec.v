@@ -168,8 +168,10 @@ Ltac monadInv_comb H :=
   end.
 
 
-Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Prop :=
-  forall id co, ce!id = Some co ->        
+Record tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Prop :=
+  { tr_composite_some:
+    forall id co,
+    ce!id = Some co ->        
          match co.(co_sv) with
          | Struct =>
              exists tco, tce!id = Some tco /\
@@ -177,8 +179,8 @@ Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Pr
              map transl_composite_member co.(co_members) = tco.(Ctypes.co_members) /\
              (* co.(co_attr) = tco.(Ctypes.co_attr) /\ *)
              co.(co_sizeof) = tco.(Ctypes.co_sizeof) /\
-             co.(co_alignof) = tco.(Ctypes.co_alignof) /\
-             co.(co_rank) = tco.(Ctypes.co_rank)
+             co.(co_alignof) = tco.(Ctypes.co_alignof)
+             (* co.(co_rank) = tco.(Ctypes.co_rank) *)
          | TaggedUnion =>
              exists tco union_id tag_fid union_fid union,
              let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
@@ -190,44 +192,82 @@ Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Pr
              tag_fid <> union_fid /\
              tco.(Ctypes.co_sizeof) = co.(co_sizeof) /\
              tco.(Ctypes.co_alignof) = co.(co_alignof) /\
-             tco.(Ctypes.co_rank) = co.(co_rank) /\
+             (* tco.(Ctypes.co_rank) = co.(co_rank) /\ *)
              union.(Ctypes.co_su) = Union /\
              union.(Ctypes.co_members) = m /\
              (* To specify *)
              union.(Ctypes.co_sizeof) = align (Ctypes.sizeof_composite tce Union m) (Ctypes.alignof_composite tce m) /\
-             union.(Ctypes.co_alignof) = (Ctypes.alignof_composite tce m) /\
-             union.(Ctypes.co_rank) = Ctypes.rank_members tce m
-         end.
+             union.(Ctypes.co_alignof) = (Ctypes.alignof_composite tce m)
+             (* union.(Ctypes.co_rank) = Ctypes.rank_members tce m *)
+         end;
+
+    tr_composite_consistent: composite_env_consistent ce }    
+.
 
 Lemma alignof_match: forall ce tce ty,
-      tr_composite_env ce tce ->
-      Ctypes.alignof tce (to_ctype ty) = alignof ce ty.
-Admitted.
+    tr_composite_env ce tce ->
+    complete_type ce ty = true ->
+    Ctypes.alignof tce (to_ctype ty) = alignof ce ty.
+Proof.
+  induction ty; simpl; auto; intros TR COM; unfold align_attr;simpl;
+    destruct (ce!i) eqn: CO; try congruence.
+  apply TR in CO.
+  destruct (co_sv c).
+  destruct CO as (tco & A & B & C & D & E). rewrite A. auto.
+  destruct CO as (? & ? & ? & ? & ? & A & B & C & D & E & F & G & H & I).
+  rewrite A. auto.
+  apply TR in CO.
+  destruct (co_sv c).
+  destruct CO as (tco & A & B & C & D & E). rewrite A. auto.
+  destruct CO as (? & ? & ? & ? & ? & A & B & C & D & E & F & G & H & I).
+  rewrite A. auto.
+Qed.
 
+  
 Lemma sizeof_match: forall ce tce ty,
     tr_composite_env ce tce ->
+    complete_type ce ty = true ->
     Ctypes.sizeof tce (to_ctype ty) = sizeof ce ty.
-Admitted.
+Proof.
+  induction ty; simpl; auto; intros TR COM; unfold align_attr;simpl;
+    try destruct (ce!i) eqn: CO; try congruence.
+  rewrite IHty; auto.
+  apply TR in CO.
+  destruct (co_sv c).
+  destruct CO as (tco & A & B & C & D & E). rewrite A. auto.
+  destruct CO as (? & ? & ? & ? & ? & A & B & C & D & E & F & G & H & I).
+  rewrite A. auto.
+  apply TR in CO.
+  destruct (co_sv c).
+  destruct CO as (tco & A & B & C & D & E). rewrite A. auto.
+  destruct CO as (? & ? & ? & ? & ? & A & B & C & D & E & F & G & H & I).
+  rewrite A. auto.
+Qed.
 
 
 Lemma field_offset_rec_match: forall ce tce membs fid ofs bf start,
-    tr_composite_env ce tce ->
+    tr_composite_env ce tce ->    
+    complete_members ce membs = true ->
     field_offset_rec ce fid membs start = OK (ofs, bf) ->
     Ctypes.field_offset_rec tce fid (map transl_composite_member membs) start = OK (ofs, Full).
 Proof.
   induction membs; simpl; intros fid ofs bf start TR FOFS.
+  congruence.
   inv FOFS.
-  destruct a. simpl in *.  
+  destruct a. simpl in *.
+  eapply andb_true_iff in H0. destruct H0.
   destruct (ident_eq fid id). subst.
-  unfold Ctypes.bitalignof, bitalignof in *. inv FOFS.
-  erewrite alignof_match; eauto. 
-  erewrite IHmembs;eauto.
+  unfold Ctypes.bitalignof, bitalignof in *. 
+  erewrite alignof_match; eauto. intros. inv H1. auto.
+  intros FOFS.
+  eapply IHmembs; eauto. 
   unfold Ctypes.bitalignof, Ctypes.bitsizeof.
   erewrite alignof_match; eauto. erewrite sizeof_match; eauto.
 Qed.
 
 Lemma field_offset_match: forall ce tce membs fid ofs bf,
     tr_composite_env ce tce ->
+    complete_members ce membs = true ->
     field_offset ce fid membs = OK (ofs, bf) ->
     Ctypes.field_offset tce fid (map transl_composite_member membs) = OK (ofs, Full).
 Proof.
@@ -246,21 +286,27 @@ Lemma struct_field_offset_match: forall ce tce id fid co ofs bf,
 Proof.
   intros until bf.
   intros TR CO STRUCT FOFS.
-  red in TR. generalize (TR id co CO).
+  generalize (tr_composite_some _ _ TR id co CO).
   rewrite STRUCT. intros (tco & A & B & C & D).
   exists tco. split; auto.
   rewrite <- C.
   eapply field_offset_match; eauto.
+  (* prove complete members *)
+  eapply tr_composite_consistent; eauto.
 Qed.
 
 Lemma alignof_composite_match: forall ce tce ms,
     tr_composite_env ce tce ->
+    complete_members ce ms = true ->
     Ctypes.alignof_composite tce (map transl_composite_member ms) = alignof_composite' ce ms.
 Proof.
   induction ms; intros; simpl; auto.
   rewrite IHms. destruct a. simpl.
   erewrite alignof_match. eauto.
-  auto. auto.
+  auto.
+  simpl in H0. eapply andb_true_iff in H0. destruct H0. auto.
+  auto.
+  simpl in H0. eapply andb_true_iff in H0. destruct H0. auto.
 Qed.
 
 Lemma union_field_offset_eq: forall ms tce fid,
@@ -295,8 +341,8 @@ Lemma variant_field_offset_match: forall ce tce co bf id,
 .
 Proof.
   intros until id. intros TR CO ENUM.
-  generalize (TR id co CO). rewrite ENUM.
-  intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E & F & G & H & I & J & K & L & M).
+  generalize (tr_composite_some _ _ TR id co CO). rewrite ENUM.
+  intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E & F & G & H & I & J & K).
   exists tco, union_id, tag_fid, union_fid, union. simpl.
   repeat split;auto.
   unfold variant_field_offset.
@@ -311,22 +357,403 @@ Proof.
     destruct (ident_eq union_fid union_fid); try contradiction.
     unfold Ctypes.bitalignof. simpl.
     rewrite B. unfold Ctypes.align_attr. simpl.
-    rewrite L. 
+    rewrite K. 
     erewrite alignof_composite_match. unfold Ctypes.bitsizeof.
     simpl. eauto.
     auto.
-  - rewrite J. eapply union_field_offset_eq. auto.
+    eapply tr_composite_consistent; eauto.
+  - rewrite I. eapply union_field_offset_eq. auto.
   - lia.
 Qed.    
+
+Lemma sizeof_struct_match_aux: forall ce tce ms m n,
+    tr_composite_env ce tce ->
+    complete_type ce (type_member m) = true ->
+    complete_members ce ms = true ->
+    bitsizeof_struct ce (next_field ce n m) ms =
+  Ctypes.bitsizeof_struct tce (Ctypes.next_field tce n (transl_composite_member m))
+    (map transl_composite_member ms).
+Proof.
+  unfold next_field, Ctypes.next_field.
+  induction ms; destruct m; simpl; auto.
+  intros TR COM COMS.
+  unfold bitalignof, Ctypes.bitalignof.
+  erewrite alignof_match.
+  unfold bitsizeof, Ctypes.bitsizeof.
+  erewrite sizeof_match. eauto.
+  1-4 : auto.
+  intros n TR COM COMS.
+  exploit (IHms a (align n (bitalignof ce t) + bitsizeof ce t)).
+  auto.
+  eapply andb_true_iff. erewrite andb_comm. eauto.
+  eapply andb_true_iff.  eauto.
+  destruct a. simpl.
+  intros. rewrite H.
+  eapply andb_true_iff in COMS. destruct COMS.
+  unfold bitalignof, Ctypes.bitalignof.
+  repeat erewrite alignof_match.
+  unfold bitsizeof, Ctypes.bitsizeof.
+  repeat erewrite sizeof_match. eauto.
+  simpl in *.
+  1-8 : eauto.
+Qed.
+
+Lemma sizeof_struct_match: forall ce tce ms,
+    tr_composite_env ce tce ->
+    complete_members ce ms = true ->
+    sizeof_struct ce ms = Ctypes.sizeof_struct tce (map transl_composite_member ms).
+Proof.
+  destruct ms; simpl; auto.
+  intros TR COM.
+  unfold sizeof_struct, Ctypes.sizeof_struct in *.
+  f_equal. simpl.
+  eapply sizeof_struct_match_aux; auto.
+  eapply andb_true_iff. erewrite andb_comm. eauto.
+  eapply andb_true_iff.  eauto.
+Qed.  
+  
+    
+Lemma sizeof_variant_match: forall ce tce ms,
+    tr_composite_env ce tce ->
+    complete_members ce ms = true ->
+    sizeof_variant' ce ms = Ctypes.sizeof_union tce (map transl_composite_member ms).
+Proof.
+  destruct ms; simpl; auto.
+  intros TR COM.
+  f_equal.
+  destruct m; simpl.
+  symmetry. eapply sizeof_match. auto.
+  eapply andb_true_iff. erewrite andb_comm. eauto.
+  eapply andb_true_iff in COM. destruct COM.
+  induction ms.
+  simpl. auto.
+  simpl. f_equal.
+  destruct a; simpl.
+  symmetry. eapply sizeof_match. auto.
+  simpl in * .
+  eapply andb_true_iff. erewrite andb_comm. eauto.
+  eapply IHms.
+  eapply andb_true_iff.  eauto.
+Qed.
+
+  
+Lemma complete_type_match: forall ce tce m,
+      tr_composite_env ce tce ->
+      complete_type ce (type_member m) = true ->
+      Ctypes.complete_type tce (Ctypes.type_member (transl_composite_member m)) = true.
+Proof.
+  destruct m; simpl;intros TR TCOMP.
+  induction t;simpl in *; auto; destruct (ce ! i) eqn: CO; try congruence.
+  eapply TR in CO. destruct (co_sv c).
+  destruct CO. intuition. rewrite H0. auto.
+  destruct CO as (a & b & d & e & f & g & h). rewrite g. auto.
+  eapply TR in CO. destruct (co_sv c).
+  destruct CO. intuition. rewrite H0. auto.
+  destruct CO as (a & b & d & e & f & g & h). rewrite g. auto.
+Qed.
+
+Lemma complete_members_match: forall ce tce ms,
+    tr_composite_env ce tce ->
+    complete_members ce ms = true ->
+    Ctypes.complete_members tce (map transl_composite_member ms) = true.
+Proof.
+  induction ms; simpl; auto.
+  intros A B.
+  destruct (complete_type ce (type_member a)) eqn: COMP.
+  exploit IHms; eauto. intros C.
+  rewrite C. erewrite complete_type_match; eauto.
+  rewrite andb_false_l in B.
+  congruence.
+Qed.
+  
+  
+(* prove a general one *)
+Lemma transl_composites_meet_spec_aux: forall co_defs tco_defs ce0 ce1 tce0 tce1,
+    (* (CON: composite_env_consistent ce0) *)
+    (* (TCON: Ctypes.composite_env_consistent tce0), *)
+    transl_composites co_defs = Some tco_defs ->
+    add_composite_definitions ce0 co_defs = OK ce1 ->
+    Ctypes.add_composite_definitions tce0 tco_defs = OK tce1 ->
+    tr_composite_env ce0 tce0 ->
+    tr_composite_env ce1 tce1.
+Proof.
+  induction co_defs as [|d1 defs]; simpl;
+    intros tco_defs ce0 ce1 tce0 tce1 TRANSL CE1 TCE1 MENV.
+  unfold transl_composites in *. simpl in *.
+  unfold Ctypes.link_composite_defs in *. simpl in *. inv TRANSL.
+  simpl in *. inv CE1. inv TCE1. auto.
+
+  generalize MENV. intros (MENVCE0 & CON).
+  unfold transl_composites in *. simpl in *.
+
+
+  set (f := (fun elt : option (Ctypes.composite_definition * option Ctypes.composite_definition)
+             => match elt with
+               | Some _ => true
+               | None => false
+               end)) in *.
+  
+  
+  destruct (transl_composite_def d1) eqn: TD1.
+  2: { rewrite andb_false_l in TRANSL. congruence. }
+  rewrite andb_true_l in TRANSL.
+  destruct (forallb f (map transl_composite_def defs)) eqn: TDS; try congruence.
+  destruct p as (tco, opt_utco).
+  inv TRANSL.
+
+  destruct d1 as (id1, sv1, ms1, a1, orgs1, rels1).
+  monadInv CE1.
+  simpl in TD1.
+  destruct( create_union_idents id1) as ((uid, tfid), ufid).
+
+  (* case: sv1 = Struct *)
+  destruct sv1.
+  - inv TD1. simpl in *.
+    monadInv TCE1.
+    
+    unfold composite_of_def in EQ.
+    destruct (ce0 ! id1) eqn: VALID1; try congruence.
+    destruct (complete_members ce0 ms1) eqn: COMPLETE1; try congruence.
+    unfold Ctypes.composite_of_def in EQ1.        
+    destruct (tce0 ! id1) eqn: TVALID1; try congruence.
+    destruct (Ctypes.complete_members tce0 (map transl_composite_member ms1)) eqn: TCOMPLETE1; try congruence.
+    assert (EXTEND: forall (id : positive) (co : composite), ce0 ! id = Some co -> (PTree.set id1 x ce0) ! id = Some co).
+    { intros. destruct (ident_eq id1 id).
+      subst. rewrite VALID1 in H. congruence.
+      rewrite PTree.gso; auto. }    
+    assert (TEXTEND: forall (id : positive) (co : Ctypes.composite), tce0 ! id = Some co -> (PTree.set id1 x0 tce0) ! id = Some co).
+    { intros. destruct (ident_eq id1 id).
+      subst. rewrite TVALID1 in H. congruence.
+      rewrite PTree.gso; auto. }
+
+    assert (MENV1: tr_composite_env (PTree.set id1 x ce0) (PTree.set id1 x0 tce0)).
+    { constructor.
+      intros id co GET.
+      inv EQ. simpl in *.
+      destruct (peq id id1). 
+      + rewrite PTree.gsspec in GET.
+        subst.
+ rewrite peq_true in GET. inv GET.
+        exists x0. split. apply PTree.gss.
+        inv EQ1. simpl. repeat split; auto.
+        (* sizeof *)
+        f_equal. eapply sizeof_struct_match;auto.
+        f_equal. symmetry. eapply alignof_composite_match; auto.
+        f_equal. symmetry. eapply alignof_composite_match; auto.
+
+      + rewrite PTree.gso in *; auto.
+        eapply MENV in GET as GET1.
+        destruct (co_sv co); auto.
+        destruct GET1 as (tco & union_id & tag_fid & union_fid & uco & GETTCO & GETUCO & A).
+        exists tco, union_id, tag_fid, union_fid, uco. simpl.
+        destruct (ident_eq id1 union_id); subst.
+        rewrite TVALID1 in GETUCO. congruence.
+        rewrite PTree.gso; auto.
+        
+        erewrite sizeof_union_stable.
+        erewrite Ctypes.alignof_composite_stable.
+        eauto. eauto. 
+        eapply complete_members_match. eauto.
+        eapply co_consistent_complete; eauto.
+        eauto.
+        eapply complete_members_match. eauto.
+        eapply co_consistent_complete; eauto.
+
+      + red. intros id co CO.
+      eapply composite_consistent_stable. eapply EXTEND.
+      rewrite PTree.gsspec in *.
+      destruct (peq id id1). inv CO.
+      inv EQ. econstructor; simpl; auto.            
+      eapply CON; eauto. 
+    }
+
+    (* use I.H. *)
+    eapply IHdefs. 4: eapply MENV1.
+    (* composite_env_consistent (PTree.set id1 x ce0) *)
+    (* Ctypes.composite_env_consistent (PTree.set id1 x0 tce0) *)
+    (* { red. intros id tco TCO. *)
+    (*   eapply Ctypes.composite_consistent_stable. eapply TEXTEND. *)
+    (*   rewrite PTree.gsspec in *. *)
+    (*   destruct (peq id id1). inv TCO. *)
+    (*   inv EQ1. econstructor; simpl; auto.             *)
+    (*   eapply TCON; eauto. } *)
+    eauto. auto. auto.
+
+  (* sv = Taggedunion *)
+  - destruct (ident_eq tfid ufid) as [|TFIDNEQ]; try congruence.
+    subst.
+    inv TD1. simpl in TCE1.
+    monadInv TCE1.
+
+    unfold composite_of_def in EQ.
+    destruct (ce0 ! id1) eqn: VALID1; try congruence.
+    destruct (complete_members ce0 ms1) eqn: COMPLETE1; try congruence.
+    unfold Ctypes.composite_of_def in EQ1.        
+    destruct (tce0 ! uid) eqn: TVALID1; try congruence.
+    destruct (Ctypes.complete_members tce0 (map transl_composite_member ms1)) eqn: TCOMPLETE1; try congruence.
+    unfold Ctypes.composite_of_def in EQ3.
+    rewrite PTree.gsspec in EQ3.
+    destruct (peq id1 uid) as [|ID1UIDNEQ]; try congruence.    
+    destruct (tce0 ! id1) eqn: TVALID2; try congruence.
+    destruct (Ctypes.complete_members (PTree.set uid x0 tce0)
+            [Ctypes.Member_plain tfid Ctypes.type_int32s;
+            Ctypes.Member_plain ufid (Tunion uid noattr)]) eqn: TCOMPLETE2; try congruence.
+    assert (EXTEND: forall (id : positive) (co : composite), ce0 ! id = Some co -> (PTree.set id1 x ce0) ! id = Some co).
+    { intros. destruct (ident_eq id1 id).
+      subst. rewrite VALID1 in H. congruence.
+      rewrite PTree.gso; auto. }
+    assert (TEXTEND: forall (id : positive) (co : Ctypes.composite), tce0 ! id = Some co -> (PTree.set uid x0 tce0) ! id = Some co).
+    { intros.
+      (*  destruct (ident_eq id1 id). *)
+      (* subst.  rewrite TVALID2 in H. congruence. *)
+      (* rewrite PTree.gso; auto. *)
+      destruct (ident_eq uid id); try congruence.
+      rewrite PTree.gso; auto. }
+    assert (TEXTEND1: forall (id : positive) (co : Ctypes.composite), (PTree.set uid x0 tce0) ! id = Some co -> (PTree.set id1 x1 (PTree.set uid x0 tce0)) ! id = Some co).
+    { intros. destruct (ident_eq id1 id).
+      subst. destruct (ident_eq uid id); try congruence.
+      rewrite PTree.gso in H. 
+      rewrite TVALID2 in H. congruence.
+      auto. rewrite PTree.gso; auto. }
+    
+    assert (MENV1: tr_composite_env (PTree.set id1 x ce0) (PTree.set id1 x1 (PTree.set uid x0 tce0))).
+    { constructor.
+      intros id co GET.
+      destruct (peq id id1). 
+      + rewrite PTree.gsspec in GET.
+        subst.
+        rewrite peq_true in GET. inv GET.
+        inv EQ. simpl.
+        exists x1, uid, tfid, ufid, x0.
+        split. apply PTree.gss.
+        split. rewrite PTree.gso;auto. apply PTree.gss.
+        split. inv EQ3. auto.
+        split. inv EQ3. simpl. auto.
+        split. auto.
+        split. inv EQ3. simpl. clear EQ4 EQ0.
+        (* FIXME: lots of unstructed code *)
+        { f_equal. unfold Ctypes.sizeof_struct, Ctypes.bitsizeof_struct.
+          simpl. unfold sizeof_variant.
+          replace ((Ctypes.bitsizeof (PTree.set uid x0 tce0) Ctypes.type_int32s)) with 32.
+          f_equal.
+          unfold Ctypes.bitalignof, Ctypes.bitsizeof.
+          simpl. rewrite PTree.gss.
+          unfold align_attr. simpl.          
+          replace (Ctypes.co_alignof x0) with (alignof_composite' ce0 ms1).
+          replace (Ctypes.co_sizeof x0) with (align (sizeof_variant' ce0 ms1) (alignof_composite' ce0 ms1)).
+          auto.
+          inv EQ1. simpl. unfold align_attr. simpl.
+          erewrite sizeof_variant_match.
+          erewrite alignof_composite_match; eauto.
+          auto. auto.
+          inv EQ1. simpl. unfold align_attr. simpl.
+          erewrite alignof_composite_match; eauto.
+          unfold Ctypes.bitsizeof. simpl. auto.
+          unfold align_attr. simpl. rewrite PTree.gss.
+          inv EQ1. simpl. unfold align_attr. simpl.
+          erewrite alignof_composite_match; eauto.          
+          assert (Z.max 4 (Z.max (alignof_composite' ce0 ms1) 1) = Z.max 4 (alignof_composite' ce0 ms1)).
+          rewrite Z.max_assoc. rewrite Z.max_l. auto.
+          erewrite  Z.max_le_iff. left. lia.
+          rewrite H. auto. }
+
+        split. inv EQ3. simpl. clear EQ4 EQ0.
+        rewrite PTree.gss.
+        inv EQ1. simpl. unfold align_attr. simpl.
+        erewrite alignof_composite_match; eauto.
+        assert (Z.max 4 (Z.max (alignof_composite' ce0 ms1) 1) = Z.max 4 (alignof_composite' ce0 ms1)).
+        rewrite Z.max_assoc. rewrite Z.max_l. auto.
+        erewrite  Z.max_le_iff. left. lia.
+        rewrite H. auto.
+
+        split. inv EQ1. auto.
+        split. inv EQ1. auto.
+        split.
+        rewrite sizeof_union_stable with (env:= tce0); auto.
+        rewrite Ctypes.alignof_composite_stable with (env:= tce0); auto.
+        inv EQ1. auto.
+        rewrite Ctypes.alignof_composite_stable with (env:= tce0); auto.
+        inv EQ1. auto.
+
+      + rewrite PTree.gso in *; auto.
+        destruct (ident_eq uid id). subst.
+        (* id <> uid *)
+        { eapply MENV in GET as GET1.
+          rewrite TVALID1 in GET1. destruct co_sv.
+          destruct GET1 as (tco & A & B). congruence.
+          destruct GET1 as (tco & union_id & tag_fid & union_fid & uco & GETTCO & GETUCO & A).
+          congruence. }
+        rewrite PTree.gso in *; auto.
           
+        eapply MENV in GET as GET1.
+        destruct (co_sv co); auto.
+        destruct GET1 as (tco & union_id & tag_fid & union_fid & uco & GETTCO & GETUCO & A & B & C & D & E & F & G & H & I).
+        exists tco, union_id, tag_fid, union_fid, uco. simpl.
+        destruct (ident_eq id1 union_id); subst.
+        rewrite TVALID2 in GETUCO. congruence.
+        rewrite PTree.gso; auto.
+        destruct (ident_eq uid union_id); subst.
+        rewrite TVALID1 in GETUCO. congruence.
+        rewrite PTree.gso; auto.
+        
+        repeat split; auto.
+        erewrite sizeof_union_stable.
+        erewrite Ctypes.alignof_composite_stable.
+        eauto. eauto. 
+        eapply complete_members_match. eauto.
+        eapply co_consistent_complete; eauto.
+        eauto.
+        eapply complete_members_match. eauto.
+        eapply co_consistent_complete; eauto.
+        erewrite Ctypes.alignof_composite_stable.
+        eauto. eauto. 
+        eapply complete_members_match. eauto.
+        eapply co_consistent_complete; eauto.
+
+      (* composite_env_consistent (PTree.set id1 x ce0) *)
+      + red. intros id co CO.
+      eapply composite_consistent_stable. eapply EXTEND.
+      rewrite PTree.gsspec in *.
+      destruct (peq id id1). inv CO.
+      inv EQ. econstructor; simpl; auto.            
+      eapply CON; eauto.
+    }
+
+    (* use I.H. *)
+    eapply IHdefs. 4: eapply MENV1.
+    (* composite_env_consistent (PTree.set id1 x ce0) *)
+    (* Ctypes.composite_env_consistent (PTree.set id1 x1 (PTree.set uid x0 tce0)) *)
+    (* { red. intros id tco TCO. *)
+    (*   do 2 rewrite PTree.gsspec in *. *)
+    (*   assert (TCON1: Ctypes.composite_consistent (PTree.set uid x0 tce0) x1). *)
+    (*   { inv EQ3. econstructor; simpl; auto. } *)
+    (*   eapply Ctypes.composite_consistent_stable. eapply TEXTEND1. *)
+    (*   destruct (peq id id1). inv TCO. auto. *)
+    (*   assert (TCON2: Ctypes.composite_consistent tce0 x0). *)
+    (*   { inv EQ1. econstructor; simpl; auto. } *)
+    (*   eapply Ctypes.composite_consistent_stable. eapply TEXTEND. *)
+    (*   destruct (peq id uid). inv TCO. auto. *)
+      
+    (*   eapply TCON; eauto. } *)
+    eauto. auto. auto.
+Qed.
     
 Lemma transl_composites_meet_spec: forall co_defs tco_defs ce tce,
     transl_composites co_defs = Some tco_defs ->
     build_composite_env co_defs = OK ce ->
     Ctypes.build_composite_env tco_defs = OK tce ->
     tr_composite_env ce tce.
-Admitted.
-
+Proof.
+  unfold build_composite_env, Ctypes.build_composite_env.
+  intros. eapply transl_composites_meet_spec_aux; eauto.
+  constructor.
+  intros.
+  rewrite PTree.gempty in *. congruence.
+  red. intros.
+  rewrite PTree.gempty in *. congruence.
+Qed.
+  
+  
 Section SPEC.
 
 Variable ce: composite_env.
