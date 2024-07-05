@@ -490,7 +490,10 @@ Lemma place_to_cexpr_type: forall p e,
     Proof.
     induction p; simpl; intros; simpl in *.
   -  monadInv H. auto.
-  - monadInv H. auto.
+  - destruct (typeof_place _); inversion H. 
+    destruct (ce ! i0);  inversion H. 
+    destruct (co_sv c); inv H. 
+    monadInv H3.  destruct t; auto. 
   - monadInv H. auto.
   - destruct (typeof_place _); inversion H.
     destruct (ce ! i0);  inversion H.
@@ -587,29 +590,37 @@ Proof.
       econstructor. eauto. eauto.
   - (* p = Pfield p i t *)  
     simpl in Hplaceok. 
-    inv Hplaceok. simpl in *.  monadInv H3. 
-    exploit IHHevalp; eauto.
+    inv Hplaceok. simpl in *.  
+    inv TRANSL. 
+    pose (H0_cp := H0). 
+    apply match_prog_comp_env0 in H0_cp. 
+    rewrite H in H3. 
+    rewrite H0 in H3. 
+    destruct (co_sv co) eqn : Hcosv.  
+    monadInv H3. 
+    exploit IHHevalp; eauto. 
     intros[b' [ofs' [A B]]].
     inv B. 
     exists b'.
     exists (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr delta0)) (Ptrofs.repr delta)). 
-    split.
-    + exploit place_to_cexpr_type; eauto. intro Htpx. rewrite H in Htpx. simpl in Htpx.
+    split. 
+    + exploit struct_field_offset_match; eauto. 
+      intros [tco' [E F]].
+      exploit place_to_cexpr_type; eauto. intro Htpx. 
+      rewrite H in Htpx.  simpl in Htpx. 
       eapply eval_Efield_struct. eapply Clight.eval_Elvalue. 
-      apply A.  rewrite <- Htpx. apply Clight.deref_loc_copy.   
-      auto.
-      rewrite <- Htpx.  eauto. 
-      *   admit.
-      * (*Ctypes.field_offset tge i (Ctypes.co_members ?co) = OK (delta, Full) *) admit.
-    + econstructor. eauto. repeat rewrite Ptrofs.add_assoc. decEq. apply Ptrofs.add_commut.
+      apply A.   apply Clight.deref_loc_copy.   
+      rewrite <- Htpx. auto. eauto. eauto. eauto.
+    + econstructor. eauto. repeat rewrite Ptrofs.add_assoc. decEq. apply Ptrofs.add_commut. 
+    + inv H3. 
   - rename Hplaceok into PEXPR.
     rename Hevalp into EVALP.
     rename Hmatch into MENV.
     rename Hmem_inj into MINJ.
-    simpl in PEXPR.
-    rewrite H in PEXPR. rewrite H0 in PEXPR.
+    simpl in PEXPR. 
+    rewrite H in PEXPR. rewrite H0 in PEXPR. 
     assert (ENUM: co_sv co = TaggedUnion).
-    destruct (co_sv co).
+    destruct (co_sv co). 
     destruct tce!id; inv PEXPR. auto.
     exploit variant_field_offset_match.
     eapply match_prog_comp_env; eauto.
@@ -661,7 +672,7 @@ Proof.
     + exploit place_to_cexpr_type. eauto. intro Hctypex. rewrite <- Hctypex.
       eauto.
     + eauto.
-Admitted.
+Qed. 
 
 
 Lemma eval_expr_inject: forall e te j a a' m tm v le,

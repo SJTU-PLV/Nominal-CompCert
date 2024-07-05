@@ -417,12 +417,25 @@ Fixpoint place_to_cexpr (p: place) : res Clight.expr :=
   match p with
   | Plocal id ty =>      
       OK (Evar id (to_ctype ty))
-  | Pfield p' fid ty =>
-      do e <- place_to_cexpr p';
-      OK (Efield e fid (to_ctype ty))
+  | Pfield p' fid ty =>   
+    match typeof_place p' with
+      | Tstruct _ id =>
+        match ce!id with
+        | Some co =>
+            match co.(co_sv) with
+            | Struct =>
+              do e <- place_to_cexpr p';
+              OK (Efield e fid (to_ctype ty))
+            | _ => Error [CTX id; MSG ": it is not a correct struct"]
+            end
+        | _ => Error [CTX id; MSG ": Cannot find its composite in Rust composite environment : place_to_cexpr"]
+        end
+      | _ => Error (msg "Type error in Pfield: place_to_cexpr ")
+      end
+      
   | Pderef p' ty =>
-      do e <- place_to_cexpr p';
-      OK (Ederef e (to_ctype ty))
+    do e <- place_to_cexpr p';
+    OK (Ederef e (to_ctype ty))
   | Pdowncast p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
@@ -765,4 +778,3 @@ Definition transl_program (p: program) : res Clight.program :=
        end) (eq_refl tce)
   | _ => Error (msg "error in transl_composites (Clightgen)")
   end.
-
