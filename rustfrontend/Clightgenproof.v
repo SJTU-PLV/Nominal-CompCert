@@ -44,8 +44,83 @@ Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     exists orgs rels tyl rety cc, (prog_defmap p) ! malloc_id = Some (Gfun (Rusttypes.External orgs rels EF_malloc tyl rety cc));
     match_prog_free:
     exists orgs rels tyl rety cc, (prog_defmap p) ! free_id = Some (Gfun (Rusttypes.External orgs rels EF_free tyl rety cc));
-
+    match_prog_wf_param_id:
+    list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements (clgen_dropm (build_clgen_env p tp)))))
   }.
+
+Lemma match_globdef: forall l tl ctx id,
+    transf_globdefs (transl_fundef (clgen_src_cenv ctx) (clgen_tgt_cenv ctx) (clgen_dropm ctx) (clgen_glues ctx)) transl_globvar l = OK tl ->
+    Coqlib.option_rel (match_glob ctx) ((PTree_Properties.of_list l) ! id) ((PTree_Properties.of_list tl) ! id).
+Proof.
+  intros l tl ctx id TR.
+  eapply PTree_Properties.of_list_related.
+  generalize dependent tl.
+  generalize dependent l.
+  induction l; simpl; intros.
+  inv TR. econstructor.
+  destruct a. destruct g.
+  destruct transl_fundef eqn: TF in TR; try congruence.  
+  monadInv TR. econstructor.
+  split; auto.
+  simpl. eapply transl_fundef_meet_spec; eauto.
+  eauto.
+  monadInv TR. econstructor.
+  split; auto.
+  simpl. destruct v. simpl.
+  constructor. auto.
+  eauto.
+Qed.
+
+Lemma match_erase_globdef: forall l tl ce tce dropm drops,
+    transf_globdefs (transl_fundef ce tce dropm drops) transl_globvar l = OK tl ->
+    map (fun '(id, g) => (id, erase_globdef g)) l = map (fun '(id, g) => (id, erase_globdef g)) tl.
+Proof.
+  induction l; simpl; intros tl ce tce dropm drops TR.
+  inv TR. auto.
+  destruct a. destruct g.
+  destruct transl_fundef eqn: TF in TR; try congruence.  
+  monadInv TR. simpl. f_equal.
+  eauto.
+  monadInv TR. simpl. f_equal.
+  eauto.
+Qed.
+
+  
+Lemma match_transf_program: forall p tp,
+    transl_program p = OK tp ->
+    match_prog p tp.
+Proof.
+  unfold transl_program. intros p tp.
+  destruct list_disjoint_dec; try congruence.
+  destruct check_malloc_free_existence eqn: EXT; try congruence.
+  destruct transl_composites as [tdefs| ]eqn: TRCOMP; try congruence.
+  (** solution comes from https://coq.discourse.group/t/destructing-term-when-match-generates-equality-involving-that-term/2209/3 *)
+  generalize (eq_refl (Ctypes.build_composite_env tdefs)).
+  generalize (Ctypes.build_composite_env tdefs) at 2 3.
+  intros [tce|] E; try congruence.
+  intros TR. monadInv TR.
+  unfold transform_partial_program2 in EQ.
+  monadInv EQ.
+  simpl.
+  constructor;auto.
+  - simpl. eapply transl_composites_meet_spec; eauto.
+    eapply prog_comp_env_eq.
+  - intros. eapply match_globdef. simpl. auto.
+  (* erase_program *)
+  - unfold erase_program.
+    simpl in *. f_equal.
+    erewrite match_erase_globdef. eauto. eauto.
+  - unfold check_malloc_free_existence in EXT.
+    destruct ((prog_defmap p) ! malloc_id); try congruence.
+    destruct g; try destruct f; try congruence; try destruct e; try congruence; eauto.
+    repeat eexists.
+  - unfold check_malloc_free_existence in EXT.
+    destruct ((prog_defmap p) ! malloc_id) eqn: MALLOC; try congruence.
+    destruct g; try destruct f; try congruence; try destruct e; try congruence; eauto.
+    destruct ((prog_defmap p) ! free_id) eqn: FREE; try congruence.
+    destruct g; try destruct f; try congruence; try destruct e; try congruence; eauto.
+    repeat eexists.
+Qed.
 
 (* Prove match_genv for this specific match_prog *)
 
@@ -1408,7 +1483,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eapply CO2. eauto. rewrite STRUCT. simpl.
-    intros (DISJOINT & DGLUE). inv DGLUE.
+    intros  DGLUE. inv DGLUE.
     (* alloc stack block in function entry *)
     exploit drop_glue_function_entry_step; eauto.
     instantiate (1:= Mptr). instantiate (1 := Vptr tcb tcofs).
@@ -1425,13 +1500,12 @@ Proof.
         (* prove te!glue_id = None *)
         { erewrite PTree.gso.
           eapply PTree.gempty.
-          intro. subst. eapply DISJOINT.
+          intro. subst. eapply match_prog_wf_param_id; eauto.
           econstructor. reflexivity.
-          instantiate (1:= param_id).
           eapply in_cons. eapply in_cons.
           (* prove glue_id in dropm's codomain *)
           eapply in_map_iff. exists (id, param_id). split;auto.
-          eapply PTree.elements_correct. auto. auto. }
+          eapply PTree.elements_correct. auto. }
         eauto.        
         simpl. eapply Clight.deref_loc_reference. auto.
         econstructor. econstructor. eauto.
@@ -1544,7 +1618,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eapply CO2. eauto. rewrite STRUCT. simpl.
-    intros (DISJOINT & DGLUE). inv DGLUE.
+    intros DGLUE. inv DGLUE.
     (* alloc stack block in function entry *)
     exploit drop_glue_function_entry_step; eauto.
     instantiate (1:= Mptr). instantiate (1 := Vptr tcb tcofs).
@@ -1561,15 +1635,13 @@ Proof.
         (* prove te!glue_id = None *)
         { erewrite PTree.gso.
           eapply PTree.gempty.
-          intro. subst. eapply DISJOINT.
+          intro. subst. eapply match_prog_wf_param_id; eauto.
           econstructor. reflexivity.
-          instantiate (1:= param_id).
           eapply in_cons. eapply in_cons.
           (* prove glue_id in dropm's codomain *)
           eapply in_map_iff. exists (id, param_id). split;auto.
-          eapply PTree.elements_correct. auto. auto. }
-        eauto.        
-        simpl. eapply Clight.deref_loc_reference. auto.
+          eapply PTree.elements_correct. auto. }        
+        simpl. eauto. eapply Clight.deref_loc_reference. auto.
         econstructor. econstructor. eauto.
         (* sem_cast *)
         eapply cast_val_casted. econstructor.
@@ -1670,7 +1742,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eapply CO2. eauto. rewrite ENUM. simpl.
-    intros (DISJOINT & union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
+    intros (union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
     inv DGLUE.
     (* alloc stack block in function entry *)
     exploit drop_glue_function_entry_step; eauto.
@@ -1693,15 +1765,14 @@ Proof.
         (* prove te!glue_id = None *)
         { erewrite PTree.gso.
           eapply PTree.gempty.
-          intro. subst. eapply DISJOINT.
+          intro. subst. eapply match_prog_wf_param_id; eauto.
           econstructor. reflexivity.
-          instantiate (1:= param_id).
           eapply in_cons. eapply in_cons.
           (* prove glue_id in dropm's codomain *)
           eapply in_map_iff. exists (id, param_id). split;auto.
-          eapply PTree.elements_correct. auto. auto. } 
+          eapply PTree.elements_correct. auto. } 
         eauto.
-        simpl. eapply Clight.deref_loc_reference. auto.        
+        simpl. eauto. eapply Clight.deref_loc_reference. auto.        
         econstructor. econstructor. eauto.
         (* sem_cast *)
         eapply cast_val_casted. econstructor.
@@ -1840,7 +1911,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eapply CO2. eauto. rewrite ENUM. simpl.
-    intros (DISJOINT & union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
+    intros (union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
     inv DGLUE.
     (* alloc stack block in function entry *)
     exploit drop_glue_function_entry_step; eauto.
@@ -1864,15 +1935,14 @@ Proof.
         (* prove te!glue_id = None *)
         { erewrite PTree.gso.
           eapply PTree.gempty.
-          intro. subst. eapply DISJOINT.
+          intro. subst. eapply match_prog_wf_param_id; eauto.
           econstructor. reflexivity.
-          instantiate (1:= param_id).
           eapply in_cons. eapply in_cons.
           (* prove glue_id in dropm's codomain *)
           eapply in_map_iff. exists (id, param_id). split;auto.
-          eapply PTree.elements_correct. auto. auto. } 
+          eapply PTree.elements_correct. auto. } 
         eauto.
-        simpl. eapply Clight.deref_loc_reference. auto.        
+        simpl. eauto. eapply Clight.deref_loc_reference. auto.        
         econstructor. econstructor. eauto.
         (* sem_cast *)
         eapply cast_val_casted. econstructor.
@@ -1993,8 +2063,8 @@ Proof.
     assert (param_id <> free_id).
     { exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
       eapply CO. eauto. rewrite STRUCT. simpl.
-      intros (DISJOINT & DGLUE).
-      eapply DISJOINT. intuition.
+      intros DGLUE. eapply match_prog_wf_param_id; eauto.
+      intuition.
       intuition. }
     rewrite PTree.gso. eapply PTree.gempty. intuition.
     simpl. f_equal. eauto.
@@ -2062,8 +2132,9 @@ Proof.
     assert (param_id <> free_id).
     { exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
       eapply CO. eauto. rewrite ENUM. simpl.
-      intros (DISJOINT & union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
-      eapply DISJOINT. intuition.
+      intros (union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
+      eapply match_prog_wf_param_id; eauto.
+      intuition.
       intuition. }
     rewrite PTree.gso. eapply PTree.gempty. intuition.
     simpl. f_equal. eauto.
@@ -2366,11 +2437,11 @@ Proof.
   (* assign_variant *)
   - inv MSTMT. simpl in H9.
     monadInv_comb H9.
-    unfold transl_assign_variant in EQ2.
+    unfold transl_assign_variant in EQ0.
     rename H3 into SENUM.
     unfold ge in SENUM. simpl in SENUM. fold ce in SENUM.
-    rewrite SENUM in EQ2.
-    destruct (co_sv co) eqn: SCV; [inv EQ2|].
+    rewrite SENUM in EQ0.
+    destruct (co_sv co) eqn: SCV; [inv EQ0|].
     (* variant_field_offset *)
     exploit variant_field_offset_match.
     eapply match_prog_comp_env; eauto.
@@ -2379,10 +2450,10 @@ Proof.
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
     clear E.
     (* rewrite to_cstmt *)
-    rename H4 into TAG. rewrite TAG in EQ2.
-    unfold tce in EQ2. rewrite A in EQ2. rewrite C in EQ2.
-    rewrite H0 in EQ2.
-    monadInv_sym EQ2.
+    rename H4 into TAG. rewrite TAG in EQ0.
+    unfold tce in EQ0. rewrite A in EQ0. rewrite C in EQ0.
+    rewrite H0 in EQ0.
+    inv EQ0.
     (* eval_lvalue (Efield x0 tag_fid Ctypes.type_int32s) *)
     exploit eval_place_inject; eauto. instantiate (1 := le0).
     intros (tb & tofs & TEVALP & VINJ1).
@@ -2716,7 +2787,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).    
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eauto. eauto. rewrite COSTRUCT. simpl.
-    intros (DISJOINT & DGLUE). inv DGLUE.
+    intros DGLUE. inv DGLUE.
         
     (* alloc stack block in function entry *)
     set (pty := Tpointer (Ctypes.Tstruct id noattr) noattr) in *.
@@ -2800,7 +2871,7 @@ Proof.
     intros (tmb & tf0 & TFINDSYMB & TFINDFUNC & GETGLUE).
     exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.
     eauto. eauto. rewrite COENUM.
-    simpl. intros (DISJOINT & union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
+    simpl. intros (union_id & tag_fid & union_fid & tco & uco & DGLUE & TCO & TUCO & TAGOFS & UFOFS).
     inv DGLUE.
     
     (* alloc stack block in function entry *)
@@ -2922,7 +2993,7 @@ Proof.
   (* step_call *)
   - inv MSTMT. simpl in H4.
     monadInv_comb H4. monadInv_sym EQ3. unfold gensym in EQ2. inv EQ2.
-    inv EQ4. destruct g. simpl in H6. inv H6. eapply list_cons_neq in H5.
+    destruct g. simpl in H6. inv H6. eapply list_cons_neq in H5.
     contradiction.
     admit.
 

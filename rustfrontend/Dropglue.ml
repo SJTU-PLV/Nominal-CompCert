@@ -36,6 +36,9 @@ let create_union_idents (a: positive) : (positive * positive) * positive =
 
 let malloc_id =
   intern_string "malloc"
-  
+
 let free_id =
   intern_string "free"
+
+let param_id =
+intern_string "dropglue_param"

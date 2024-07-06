@@ -50,7 +50,7 @@ Ltac monadInv_sym1 H :=
       let EQ2 := fresh "EQ" in (
       destruct (bind_inversion_sym _ _ F G X Z Z' H) as [x [z [EQ1 EQ2]]];
       clear H;
-      try (monadInv1 EQ2)))))
+      try (monadInv_sym1 EQ2)))))
    | (bind2 ?F ?G ?Z = Res ?X ?Z') =>
       let x := fresh "x" in (
       let y := fresh "y" in (
@@ -59,7 +59,7 @@ Ltac monadInv_sym1 H :=
       let EQ2 := fresh "EQ" in (
       destruct (bind2_inversion_sym _ _ _ F G X Z Z' H) as [x [y [z [EQ1 EQ2]]]];
       clear H;
-      try (monadInv1 EQ2))))))
+      try (monadInv_sym1 EQ2))))))
   | (match ?X with left _ => _ | right _ => error _ end = OK _) =>
       destruct X; [try (monadInv_sym1 H) | discriminate]
   end.
@@ -788,12 +788,12 @@ tr_composite relation *)
     tr_stmt s1 s1' ->
     tr_stmt s2 s2' ->
     tr_stmt (Ssequence s1 s2) (Clight.Ssequence s1' s2')
-| Sifthenelse: forall e e' s1 s2 s1' s2',
+| tr_ifthenelse: forall e e' s1 s2 s1' s2',
     expr_to_cexpr ce tce e = OK e' ->
     tr_stmt s1 s1' ->
     tr_stmt s2 s2' ->
     tr_stmt (Sifthenelse e s1 s2) (Clight.Sifthenelse e' s1' s2')
-  | Sloop: forall s s',
+| tr_loop: forall s s',
       tr_stmt s s' ->
       tr_stmt (Sloop s) (Clight.Sloop s' Clight.Sskip)
 .
@@ -818,8 +818,8 @@ Inductive tr_function: function -> Clight.function -> Prop :=
 (*     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) -> *)
 (*     Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) -> *)
 (*     tr_function f tf *)
-| tr_function_drop_glue: forall f comp_id glue
-    (WFNAMES: list_disjoint (Clight.var_names (glue.(Clight.fn_params) ++ glue.(Clight.fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm)))),
+| tr_function_drop_glue: forall f comp_id glue,
+    (* (WFNAMES: list_disjoint (Clight.var_names (glue.(Clight.fn_params) ++ glue.(Clight.fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm)))), *)
     f.(fn_drop_glue) = Some comp_id ->
     (* We can ensure that every composite has a drop glue in Clightgen
     because if ce!id = Some co and tr_composite ce tce then
@@ -827,6 +827,54 @@ Inductive tr_function: function -> Clight.function -> Prop :=
     glues!comp_id = Some glue ->
     tr_function f glue
 .
+
+
+Lemma transl_stmt_meet_spec: forall s ts g g',
+    transl_stmt ce tce dropm s g = Res ts g' ->
+    tr_stmt s ts.
+Proof.
+  induction s; simpl; intros until g'; intros TRANSL;
+    try (monadInv_sym TRANSL); simpl; try (econstructor; instantiate (1:= g'); eauto; fail).
+  - econstructor. instantiate (1:= g'). monadInv_comb TRANSL. simpl.
+    rewrite EQ. rewrite EQ1. eauto.
+  - monadInv_comb TRANSL. econstructor. instantiate (1:= g'). simpl.
+    rewrite EQ. rewrite EQ1. simpl. rewrite EQ0. eauto.
+  - monadInv_comb EQ0. eapply tr_box; eauto.
+  - monadInv_comb EQ0. destruct expand_drop eqn: EXP in EQ2.
+    monadInv_sym EQ2. eapply tr_drop; eauto. monadInv_sym EQ2.
+  - monadInv_comb TRANSL. monadInv_sym EQ3.
+    eapply tr_call; eauto.
+  - eapply tr_seq; eauto.
+  - monadInv_comb TRANSL. monadInv_sym EQ0.
+    eapply tr_ifthenelse; eauto.
+  - eapply tr_loop. eauto.
+  - destruct o.
+    monadInv_comb TRANSL. econstructor. instantiate (1:= g'). simpl.
+    rewrite EQ. auto.
+    monadInv_sym TRANSL. econstructor. instantiate (1:= g'). simpl.
+    auto.
+Qed.
+
+
+Lemma transl_function_meet_spec: forall f tf,
+    transl_function ce tce dropm glues f = OK tf ->
+    tr_function f tf.
+Proof.
+  unfold transl_function. intros f tf TR.
+  destruct (fn_drop_glue f) eqn: DROP.
+  destruct (glues ! i) eqn: GLUE.
+  inv TR. eapply tr_function_drop_glue; eauto.
+  congruence.
+  unfold transl_function_normal in TR.
+  destruct (transl_stmt) eqn: TRSTMT in TR.
+  congruence.
+  destruct (list_norepet_dec ident_eq (Clight.var_names (gen_trail g'))) eqn: A in TR; try congruence.
+  destruct (list_disjoint_dec ident_eq (var_names (fn_params f ++ fn_vars f))
+              (malloc_id :: free_id :: map snd (PTree.elements dropm))) in TR; try congruence.
+  inv TR.
+  eapply tr_function_normal; eauto.
+  simpl. eapply transl_stmt_meet_spec. eauto.
+Qed.
 
 End SPEC.
 
@@ -853,6 +901,15 @@ Inductive tr_fundef (ctx: clgen_env): fundef -> Clight.fundef -> Prop :=
     ef <> EF_malloc /\ ef <> EF_free ->
     tr_fundef ctx (External orgs rels ef targs tres cconv) (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv).
 
+Lemma transl_fundef_meet_spec: forall f tf ctx id,
+    transl_fundef ctx.(clgen_src_cenv) ctx.(clgen_tgt_cenv) ctx.(clgen_dropm) ctx.(clgen_glues) id f = OK tf ->
+    tr_fundef ctx f tf.
+Proof.
+  destruct f;simpl; intros.
+  monadInv H. econstructor. eapply transl_function_meet_spec. auto.
+  destruct e; inv H; try econstructor; auto; try (split; congruence).
+Qed.
+
 
 Lemma generate_dropm_inv: forall p id gid,
     (generate_dropm p) ! id = Some gid ->
@@ -867,7 +924,7 @@ Lemma generate_drops_inv: forall ce tce dropm id co f,
     let co_ty := Ctypes.Tstruct id noattr in
     let param_ty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id param_ty) co_ty in
-    list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements dropm))) /\
+    (* list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements dropm))) /\ *)
     match co.(co_sv) with
     | Struct =>
         let stmt_list := drop_glue_for_members ce dropm deref_param co.(co_members) in
@@ -902,7 +959,48 @@ Lemma generate_drops_inv: forall ce tce dropm id co f,
                 /\ Ctypes.union_field_offset tce fid uco.(Ctypes.co_members) = OK (ofs2, Full)
                 /\ ofs = ofs1 + ofs2)
     end.
-Admitted.
+Proof.
+  intros until f.
+  intros TR CO.
+  unfold generate_drops.
+  rewrite PTree.gmap. rewrite CO.
+  simpl.
+  intros DROP. inv DROP.
+  unfold generate_drops_acc, drop_glue_for_composite.
+  generalize (tr_composite_some _ _ TR _ _ CO).
+  destruct (co_sv co) eqn: SV.
+  - intros (tco & A & B & C & D & E).
+    eauto.
+  - intros (tco & uid & tfid & ufid & uco & A & B & C & D & E & F & G & H & I & J & K).
+    exists uid, tfid, ufid, tco, uco. simpl.
+    rewrite A. rewrite C. rewrite D.
+    repeat split; auto.
+    unfold Ctypes.field_offset. simpl.
+    destruct (ident_eq tfid tfid); try congruence.
+    rewrite align_same. f_equal. unfold Ctypes.bitalignof. simpl. lia.
+    apply Z.divide_0_r.
+    (* prove variant_field_offset_match twice here!!! *)
+    unfold variant_field_offset.
+    intros fid ofs.
+    destruct (existsb (fun m : member => ident_eq fid (name_member m)) (co_members co)) eqn: EB; try congruence.
+    intros. inv H0.
+    exists (align 32 (alignof_composite' ce (co_members co) * 8) / 8), 0.
+    split; try split.
+  + unfold Ctypes.field_offset.
+    simpl.
+    destruct (ident_eq ufid tfid). subst. contradiction.
+    destruct (ident_eq ufid ufid); try contradiction.
+    unfold Ctypes.bitalignof. simpl.
+    rewrite B. unfold Ctypes.align_attr. simpl.
+    rewrite K. 
+    erewrite alignof_composite_match. unfold Ctypes.bitsizeof.
+    simpl. eauto.
+    auto.
+    eapply tr_composite_consistent; eauto.
+  + rewrite I. eapply union_field_offset_eq. auto.
+  + lia.
+Qed.
+
 
 Lemma select_switch_sem_match_aux: forall ce dropm param membs tag memb idx,
     list_nth_z membs (tag - idx) = Some memb ->
@@ -924,7 +1022,7 @@ Proof.
   destruct (select_switch_case tag (make_labelled_drop_stmts ce dropm param (idx + 1) membs)) eqn: SEL.
   eauto. eauto.
 Qed.
-
+ 
 Lemma select_switch_sem_match: forall ce dropm param membs tag memb,
     list_nth_z membs tag = Some memb ->
     exists s, seq_of_labeled_statement (select_switch tag (make_labelled_drop_stmts ce dropm param 0 membs)) = (Clight.Ssequence (Clight.Ssequence (drop_glue_for_member ce dropm param memb) Clight.Sbreak) s).

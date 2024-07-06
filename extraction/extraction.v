@@ -130,6 +130,7 @@ Extract Constant Compiler.time  => "Timing.time_coq".
 Extract Constant Clightgen.create_union_idents => "Dropglue.create_union_idents".
 Extract Constant Clightgen.malloc_id => "Dropglue.malloc_id".
 Extract Constant Clightgen.free_id => "Dropglue.free_id".
+Extract Constant Clightgen.param_id => "Dropglue.param_id".
 Extract Constant Clightgen.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant ElaborateDrop.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant Rustlightgen.fresh_atom => "Camlcoq.fresh_atom".

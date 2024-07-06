@@ -500,12 +500,14 @@ let debug_BorrowCheck (prog: RustIR.program) =
     fatal_error no_loc "%a"  print_error msg
 
 let debug_ClightComposite prog =
-  let clight_composites = Clightgen.transl_composites prog.Rusttypes.prog_types in
-  Format.fprintf stdout_format "@.Clightgen Composites: @.";
-  Format.fprintf stdout_format "@[<v 0>"; 
-  List.iter (PrintCsyntax.define_composite stdout_format)clight_composites;
-  Format.fprintf stdout_format "@]@.";
-  prog
+  match Clightgen.transl_composites prog.Rusttypes.prog_types with
+  | Some clight_composites -> 
+    Format.fprintf stdout_format "@.Clightgen Composites: @.";
+    Format.fprintf stdout_format "@[<v 0>"; 
+    List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
+    Format.fprintf stdout_format "@]@.";
+    prog
+  |  None -> fatal_error no_loc "@.Translate composites error @."
 
 let debug_Clightgen prog =
   match Clightgen.transl_program prog with

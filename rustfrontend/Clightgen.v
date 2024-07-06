@@ -292,16 +292,17 @@ Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.functio
 (* Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : PTree.t Clight.function := *)
 (*   PTree_Properties.of_list (generate_drops_list l dropm). *)
 
-Definition generate_drops_acc (dropm: PTree.t ident) (drops: PTree.t Clight.function) (id: ident) (co: composite) : PTree.t Clight.function :=
+Definition empty_drop := Clight.mkfunction Tvoid cc_default nil nil nil Clight.Sskip.
+
+Definition generate_drops_acc (dropm: PTree.t ident) (id: ident) (co: composite) : Clight.function :=
   let glue := drop_glue_for_composite dropm id co.(co_sv) co.(co_members) in
   match glue with
-  | Some glue1 =>
-      PTree.set id glue1 drops
-  | None => drops
+  | Some glue1 => glue1
+  | None => empty_drop
   end.
   
 Definition generate_drops (dropm: PTree.t ident) : PTree.t Clight.function :=
-  PTree.fold (generate_drops_acc dropm) ce (PTree.empty Clight.function).
+  PTree.map (generate_drops_acc dropm) ce.
 
 End COMPOSITE_ENV.
 
@@ -595,18 +596,18 @@ Definition transl_assign_variant (p: place) (enum_id arm_id: ident) (e' lhs: Cli
                           let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
                           let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
                           let assign_body := Clight.Sassign lhs' e' in
-                          ret (Clight.Ssequence assign_tag assign_body)
-                      | _ => error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
+                          OK (Clight.Ssequence assign_tag assign_body)
+                      | _ => Error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
                       end
-                  | _ => error [CTX enum_id; MSG ": cannot get its tag or body id when translating the variant assignement"]
+                  | _ => Error [CTX enum_id; MSG ": cannot get its tag or body id when translating the variant assignement"]
                   end
-              | _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
+              | _ => Error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
               end
-          | _, _  => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
+          | _, _  => Error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
           end
-      | _ => error [CTX enum_id; MSG ": assign variant to a non-variant place"]
+      | _ => Error [CTX enum_id; MSG ": assign variant to a non-variant place"]
       end
-  | _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
+  | _ => Error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
   end.
 
 
@@ -621,7 +622,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       docomb e' <- expr_to_cexpr e;
       docomb lhs <- place_to_cexpr p;
       (* let ty := typeof e in *)
-      transl_assign_variant p enum_id arm_id e' lhs
+      docomb r <- transl_assign_variant p enum_id arm_id e' lhs;
+      ret r
   | Sbox p e =>
       (* temp = malloc(sizeof(e));
        *temp = e;
@@ -726,9 +728,7 @@ Definition transl_function glues (f: function) : Errors.res Clight.function :=
   | Some comp_id =>
       match glues!comp_id with
       | Some glue =>
-          if list_disjoint_dec ident_eq (Clight.var_names (glue.(Clight.fn_params) ++ glue.(Clight.fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
-            Errors.OK glue
-          else Errors.Error [MSG "param_id is not disjoint with drop id"]
+          Errors.OK glue
       | _ => Errors.Error [MSG "no drop glue for "; CTX comp_id; MSG " , it is invalid composite"]
       end
   | None => transl_function_normal f
@@ -753,6 +753,14 @@ Definition transl_fundef glues (_: ident) (fd: fundef) : Errors.res Clight.funde
 
 End TRANSL.
 
+(* Check the existence of malloc and free *)
+
+Definition check_malloc_free_existence (p: program) : bool :=
+  match (prog_defmap p) ! malloc_id, (prog_defmap p) ! free_id with
+  | Some (Gfun (External _ _ EF_malloc _ _ _)), Some (Gfun (External _ _ EF_free _ _ _)) =>
+      true
+  | _, _ => false
+  end.
 
 (* Translation of a whole program *)
 
@@ -763,27 +771,30 @@ Local Open Scope error_monad_scope.
 Definition transl_program (p: program) : res Clight.program :=
   (* generate drop glue map: composite id to drop glue id *)
   let dropm := generate_dropm p in
-  (* step 1: rust composite to c composite: generate union for each variant *)
-  match transl_composites p.(prog_types) with
-  | Some co_defs =>
-      let tce := Ctypes.build_composite_env co_defs in
-      (match tce as m return (tce = m) -> res Clight.program with
-       | OK tce =>
-           fun Hyp =>
-             let ce := p.(prog_comp_env) in
-             (* step 2: generate drop glue *)
-             let globs := generate_drops ce tce dropm in
-             (** TODO: Maybe we should check the existence of malloc
-                 and free idents *)      
-             (* step 3: translate the statement and convert drop glue *)
-             do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
-             OK {| Ctypes.prog_defs := AST.prog_defs p1;
-                  Ctypes.prog_public := AST.prog_public p1;
-                  Ctypes.prog_main := AST.prog_main p1;
-                  Ctypes.prog_types := co_defs;
-                  Ctypes.prog_comp_env := tce;
-                  Ctypes.prog_comp_env_eq := Hyp |}
-       | Error msg => fun _ => Error msg
-       end) (eq_refl tce)
-  | _ => Error (msg "error in transl_composites (Clightgen)")
-  end.
+  if list_disjoint_dec ident_eq [param_id] (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
+    if check_malloc_free_existence p then
+      (* step 1: rust composite to c composite: generate union for each variant *)
+      match transl_composites p.(prog_types) with
+      | Some co_defs =>
+          let tce := Ctypes.build_composite_env co_defs in
+          (match tce as m return (tce = m) -> res Clight.program with
+           | OK tce =>
+               fun Hyp =>
+                 let ce := p.(prog_comp_env) in
+                 (* step 2: generate drop glue *)
+                 let globs := generate_drops ce tce dropm in
+                 (* step 3: translate the statement and convert drop glue *)
+                 do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
+                 OK {| Ctypes.prog_defs := AST.prog_defs p1;
+                      Ctypes.prog_public := AST.prog_public p1;
+                      Ctypes.prog_main := AST.prog_main p1;
+                      Ctypes.prog_types := co_defs;
+                      Ctypes.prog_comp_env := tce;
+                      Ctypes.prog_comp_env_eq := Hyp |}
+           | Error msg => fun _ => Error msg
+           end) (eq_refl tce)
+      | _ => Error (msg "error in transl_composites (Clightgen)")
+      end
+    else Error (msg "malloc/free does not exists (Clightgen)")
+  else Error (msg "repeated drop glue paramter id (Clightgen)")
+.
