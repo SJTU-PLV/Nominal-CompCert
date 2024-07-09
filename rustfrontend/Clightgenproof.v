@@ -608,6 +608,35 @@ Proof.
       monadInv H4. auto.
 Qed.
 
+Lemma pexpr_to_cexpr_types : forall p x,
+    pexpr_to_cexpr ce tce p = OK x ->
+    to_ctype (typeof_pexpr p) = Clight.typeof x. 
+Proof.
+  induction p. 
+  - simpl. intros. monadInv H. auto.
+  - simpl. intros. monadInv H. auto.
+  - simpl. intros. monadInv H. auto.
+  - simpl. intros. monadInv H. auto.
+  - simpl. intros. monadInv H. auto.
+  - simpl. intros. destruct (type_eq_except_origins t (typeof_place p) ) eqn : Horg.
+
+    eapply type_eq_except_origins_to_ctype in Horg. 
+    rewrite Horg. 
+    eapply place_to_cexpr_type. eauto.
+    inv H. 
+  - simpl. intros. destruct (typeof_place p ) eqn: Htp; inv H. 
+    destruct (ce ! i0) eqn: Hce; inv H1.
+    destruct (field_tag i (co_members c)) eqn: Hcosv; inv H0.
+    destruct (get_variant_tag tce i0) eqn: Htag; inv H1.
+    monadInv H0.
+    simpl.  auto. 
+  - intros. simpl in H. monadInv H. 
+    simpl.  auto. 
+  - intros. inv H. monadInv H1. simpl. auto.
+  - intros. inv H. monadInv H1. simpl. auto.
+Qed. 
+
+
 (* Injection is preserved during evaluation *)
 
 Lemma deref_loc_inject: forall ty m tm b ofs b' ofs' v j,
@@ -749,7 +778,6 @@ Proof.
     + eauto.
 Qed. 
 
-
 Lemma eval_expr_inject: forall e te j a a' m tm v le,
     eval_expr ce e m a v ->
     expr_to_cexpr ce tce a = OK a' ->
@@ -762,38 +790,124 @@ Proof.
   destruct a.
   - admit. 
   - simpl. 
-    intros. 
-    induction p eqn:Hp. 
-    + simpl. intros. simpl in *. inv H. inv H0. 
-      esplit. split. econstructor.
-      inv H4. auto. 
-    + intros. simpl in *. inv H. inv H4. exists (Vint i). 
-      split. inv H0. constructor. auto.
-    + intros. simpl in *. inv H. inv H4. exists (Vfloat f).
-      split. inv H0. constructor. auto.
-    + intros. simpl in *. inv H. inv H4. exists (Vsingle f).
-      split. inv H0. constructor. auto.
-    + intros. simpl in *. inv H. inv H4. exists (Vlong i).
-      split. inv H0. constructor. auto.
+    intros a' m tm v le. 
+    intros EVAL PEXPR MATJ MINJ. 
+    generalize dependent v. 
+    generalize dependent a'. 
+    induction p; intros.
+    + simpl. intros. simpl in *. inv EVAL. monadInv PEXPR.   
+      esplit. split. econstructor. inv H0. eauto. 
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vint i). 
+      split. inv H0. constructor. inv H0. eauto. 
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vfloat f).
+      split. inv H0. constructor. inv H0. eauto. 
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vsingle f).
+      split. inv H0. constructor. inv H0. eauto. 
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vlong i).
+      split. inv H0. constructor. inv H0. eauto. 
     + (* Eplace p0 t *)
-      intros. 
-      * simpl in *. destruct (type_eq_except_origins t (typeof_place p0) ) eqn:Horg. 
-        inv H. inv H4.  inv H5. inv H0.      
-        ** generalize (H1 id). intros REL. inv REL.
-            *** esplit. split. econstructor. econstructor. 
-                instantiate (1:= b). congruence.
-                simpl in *.
-                exploit deref_loc_inject; eauto.
-                (* instantiate (1:= ) *)
-                admit.
-                admit.
-                admit.
-            *** destruct x. destruct y. simpl in H4. destruct H4. 
-                esplit. split. econstructor. econstructor.
-                instantiate (1:= b1).  congruence.
-                simpl.
-Admitted.
+      inv PEXPR. destruct (type_eq_except_origins t (typeof_place p) ) eqn:Horg; inv H0. 
+      inv EVAL. inv H0.   
+      exploit eval_place_inject; eauto.
+      intros (b' & ofs' & A & B).
+      exploit deref_loc_inject; eauto. intros [v' [C D]].
+      eexists.  split. eapply Clight.eval_Elvalue. eauto. 
+      assert (EQTYPETA: to_ctype t = Clight.typeof a'). 
+      {
+        exploit place_to_cexpr_type; eauto. 
+        intros. exploit type_eq_except_origins_to_ctype; eauto. 
+        intro K. congruence. 
+      }
+      rewrite <-  EQTYPETA. eauto. eauto. 
+    + inv EVAL. inv H0.   
+      inversion PEXPR. 
+      rewrite H4 in H0. 
+      rewrite H5 in H0. 
+      rewrite H7 in H0. 
+      destruct (get_variant_tag tce id) eqn:VTAG; inv H0.
+      unfold get_variant_tag in VTAG. 
+      destruct (tce ! id) eqn:TCID; inv VTAG. 
+      destruct (co_su c) eqn: COSUC; inv H0. 
+      destruct (Ctypes.co_members c) eqn: COMEM; inv H6. 
+      destruct (m0) eqn: MEMB; inv H0. 
+      destruct (m1) eqn: MEMB1; inv H6. 
+      destruct (m0) eqn: MEMB0; inv H0.
+      destruct (t0) eqn: T0; inv H6. 
+      destruct l eqn: L; inv H0.  
+      monadInv H1. 
+      exploit place_to_cexpr_type; eauto. 
+      intros Htpx. rewrite H4 in Htpx. simpl in Htpx. 
+      exploit eval_place_inject; eauto. 
+      instantiate (1:=le).  
+      intros (b' & ofs' & A & B). 
+      inv B. 
+      pose (CEID := H5).  
+      eexists. split. 
+      * eapply Clight.eval_Ebinop. 
+         
+        **eapply eval_Elvalue. 
+          eapply eval_Efield_struct.  
+          eapply eval_Elvalue. eauto. 
+          rewrite <- Htpx. eapply Clight.deref_loc_copy; eauto.  rewrite Htpx.  auto.
+          simpl. eauto. 
+          rewrite COMEM.
+          unfold Ctypes.field_offset.    
+          unfold Ctypes.field_offset_rec. simpl. 
+          destruct (ident_eq i0 i0). auto. congruence. 
+          simpl. 
+          eapply Clight.deref_loc_value. 
+          simpl. eauto.  
+          exploit Mem.loadv_inject; eauto.    
+          intros (v2 & LOAD & VINJ).
+          (* unfold align.    *)
+          inv VINJ.    
+          assert ( (align 0 (Ctypes.bitalignof (Ctypes.prog_comp_env tprog) t) / 8)= 0). 
+          admit. (*use align_same*)
+          rewrite  H.   rewrite   Ptrofs.add_zero.  eauto. 
+        ** eapply Clight.eval_Econst_int. 
+        ** instantiate (1:= (Val.of_bool (Int.unsigned tag =? tagz))). admit. 
+      * unfold Val.of_bool. 
+        destruct (Int.unsigned tag =? tagz);
+        eapply Val.inject_int. 
+    + inv EVAL. inv H0.  monadInv PEXPR. 
+      exploit place_to_cexpr_type; eauto. 
+      intros Htpx. 
+      exploit eval_place_inject; eauto.
+      instantiate (1:=le).
+      intros (b' & ofs' & A & B). 
+      eexists.  
+      split. 
+      * eapply Clight.eval_Eaddrof. eauto. 
+      * eauto.
+    + simpl in PEXPR. monadInv PEXPR.
+      inv EVAL. 
+      inv H0. 
+      exploit IHp. eauto. econstructor. eauto. 
+      intros [v' [A B]]. 
+      exploit sem_unary_operation_inject; eauto.
+      intros [v2 [C D]].
+      eexists. 
+      split.
+      econstructor. eauto. 
+      exploit pexpr_to_cexpr_types; eauto. 
+      intros Htpx. rewrite <- Htpx. eauto. eauto.
+    + simpl in PEXPR. monadInv PEXPR.
+      inv EVAL.
+      inv H0. 
+      exploit IHp1; eauto.  econstructor.  eauto. 
+      intros [v1' [A B]].
+      exploit IHp2; eauto. econstructor. eauto.
+      intros [v2' [C D]].
+      exploit sem_binary_operation_rust_inject; eauto.
+      intros [v3 [E F]]. eauto.
 
+      esplit. split. econstructor. eapply A. eapply C. 
+      exploit  pexpr_to_cexpr_types.  eapply EQ. 
+      intros Htpx. rewrite <- Htpx.
+      exploit pexpr_to_cexpr_types. eapply EQ1. 
+      intros Htpx0. rewrite <- Htpx0. 
+      eauto. eauto.
+Admitted. 
        
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->

@@ -1473,6 +1473,63 @@ Proof.
 - eapply sem_cmp_inj; eauto.
 Qed.
 
+Lemma sem_binary_operation_rust_inj:
+  forall op v1 ty1 v2 ty2 v tv1 tv2 cenv,
+  sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
+  Val.inject f v1 tv1 -> Val.inject f v2 tv2 ->
+  exists tv, sem_binary_operation cenv op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
+  Proof.
+    unfold sem_binary_operation_rust; unfold sem_binary_operation; intros; destruct op.
+    - (* add *)
+      unfold sem_add_rust in *; unfold sem_add in *; destruct (classify_add ty1 ty2); inv H. 
+      eapply sem_binarith_inject; eauto; intros; exact I.
+    - unfold sem_sub_rust in *; unfold sem_sub in *; destruct (classify_sub ty1 ty2); inv H. 
+      eapply sem_binarith_inject; eauto; intros; exact I.
+      - (* mul *)
+      eapply sem_binarith_inject; eauto; intros; exact I.
+    - (* div *)
+      eapply sem_binarith_inject; eauto; intros.
+      destruct sg.
+      destruct (Int.eq n2 Int.zero
+                || Int.eq n1 (Int.repr Int.min_signed) && Int.eq n2 Int.mone); exact I.
+      destruct (Int.eq n2 Int.zero); exact I.
+      destruct sg.
+      destruct (Int64.eq n2 Int64.zero
+                || Int64.eq n1 (Int64.repr Int64.min_signed) && Int64.eq n2 Int64.mone); exact I.
+      destruct (Int64.eq n2 Int64.zero); exact I.
+      exact I.
+      exact I.
+    - (* mod *)
+      eapply sem_binarith_inject; eauto; intros.
+      destruct sg.
+      destruct (Int.eq n2 Int.zero
+                || Int.eq n1 (Int.repr Int.min_signed) && Int.eq n2 Int.mone); exact I.
+      destruct (Int.eq n2 Int.zero); exact I.
+      destruct sg.
+      destruct (Int64.eq n2 Int64.zero
+                || Int64.eq n1 (Int64.repr Int64.min_signed) && Int64.eq n2 Int64.mone); exact I.
+      destruct (Int64.eq n2 Int64.zero); exact I.
+      exact I.
+      exact I.
+    - (* and *)
+      eapply sem_binarith_inject; eauto; intros; exact I.
+    - (* or *)
+      eapply sem_binarith_inject; eauto; intros; exact I.
+    - (* xor *)
+      eapply sem_binarith_inject; eauto; intros; exact I.
+    - (* shl *)
+      eapply sem_shift_inject; eauto.
+    - (* shr *)
+      eapply sem_shift_inject; eauto.
+      (* comparisons *)
+    - eapply sem_cmp_inj; eauto.
+    - eapply sem_cmp_inj; eauto.
+    - eapply sem_cmp_inj; eauto.
+    - eapply sem_cmp_inj; eauto.
+    - eapply sem_cmp_inj; eauto.
+    - eapply sem_cmp_inj; eauto.
+    Qed.
+
 End GENERIC_INJECTION.
 
 Lemma sem_cast_inject:
@@ -1505,6 +1562,20 @@ Lemma sem_binary_operation_inject:
   exists tv, sem_binary_operation cenv op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
 Proof.
   intros. eapply sem_binary_operation_inj; eauto.
+  intros; eapply Mem.valid_pointer_inject_val; eauto.
+  intros; eapply Mem.weak_valid_pointer_inject_val; eauto.
+  intros; eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
+  intros; eapply Mem.different_pointers_inject; eauto.
+Qed.
+
+Lemma sem_binary_operation_rust_inject:
+  forall f m m' op v1 ty1 v2 ty2 v tv1 tv2 cenv,
+  sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
+  Val.inject f v1 tv1 -> Val.inject f v2 tv2 ->
+  Mem.inject f m m' ->
+  exists tv, sem_binary_operation cenv op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
+Proof.
+  intros. eapply sem_binary_operation_rust_inj; eauto.
   intros; eapply Mem.valid_pointer_inject_val; eauto.
   intros; eapply Mem.weak_valid_pointer_inject_val; eauto.
   intros; eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
