@@ -519,12 +519,12 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     eval_pexpr (Eplace p ty) v
 | eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
     eval_place p b ofs ->
-    (* load the tag *)
+    (* load the tag *) 
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
-    eval_pexpr (Ecktag p fid) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
+    eval_pexpr (Ecktag p fid) (Val.of_bool (Int.eq tag (Int.repr tagz)))
 | eval_Eref: forall p b ofs mut ty org,
     eval_place p b ofs ->
     eval_pexpr (Eref org mut p ty) (Vptr b ofs).

@@ -788,7 +788,22 @@ Lemma eval_expr_inject: forall e te j a a' m tm v le,
    evaluation of expression in RustIR *)
 Proof. 
   destruct a.
-  - admit. 
+  - simpl. 
+    destruct (type_eq_except_origins t (typeof_place p)) eqn :Horg; try congruence. 
+    exploit type_eq_except_origins_to_ctype; eauto. 
+    intros TTYP.
+    intros a' m tm v le.
+    intros EVAL PEXPR MATJ MINJ.
+    inv EVAL. 
+    inv H2. 
+    exploit eval_place_inject; eauto. 
+    intros (b' & ofs' & A & B).
+    exploit deref_loc_inject; eauto.
+    intros [v' [C D]].
+    eexists. split. eapply Clight.eval_Elvalue. eauto.
+    exploit place_to_cexpr_type; eauto. 
+    intros Htpx. rewrite <- TTYP in Htpx. rewrite <- Htpx. 
+    eauto. eauto.
   - simpl. 
     intros a' m tm v le. 
     intros EVAL PEXPR MATJ MINJ. 
@@ -840,7 +855,6 @@ Proof.
       exploit eval_place_inject; eauto. 
       instantiate (1:=le).  
       intros (b' & ofs' & A & B). 
-      inv B. 
       pose (CEID := H5).  
       eexists. split. 
       * eapply Clight.eval_Ebinop. 
@@ -859,16 +873,29 @@ Proof.
           simpl. eauto.  
           exploit Mem.loadv_inject; eauto.    
           intros (v2 & LOAD & VINJ).
-          (* unfold align.    *)
           inv VINJ.    
-          assert ( (align 0 (Ctypes.bitalignof (Ctypes.prog_comp_env tprog) t) / 8)= 0). 
-          admit. (*use align_same*)
-          rewrite  H.   rewrite   Ptrofs.add_zero.  eauto. 
+          assert ( L : (align 0 (Ctypes.bitalignof (Ctypes.prog_comp_env tprog) t) / 8)= 0). 
+          exploit align_same. 
+          instantiate ( 1:= Ctypes.bitalignof (Ctypes.prog_comp_env tprog) t). 
+          unfold Ctypes.bitalignof. 
+          exploit Ctypes.alignof_pos.  
+          instantiate (1:= t).
+          instantiate (1 := Ctypes.prog_comp_env tprog).
+          lia. 
+          instantiate (1:=0).
+          apply Z.divide_0_r. 
+          intros ALIGNZERO. 
+          rewrite ALIGNZERO. auto. 
+          rewrite  L.   rewrite   Ptrofs.add_zero.  eauto. 
         ** eapply Clight.eval_Econst_int. 
-        ** instantiate (1:= (Val.of_bool (Int.unsigned tag =? tagz))). admit. 
-      * unfold Val.of_bool. 
-        destruct (Int.unsigned tag =? tagz);
-        eapply Val.inject_int. 
+        ** simpl. 
+          unfold sem_cmp. simpl. 
+          unfold sem_binarith. simpl. 
+          unfold Cop.sem_cast. simpl. 
+          destruct Archi.ptr64 eqn:ARCHI. 
+          simpl. eauto. 
+          destruct (intsize_eq I32 I32); try congruence. 
+      * destruct (Int.eq tag (Int.repr tagz)); econstructor.  
     + inv EVAL. inv H0.  monadInv PEXPR. 
       exploit place_to_cexpr_type; eauto. 
       intros Htpx. 
@@ -907,8 +934,8 @@ Proof.
       exploit pexpr_to_cexpr_types. eapply EQ1. 
       intros Htpx0. rewrite <- Htpx0. 
       eauto. eauto.
-Admitted. 
-       
+Qed. 
+
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->
     Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
