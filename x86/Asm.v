@@ -1187,6 +1187,7 @@ Canonical Structure li_asm :=
 Inductive initial_state (ge: genv): query li_asm -> state -> Prop :=
   | initial_state_intro rs m f:
       Genv.find_funct ge rs#PC = Some (Internal f) ->
+      (* It is ok to remove these two premises to make initial state safe *)
       rs#SP <> Vundef ->
       rs#RA <> Vundef ->
       initial_state ge (rs, m) (State rs m true).

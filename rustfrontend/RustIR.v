@@ -512,7 +512,7 @@ Definition generate_dropm (p: program) :=
   PTree_Properties.of_list drop_glue_ids.
 
 
-(** ** Operational semantics for RustIR after drop elabration *)
+(** ** Operational semantics for RustIR (include ownership semantics and semantics after drop elaboration) *)
 
 Section SEMANTICS.
 
