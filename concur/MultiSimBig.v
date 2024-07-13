@@ -1244,8 +1244,7 @@ Qed.
        + (*match_states*)
          simpl in *.
          econstructor.
-         8:{  rewrite NatMap.gss. reflexivity. }.
-         
+         8:{  rewrite NatMap.gss. reflexivity. }
          all: simpl; eauto.
          -- intros. destruct (Nat.eq_dec 1 cur).
             subst. rewrite NatMap.gss. congruence.
