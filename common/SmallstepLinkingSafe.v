@@ -145,103 +145,12 @@ Proof.
       assert (B: safe (L i se) s'0). {
         eapply step_safe. eapply SAFE; eauto. eauto. }
       eapply safe_internal; eauto.
-      destruct B as [(r & FINAL)|[(q & EXT)|(t1 & s1 & STEP1)]].
-      * destruct k.
-        -- left. exists r.
-           econstructor. auto.
-        -- destruct f.
-           right. right.
-           do 2 eexists.
-           eapply step_pop; eauto.
-           (* we need to ensure that all the conts are in at_external states *)
-           admit.
-      * generalize (external_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) s'0 q EXT).
-        intros (wA & SYMBINV & QINV & AFTER).
-        destruct (valid_query (L i se) q) eqn: VQ1.
-        -- right. right.
-           generalize (initial_progress _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ VQ1 QINV).
-           intros (initS & INIT).
-           do 2 eexists.
-           eapply step_push; eauto.
-        -- destruct i; simpl in *.
-           ++ destruct (valid_query (L2 se) q) eqn: VQ2.
-              ** right. right.
-                 generalize (initial_progress _ _ _ _ _ _ (SAFE2 _ _ (VALIDSE false) SYMBINV) _ VQ2 QINV).
-                 intros (initS & INIT).
-                 do 2 eexists.
-                 eapply step_push. eauto.
-                 instantiate (1 := false). auto.
-                 simpl. eauto.
-              ** right. left.
-                 eexists. econstructor.
-                 simpl. eauto.
-                 intros. destruct j; simpl; auto.
-           ++  destruct (valid_query (L1 se) q) eqn: VQ2.
-               ** right. right.
-                  generalize (initial_progress _ _ _ _ _ _ (SAFE1 _ _ (VALIDSE true) SYMBINV) _ VQ2 QINV).
-                  intros (initS & INIT).
-                  do 2 eexists.
-                  eapply step_push. eauto.
-                  instantiate (1 := true). auto.
-                  simpl. eauto.
-               ** right. left.
-                  eexists. econstructor.
-                  simpl. eauto.
-                  intros. destruct j; simpl; auto.
-      * right. right. do 2 eexists.
-        eapply step_internal. simpl. eauto.
-        
+      
     (* step_push *)
     + assert (A: safe (L i se) s0). right. left. eauto.
       assert (B: safe (L j se) s'0).
       eapply initial_safe. eapply SAFE; eauto. eauto.
-      destruct B as [(r & FINAL)|[(q1 & EXT)|(t1 & s1 & STEP1)]].
-      * generalize (external_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) s0 q H).
-        intros (wA & SYMBINV & QINV & AFTER).      
-        right. right.
-        generalize (final_safe _ _ _ _ _ _ (SAFE j _ _ (VALIDSE j) SYMBINV) _ _ FINAL).
-        intros VREP.
-        generalize (AFTER r VREP).
-        intros ((s' & AFTER1) & C).
-        do 2 eexists.
-        eapply step_pop; eauto.
-
-      (** TODO: same as above  *)
-      * generalize (external_safe _ _ _ _ _ _ (SAFE j _ _ (VALIDSE j) INV) s'0 q1 EXT).
-        intros (wA & SYMBINV & QINV & AFTER).
-        destruct (valid_query (L i se) q1) eqn: VQ1.
-        -- right. right.
-           generalize (initial_progress _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ VQ1 QINV).
-           intros (initS & INIT).
-           do 2 eexists.
-           eapply step_push; eauto.
-        -- destruct i; simpl in *.
-           ++ destruct (valid_query (L2 se) q1) eqn: VQ2.
-              ** right. right.
-                 generalize (initial_progress _ _ _ _ _ _ (SAFE2 _ _ (VALIDSE false) SYMBINV) _ VQ2 QINV).
-                 intros (initS & INIT).
-                 do 2 eexists.
-                 eapply step_push. eauto.
-                 instantiate (1 := false). auto.
-                 simpl. eauto.
-              ** right. left.
-                 eexists. econstructor.
-                 eauto.
-                 intros. destruct j0; simpl; auto.
-           ++  destruct (valid_query (L1 se) q1) eqn: VQ2.
-               ** right. right.
-                  generalize (initial_progress _ _ _ _ _ _ (SAFE1 _ _ (VALIDSE true) SYMBINV) _ VQ2 QINV).
-                  intros (initS & INIT).
-                  do 2 eexists.
-                  eapply step_push. eauto.
-                  instantiate (1 := true). auto.
-                  simpl. eauto.
-               ** right. left.
-                  eexists. econstructor.
-                  simpl. eauto.
-                  intros. destruct j0; simpl; auto.
-      * right. right. do 2 eexists.
-        eapply step_internal. simpl. eauto.
+      eapply safe_internal;eauto.
 
     (* step_pop *)
     + assert (ATEXT: exists q, at_external (L j se) sk0 q).
@@ -254,54 +163,8 @@ Proof.
       generalize (AFTER r VR).
       intros ((s' & AFTER1) & C).
       assert (B: safe (L j se) s'0). eapply C. eauto.
-      destruct B as [(r1 & FINAL)|[(q1 & EXT)|(t1 & s1 & STEP1)]].
-      * destruct k.
-        -- left. exists r1.
-           econstructor. auto.
-        -- destruct f.
-           right. right.
-           do 2 eexists.
-           eapply step_pop; eauto.
-           (* we need to ensure that all the conts are in at_external states *)
-           admit.
-
-      (** TODO: same as above  *)
-      * generalize (external_safe _ _ _ _ _ _ (SAFE j _ _ (VALIDSE j) INV) s'0 q1 EXT).
-        intros (wA1 & SYMBINV1 & QINV1 & AFTER2).
-        destruct (valid_query (L i se) q1) eqn: VQ1.
-        -- right. right.
-           generalize (initial_progress _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV1) _ VQ1 QINV1).
-           intros (initS & INIT).
-           do 2 eexists.
-           eapply step_push; eauto.
-        -- destruct i; simpl in *.
-           ++ destruct (valid_query (L2 se) q1) eqn: VQ2.
-              ** right. right.
-                 generalize (initial_progress _ _ _ _ _ _ (SAFE2 _ _ (VALIDSE false) SYMBINV1) _ VQ2 QINV1).
-                 intros (initS & INIT).
-                 do 2 eexists.
-                 eapply step_push. eauto.
-                 instantiate (1 := false). auto.
-                 simpl. eauto.
-              ** right. left.
-                 eexists. econstructor.
-                 eauto.
-                 intros. destruct j0; simpl; auto.
-           ++  destruct (valid_query (L1 se) q1) eqn: VQ2.
-               ** right. right.
-                  generalize (initial_progress _ _ _ _ _ _ (SAFE1 _ _ (VALIDSE true) SYMBINV1) _ VQ2 QINV1).
-                  intros (initS & INIT).
-                  do 2 eexists.
-                  eapply step_push. eauto.
-                  instantiate (1 := true). auto.
-                  simpl. eauto.
-               ** right. left.
-                  eexists. econstructor.
-                  simpl. eauto.
-                  intros. destruct j0; simpl; auto.
-      * right. right. do 2 eexists.
-        eapply step_internal. simpl. eauto.
-
+      eapply safe_internal; eauto.
+      
   (* initial_progress *)
   - intros q VQ SQ. simpl in *.
     unfold SmallstepLinking.valid_query in VQ.
