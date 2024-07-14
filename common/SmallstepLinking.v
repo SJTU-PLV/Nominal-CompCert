@@ -31,16 +31,26 @@ Section LINK.
     Variant frame := st (i: I) (s: Smallstep.state (L i)).
     Notation state := (list frame).
 
+    (** * Well formedness of frame used in module safety *)
+
+    (* Well formedness of frames *)
+    Inductive wf_frame : frame -> Prop :=
+    | wf_frame_intro: forall i s q,
+        at_external (L i se) s q ->
+        wf_frame (st i s).
+
+    Definition wf_state st := Forall wf_frame st.
+    
     Inductive step: state -> trace -> state -> Prop :=
-      | step_internal i s t s' k :
+      | step_internal i s t s' k (WF: wf_state k):
           Step (L i se) s t s' ->
           step (st i s :: k) t (st i s' :: k)
-      | step_push i j s q s' k :
+      | step_push i j s q s' k (WF: wf_state k):
           Smallstep.at_external (L i se) s q ->
           valid_query (L j se) q = true ->
           Smallstep.initial_state (L j se) q s' ->
           step (st i s :: k) E0 (st j s' :: st i s :: k)
-      | step_pop i j s sk r s' k :
+      | step_pop i j s sk r s' k (WF: wf_state (st j sk :: k)):
           Smallstep.final_state (L i se) s r ->
           Smallstep.after_external (L j se) sk r s' ->
           step (st i s :: st j sk :: k) E0 (st j s' :: k).
@@ -52,13 +62,13 @@ Section LINK.
           initial_state q (st i s :: nil).
 
     Inductive at_external: state -> query li -> Prop :=
-      | at_external_intro i s q k:
+      | at_external_intro i s q k (WF: wf_state k):
           Smallstep.at_external (L i se) s q ->
           (forall j, valid_query (L j se) q = false) ->
           at_external (st i s :: k) q.
 
     Inductive after_external: state -> reply li -> state -> Prop :=
-      | after_external_intro i s r s' k:
+      | after_external_intro i s r s' k (WF: wf_state k):
           Smallstep.after_external (L i se) s r s' ->
           after_external (st i s :: k) r (st i s' :: k).
 
@@ -91,7 +101,7 @@ Section LINK.
 
   (** * Properties *)
 
-  Lemma star_internal se i s t s' k:
+  Lemma star_internal se i s t s' k (WF: wf_state se k):
     Star (L i se) s t s' ->
     star (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
   Proof.
@@ -99,7 +109,7 @@ Section LINK.
     constructor; auto.
   Qed.
 
-  Lemma plus_internal se i s t s' k:
+  Lemma plus_internal se i s t s' k (WF: wf_state se k):
     Plus (L i se) s t s' ->
     plus (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
   Proof.
@@ -170,7 +180,7 @@ Section LINK.
     - destruct 1. inversion 1; subst_dep.
       eapply sd_final_determ; eauto.
   Qed.
-
+  
 End LINK.
 
 (** * Compatibility with forward simulations *)
@@ -201,6 +211,8 @@ Section FSIM.
 
   Inductive match_contframes wk wk': frame L1 -> frame L2 -> Prop :=
     match_contframes_intro i s1 s2:
+      forall (WF: forall q1, Smallstep.at_external (L1 i se1) s1 q1 ->
+                   exists q2, Smallstep.at_external (L2 i se2) s2 q2),
       match_senv cc wk' se1 se2 ->
       (forall r1 r2 s1', match_reply cc wk r1 r2 ->
        Smallstep.after_external (L1 i se1) s1 r1 s1' ->
@@ -229,6 +241,21 @@ Section FSIM.
 
   (** ** Simulation properties *)
 
+  Lemma wf_state_simulation:
+    forall wk k1 k2, match_cont wk k1 k2 -> wf_state L1 se1 k1 -> wf_state L2 se2 k2. 
+  Proof.
+    intros until k2. intros MCONT WF.
+    induction MCONT.
+    - inv WF. econstructor.
+      + inv H. inv H2.
+        eapply inj_pair2 in H5. subst.
+        eapply WF in H4. destruct H4.
+        econstructor; eauto.
+      + exploit IHMCONT.
+        red. auto. auto.
+    - constructor.
+  Qed.
+  
   Lemma step_simulation:
     forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 s1 t s1' ->
     exists idx' s2',
@@ -240,6 +267,8 @@ Section FSIM.
     destruct Hs1'; inv Hs.
     - (* internal step *)
       inv H3; subst_dep. clear idx0.
+      (* match_cont implies wf_state *)
+      exploit wf_state_simulation; eauto. intros WFK2.
       edestruct @fsim_simulation as (idx' & s2' & Hs2' & Hs'); eauto using fsim_lts.
       eexists (existT _ i idx'), _. split.
       * destruct Hs2'; [left | right]; intuition eauto using star_internal, plus_internal.
@@ -247,6 +276,8 @@ Section FSIM.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
       inv H5; subst_dep. clear idx0.
+      (* match_cont implies wf_state *)
+      exploit wf_state_simulation; eauto. intros WFK2.      
       edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & Hrx); eauto using fsim_lts.
       pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
@@ -261,6 +292,11 @@ Section FSIM.
       inv H6. inv H8; subst_dep. edestruct H10 as (idx' & s2' & Hs2'& Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_pop; eauto.
+        inv WF. inv H6. eapply inj_pair2 in H12. subst.
+        econstructor.
+        exploit WF0; eauto. intros (q2 & ATEXT).
+        econstructor; eauto.
+        eapply wf_state_simulation; eauto.
       + repeat (econstructor; eauto).
   Qed.
 
@@ -296,18 +332,21 @@ Section FSIM.
     exists idx' s2', after_external L2 se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
     clear - HL Hse1.
-    intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i s1 qx1 k1 Hqx1 Hvld].
+    intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i s1 qx1 k1 WF Hqx1 Hvld].
     inv Hs. inv H2. subst_dep. clear idx0.
     pose proof (fsim_lts (HL i) _ _ H1 H5) as Hi.
     edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto.
     exists wx, qx2. intuition idtac.
-    + constructor. eauto.
+    + constructor.
+      eapply wf_state_simulation; eauto.
+      eauto.
       intros j. pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
       erewrite fsim_match_valid_query; eauto.
     + inv H2; subst_dep.
       edestruct H as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ i idx'), _.
       split; repeat (econstructor; eauto).
+      eapply wf_state_simulation; eauto.
   Qed.
 
   Lemma semantics_simulation sk1 sk2:

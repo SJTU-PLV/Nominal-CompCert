@@ -24,6 +24,9 @@ Definition partial_safe {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
   \/ (mem_error liA liB st L s).
 
 
+(** TODO: generalize safe/partial_safe to module linking and show that
+the original safe/partial_safe is identical to the composed
+safe/partial_safe *)
 
 Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: _ -> S -> Prop) w :=
   {
@@ -66,7 +69,8 @@ Lemma safe_internal {li} (I: invariant li) L1 L2: forall i sk se s k w,
       (INV : symtbl_inv I w se)
       (VALIDSE: forall i, Genv.valid_for (skel (L i)) se)
       (SAFE: forall i, module_safe (L i) I I safe)
-      (STSAFE: safe (L i se) s),
+      (STSAFE: safe (L i se) s)
+      (WFFRAMES: Forall (wf_frame L se) k),
       safe (SmallstepLinking.semantics L sk se) (st L i s :: k).
 Proof.
   intros.
@@ -76,10 +80,18 @@ Proof.
        econstructor. auto.
     -- destruct f.
        right. right.
+       (* s0 in in at_external state *)
+       inv WFFRAMES. inv H1. eapply inj_pair2 in H3. subst.
+       generalize (external_safe _ _ _ _ _ _ (SAFE i0 _ _ (VALIDSE i0) INV) s0 q H0).
+       intros (wA & SYMBINV & QINV & AFTER).
+       generalize (final_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ _ FINAL).
+       intros WR.
+       generalize (AFTER _ WR).
+       intros ((s0' & AFTER1) & SAFTER).
        do 2 eexists.
        eapply step_pop; eauto.
-       (* we need to ensure that all the conts are in at_external states *)
-       admit.
+       constructor. econstructor.
+       eauto. eauto.             
   * generalize (external_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) s q EXT).
     intros (wA & SYMBINV & QINV & AFTER).
     destruct (valid_query (L i se) q) eqn: VQ1.
@@ -94,29 +106,28 @@ Proof.
              generalize (initial_progress _ _ _ _ _ _ (SAFE false _ _ (VALIDSE false) SYMBINV) _ VQ2 QINV).
              intros (initS & INIT).
              do 2 eexists.
-             eapply step_push. eauto.
+             eapply step_push. eauto. eauto.
              instantiate (1 := false). auto.
              simpl. eauto.
           ** right. left.
              eexists. econstructor.
-             simpl. eauto.
+             simpl. eauto. eauto.
              intros. destruct j; simpl; auto.
        ++  destruct (valid_query (L1 se) q) eqn: VQ2.
            ** right. right.
               generalize (initial_progress _ _ _ _ _ _ (SAFE true _ _ (VALIDSE true) SYMBINV) _ VQ2 QINV).
               intros (initS & INIT).
               do 2 eexists.
-              eapply step_push. eauto.
+              eapply step_push. eauto. eauto.
               instantiate (1 := true). auto.
               simpl. eauto.
            ** right. left.
               eexists. econstructor.
-              simpl. eauto.
+              simpl. eauto. eauto.
               intros. destruct j; simpl; auto.
   * right. right. do 2 eexists.
-    eapply step_internal. simpl. eauto.
-Admitted.
-
+    eapply step_internal. simpl. eauto. eauto.
+Qed.
   
 Lemma compose_safety {li} (I: invariant li) L1 L2 L:
   module_safe L1 I I safe ->
@@ -136,7 +147,6 @@ Proof.
   eapply (link_linkorder _ _ _ Hsk). eauto.
   assert (SAFE: forall i, module_safe (L i) I I safe).
   destruct i; simpl; auto.
-    
   constructor.
   - intros s t s' STEP.
     inv STEP.
@@ -145,18 +155,18 @@ Proof.
       assert (B: safe (L i se) s'0). {
         eapply step_safe. eapply SAFE; eauto. eauto. }
       eapply safe_internal; eauto.
-      
     (* step_push *)
     + assert (A: safe (L i se) s0). right. left. eauto.
       assert (B: safe (L j se) s'0).
       eapply initial_safe. eapply SAFE; eauto. eauto.
       eapply safe_internal;eauto.
-
+      constructor; eauto. econstructor; eauto.
     (* step_pop *)
-    + assert (ATEXT: exists q, at_external (L j se) sk0 q).
-      admit. (* we need to ensure that all the conts are in at_external states *)
-      destruct ATEXT as (q & ATEXT).
-      generalize (external_safe _ _ _ _ _ _ (SAFE j _ _ (VALIDSE j) INV) sk0 q ATEXT).
+    + inv WF. inv H3. eapply inj_pair2 in H5. subst.
+      assert (ATEXT: exists q, at_external (L j se) sk0 q).
+      eauto.
+      destruct ATEXT as (q1 & ATEXT).
+      generalize (external_safe _ _ _ _ _ _ (SAFE j _ _ (VALIDSE j) INV) sk0 q1 ATEXT).
       intros (wA & SYMBINV & QINV & AFTER).
       generalize (final_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ _ H).
       intros VR.
@@ -164,7 +174,6 @@ Proof.
       intros ((s' & AFTER1) & C).
       assert (B: safe (L j se) s'0). eapply C. eauto.
       eapply safe_internal; eauto.
-      
   (* initial_progress *)
   - intros q VQ SQ. simpl in *.
     unfold SmallstepLinking.valid_query in VQ.
@@ -201,4 +210,4 @@ Proof.
     inv FINAL.
     generalize (final_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) _ _ H).
     auto.
-Admitted.    
+Qed.
