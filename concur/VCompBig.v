@@ -178,7 +178,27 @@ Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2
   forall wp1' wp2', wp1 *-> wp1' -> same_mem wp1' wp2' -> wp2 *-> wp2'.
  *)
 
+(** We are trying to define the ccref_outgoing with respect to the "living wp1, however,
+    to show from [wp1 *-> (get w1)] we can construct w2 and show [wp2 *-> (get w2)], we still
+    have to show that wp1 and wp2 are recording the same injected memories. Such relation has to be **defined**
+    in some way "*)
+Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall wp1 wp2 w1 se1 se2 q1 q2,
+    match_senv cc1 w1 se1 se2 ->
+    match_query cc1 w1 q1 q2 ->
+    wp1 *-> (get w1) ->
+    exists w2,
+      match_senv cc2 w2 se1 se2 /\
+      match_query cc2 w2 q1 q2 /\ 
+      forall r1 r2 (wp2: gworld cc2),
+        get w2 o-> wp2 ->
+        match_reply cc2 (set w2 wp2) r1 r2 ->
+        exists (wp1 : gworld cc1),
+        get w1 o-> wp1 /\
+                     match_reply cc1 (set w1 wp1) r1 r2.
+(*
 (** The passive outgoing : leaving wA2 as given*)
+  seems here we need a relation between w1 w2 s.t. they refer to the same injp_world, i.e. m1 -->_j m2
 Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
   forall w1 se1 se2 q1 q2 w2,
     match_senv cc1 w1 se1 se2 ->
@@ -190,6 +210,8 @@ Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
         exists (wp1 : gworld cc1),
         get w1 o-> wp1 /\
          match_reply cc1 (set w1 wp1) r1 r2.
+
+*)
 (** I -> F *)
 Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) :=
   forall w2 se1 se2 q1 q2,
