@@ -652,15 +652,16 @@ Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.r
 
 Definition transl_globvar (id: ident) (ty: type) := OK ty.
 
+(** TODO  *)
+Definition check_origins_well_formedness (p: program) : bool :=
+  true.
+
 (* borrow check the whole module *)
 
-Definition borrow_check_program (p: program) : res program :=
-  (* replace origins with fresh origins *)
-  do p <- ReplaceOrigins.transl_program p;
-  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env)) transl_globvar p;
-  Errors.OK {| prog_defs := AST.prog_defs p1;
-              prog_public := AST.prog_public p1;
-              prog_main := AST.prog_main p1;
-              prog_types := prog_types p;
-              prog_comp_env := prog_comp_env p;
-              prog_comp_env_eq := prog_comp_env_eq p |}.
+Definition borrow_check_program (p: program) : res unit :=
+  (* ensure that replaceOrigins has been executed before borrow checking *)
+  if check_origins_well_formedness p then
+    do _ <- transform_partial_program2 (transf_fundef p.(prog_comp_env)) transl_globvar p;
+    OK tt
+  else
+    Error (msg "Origins in the program are not well formed").

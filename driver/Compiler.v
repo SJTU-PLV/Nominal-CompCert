@@ -212,7 +212,11 @@ Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
   @@@ time "Rustsyntax to Rustlight" Rustlightgen.transl_program
   !@@ time "Rustlight to RustIR" RustIRgen.transl_program
   @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
-  @@@ time "Borrow check" BorrowCheckPolonius.borrow_check_program
+  @@@ time "Replace origins in RustIR" ReplaceOrigins.transl_program
+  @@@ time "Borrow check" (fun p => match BorrowCheckPolonius.borrow_check_program p with
+                                 | OK _ => OK p
+                                 | Error msg => Error msg
+                                 end)
   @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
   @@@ transf_clight_program.
   

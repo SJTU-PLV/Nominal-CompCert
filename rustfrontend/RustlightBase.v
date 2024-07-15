@@ -592,13 +592,10 @@ Inductive eval_expr_mem_error: expr -> Prop :=
     eval_expr_mem_error (Epure pe).
 
 Inductive eval_exprlist_mem_error : list expr -> typelist -> Prop :=
-| eval_Econs_mem_error1: forall a ty,
-    eval_expr_mem_error a ->
-    eval_exprlist_mem_error (a::nil) (Tcons ty Tnil)
-| eval_Econs_mem_error2: forall a bl ty tyl,
+| eval_Econs_mem_error1: forall a bl ty tyl,
     eval_expr_mem_error a ->
     eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
-| eval_Econs_mem_error3: forall a bl ty tyl v1,
+| eval_Econs_mem_error2: forall a bl ty tyl v1,
     eval_expr a v1 ->
     eval_exprlist_mem_error bl tyl ->
     eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
