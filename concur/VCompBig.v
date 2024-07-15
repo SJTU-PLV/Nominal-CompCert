@@ -212,47 +212,13 @@ Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) :=
       match_query cc1 w1 q1 q2 /\
       ACCI_12 (get w1) (get w2) /\
       (forall r1 r2 (wp1: gworld cc1),
-        get w1 o-> wp1 -> (get w1 *-> wp1) ->
+        get w1 o-> wp1 ->
         match_reply cc1 (set w1 wp1) r1 r2 ->
         exists (wp2 : gworld cc2),
-        get w2 o-> wp2 /\ (get w2 *-> wp2) /\
+        get w2 o-> wp2 /\
         match_reply cc2 (set w2 wp2) r1 r2).
 
-(*The case I -> X *)
-(* 
-Definition ccref_incoming_acci1 {li1 li2} (cc1 cc2: callconv li1 li2) :=
-  forall w2 se1 se2 q1 q2,
-    match_senv cc2 w2 se1 se2 ->
-    match_query cc2 w2 q1 q2 ->
-    exists w1,
-      match_senv cc1 w1 se1 se2 /\
-      match_query cc1 w1 q1 q2 /\
-      (* get w' = trans1 (get w) /\ *)
-      forall q1' q2' (wp1: gworld cc1),
-        get w1 *-> wp1 ->
-        match_query cc1 (set w1 wp1) q1' q2' ->
-        exists wp2,
-        get w2 *-> wp2 /\
-          match_query cc2 (set w2 wp2) q1' q2'.
-*)
-(*The case Y -> X *)
-(* 
-Definition ccref_incoming_acci1 {li1 li2} (cc1 cc2: callconv li1 li2) :=
-  forall w2 se1 se2 r1 r2,
-    match_senv cc2 w2 se1 se2 ->
-    match_reply cc2 w2 r1 r2 ->
-    exists w1,
-      match_senv cc1 w1 se1 se2 /\
-      match_query cc1 w1 q1 q2 /\
-      (* get w' = trans1 (get w) /\ *)
-      forall q1' q2' (wp1: gworld cc1),
-        get w1 *-> wp1 ->
-        match_query cc1 (set w1 wp1) q1' q2' ->
-        exists wp2,
-        get w2 *-> wp2 /\
-          match_query cc2 (set w2 wp2) q1' q2'.
-*)
-  Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
+Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
     Callconv_Trans{
         big_step_incoming : ccref_incoming cc1 cc2;
         big_step_outgoing : ccref_outgoing cc1 cc2;
@@ -277,8 +243,8 @@ Proof.
            match_states se1 se2 w1 wp1 idx s1 s2 /\
              match_senv cc1 w1 se1 se2 /\
              ACCI_12 wp1 wp2 /\
-             (forall r1 r2 wp1', (get w1) o-> wp1' -> wp1 *-> wp1' -> match_reply cc1 (set w1 wp1') r1 r2 ->
-                            exists wp2', (get w2) o-> wp2' /\ wp2 *-> wp2' /\ match_reply cc2 (set w2 wp2') r1 r2)).
+             (forall r1 r2 (wp1' : gworld cc1), (get w1) o-> wp1' -> match_reply cc1 (set w1 wp1') r1 r2 ->
+                            exists (wp2' : gworld cc2), (get w2) o-> wp2' /\ match_reply cc2 (set w2 wp2') r1 r2)).
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
@@ -289,27 +255,22 @@ Proof.
     destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & HACCI & Hr); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
     exists i, s2. split; auto. red. exists wB,(get wB). repeat apply conj; eauto.
-    (** INCOM is not strong enough *)
   - intros gw i s1 s2 r1 (wB & gw' & Hs & Hse & HACCI & Hr') Hr1.
     edestruct @fsim_match_final_states as (r2 & gw1 & Hr2 & ACCO1 & ACCI1 & Hr); eauto.
-    exploit Hr'; eauto. intros (gw2 &  ACCO2 & ACCI2 & Hr2'). exists r2.
+    exploit Hr'; eauto. intros (gw2 &  ACCO2 & Hr2'). exists r2.
     exists gw2. intuition auto.
-  (** The match_state is strong enough for [final_state]*)
-    (** Can this be weaken? *)
+    eapply HACCI; eauto. eapply match_reply_mem; eauto. rewrite get_set. reflexivity.
+    rewrite get_set. reflexivity.
   - (*the most tricky part*)
     intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & HACCI& Hr') HqA1.
     edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
     edestruct OUTGO as (wA' & HseA' & HqA' & Hr); eauto.
     exists wA', qA2. intuition auto.
-    eapply HACCI. eauto.  econstructor; eauto. 
-    (** from gw1 *-> get wA to gw2 *-> get wA'*)
-    (** This should be provided by match_states or INCOM? and OUTGOING(AFTER) *)
+    eapply HACCI. eauto.  econstructor; eauto.
     exploit Hr; eauto. intros (wp1 & ACCO1 & MR1 & HACCI').
     edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
     exists i', s2'. split; auto.
     exists wB, wp1. intuition auto.
-    (** This part of match_states need to be provided by after_external or OUTGO*)
-    admit.
   - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
     exists i', s2'. split; auto.
@@ -327,7 +288,7 @@ Qed.
 (** 5.Compose the compiler *)
 
   
-Require Import InjectFootprint.
+Require Import Inject InjectFootprint.
 
 Program Instance injp_world_id : World injp_world :=
     {
@@ -353,17 +314,53 @@ Next Obligation.
   intros. inv H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
-Compute (gworld (cc_compose c_injp c_injp)).
-Program Definition trans12 : injp_world * injp_world -> injp_world.
-Proof.
-  intros. inv X. destruct X0,X1.
-  econstructor.
-  eapply Mem.inject_compose.
-Abort. (** SOOOO BAD: It can not be defined.. I Need match_query to get m1<->m2<->m3*)
+Compute (ccworld (cc_compose c_injp c_injp)).
 
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
 Proof.
   econstructor.
+  - (*incoming construction*)
+    red. intros. inv H0. inv H3. simpl in H2, H1.
+    inv H.
+    exists (se1, (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm),
+              injpw f m1 m2 Hm)).
+    repeat apply conj; eauto.
+    + simpl. split. constructor; eauto. eapply match_stbls_dom; eauto. constructor; simpl; eauto.
+    + exists (cq vf1 sg vargs1 m1). split.
+      econstructor; simpl; eauto. eapply val_inject_dom; eauto.
+      eapply val_inject_list_dom; eauto.
+      econstructor; eauto. simpl. econstructor; eauto.
+    + red. simpl. intros.
+      red in H. inv H0.
+      -- destruct w1 as [se1' [w11 w12]]. simpl. simpl in H.
+         inv H3. inv H5. destruct H as [ACCI1 ACCI2].
+         destruct H0 as [Hq1 Hq2]. inv Hq1. inv Hq2.
+         simpl in *. inv H8. inv H16. inv H22.
+         rename m0 into m1'. rename m3 into m2'. rename m5 into m3'.
+         rename f0 into f'.
+         inv ACCI1. inv ACCI2.
+         assert (Hcom: f' = compose_meminj f1 f2). admit.
+         constructor; eauto.
+         ++ inv H24. split. eauto.
+            eapply Mem.unchanged_on_implies. eauto.
+            intros. destruct H. split. red. red in H.
+            unfold meminj_dom. rewrite H. auto. auto.
+         ++ red. intros. simpl in *.
+            clear - Hm6 Hm9 Hm12 H26 H34 H Hm0 Hcom.
+            rewrite Hcom. unfold compose_meminj.
+            assert (Hf0 : (meminj_dom f) b = Some (b,0) ).
+            unfold meminj_dom. rewrite H. reflexivity.
+            apply H26 in Hf0. rewrite Hf0.
+            apply H34 in H. rewrite H. reflexivity.
+         ++ admit. (* ok *)
+      -- admit. (*same as the match_query part *)
+    + intros r1 r3 wp1 [Hae1 Hae2] Hr. simpl in Hae1, Hae2.
+      simpl in wp1. destruct wp1 as [wp11 wp12].
+      simpl in *. destruct Hr as [r2 [Hr1 Hr2]].
+      admit. (*just compose wp11 and wp12*)
+  - (* outgoing construction *)
+    red. intros.
+        ;
 Admitted.
 
 Theorem injp_pass_compose: forall (L1 L2 L3: semantics li_c li_c),
