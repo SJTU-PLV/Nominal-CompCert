@@ -196,6 +196,7 @@ Definition own_env := PTree.t (list place).
 
 Definition empty_own_env : own_env := PTree.empty (list place).
 
+
 (** TODO: Ownership type-state  *)
 
 (* tss for Type-State System *)
@@ -436,13 +437,16 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
-| eval_Pdowncast: forall  p ty b ofs delta id fid co bf orgs,
+| eval_Pdowncast: forall  p ty b ofs fofs id fid fty co bf orgs tag,
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
-    (* Is it considered memory error? No! Because we can write any kind of place to trigger this error. *)
-    variant_field_offset ce fid (co_members co) = OK (delta, bf) ->
-    eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
+    (* check tag and fid *)
+    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+    list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
+    variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+    (* fty and ty must be equal? *)
+    eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr fofs))
 | eval_Pderef: forall p ty l ofs l' ofs',
     eval_place p l ofs ->
     deref_loc (typeof_place p) m l ofs (Vptr l' ofs') ->
@@ -452,8 +456,12 @@ Inductive eval_place_mem_error : place -> Prop :=
 | eval_Pfield_error: forall p ty i,
     eval_place_mem_error p ->
     eval_place_mem_error (Pfield p i ty)
-| eval_Pdowncast_error: forall p ty fid,
+| eval_Pdowncast_error1: forall p ty fid,
     eval_place_mem_error p ->
+    eval_place_mem_error (Pdowncast p fid ty)
+| eval_Pdowncast_error2: forall p ty fid b ofs,
+    eval_place p b ofs ->
+    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
     eval_place_mem_error (Pdowncast p fid ty)
 | eval_Pderef_error1: forall p ty,
     eval_place_mem_error p ->
