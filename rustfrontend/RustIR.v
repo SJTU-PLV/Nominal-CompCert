@@ -1223,4 +1223,3 @@ End SEMANTICS.
 
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
-
