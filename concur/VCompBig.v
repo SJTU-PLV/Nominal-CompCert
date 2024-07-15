@@ -164,58 +164,101 @@ Notation "1" := cc_id : gs_cc_scope.
   Context {li1 li2} (cc1 cc2: callconv li1 li2)
     Context (se1)
 *)
+(** cc1: internal, i.e. injp ⋅ injp
+    cc2: external, i.e. injp  *)
 
-Definition ccref_outgoing {li1 li2} (cc cc': callconv li1 li2)
-  (trans1 : gworld cc -> gworld cc')
-  (trans2 : gworld cc -> gworld cc' -> gworld cc' -> gworld cc):=
-  forall w se1 se2 q1 q2,
-    match_senv cc w se1 se2 ->
-    match_query cc w q1 q2 ->
-    exists w',
-      match_senv cc' w' se1 se2 /\
-      match_query cc' w' q1 q2 /\
-      get w' = trans1 (get w) /\
-      forall r1 r2 (wp': gworld cc'),
-        get w' o-> wp' ->
-        match_reply cc' (set w' wp') r1 r2 ->
-        let wp := trans2 (get w) (get w') wp' in
-        get w o-> wp /\
-        match_reply cc (set w wp) r1 r2.
+(*
+Definition acci_future_query {li1 li2} {cc1 cc2: callconv li li2}
+  (wp1 : gworld cc1) (wp2 : gworld cc2) :=
+  forall wp1' w1 q1 q2, wp1 *-> wp1' /\ match_query cc1 w1 q1 q2 /\
+ *)
 
-Definition ccref_incoming {li1 li2} (cc cc': callconv li1 li2)
-  (trans1 : gworld cc -> gworld cc')
-  (trans2 : gworld cc' -> gworld cc):=
-  forall w se1 se2 q1 q2,
-    match_senv cc w se1 se2 ->
-    match_query cc w q1 q2 ->
-    exists w',
-      match_senv cc' w' se1 se2 /\
-      match_query cc' w' q1 q2 /\
-      get w' = trans1 (get w) /\
-      forall r1 r2 (wp': gworld cc'),
-        get w' o-> wp' ->
-        match_reply cc' (set w' wp') r1 r2 ->
-        let wp := trans2 wp' in
-        get w o-> wp /\
-        match_reply cc (set w wp) r1 r2.
 
+Inductive same_mem {li1 li2: language_interface} {cc1 cc2: callconv li1 li2} : gworld cc1 -> gworld cc2 -> Prop :=
+|match_query_mem : forall w1 w2 q1 q2 wp1 wp2,
+    match_query cc1 w1 q1 q2 -> match_query cc2 w2 q1 q2 ->
+    get w1 = wp1 -> get w2 = wp2 ->
+    same_mem wp1 wp2
+|match_reply_mem : forall w1 w2 r1 r2 wp1 wp2,
+    match_reply cc1 w1 r1 r2 -> match_reply cc2 w2 r1 r2 ->
+    get w1 = wp1 -> get w2 = wp2 ->
+    same_mem wp1 wp2.
+
+Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2 : gworld cc2) :=
+  forall wp1' wp2', wp1 *-> wp1' -> same_mem wp1' wp2' -> wp2 *-> wp2'.
+
+Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall w1 se1 se2 q1 q2,
+    match_senv cc1 w1 se1 se2 ->
+    match_query cc1 w1 q1 q2 ->
+    exists w2,
+      match_senv cc2 w2 se1 se2 /\
+      match_query cc2 w2 q1 q2 /\  
+      forall r1 r2 (wp2: gworld cc2),
+        get w2 o-> wp2 ->
+        match_reply cc2 (set w2 wp2) r1 r2 ->
+        exists (wp1 : gworld cc1),
+        get w1 o-> wp1 /\
+         match_reply cc1 (set w1 wp1) r1 r2 /\
+        ACCI_12 wp1 wp2 .
+
+(** I -> F *)
+Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall w2 se1 se2 q1 q2,
+    match_senv cc2 w2 se1 se2 ->
+    match_query cc2 w2 q1 q2 ->
+    exists w1,
+      match_senv cc1 w1 se1 se2 /\
+      match_query cc1 w1 q1 q2 /\
+      ACCI_12 (get w1) (get w2) /\
+      (forall r1 r2 (wp1: gworld cc1),
+        get w1 o-> wp1 -> (get w1 *-> wp1) ->
+        match_reply cc1 (set w1 wp1) r1 r2 ->
+        exists (wp2 : gworld cc2),
+        get w2 o-> wp2 /\ (get w2 *-> wp2) /\
+        match_reply cc2 (set w2 wp2) r1 r2).
+
+(*The case I -> X *)
+(* 
+Definition ccref_incoming_acci1 {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall w2 se1 se2 q1 q2,
+    match_senv cc2 w2 se1 se2 ->
+    match_query cc2 w2 q1 q2 ->
+    exists w1,
+      match_senv cc1 w1 se1 se2 /\
+      match_query cc1 w1 q1 q2 /\
+      (* get w' = trans1 (get w) /\ *)
+      forall q1' q2' (wp1: gworld cc1),
+        get w1 *-> wp1 ->
+        match_query cc1 (set w1 wp1) q1' q2' ->
+        exists wp2,
+        get w2 *-> wp2 /\
+          match_query cc2 (set w2 wp2) q1' q2'.
+*)
+(*The case Y -> X *)
+(* 
+Definition ccref_incoming_acci1 {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall w2 se1 se2 r1 r2,
+    match_senv cc2 w2 se1 se2 ->
+    match_reply cc2 w2 r1 r2 ->
+    exists w1,
+      match_senv cc1 w1 se1 se2 /\
+      match_query cc1 w1 q1 q2 /\
+      (* get w' = trans1 (get w) /\ *)
+      forall q1' q2' (wp1: gworld cc1),
+        get w1 *-> wp1 ->
+        match_query cc1 (set w1 wp1) q1' q2' ->
+        exists wp2,
+        get w2 *-> wp2 /\
+          match_query cc2 (set w2 wp2) q1' q2'.
+*)
   Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
     Callconv_Trans{
-        trans_12 : gworld cc1 -> gworld cc2; (* compose m1<->m2<->m3 into m1<->m3*)
-        trans_21_acc : gworld cc1 -> gworld cc2 -> gworld cc2 -> gworld cc1;
-        (*the injp_construction operation which keeps accessibility*)
-        trans_21 : gworld cc2 -> gworld cc1; (* split m1<-> m3 into m1<->m1<->m3*)
-        trans_initial : forall (gw: gworld cc2), trans_12 (trans_21 gw) = gw;
-        (*split the outer-side world and compose it back *)
-        trans_acc_eq : forall gw1 gw2 gw2', trans_12 (trans_21_acc gw1 gw2 gw2') = gw2';
-        trans_acci : forall (gw1 gw1' : gworld cc1), gw1 *-> gw1' -> (trans_12 gw1) *-> (trans_12 gw1');
-        (*the accessibility of internal world (containing mid-level information) can derive
-         the accessibility of composed world*)
-        bigstep_12 : ccref_outgoing cc1 cc2 trans_12 trans_21_acc; (*the hard part*)
-        bigstep_21 : ccref_incoming cc2 cc1 trans_21 trans_12; (*the easy part*)
+        big_step_incoming : ccref_incoming cc1 cc2;
+        big_step_outgoing : ccref_outgoing cc1 cc2;
       }.
 
-
+  
   Lemma open_fsim_cctrans {li1 li2: language_interface}:
   forall (cc1 cc2: callconv li1 li2) L1 L2,
     forward_simulation cc1 L1 L2 ->
@@ -224,55 +267,53 @@ Definition ccref_incoming {li1 li2} (cc cc': callconv li1 li2)
   (*cc1 : injp @ injp cc2: injp*)
 Proof.
   intros.
-  destruct X as [trans12 trans21_acc trans21 trans_acc_eq trans_initial trans_acci Big12 Big21].
+  destruct H0 as [INCOM OUTGO].
   inv H.
   destruct X as [index order match_states SKEL PROP WF].
   constructor.
-  set (ms se1 se2 w' (wp': gworld cc2) idx s1 s2 :=
-         exists w wp,
-           wp' = trans12 wp /\
-           get w = trans21 (get w') /\
-           match_states se1 se2 w wp idx s1 s2 /\
-             match_senv cc1 w se1 se2 /\
-             forall r1 r2 wpf, (get w) o-> wpf -> match_reply cc1 (set w wpf) r1 r2 ->
-                          let wpf' := trans12 wpf in
-                          (get w') o-> wpf' /\ match_reply cc2 (set w' wpf') r1 r2).
+  
+  set (ms se1 se2 (w2 : ccworld cc2) (wp2: gworld cc2) idx s1 s2 :=
+         exists w1 wp1,
+           match_states se1 se2 w1 wp1 idx s1 s2 /\
+             match_senv cc1 w1 se1 se2 /\
+             ACCI_12 wp1 wp2 /\
+             (forall r1 r2 wp1', (get w1) o-> wp1' -> wp1 *-> wp1' -> match_reply cc1 (set w1 wp1') r1 r2 ->
+                            exists wp2', (get w2) o-> wp2' /\ wp2 *-> wp2' /\ match_reply cc2 (set w2 wp2') r1 r2)).
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
   - intros q1 q2 Hq'.
-    destruct (Big21 wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     eapply fsim_match_valid_query; eauto.
   - intros q1 q2 s1 Hq' Hs1 Ho.
-    destruct (Big21 wB' se1 se2 q1 q2) as (wB & Hse & Hq & Htrans & Hr); auto.
+    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & HACCI & Hr); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
     exists i, s2. split; auto. red. exists wB,(get wB). repeat apply conj; eauto.
-    rewrite Htrans. eauto.
-  - intros gw i s1 s2 r1 (wB & gw' & Htransw & HtranswB & Hs & Hse & Hr') Hr1.
-    edestruct @fsim_match_final_states as (r2 & Hr2 & ACC & Hr); eauto.
-    exploit Hr'; eauto. intros. exists r2. simpl in H. destruct H.
-    split. auto. split. rewrite Htransw. auto. rewrite Htransw. auto.
-  - (*the most tricky part*) 
-    intros gw2 i s1 s2 qA1 (wB & gw1 & Htransw & HtranswB &  Hs & Hse & Hr') HqA1.
+    (** INCOM is not strong enough *)
+  - intros gw i s1 s2 r1 (wB & gw' & Hs & Hse & HACCI & Hr') Hr1.
+    edestruct @fsim_match_final_states as (r2 & gw1 & Hr2 & ACCO1 & ACCI1 & Hr); eauto.
+    exploit Hr'; eauto. intros (gw2 &  ACCO2 & ACCI2 & Hr2'). exists r2.
+    exists gw2. intuition auto.
+  (** The match_state is strong enough for [final_state]*)
+    (** Can this be weaken? *)
+  - (*the most tricky part*)
+    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & HACCI& Hr') HqA1.
     edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct Big12 as (wA' & HseA' & HqA' & Hr); eauto.
+    edestruct OUTGO as (wA' & HseA' & HqA' & Hr); eauto.
     exists wA', qA2. intuition auto.
-    rewrite Htransw. setoid_rewrite H0.
-    apply trans_acci. auto. exploit H1; eauto.
-    intros [A B].
+    eapply HACCI. eauto.  econstructor; eauto. 
+    (** from gw1 *-> get wA to gw2 *-> get wA'*)
+    (** This should be provided by match_states or INCOM? and OUTGOING(AFTER) *)
+    exploit Hr; eauto. intros (wp1 & ACCO1 & MR1 & HACCI').
     edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. destruct Hs' as [gw1'' [C D]].
-    rename gw'' into gw2'.
-    exists (trans12 gw1''). split.
-    assert (trans12 ( trans21_acc (get wA) (get wA') gw2') = gw2'). eauto.
-    rewrite <- H5. eauto.
-    exists wB, gw1''. intuition auto.
-  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Htransw & HtranswB & Hs & Hse & Hr').
-    edestruct @fsim_simulation as (i' & s2' & Hs2' & gw1' & Hac1 & Hs'); eauto.
     exists i', s2'. split; auto.
-    exists (trans12 gw1'). (*here what we do is just [ignore] the middle part in gw1'*)
-    split. rewrite Htransw. eauto.
-    econstructor; eauto. exists gw1'. repeat apply conj; eauto.
+    exists wB, wp1. intuition auto.
+    (** This part of match_states need to be provided by after_external or OUTGO*)
+    admit.
+  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
+   edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto.
+    econstructor; eauto.
 Qed.
 
 
