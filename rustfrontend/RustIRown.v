@@ -21,19 +21,18 @@ Import ListNotations.
 
 Section SEMANTICS.
 
-(** Ownership environment (TODO: it should be defined in Rustlight) *)
+(** Ownership environment: a pair of deep owned place set and
+shallow owned place set (TODO: it should be defined in Rustlight) *)
     
-(** TODO: own_env is actually init environment which is used to check
+(** own_env is actually init environment which is used to check
 every used is initialized. Maybe we should change the name?  *)
-Definition own_env := PathsMap.t.
+  
+Record own_env := { deep_own: Paths.t; shallow_own: Paths.t}.
 
 Definition is_owned (p: place) (own: own_env) : bool :=
-  match own ! (local_of_place p) with
-  | Some paths =>
-      (* check whether p is a children in one of the path in [paths] *)
-      Paths.exists_ (fun p' => is_prefix p p') paths
-  | None => false
-  end.
+  (* check whether p is a children in one of the path in deep owned
+  set or p is in the shallow owned set *)
+  Paths.exists_ (fun p' => is_prefix p p') own.(deep_own) || Paths.mem p own.(shallow_own).
       
 (** Continuation *)
   

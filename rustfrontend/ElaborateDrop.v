@@ -130,7 +130,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
             (** TODO: we need to check if p is fully owned, in order
             to just use one function to drop all its successor *)
             (* first drop *p if necessary *)
-            if Paths.is_empty (Paths.filter (fun elt => is_prefix (Pderef p ty) elt) universe) then (* p fully owns *)
+            if Paths.is_empty (Paths.filter (fun elt => is_prefix (Pderef p ty) elt) universe) then (* p fully owns because there are no p's children in universe *)
               if Paths.mem p mayinit then
                 if Paths.mem p mayuninit then (* need drop flag *)
                   do drop_flag <- gensym type_bool p;

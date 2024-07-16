@@ -294,6 +294,8 @@ simulation *)
 Definition well_formed_env (f: function) (e: env) : Prop :=
   forall id, ~ In id (var_names (f.(fn_params) ++ f.(fn_vars))) -> e!id = None.
 
+
+
 Lemma wf_env_target_none: forall j e te l id f,
     match_env j e te ->
     well_formed_env f e ->
@@ -303,10 +305,33 @@ Lemma wf_env_target_none: forall j e te l id f,
 Proof.
 Admitted.
 
+Lemma alloc_variables_wf_env: forall ce l id e1 e2 m1 m2,
+    alloc_variables ce e1 m1 l e2 m2 ->
+    (* constraint for e1 *)
+    e1 ! id = None ->
+    ~ In id (var_names l) ->
+    e2 ! id = None.
+Proof.
+  induction l; simpl; intros.
+  inv H; auto.
+  destruct a. simpl in *.
+  inv H.
+  eapply IHl; eauto.
+  rewrite PTree.gsspec.
+  destruct (peq id i). subst.
+  exfalso. apply H1. auto.
+  auto.
+Qed.
+
 Lemma function_entry_wf_env: forall ge f vargs e m1 m2,
     function_entry ge f vargs m1 e m2 ->
     well_formed_env f e.
-Admitted.
+Proof.
+  intros until m2.
+  intros FENTRY. inv FENTRY.
+  red. intros.
+  eapply alloc_variables_wf_env; eauto.
+Qed.
 
 (* Can be proved by tr_composite *)
 Definition enum_consistent (eid fid uid ufid: ident) : Prop :=
