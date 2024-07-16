@@ -163,7 +163,10 @@ Notation "1" := cc_id : gs_cc_scope.
 (** cc1: internal, i.e. injp ⋅ injp
     cc2: external, i.e. injp  *)
 
-(* 
+Inductive wf_mem {li1 li2 : language_interface} {cc : callconv li1 li2} : gworld cc -> Prop :=
+|wf_q : forall w wp q1 q2, match_query cc w q1 q2 -> get w = wp -> wf_mem wp
+|wf_r : forall w wp r1 r2, match_reply cc w r1 r2 -> get w = wp -> wf_mem wp.
+                                                                   
 Inductive same_mem {li1 li2: language_interface} {cc1 cc2: callconv li1 li2} : gworld cc1 -> gworld cc2 -> Prop :=
 |match_query_mem : forall w1 w2 q1 q2 wp1 wp2,
     match_query cc1 w1 q1 q2 -> match_query cc2 w2 q1 q2 ->
@@ -173,7 +176,7 @@ Inductive same_mem {li1 li2: language_interface} {cc1 cc2: callconv li1 li2} : g
     match_reply cc1 w1 r1 r2 -> match_reply cc2 w2 r1 r2 ->
     get w1 = wp1 -> get w2 = wp2 ->
     same_mem wp1 wp2.
-
+(*
 Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2 : gworld cc2) :=
   forall wp1' wp2', wp1 *-> wp1' -> same_mem wp1' wp2' -> wp2 *-> wp2'.
  *)
@@ -182,20 +185,24 @@ Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2
     to show from [wp1 *-> (get w1)] we can construct w2 and show [wp2 *-> (get w2)], we still
     have to show that wp1 and wp2 are recording the same injected memories. Such relation has to be **defined**
     in some way "*)
-Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
+Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) (trans12 : gworld cc1 -> gworld cc2) :=
   forall wp1 wp2 w1 se1 se2 q1 q2,
     match_senv cc1 w1 se1 se2 ->
     match_query cc1 w1 q1 q2 ->
     wp1 *-> (get w1) ->
+    wf_mem wp1 ->
+    wp2 = trans12 wp1 ->
     exists w2,
+      wp2 *-> (get w2) /\
       match_senv cc2 w2 se1 se2 /\
-      match_query cc2 w2 q1 q2 /\ 
-      forall r1 r2 (wp2: gworld cc2),
-        get w2 o-> wp2 ->
-        match_reply cc2 (set w2 wp2) r1 r2 ->
-        exists (wp1 : gworld cc1),
-        get w1 o-> wp1 /\
-                     match_reply cc1 (set w1 wp1) r1 r2.
+      match_query cc2 w2 q1 q2 /\
+      forall r1 r2 (wp2': gworld cc2),
+        get w2 o-> wp2' ->
+        match_reply cc2 (set w2 wp2') r1 r2 ->
+        exists (wp1' : gworld cc1),
+        get w1 o-> wp1' /\
+        match_reply cc1 (set w1 wp1') r1 r2 /\
+        wp2' = trans12 wp1'.
 (*
 (** The passive outgoing : leaving wA2 as given*)
   seems here we need a relation between w1 w2 s.t. they refer to the same injp_world, i.e. m1 -->_j m2
@@ -213,27 +220,31 @@ Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) :=
 
 *)
 (** I -> F *)
-Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) :=
+Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) (trans12 : gworld cc1 -> gworld cc2):=
   forall w2 se1 se2 q1 q2,
     match_senv cc2 w2 se1 se2 ->
     match_query cc2 w2 q1 q2 ->
     exists (w1: ccworld cc1) ,
       match_senv cc1 w1 se1 se2 /\
       match_query cc1 w1 q1 q2 /\
-      (* (forall (wp1': gworld cc1), get w1 *-> wp1' -> exists (wp2' : gworld cc2), get w2 *-> wp2'). *)
-      (* (forall q1 q2 (w1' : ccworld cc1) (wp1' : gworld cc1),  get w1' = wp1' -> (get w1) *-> wp1' ->  match_query cc1 w1' q1 q2 -> match_senv cc1 w1' se1 se2 ->
-                           exists (w2': ccworld cc2) (wp2' : gworld cc2), get w2' = wp2' /\ (get w2) *-> (get w2') /\ match_query cc2 w2' q1 q2 /\ match_senv cc2 w2' se1 se2) /\ *)
+      get w2 = trans12 (get w1)  /\
       (forall r1 r2 (wp1: gworld cc1),
         get w1 o-> wp1 -> (get w1 *-> wp1) ->
         match_reply cc1 (set w1 wp1) r1 r2 ->
         exists (wp2 : gworld cc2),
-        get w2 o-> wp2 /\ (get w2 o-> wp2) ->
+        get w2 o-> wp2 /\ (get w2 *-> wp2) /\ wp2 = trans12 wp1 /\              
         match_reply cc2 (set w2 wp2) r1 r2).
 
+(* Lemma same_mem_trans_OK {li1 li2} (cc1 cc2: callconv li1 li2) :=
+  forall wp1 wp2,
+    wf_mem wp1 -> trans12 wp1 = wp2 ->
+ *)
+
 Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
-    Callconv_Trans{
-        big_step_incoming : ccref_incoming cc1 cc2;
-        big_step_outgoing : ccref_outgoing cc1 cc2;
+  Callconv_Trans{
+        trans12 : gworld cc1 -> gworld cc2;
+        big_step_incoming : ccref_incoming cc1 cc2 trans12;
+        big_step_outgoing : ccref_outgoing cc1 cc2 trans12;
       }.
 
   
@@ -245,18 +256,19 @@ Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
   (*cc1 : injp @ injp cc2: injp*)
 Proof.
   intros.
-  destruct H0 as [INCOM OUTGO].
+  destruct X as [trans12 INCOM OUTGO].
   inv H.
   destruct X as [index order match_states SKEL PROP WF].
   constructor.
     set (ms se1 se2 (w2 : ccworld cc2) (wp2: gworld cc2) idx s1 s2 :=
-         exists w1 wp1,
+         exists w1 (wp1 : gworld cc1),
            match_states se1 se2 w1 wp1 idx s1 s2 /\
              match_senv cc1 w1 se1 se2 /\
-             (forall q1 q2 (w1': ccworld cc1), wp1 *-> (get w1') -> match_query cc1 w1' q1 q2 -> match_senv cc1 w1' se1 se2 ->
-                           exists (w2' : ccworld cc2), wp2 *-> (get w2') /\ match_query cc2 w2' q1 q2 /\ match_senv cc2 w2' se1 se2) /\
+             wf_mem wp1 /\
+             wp2 = trans12 wp1 /\
+             get w2 = trans12 (get w1) /\
              (forall r1 r2 (wp1' : gworld cc1), (get w1) o-> wp1' -> wp1 *-> wp1' -> match_reply cc1 (set w1 wp1') r1 r2 ->
-                            exists (wp2' : gworld cc2), (get w2) o-> wp2' /\ wp2 *-> wp2' /\ match_reply cc2 (set w2 wp2') r1 r2)).
+                            exists (wp2' : gworld cc2), (get w2) o-> wp2' /\ wp2 *-> wp2' /\  wp2' = trans12 wp1' /\ match_reply cc2 (set w2 wp2') r1 r2)).
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
@@ -264,28 +276,33 @@ Proof.
     destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     eapply fsim_match_valid_query; eauto.
   - intros q1 q2 s1 Hq' Hs1 Ho.
-    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hxy & Hf); auto.
+    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Htrans & Hf); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
     exists i, s2. split; auto. red. exists wB,(get wB). repeat apply conj; eauto.
-    + intros. (* Set Printing All. *)
-      simpl in *. eapply Hxy in H0. eapply H0 in exploit Hxy; eauto. 
-    intuition auto. 
-    admit. admit.
-  - intros gw i s1 s2 r1 (wB & gw' & Hs & Hse & Hxy & Hf) Hr1.
+    econstructor; eauto.
+  - intros gw i s1 s2 r1 (wB & gw' & Hs & Hse & Htrans & Hwf & HtranswB & Hf) Hr1.
     edestruct @fsim_match_final_states as (r2 & gw1 & Hr2 & ACCO1 & ACCI1 & Hr); eauto.
     exploit Hf; eauto. intros (gw2 &  ACCO2 & Hr2'). exists r2.
     exists gw2. intuition auto.
   - (*the most tricky part*)
-    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hxy & Hf) HqA1.
+    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & Hwf & Htrans & HtranswB & Hf) HqA1.
     edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct Hxy as (wA' & Hacci & Hq & Hsea); eauto.
-    specialize (OUTGO _ _ _ _ _ _ HseA HqA Hq) as Hroutgo.
-    exists wA', qA2. intuition auto.
-    exploit Hroutgo; eauto. intros (wp1 & ACCO1 & MR1).
+    edestruct OUTGO as (wA' & Htrans' & HseA' & HqA' & Hr); eauto.
+    exists wA', qA2. intuition auto. subst. auto.
+    exploit Hr; eauto. intros (wp1' & ACCO1 & MR1 & Htrans'').
     edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto.
-    exists wB, wp1. repeat apply conj; eauto.
-    admit. admit.
+    exists i', s2'. split; auto. exists wB. exists wp1'.
+    intuition auto. eapply wf_r; eauto.
+    rewrite get_set. reflexivity. exists (trans12 wp1'0).
+    assert( trans12_result : forall (wpB1 wp1 wp1': gworld cc1),
+              wpB1 o-> wp1' -> wp1 *-> wp1' ->
+              trans12 wpB1 o-> trans12 wp1' /\ trans12 wp1 *-> trans12 wp1').
+    admit.
+    exploit trans12_result; eauto.
+    intros (T & Y). intuition auto. subst.
+    setoid_rewrite HtranswB. auto.
+    setoid_rewrite Htrans''. auto.
+    admit.
   - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
     exists i', s2'. split; auto.
