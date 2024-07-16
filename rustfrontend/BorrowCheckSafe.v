@@ -100,6 +100,8 @@ Definition mmatch (m: mem) (own: own_env) : Prop :=
     abs b ofs = Some (p, pofs) ->
     (** TODO: how to represent the align_chunk property in
     valid_access ? I think the permission depends on the type of p *)
+    (** p may be an enum whose body has been moved, but its tag is
+    still owned by p? *)
     (Mem.range_perm m b (ofs - pofs) (ofs - pofs + (sizeof ce (typeof_place p))) Cur Freeable
     /\ bmatch m b (ofs - pofs) p own (typeof_place p)).
 

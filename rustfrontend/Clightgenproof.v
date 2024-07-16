@@ -7,7 +7,7 @@ Require Import AST Linking.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import Clight.
-Require Import RustlightBase RustIR RustOp.
+Require Import RustlightBase RustIR RustIRsem RustOp.
 Require Import Errors.
 Require Import Clightgen Clightgenspec.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
@@ -292,7 +292,7 @@ Qed.
 (* We need to maintain the well-formedness of local environment in the
 simulation *)
 Definition well_formed_env (f: function) (e: env) : Prop :=
-  forall id, ~ In id (var_names f.(fn_vars)) -> e!id = None.
+  forall id, ~ In id (var_names (f.(fn_params) ++ f.(fn_vars))) -> e!id = None.
 
 Lemma wf_env_target_none: forall j e te l id f,
     match_env j e te ->
@@ -358,18 +358,18 @@ Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_vari
 
 (* We need to record the list of stack block for the parameter of the
 drop glue *)
-Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> list block -> Prop :=
+Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list block -> Prop :=
 | match_Kstop: forall m tm bs,
-    match_cont j RustIR.Kstop Clight.Kstop m tm bs
+    match_cont j Kstop Clight.Kstop m tm bs
 | match_Kseq: forall s ts k tk m tm bs
     (* To avoid generator, we need to build the spec *)
     (MSTMT: tr_stmt ce tce dropm s ts)
     (MCONT: forall m tm bs, match_cont j k tk m tm bs),
-    match_cont j (RustIR.Kseq s k) (Clight.Kseq ts tk) m tm bs
+    match_cont j (Kseq s k) (Clight.Kseq ts tk) m tm bs
 | match_Kloop: forall s ts k tk m tm bs
     (MSTMT: tr_stmt ce tce dropm s ts)
     (MCONT: forall m tm bs, match_cont j k tk m tm bs),
-    match_cont j (RustIR.Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm bs
+    match_cont j (Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm bs
 | match_Kcall1: forall p f tf e te le k tk cty temp pe m tm bs
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
@@ -380,7 +380,7 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> l
     (PE: place_to_cexpr ce tce p = OK pe)
     (MCONT: forall m tm bs, match_cont j k tk m tm bs)
     (MENV: match_env j e te),
-    match_cont j (RustIR.Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm bs
+    match_cont j (Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm bs
 | match_Kcall2: forall f tf e te le k tk m tm bs
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
@@ -388,7 +388,7 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> l
     (TRFUN: tr_function ce tce dropm glues f tf)
     (MCONT: forall m tm bs, match_cont j k tk m tm bs)
     (MENV: match_env j e te),
-    match_cont j (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk) m tm bs
+    match_cont j (Kcall None f e k) (Clight.Kcall None tf te le tk) m tm bs
 | match_Kdropcall_composite: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 kts fid fty tys bs,
     (* invariant that needed to be preserved *)
     let co_ty := (Ctypes.Tstruct id noattr) in
@@ -421,7 +421,7 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> l
     (NOTIN: ~ In pb bs)
     (GLUE: glues ! id = Some tf),
       match_cont j
-        (RustIR.Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k)
+        (Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k)
         (Clight.Kcall None tf te le (Clight.Kseq ts1 kts)) m tm (pb :: bs)
 .
 
@@ -449,7 +449,7 @@ Inductive match_cont (j: meminj) : RustIR.cont -> Clight.cont -> mem -> mem -> l
 (* . *)
 
 
-Inductive match_states: RustIR.state -> Clight.state -> Prop :=
+Inductive match_states: state -> Clight.state -> Prop :=
 | match_regular_state: forall f tf s ts k tk m tm e te le j
     (WFENV: well_formed_env f e)
     (* maintain that this function is a normal function *)
@@ -462,7 +462,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (MINJ: Mem.inject j m tm)   
     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
     (MENV: match_env j e te),
-    match_states (RustIR.State f s k e m) (Clight.State tf ts tk te le tm)
+    match_states (State f s k e m) (Clight.State tf ts tk te le tm)
 | match_call_state: forall vf vargs k m tvf tvargs tk tm j
     (* match_kcall is independent of ce and dropm  *)
     (MCONT: forall m tm bs, match_cont j k tk m tm bs)
@@ -472,13 +472,13 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (AINJ: Val.inject_list j vargs tvargs),
     (* (VFIND: Genv.find_funct ge vf = Some fd) *)
     (* (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv), *)
-    match_states (RustIR.Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
+    match_states (Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
 | match_return_state: forall v k m tv tk tm j
    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
    (MINJ: Mem.inject j m tm)
    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
    (RINJ: Val.inject j v tv),
-    match_states (RustIR.Returnstate v k m) (Clight.Returnstate tv tk tm)
+    match_states (Returnstate v k m) (Clight.Returnstate tv tk tm)
 (* | match_calldrop_box: forall k m b ofs tk tm ty j fb tb tofs *)
 (*     (* we can store the address of p in calldrop and build a local env *)
 (*        in Drop state according to this address *) *)
@@ -520,7 +520,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (UNREACH: forall ofs, loc_out_of_reach j m pb ofs)
     (VALIDBS: forall b, In b bs -> Mem.valid_block tm b)
     (NOTIN: ~ In pb bs),
-      match_states (RustIR.Dropstate id (Vptr b ofs) s membs k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
+      match_states (Dropstate id (Vptr b ofs) s membs k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
 | match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts uts bs,
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
@@ -543,7 +543,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (* Use VALIDBS to prove NOTIN in Dropstate tansitions *)
     (VALIDBS: forall b, In b bs -> Mem.valid_block tm b)
     (NOTIN: ~ In pb bs),
-      match_states (RustIR.Dropstate id (Vptr b ofs) s nil k m) (Clight.State tf ts (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Kswitch tk))) te le tm)
+      match_states (Dropstate id (Vptr b ofs) s nil k m) (Clight.State tf ts (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Kswitch tk))) te le tm)
 .
 
 
@@ -731,7 +731,7 @@ Proof.
     eauto.
     auto.
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
-    generalize (E _ _ H1). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.
+    generalize (E _ _ H3). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.
     unfold tce in PEXPR. simpl in PEXPR.
     rewrite A in PEXPR.
     rewrite ENUM in PEXPR.
@@ -3244,7 +3244,7 @@ End PRESERVATION.
 
 Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_c inj) (cc_c inj) (RustIR.semantics prog) (Clight.semantics1 tprog).
+  forward_simulation (cc_c inj) (cc_c inj) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
 Proof.
   fsim eapply forward_simulation_plus. 
   - inv MATCH. auto.
