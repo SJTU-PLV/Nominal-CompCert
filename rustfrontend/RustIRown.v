@@ -13,7 +13,7 @@ Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
 Require Import Clight RustlightBase RustIR.
-Require Import InitDomain.
+Require Import InitDomain InitAnalysis.
 
 Import ListNotations.
 
@@ -28,68 +28,55 @@ shallow owned place set (TODO: it should be defined in Rustlight) *)
 every used is initialized. Maybe we should change the name?  *)
 
 (* may be we can use PathMap to optimize it *)
-Record own_env := mkown { deep_own: Paths.t; shallow_own: Paths.t}.
-
-Definition is_deep_owned (p: place) (own: own_env) : bool :=
-  Paths.exists_ (fun p' => is_prefix p' p) own.(deep_own).
-
-Definition is_shallow_owned (p: place) (own: own_env) : bool :=
-  Paths.mem p own.(shallow_own).
+  Record own_env :=
+    mkown { own_init: PathsMap.t;
+            own_uninit: PathsMap.t;
+            own_universe: PathsMap.t } .
 
 Definition is_owned (p: place) (own: own_env) : bool :=
-  (* check whether p is a children in one of the path in deep owned
-  set or p is in the shallow owned set *)
- is_deep_owned p own || is_shallow_owned p own.
+  let id := local_of_place p in
+  let init := PathsMap.get id own.(own_init) in
+  let uninit := PathsMap.get id own.(own_uninit) in
+  (* no p's prefix in uninit and there is some p's prefix in init *)
+  Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
+  && Paths.exists_ (fun p' => is_prefix p' p) init.
+
+Definition is_deep_owned (p: place) (own: own_env) : bool :=
+  (* p is owned and no p's children in uninit *)
+  is_owned p own &&
+    let id := local_of_place p in
+    let init := PathsMap.get id own.(own_init) in
+    let uninit := PathsMap.get id own.(own_uninit) in
+    Paths.for_all (is_prefix p) uninit.
+
+(* check that parents of p are not in uninit (slightly different from
+   the condition in is_owned) *)
+Definition prefix_is_owned (p: place) (own: own_env) : bool :=
+  let id := local_of_place p in
+  let uninit := PathsMap.get id own.(own_uninit) in
+  (* no p's prefix in uninit and there is some p's prefix in init *)
+  Paths.for_all (fun p' => negb (is_prefix_strict p' p)) uninit.
 
 
-(* place with succesive Pdowncast in the end is not a valid owner *)
+(* place with succesive Pdowncast in the end is not a valid owner. For
+example, move (Pdowncast p) is equivalent to move p *)
 Fixpoint valid_owner (p: place) :=
   match p with
   | Pdowncast p' _ _ => valid_owner p'
   | _ => p
   end.
 
-Section COMP_ENV.
 
-Variable ce: composite_env.
-
-(* For parent [p'] of [p]: [p] has been just be moved from or be
-partialized (become shallow own) and we should do something for
-[p'] *)
-Fixpoint partialize (own: own_env) (p: place) : own_env :=
-  match p with
-  | Pderef p' ty =>
-      partialize (mkown own.(deep_own) (Paths.add p' own.(shallow_own))) p'
-  | Pfield p' fid fty =>
-      if is_deep_owned p' own then
-        (* remove p' from deep_own *)
-        let own1 := mkown (Paths.remove p' own.(deep_own)) own.(shallow_own) in
-        (* make siblings of p deep own and then partialize the parent of p' *)
-        let siblings := siblings ce p in
-        (* add siblings to deep_own of own1 *)
-        let own2 := mkown (Paths.union siblings own1.(deep_own)) own1.(shallow_own) in
-        partialize own2 p'
-      else
-        (* Is it possible? *)
-        partialize own p'
-  | Plocal id ty => own          (* do nothing *)
-  | Pdowncast p' fid fty =>
-      partialize own p'
-  end.
-          
 Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
   match pe with
-  | Eplace p ty =>
-      (** FIXME: we must ensure that ty is not a non-copy type (contains Tbox) *)
-      (** An adhoc solution: we can treat all composite as non-copy type *)
-      if definite_copy_type ty then
+  | Eplace p _
+  | Ecktag p _
+  | Eref _ _ p _ =>
+      (* we only check p which represents/owns a memory location *)
+      if place_owns_loc p then
         is_owned p own
       else
         false
-  | Ecktag p ty =>
-      is_owned p own
-  | Eref _ _ p _ =>
-      is_owned p own
   | Eunop _ pe _ =>
       own_check_pexpr own pe
   | Ebinop _ pe1 pe2 _ =>
@@ -98,22 +85,19 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
 end.          
 
 
-(* Move out a place or drop a place and then update the own_env *)
-Definition own_move_place (own: own_env) (p: place) : own_env :=
-  let own1 := mkown (Paths.remove p own.(deep_own)) own.(shallow_own) in
-  (partialize own1 p).
-             
-
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
   match e with
   | Emoveplace p ty =>
+      (** FIXME: when to use valid_owner? *)
+      let p := valid_owner p in
       if is_deep_owned p own then
         (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
         partial owned *)
-        (* remove p in deep own if it exists. No matter it exists or
-        not, we should partialize it's parents *)
-        Some (own_move_place own p)
+        (* remove p from init and add p and its children to uninit *)
+        Some (mkown (remove_place p own.(own_init))
+                (add_place own.(own_universe) p own.(own_uninit))
+                own.(own_universe))
       else
         (* Error! We must move a deeply owned place! *)
         None
@@ -123,11 +107,30 @@ Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
       else None
   end.
 
+Fixpoint own_check_exprlist (own: own_env) (l: list expr) : option own_env :=
+  match l with
+  | nil => Some own
+  | e :: l' =>
+      match own_check_expr own e with
+      | Some own1 =>
+          own_check_exprlist own1 l'
+      | None => None
+      end
+  end.
+
 (* Update the ownership environment when assigning to p. We must
 ensure that p is not deeply owned because p must be dropped before
-this assignment. The assignment is somewhat backward operation of
-own_move_place *)
-Fixpoint own_check_assign (own: own_env) (p: place) : option own_env :=
+this assignment. *)
+Definition own_check_assign (own: own_env) (p: place) : option own_env :=
+  (* check that parents of p are not in uninit (slightly different
+  from the condition in is_owned) *)
+  if prefix_is_owned p own then
+    Some (mkown (add_place own.(own_universe) p own.(own_init))
+            (remove_place p own.(own_uninit))
+            own.(own_universe))
+  else
+    None.             
+
   
 (** Continuation *)
   
@@ -311,9 +314,10 @@ Inductive step_drop_mem_error : state -> Prop :=
 
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_assign: forall f e p k le m1 m2 b ofs v v1,
+| step_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
-    
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3),
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
@@ -322,8 +326,11 @@ Inductive step : state -> trace -> state -> Prop :=
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
     assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
-    step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
-| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs
+    step (State f (Sassign p e) k le own1 m1) E0 (State f Sskip k le own3 m2)
+| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3
+    (* check ownership *)
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3)
     (* necessary for clightgen simulation *)
     (TYP: typeof_place p = Tvariant orgs enum_id),
     ge.(genv_cenv) ! enum_id = Some co ->
@@ -346,8 +353,11 @@ Inductive step : state -> trace -> state -> Prop :=
     (* variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->- *)
     (* set the value *)
     assign_loc ge ty m2 b1 ofs1 v1 m3 ->
-    step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
-| step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs,
+    step (State f (Sassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
+| step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
+    (* check ownership *)
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3),
     typeof_place p = Tbox ty ->
     (* Simulate malloc semantics to allocate the memory block *)
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
@@ -361,62 +371,66 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign the address to p *)
     eval_place ge le m4 p pb pofs ->
     assign_loc ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) m5 ->
-    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m5)
+    step (State f (Sbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
 
-(** Small-step drop semantics *)
-| step_drop_box: forall le m m' k ty b' ofs' f b ofs p
-    (* We assume that drop(p) where p is box type has been expanded in
-    drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
-    (PADDR: eval_place ge le m p b ofs)
-    (PTY: typeof_place p = Tbox ty)
-    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
-    (* Simulate free semantics *)
-    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
-    step (State f (Sdrop p) k le m) E0 (State f Sskip k le m')
-| step_drop_struct: forall m k orgs co id p b ofs f le
-    (* It corresponds to the call step to the drop glue of this struct *)
-    (PTY: typeof_place p = Tstruct orgs id)
-    (SCO: ge.(genv_cenv) ! id = Some co)
-    (COSTRUCT: co.(co_sv) = Struct)
-    (PADDR: eval_place ge le m p b ofs),
-    step
-      (State f (Sdrop p) k le m) E0
-      (Dropstate id (Vptr b ofs) None co.(co_members) (Kcall None f le k) m)
-| step_drop_enum: forall m k p orgs co id fid fty tag b ofs f le
-    (PTY: typeof_place p = Tvariant orgs id)
-    (SCO: ge.(genv_cenv) ! id = Some co)
-    (COENUM: co.(co_sv) = TaggedUnion)
-    (PADDR: eval_place ge le m p b ofs)
-    (* big step to evaluate the switch statement *)
-    (* load tag  *)
-    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
-    (* use tag to choose the member *)
-    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
-    step
-    (State f (Sdrop p) k le m) E0
-    (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) nil (Kcall None f le k) m)
-| step_dropstate: forall id v s membs k m S E
-    (SDROP: step_drop (Dropstate id v s membs k m) E S),
-    step (Dropstate id v s membs k m) E S
+(** TODO: support dynamic drop semantics *)
+(* (** Small-step drop semantics *) *)
+(* | step_drop_box: forall le m m' k ty b' ofs' f b ofs p *)
+(*     (* We assume that drop(p) where p is box type has been expanded in *)
+(*     drop elaboration (see drop_fully_own in ElaborateDrop.v) *) *)
+(*     (PADDR: eval_place ge le m p b ofs) *)
+(*     (PTY: typeof_place p = Tbox ty) *)
+(*     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs')) *)
+(*     (* Simulate free semantics *) *)
+(*     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'), *)
+(*     step (State f (Sdrop p) k le m) E0 (State f Sskip k le m') *)
+(* | step_drop_struct: forall m k orgs co id p b ofs f le *)
+(*     (* It corresponds to the call step to the drop glue of this struct *) *)
+(*     (PTY: typeof_place p = Tstruct orgs id) *)
+(*     (SCO: ge.(genv_cenv) ! id = Some co) *)
+(*     (COSTRUCT: co.(co_sv) = Struct) *)
+(*     (PADDR: eval_place ge le m p b ofs), *)
+(*     step *)
+(*       (State f (Sdrop p) k le m) E0 *)
+(*       (Dropstate id (Vptr b ofs) None co.(co_members) (Kcall None f le k) m) *)
+(* | step_drop_enum: forall m k p orgs co id fid fty tag b ofs f le *)
+(*     (PTY: typeof_place p = Tvariant orgs id) *)
+(*     (SCO: ge.(genv_cenv) ! id = Some co) *)
+(*     (COENUM: co.(co_sv) = TaggedUnion) *)
+(*     (PADDR: eval_place ge le m p b ofs) *)
+(*     (* big step to evaluate the switch statement *) *)
+(*     (* load tag  *) *)
+(*     (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag)) *)
+(*     (* use tag to choose the member *) *)
+(*     (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)), *)
+(*     step *)
+(*     (State f (Sdrop p) k le m) E0 *)
+(*     (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) nil (Kcall None f le k) m) *)
+(* | step_dropstate: forall id v s membs k m S E *)
+(*     (SDROP: step_drop (Dropstate id v s membs k m) E S), *)
+(*     step (Dropstate id v s membs k m) E S *)
     
-| step_storagelive: forall f k le m id,
-    step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
-| step_storagedead: forall f k le m id,
-    step (State f (Sstoragedead id) k le m) E0 (State f Sskip k le m)
+| step_storagelive: forall f k le m id own,
+    step (State f (Sstoragelive id) k le own m) E0 (State f Sskip k le own m)
+| step_storagedead: forall f k le m id own,
+    step (State f (Sstoragedead id) k le own m) E0 (State f Sskip k le own m)
          
-| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,    
+| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
+    (CHKEXPRLIST: own_check_exprlist own1 al = Some own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall (Some p) f le k) m)
+    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le own2 k) m)
 
-| step_internal_function: forall vf f vargs k m e m'
+| step_internal_function: forall vf f vargs k m e m' uninit
     (FIND: Genv.find_funct ge vf = Some (Internal f))
     (NORMAL: f.(fn_drop_glue) = None),
     function_entry ge f vargs m e m' ->
-    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e m')
+    (** Important: initialize own_env in function entry *)
+    collect_func ge f = OK uninit ->    
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e (mkown (PTree.empty LPaths.t) uninit uninit) m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
     (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc))
@@ -425,62 +439,65 @@ Inductive step : state -> trace -> state -> Prop :=
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
 (** Return cases *)
-| step_return_0: forall e lb m1 m2 f k ,
+| step_return_0: forall e lb m1 m2 f k own,
     blocks_of_env ge e = lb ->
     (* drop the stack blocks *)
     Mem.free_list m1 lb = Some m2 ->
     (* return unit or Vundef? *)
-    step (State f (Sreturn None) k e m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v v1 lb m1 m2 f k ,
+    step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
+| step_return_1: forall le a v v1 lb m1 m2 f k own1 own2
+    (CHKEXPR: own_check_expr own1 a = Some own2),
     eval_expr ge le m1 a v ->
     (* sem_cast to the return type *)
     sem_cast v (typeof a) f.(fn_return) = Some v1 ->
     (* drop the stack blocks *)
     blocks_of_env ge le = lb ->
     Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn (Some a)) k le m1) E0 (Returnstate v1 (call_cont k) m2)
+    step (State f (Sreturn (Some a)) k le own1 m1) E0 (Returnstate v1 (call_cont k) m2)
 (* no return statement but reach the end of the function *)
-| step_skip_call: forall e lb m1 m2 f k,
+| step_skip_call: forall e lb m1 m2 f k own,
     is_call_cont k ->
     blocks_of_env ge e = lb ->
     Mem.free_list m1 lb = Some m2 ->
-    step (State f Sskip k e m1) E0 (Returnstate Vundef (call_cont k) m2)
+    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
          
-| step_returnstate: forall p v b ofs ty m1 m2 e f k,
+| step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
+    (CHKASSIGN: own_check_assign own1 p = Some own2),
     eval_place ge e m1 p b ofs ->
     assign_loc ge ty m1 b ofs v m2 ->    
-    step (Returnstate v (Kcall (Some p) f e k) m1) E0 (State f Sskip k e m2)
+    step (Returnstate v (Kcall (Some p) f e own1 k) m1) E0 (State f Sskip k e own2 m2)
 
 (* Control flow statements *)
-| step_seq:  forall f s1 s2 k e m,
-    step (State f (Ssequence s1 s2) k e m)
-      E0 (State f s1 (Kseq s2 k) e m)
-| step_skip_seq: forall f s k e m,
-    step (State f Sskip (Kseq s k) e m)
-      E0 (State f s k e m)
-| step_continue_seq: forall f s k e m,
-    step (State f Scontinue (Kseq s k) e m)
-      E0 (State f Scontinue k e m)
-| step_break_seq: forall f s k e m,
-    step (State f Sbreak (Kseq s k) e m)
-      E0 (State f Sbreak k e m)
-| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty,
+| step_seq:  forall f s1 s2 k e m own,
+    step (State f (Ssequence s1 s2) k e own m)
+      E0 (State f s1 (Kseq s2 k) e own m)
+| step_skip_seq: forall f s k e m own,
+    step (State f Sskip (Kseq s k) e own m)
+      E0 (State f s k e own m)
+| step_continue_seq: forall f s k e m own,
+    step (State f Scontinue (Kseq s k) e own m)
+      E0 (State f Scontinue k e own m)
+| step_break_seq: forall f s k e m own,
+    step (State f Sbreak (Kseq s k) e own m)
+      E0 (State f Sbreak k e own m)
+| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1 own2
+    (CHKEXPR: own_check_expr own1 a = Some own2),
     (* there is no receiver for the moved place, so it must be None *)
     eval_expr ge e m a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
-    step (State f (Sifthenelse a s1 s2) k e m)
-      E0 (State f (if b then s1 else s2) k e m)
-| step_loop: forall f s k e m,
-    step (State f (Sloop s) k e m)
-      E0 (State f s (Kloop s k) e m)
-| step_skip_or_continue_loop:  forall f s k e m x,
+    step (State f (Sifthenelse a s1 s2) k e own1 m)
+      E0 (State f (if b then s1 else s2) k e own2 m)
+| step_loop: forall f s k e m own,
+    step (State f (Sloop s) k e own m)
+      E0 (State f s (Kloop s k) e own m)
+| step_skip_or_continue_loop:  forall f s k e m x own,
     x = Sskip \/ x = Scontinue ->
-    step (State f x (Kloop s k) e m)
-      E0 (State f s (Kloop s k) e m)
-| step_break_loop:  forall f s k e m,
-    step (State f Sbreak (Kloop s k) e m)
-      E0 (State f Sskip k e m)
+    step (State f x (Kloop s k) e own m)
+      E0 (State f s (Kloop s k) e own m)
+| step_break_loop:  forall f s k e m own,
+    step (State f Sbreak (Kloop s k) e own m)
+      E0 (State f Sskip k e own m)
 .
 
 

@@ -118,15 +118,26 @@ Fixpoint own_path_box (p: place) (ty: type) :=
   | _ => Paths.empty
   end.
 
+(* place [p] owns a memory location and we need to check its value is
+initialized *)
+Fixpoint place_owns_loc (p: place) : bool :=
+  match p with
+  | Plocal _ _ => true
+  | Pderef p' (Tbox _) => true
+  | Pfield p' _ _ => place_owns_loc p'
+  | Pdowncast p' _ _ => place_owns_loc p'
+  | _ => false
+  end.
 
 (** The core function of adding a place [p] to the whole set [l] *)
 (* add [p] to the paths [l]: If [p] is [Pderef p' ty], then
 recursively add p' and its parents to paths [l]; If [p] is [Pfield p'
 fid ty], then add [p']'s siblings and [p']'s parent to paths [l]*)
 Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
-  if own_type ce (typeof_place p) then
+  if place_owns_loc p then
     (** FIXME: WHY? If there are some children of [p] in [l], do
-    nothing. *)
+      nothing. Because [p] may have been split into sub-fields and we
+      have collected p (see Pderef and Pfield cases). *)
     if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) l) then
       match p with
       | Plocal _ _ =>

@@ -13,23 +13,53 @@ Section COMP_ENV.
 
 Variable ce : composite_env.
 
+Fixpoint collect_pexpr (pe: pexpr) (m: PathsMap.t) : PathsMap.t :=
+  match pe with
+  | Eplace p _
+  | Ecktag p _
+  | Eref _ _ p _ =>
+      (* we only check p which represents/owns a memory location *)
+      if place_owns_loc p then
+        collect_place ce p m
+      else m
+  | Eunop _ pe _ =>
+      collect_pexpr pe m
+  | Ebinop _ pe1 pe2 _ =>
+      collect_pexpr pe2 (collect_pexpr pe1 m)
+  | _ => m
+end.          
+
+
+Definition collect_expr (e: expr) (m: PathsMap.t) : PathsMap.t :=
+  match e with
+  | Emoveplace p _ =>
+      collect_place ce p m
+  | Epure pe =>
+      collect_pexpr pe m
+  end.
+
+Fixpoint collect_exprlist (l: list expr) (m: PathsMap.t) : PathsMap.t :=
+  match l with
+  | nil => m
+  | e :: l' =>
+      collect_exprlist l' (collect_expr e m)
+  end.
+
+
 Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with
   | Sassign_variant p _ _ e
-  | Sassign p e  =>
-      collect_place ce p (collect_option_place ce (moved_place e) m)
+  | Sassign p e
   | Sbox p e =>
-      collect_place ce p (collect_option_place ce (moved_place e) m)
+      collect_place ce p (collect_expr e m)
   | Scall p _ al =>
-      let pl := moved_place_list al in
-      let m' := fold_right (collect_place ce) m pl in
-      collect_place ce p m'
+      collect_place ce p (collect_exprlist al m)
   | Sreturn (Some e) =>
-      collect_option_place ce (moved_place e) m
+      collect_expr e m
   | Ssequence s1 s2 =>
       collect_stmt s1 (collect_stmt s2 m)
   | Sifthenelse e s1 s2 =>
-      collect_option_place ce (moved_place e) (collect_stmt s1 (collect_stmt s2 m))
+      collect_stmt s1 (collect_stmt s2 (collect_expr e m))
   | Sloop s =>
       collect_stmt s m
   | _ => m
@@ -44,7 +74,7 @@ Definition collect_func (f: function) : Errors.res PathsMap.t :=
     Errors.OK (collect_stmt f.(fn_body) init_map)
   else
     Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
-        
+
 End COMP_ENV.
 
 (* S is the whole set, flag = true indicates that it computes the MaybeInit set *)
