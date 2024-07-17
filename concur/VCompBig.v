@@ -322,13 +322,73 @@ Next Obligation.
   intros. inv H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
-Compute (gworld (cc_compose c_injp c_injp)).
-
 Inductive match_injp_comp_world : (injp_world * injp_world) -> injp_world -> Prop :=
 |world_comp_intro:
   forall m1 m2 m3 j12 j23 j13 Hm12 Hm23 Hm13,
     j13 = compose_meminj j12 j23 ->
     match_injp_comp_world (injpw j12 m1 m2 Hm12, injpw j23 m2 m3 Hm23) (injpw j13 m1 m3 Hm13).
+
+Lemma injp_comp_acce : forall w11 w12 w11' w12' w1 w2,
+    match_injp_comp_world (w11, w12)  w1 ->
+    match_injp_comp_world (w11', w12')  w2 ->
+    injp_acce w11 w11' -> injp_acce w12 w12' ->
+    injp_acce w1 w2.
+Admitted.
+  
+Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
+    match_injp_comp_world (w11, w12)  w1 ->
+    match_injp_comp_world (w11', w12')  w2 ->
+    injp_acci w11 w11' -> injp_acci w12 w12' ->
+    injp_acci w1 w2.
+Proof.
+  intros. inv H. inv H0.
+  rename j0 into j12'. rename j1 into j23'. rename m0 into m1'. rename m4 into m2'.
+  rename m5 into m3'.
+  inv H1. inv H2.
+  constructor; eauto.
+  - destruct H11 as [S11 H11]. split. auto.
+    (** a little bit different from old composition, it was (meminj_dom j) compose j.
+        Now here it is arbitrary j1 compose j2 *)
+    constructor.
+    + destruct H11. auto.
+    + intros b ofs k p [X Y] Hv.
+      red in X. destruct (j12 b) as [[b2 d]|] eqn: Hj12.
+      -- destruct (j23 b2) as [[b3 d2]|] eqn:Hj23.
+         exfalso. unfold compose_meminj in X.
+         rewrite Hj12, Hj23 in X. congruence.
+         admit. (** !!problem here*)
+         (* split.
+         destruct H18 as [S18 H18]. inv H18.
+         eapply Mem.valid_block_inject_2 in Hj12 as Hv2; eauto.
+         exploit unchanged_on_perm; eauto. *)
+      -- inv H11. eapply unchanged_on_perm; eauto. split; auto.
+    + intros b ofs [X Y] Hv.
+      red in X. destruct (j12 b) as [[b2 d]|] eqn: Hj12.
+      -- admit.
+      -- inv H11. eapply unchanged_on_contents; eauto. split; auto.
+  - destruct H19 as [S19 H19]. split. auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. red. destruct H as [X Y].
+    split; eauto. red in X.
+    red. intros.
+    admit. (** similarly, it is somehow trikey *)
+  - rauto. 
+  - red.
+    intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (j12' b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
+        destruct (j23' bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
+        inv Hb'.
+        destruct (j12 b1) as [[? ?] | ] eqn:Hb1.
+        + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
+          destruct (j23 b) as [[? ?] |] eqn: Hb2.
+          unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
+          exfalso. exploit H21; eauto. intros [X Y].
+          eapply Mem.valid_block_inject_2 in Hb1; eauto.
+        + exploit H14; eauto. intros [X Y].
+          destruct (j23 bi) as [[? ?] |] eqn: Hb2.
+          exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
+          exploit H21; eauto. intros [X1 Y1]. intuition auto.
+Admitted.
 
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
 Proof.
@@ -347,8 +407,18 @@ Proof.
     + econstructor. rewrite meminj_dom_compose. reflexivity. 
     + intros r1 r3 wp1 wp2 wp1' Hmatch [Hae1 Hae2] HACCI Hr. simpl in Hae1, Hae2.
       destruct wp1' as [wp11' wp12']. simpl. simpl in *.
-      destruct wp1 as [wp11 wp12]. simpl in *.
-      admit. (*just compose wp11 and wp12, not completely sure if this is correct *)
+      destruct wp1 as [wp11 wp12]. simpl in *. destruct HACCI as [HAci1 HAci2].
+      simpl in *. destruct wp11' as [j12 m1' m2' Hm1']. destruct wp12' as [j23 m2'_ m3' Hm2'].
+      destruct Hr as [r2 [Hr1 Hr2]].
+      inv Hr1. inv Hr2. simpl in *. inv H0. inv H11. rename m1'0 into m1'.
+      rename m2'0 into m2'. rename m2'1 into m3'.
+      exists (injpw (compose_meminj j12 j23) m1' m3' (Mem.inject_compose _ _ _ _ _ Hm1' Hm2')).
+      repeat apply conj; eauto.
+      -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2. econstructor; eauto.
+         rewrite meminj_dom_compose. reflexivity.
+         econstructor; eauto.
+      -- eapply injp_comp_acci; eauto. econstructor; eauto.
+      -- econstructor; simpl; eauto. eapply val_inject_compose; eauto.
   - (* outgoing construction *)
     red. intros wp1 wp2 w1 se1 se2 q1 q3 Hs Hq HACI Hmatch.
     inv Hmatch. destruct w1 as [x [w11 w12]].
@@ -361,7 +431,10 @@ Proof.
     subst m2'_.
     exists (injpw (compose_meminj j12' j23')  m1' m3' (Mem.inject_compose _ _ _ _ _ Hm12' Hm23') ).
     repeat apply conj; eauto.
-    + simpl. admit. (** TODO: add a lemma , should be correct *)
+    + simpl.
+      eapply injp_comp_acci. 3: apply H. 3: apply H0.
+      econstructor; eauto.
+      econstructor; eauto.
     + inv Hs. inv H1. inv H2. econstructor; eauto.
       eapply Genv.match_stbls_compose; eauto.
     + destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2.
