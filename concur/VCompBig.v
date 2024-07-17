@@ -328,13 +328,56 @@ Inductive match_injp_comp_world : (injp_world * injp_world) -> injp_world -> Pro
     j13 = compose_meminj j12 j23 ->
     match_injp_comp_world (injpw j12 m1 m2 Hm12, injpw j23 m2 m3 Hm23) (injpw j13 m1 m3 Hm13).
 
+Inductive injp_trivial_comp_world : (injp_world * injp_world) -> injp_world -> Prop :=
+|trivial_comp_intro : forall j m1 m3 Hm12 Hm23 Hm13,
+    injp_trivial_comp_world (injpw (meminj_dom j) m1 m1 Hm12, injpw j m1 m3 Hm23)
+      (injpw j m1 m3 Hm13).
+
+
+          
 Lemma injp_comp_acce : forall w11 w12 w11' w12' w1 w2,
-    match_injp_comp_world (w11, w12)  w1 ->
+    injp_trivial_comp_world (w11, w12)  w1 ->
     match_injp_comp_world (w11', w12')  w2 ->
     injp_acce w11 w11' -> injp_acce w12 w12' ->
     injp_acce w1 w2.
+Proof.
+  intros. inv H. inv H0.
+  inv H1. inv H2. rename m0 into m1'. rename m2 into m2'. rename m4 into m3'.
+  econstructor; eauto.
+  - destruct H11. split. auto. eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H. split; auto. red. unfold meminj_dom.
+    rewrite H. reflexivity.
+  - assert (j = compose_meminj (meminj_dom j) j).
+    rewrite meminj_dom_compose. reflexivity.
+    rewrite H. rauto.
+  - red.
+    intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+    destruct (j12 b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
+    destruct (j23 bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
+    inv Hb'.
+    exploit H14; eauto. unfold meminj_dom. rewrite Hb. reflexivity.
+    intros [X Y].
+    destruct (j bi) as [[? ?] | ] eqn:Hfbi.
+    {
+      eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+    }
+    edestruct H21; eauto.
+Qed.
+
+(** failed *)
+(* Lemma memval_inj_eq_trans: forall mv1 mv2 mv2' f,
+    memval_inject f mv1 mv2 ->
+    memval_inject f mv1 mv2' ->
+    mv2 = mv2'.
+Proof.
+  intros. destruct mv1; inv H; inv H0; eauto.
+  admit.
+  destruct v; inv H5; inv H4; eauto.
+  admit.
+  rewrite H1 in H2. inv H2. reflexivity.
 Admitted.
-  
+ *)
+
 Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
     match_injp_comp_world (w11, w12)  w1 ->
     match_injp_comp_world (w11', w12')  w2 ->
@@ -356,23 +399,85 @@ Proof.
       -- destruct (j23 b2) as [[b3 d2]|] eqn:Hj23.
          exfalso. unfold compose_meminj in X.
          rewrite Hj12, Hj23 in X. congruence.
-         admit. (** !!problem here*)
-         (* split.
-         destruct H18 as [S18 H18]. inv H18.
-         eapply Mem.valid_block_inject_2 in Hj12 as Hv2; eauto.
-         exploit unchanged_on_perm; eauto. *)
+         destruct H19 as [S19 H19].
+         split; intro Hpm1.
+         **
+           eapply Mem.perm_inject in Hpm1 as Hpm2; eauto.
+           erewrite Mem.unchanged_on_perm in Hpm2; eauto.
+           eapply Mem.perm_inject_inv in Hpm2 as H; eauto.
+           destruct H. auto. exploit H15; eauto with mem.
+           intro. inv H0. red. split. auto. admit.
+           eapply Mem.valid_block_inject_2; eauto.
+         ** eapply Mem.perm_inject in Hpm1 as Hpm2. 3: eauto.
+            2: eauto.
+            erewrite <- Mem.unchanged_on_perm in Hpm2; eauto.
+            eapply Mem.perm_inject_inv in Hpm2 as H; eauto.
+            destruct H. auto. red in H9. exfalso.
+            exploit H9. 2: eauto with mem. eauto with mem.
+            intro. apply H. eauto with mem.
+            red. split; auto. admit.
+            eapply Mem.valid_block_inject_2; eauto.
       -- inv H11. eapply unchanged_on_perm; eauto. split; auto.
     + intros b ofs [X Y] Hv.
       red in X. destruct (j12 b) as [[b2 d]|] eqn: Hj12.
-      -- admit.
+      -- unfold compose_meminj in X. rewrite Hj12 in X.
+         admit. (* Problem : we have to prevent the contents in m1 and m1'
+                  from being like [Vint 1 ---> Vundef], simular to the free_preservation*)
       -- inv H11. eapply unchanged_on_contents; eauto. split; auto.
-  - destruct H19 as [S19 H19]. split. auto.
-    eapply Mem.unchanged_on_implies; eauto.
-    intros. red. destruct H as [X Y].
-    split; eauto. red in X.
-    red. intros.
-    admit. (** similarly, it is somehow trikey *)
-  - rauto. 
+  - destruct H20 as [S20 H20]. split. auto.
+    constructor. inv H20. auto.
+    + (*perm*)
+      intros b3 ofs3 k p [X Y] Hv3. red in X.
+      destruct (Mem.loc_in_reach_find m2 j23 b3 ofs3) as [[b2 ofs2]|] eqn:FIND23.
+      -- edestruct Mem.loc_in_reach_find_valid as [Hj23 Hpm2]; eauto.
+         destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1] |] eqn:FIND12.
+         exfalso. edestruct (Mem.loc_in_reach_find_valid) as [Hj12 Hpm1]; eauto.
+         eapply X. unfold compose_meminj. rewrite Hj12, Hj23.
+         reflexivity. replace (ofs3 - (ofs2 - ofs1 + (ofs3 - ofs2))) with ofs1 by lia. auto.
+         eapply Mem.loc_in_reach_find_none in FIND12; eauto.
+         destruct H12 as [S12 H12]. inv H12.
+         exploit unchanged_on_perm. red. split. apply FIND12.
+         admit. (*inject inv*)
+         eauto with mem.
+         instantiate (1:= p).
+         instantiate (1:= k).
+         intro Hpm2eq. replace (ofs3) with (ofs2 + (ofs3 - ofs2)) by lia.
+         split; intro.
+         ++ eapply Mem.perm_inject_inv in H; eauto. destruct H; auto.
+            eapply Mem.perm_inject. 2: eauto. eauto. apply Hpm2eq. auto.
+            congruence.
+         ++ eapply Mem.perm_inject_inv in H as H'; eauto. destruct H'; auto.
+            eapply Mem.perm_inject; eauto. apply Hpm2eq. auto.
+            exploit H23; eauto with mem. intro. inv H1.
+      -- eapply Mem.loc_in_reach_find_none in FIND23; eauto.
+         eapply H20; eauto. split. auto. auto.
+    + (*content*)
+      intros b3 ofs3 [X Y] Hpm3. red in X.
+      destruct (Mem.loc_in_reach_find m2 j23 b3 ofs3) as [[b2 ofs2]|] eqn:FIND23.
+      -- edestruct Mem.loc_in_reach_find_valid as [Hj23 Hpm2]; eauto.
+         destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1] |] eqn:FIND12.
+         exfalso. edestruct (Mem.loc_in_reach_find_valid) as [Hj12 Hpm1]; eauto.
+         eapply X. unfold compose_meminj. rewrite Hj12, Hj23.
+         reflexivity. replace (ofs3 - (ofs2 - ofs1 + (ofs3 - ofs2))) with ofs1 by lia. auto.
+         eapply Mem.loc_in_reach_find_none in FIND12; eauto.
+         assert (Mem.perm m2 b2 ofs2 Cur Readable).
+         { replace ofs3 with (ofs2 + (ofs3 - ofs2)) in Hpm3 by lia.
+           eapply Mem.perm_inject_inv in Hpm3; eauto.
+           destruct Hpm3; eauto. congruence. }
+         destruct H12 as [S12 H12]. inv H12.
+         exploit unchanged_on_contents. red. split. apply FIND12.
+         admit. eauto.
+         intro Hcon2eq.
+         assert (Hpm2' : Mem.perm m2' b2 ofs2 Cur Readable).
+         apply unchanged_on_perm; eauto. split. auto. admit. eauto with mem.
+         inv Hm23. inv mi_inj. exploit mi_memval; eauto.
+         intro VINJ1.
+         inv Hm'3. inv mi_inj. exploit mi_memval0; eauto.
+         intro VINJ2.
+         admit.
+      -- eapply Mem.loc_in_reach_find_none in FIND23; eauto.
+         eapply H20; eauto. split. auto. auto.
+  - rauto.
   - red.
     intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
         destruct (j12' b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
@@ -382,12 +487,23 @@ Proof.
         + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
           destruct (j23 b) as [[? ?] |] eqn: Hb2.
           unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
-          exfalso. exploit H21; eauto. intros [X Y].
+          exfalso. exploit H22; eauto. intros [X Y].
           eapply Mem.valid_block_inject_2 in Hb1; eauto.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H21; eauto. intros [X1 Y1]. intuition auto.
+          exploit H22; eauto. intros [X1 Y1]. intuition auto.
+  - red. intros. unfold compose_meminj in H.
+    destruct (j12 b1) as [[bi ?] |] eqn:Hj1; try congruence.
+    destruct (j23 bi) as [[? ?] |] eqn: Hj2; try congruence.
+    inv H.
+    red in H15.
+    specialize (H15 _ _ _ _ Hj1 H0 H1) as Hpm2'.
+    eapply Mem.perm_inject in H0 as Hpm2. 3: eauto. 2: eauto.
+    red in H23.
+    specialize (H23 _ _ _ _ Hj2 Hpm2 Hpm2') as Hpm3'.
+    replace (ofs1 + (z + z0)) with (ofs1 + z + z0) by lia.
+    auto.
 Admitted.
 
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
@@ -414,8 +530,8 @@ Proof.
       rename m2'0 into m2'. rename m2'1 into m3'.
       exists (injpw (compose_meminj j12 j23) m1' m3' (Mem.inject_compose _ _ _ _ _ Hm1' Hm2')).
       repeat apply conj; eauto.
-      -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2. econstructor; eauto.
-         rewrite meminj_dom_compose. reflexivity.
+      -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2.
+         econstructor; eauto.
          econstructor; eauto.
       -- eapply injp_comp_acci; eauto. econstructor; eauto.
       -- econstructor; simpl; eauto. eapply val_inject_compose; eauto.
