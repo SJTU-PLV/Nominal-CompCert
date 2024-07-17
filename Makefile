@@ -192,8 +192,7 @@ CLOSE=SmallstepClosed.v CompilerClosed.v
 
 # Concurrent semantics
 
-CONCUR=MultiLibs.v CMulti.v AsmMulti.v CallconvNew.v MultiSimNew.v \
-       HcompNew.v VCompNew.v \
+CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        CallconvBig.v MultiSimBig.v \
        HCompBig.v VCompBig.v
 

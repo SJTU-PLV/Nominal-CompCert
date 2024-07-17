@@ -320,7 +320,6 @@ Next Obligation.
   intros. inv H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
-Compute (gworld (cc_compose c_injp c_injp)).
 Program Definition trans12 : injp_world * injp_world -> injp_world.
 Proof.
   intros. inv X. destruct X0,X1.
