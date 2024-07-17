@@ -26,14 +26,109 @@ shallow owned place set (TODO: it should be defined in Rustlight) *)
     
 (** own_env is actually init environment which is used to check
 every used is initialized. Maybe we should change the name?  *)
-  
-Record own_env := { deep_own: Paths.t; shallow_own: Paths.t}.
+
+(* may be we can use PathMap to optimize it *)
+Record own_env := mkown { deep_own: Paths.t; shallow_own: Paths.t}.
+
+Definition is_deep_owned (p: place) (own: own_env) : bool :=
+  Paths.exists_ (fun p' => is_prefix p' p) own.(deep_own).
+
+Definition is_shallow_owned (p: place) (own: own_env) : bool :=
+  Paths.mem p own.(shallow_own).
 
 Definition is_owned (p: place) (own: own_env) : bool :=
   (* check whether p is a children in one of the path in deep owned
   set or p is in the shallow owned set *)
-  Paths.exists_ (fun p' => is_prefix p p') own.(deep_own) || Paths.mem p own.(shallow_own).
-      
+ is_deep_owned p own || is_shallow_owned p own.
+
+
+(* place with succesive Pdowncast in the end is not a valid owner *)
+Fixpoint valid_owner (p: place) :=
+  match p with
+  | Pdowncast p' _ _ => valid_owner p'
+  | _ => p
+  end.
+
+Section COMP_ENV.
+
+Variable ce: composite_env.
+
+(* For parent [p'] of [p]: [p] has been just be moved from or be
+partialized (become shallow own) and we should do something for
+[p'] *)
+Fixpoint partialize (own: own_env) (p: place) : own_env :=
+  match p with
+  | Pderef p' ty =>
+      partialize (mkown own.(deep_own) (Paths.add p' own.(shallow_own))) p'
+  | Pfield p' fid fty =>
+      if is_deep_owned p' own then
+        (* remove p' from deep_own *)
+        let own1 := mkown (Paths.remove p' own.(deep_own)) own.(shallow_own) in
+        (* make siblings of p deep own and then partialize the parent of p' *)
+        let siblings := siblings ce p in
+        (* add siblings to deep_own of own1 *)
+        let own2 := mkown (Paths.union siblings own1.(deep_own)) own1.(shallow_own) in
+        partialize own2 p'
+      else
+        (* Is it possible? *)
+        partialize own p'
+  | Plocal id ty => own          (* do nothing *)
+  | Pdowncast p' fid fty =>
+      partialize own p'
+  end.
+          
+Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
+  match pe with
+  | Eplace p ty =>
+      (** FIXME: we must ensure that ty is not a non-copy type (contains Tbox) *)
+      (** An adhoc solution: we can treat all composite as non-copy type *)
+      if definite_copy_type ty then
+        is_owned p own
+      else
+        false
+  | Ecktag p ty =>
+      is_owned p own
+  | Eref _ _ p _ =>
+      is_owned p own
+  | Eunop _ pe _ =>
+      own_check_pexpr own pe
+  | Ebinop _ pe1 pe2 _ =>
+      own_check_pexpr own pe1 && own_check_pexpr own pe2
+  | _ => true
+end.          
+
+
+(* Move out a place or drop a place and then update the own_env *)
+Definition own_move_place (own: own_env) (p: place) : own_env :=
+  let own1 := mkown (Paths.remove p own.(deep_own)) own.(shallow_own) in
+  (partialize own1 p).
+             
+
+(* Move to Rustlight: Check the ownership of expression *)
+Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
+  match e with
+  | Emoveplace p ty =>
+      if is_deep_owned p own then
+        (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
+        partial owned *)
+        (* remove p in deep own if it exists. No matter it exists or
+        not, we should partialize it's parents *)
+        Some (own_move_place own p)
+      else
+        (* Error! We must move a deeply owned place! *)
+        None
+  | Epure pe =>
+      if own_check_pexpr own pe then
+        Some own
+      else None
+  end.
+
+(* Update the ownership environment when assigning to p. We must
+ensure that p is not deeply owned because p must be dropped before
+this assignment. The assignment is somewhat backward operation of
+own_move_place *)
+Fixpoint own_check_assign (own: own_env) (p: place) : option own_env :=
+  
 (** Continuation *)
   
 Inductive cont : Type :=
@@ -217,6 +312,8 @@ Inductive step_drop_mem_error : state -> Prop :=
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1,
+    (* check ownership *)
+    
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
