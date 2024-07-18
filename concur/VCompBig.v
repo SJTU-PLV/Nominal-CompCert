@@ -40,14 +40,6 @@ Section COMP_FSIM.
     (HS2: fsim_match_states H2 se2 se3 wb2 wp2 i2 s2 s3):
     compose_fsim_match_states se1 se3 (se2, (wb1, wb2)) (wp1,wp2) (i2, i1) s1 s3.
 
-  (** Is this necessary or useful? *)
-  (*Inductive compose_fsim_inv:
-    gworld (cc_compose cc1 cc2) -> gworld (cc_compose cc1 cc2) -> Prop :=
-  | compose_fsim_inv_intro wa1 wa2 wb1 wb2
-      (INV1: fsim_invariant H1 wa1 wb1)
-      (INV2: fsim_invariant H2 wa2 wb2):
-    compose_fsim_inv (wa1, wa2) (wb1, wb2).*)
-
   Lemma st_fsim_vcomp':
     fsim_components (cc_compose cc1 cc2) Ls Lf.
   Proof.
@@ -163,7 +155,7 @@ Notation "1" := cc_id : gs_cc_scope.
 (** cc1: internal, i.e. injp ⋅ injp
     cc2: external, i.e. injp  *)
 
-
+(*
 Inductive wf_mem {li1 li2 : language_interface} {cc : callconv li1 li2} : gworld cc -> Prop :=
 |wf_q : forall w wp q1 q2, match_query cc w q1 q2 -> get w = wp -> wf_mem wp
 |wf_r : forall w wp r1 r2, match_reply cc w r1 r2 -> get w = wp -> wf_mem wp.
@@ -177,7 +169,7 @@ Inductive same_mem {li1 li2: language_interface} {cc1 cc2: callconv li1 li2} : g
     match_reply cc1 w1 r1 r2 -> match_reply cc2 w2 r1 r2 ->
     get w1 = wp1 -> get w2 = wp2 ->
     same_mem wp1 wp2.
-(*
+
 Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2 : gworld cc2) :=
   forall wp1' wp2', wp1 *-> wp1' -> same_mem wp1' wp2' -> wp2 *-> wp2'.
  *)
@@ -364,19 +356,6 @@ Proof.
     edestruct H21; eauto.
 Qed.
 
-(** failed *)
-(* Lemma memval_inj_eq_trans: forall mv1 mv2 mv2' f,
-    memval_inject f mv1 mv2 ->
-    memval_inject f mv1 mv2' ->
-    mv2 = mv2'.
-Proof.
-  intros. destruct mv1; inv H; inv H0; eauto.
-  admit.
-  destruct v; inv H5; inv H4; eauto.
-  admit.
-  rewrite H1 in H2. inv H2. reflexivity.
-Admitted.
- *)
 
 Lemma inject_preserve_tid : forall j m1 m2 b1 b2 d,
     j b1 = Some (b2, d) ->
@@ -397,107 +376,47 @@ Proof.
   congruence.
 Qed.
 
+Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
+|external_mid_hidden_intro :
+  forall j12 j23 m1 m2 m3 Hm12 Hm23
+    (** This case says that for any related external blocks [j13 b1 = Some b3],
+        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
+    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
+                 j12 b1 = Some (b2, d) -> j23 b2 <> None)
+    (** This cases says that for any external stack block with permission in m2, it
+        comes from a corresponding position im m1*)
+    (Hconstr2: forall b2 ofs2, Mem.perm m2 b2 ofs2 Max Nonempty ->
+                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
+    external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
+                                                                                             
 Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
     match_injp_comp_world (w11, w12)  w1 ->
+    external_mid_hidden w11 w12 ->
     match_injp_comp_world (w11', w12')  w2 ->
     injp_acci w11 w11' -> injp_acci w12 w12' ->
     injp_acci w1 w2.
 Proof.
-  intros. inv H. inv H0.
+  intros. inv H. inv H1. inv H0.
   rename j0 into j12'. rename j1 into j23'. rename m0 into m1'. rename m4 into m2'.
   rename m5 into m3'.
-  inv H1. inv H2.
+  inv H2. inv H3.
   constructor; eauto.
   - destruct H11 as [S11 H11]. split. auto.
-    (** a little bit different from old composition, it was (meminj_dom j) compose j.
-        Now here it is arbitrary j1 compose j2 *)
-    constructor.
-    + destruct H11. auto.
-    + intros b ofs k p [X Y] Hv.
-      red in X. destruct (j12 b) as [[b2 d]|] eqn: Hj12.
-      -- destruct (j23 b2) as [[b3 d2]|] eqn:Hj23.
-         exfalso. unfold compose_meminj in X.
-         rewrite Hj12, Hj23 in X. congruence.
-         destruct H19 as [S19 H19].
-         split; intro Hpm1.
-         **
-           eapply Mem.perm_inject in Hpm1 as Hpm2; eauto.
-           erewrite Mem.unchanged_on_perm in Hpm2; eauto.
-           eapply Mem.perm_inject_inv in Hpm2 as H; eauto.
-           destruct H. auto. exploit H15; eauto with mem.
-           intro. inv H0. red. split. auto. rewrite <- inject_other_thread; eauto.
-           eapply Mem.valid_block_inject_2; eauto.
-         ** eapply Mem.perm_inject in Hpm1 as Hpm2. 3: eauto.
-            2: eauto.
-            erewrite <- Mem.unchanged_on_perm in Hpm2; eauto.
-            eapply Mem.perm_inject_inv in Hpm2 as H; eauto.
-            destruct H. auto. red in H9. exfalso.
-            exploit H9. 2: eauto with mem. eauto with mem.
-            intro. apply H. eauto with mem.
-            red. split; auto. rewrite <- inject_other_thread; eauto. 
-            eapply Mem.valid_block_inject_2; eauto.
-      -- inv H11. eapply unchanged_on_perm; eauto. split; auto.
-    + intros b ofs [X Y] Hv.
-      red in X. destruct (j12 b) as [[b2 d]|] eqn: Hj12.
-      -- unfold compose_meminj in X. rewrite Hj12 in X.
-         admit. (* Problem : we have to prevent the contents in m1 and m1'
-                  from being like [Vint 1 ---> Vundef], simular to the free_preservation*)
-      -- inv H11. eapply unchanged_on_contents; eauto. split; auto.
-  - destruct H20 as [S20 H20]. split. auto.
-    constructor. inv H20. auto.
-    + (*perm*)
-      intros b3 ofs3 k p [X Y] Hv3. red in X.
-      destruct (Mem.loc_in_reach_find m2 j23 b3 ofs3) as [[b2 ofs2]|] eqn:FIND23.
-      -- edestruct Mem.loc_in_reach_find_valid as [Hj23 Hpm2]; eauto.
-         destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1] |] eqn:FIND12.
-         exfalso. edestruct (Mem.loc_in_reach_find_valid) as [Hj12 Hpm1]; eauto.
-         eapply X. unfold compose_meminj. rewrite Hj12, Hj23.
-         reflexivity. replace (ofs3 - (ofs2 - ofs1 + (ofs3 - ofs2))) with ofs1 by lia. auto.
-         eapply Mem.loc_in_reach_find_none in FIND12; eauto.
-         destruct H12 as [S12 H12]. inv H12.
-         exploit unchanged_on_perm. red. split. apply FIND12.
-         rewrite inject_other_thread; eauto.
-         eauto with mem.
-         instantiate (1:= p).
-         instantiate (1:= k).
-         intro Hpm2eq. replace (ofs3) with (ofs2 + (ofs3 - ofs2)) by lia.
-         split; intro.
-         ++ eapply Mem.perm_inject_inv in H; eauto. destruct H; auto.
-            eapply Mem.perm_inject. 2: eauto. eauto. apply Hpm2eq. auto.
-            congruence.
-         ++ eapply Mem.perm_inject_inv in H as H'; eauto. destruct H'; auto.
-            eapply Mem.perm_inject; eauto. apply Hpm2eq. auto.
-            exploit H23; eauto with mem. intro. inv H1.
-      -- eapply Mem.loc_in_reach_find_none in FIND23; eauto.
-         eapply H20; eauto. split. auto. auto.
-    + (*content*)
-      intros b3 ofs3 [X Y] Hpm3. red in X.
-      destruct (Mem.loc_in_reach_find m2 j23 b3 ofs3) as [[b2 ofs2]|] eqn:FIND23.
-      -- edestruct Mem.loc_in_reach_find_valid as [Hj23 Hpm2]; eauto.
-         destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1] |] eqn:FIND12.
-         exfalso. edestruct (Mem.loc_in_reach_find_valid) as [Hj12 Hpm1]; eauto.
-         eapply X. unfold compose_meminj. rewrite Hj12, Hj23.
-         reflexivity. replace (ofs3 - (ofs2 - ofs1 + (ofs3 - ofs2))) with ofs1 by lia. auto.
-         eapply Mem.loc_in_reach_find_none in FIND12; eauto.
-         assert (Mem.perm m2 b2 ofs2 Cur Readable).
-         { replace ofs3 with (ofs2 + (ofs3 - ofs2)) in Hpm3 by lia.
-           eapply Mem.perm_inject_inv in Hpm3; eauto.
-           destruct Hpm3; eauto. congruence. }
-         destruct H12 as [S12 H12]. inv H12.
-         exploit unchanged_on_contents. red. split. apply FIND12.
-         rewrite inject_other_thread; eauto. eauto.
-         intro Hcon2eq.
-         assert (Hpm2' : Mem.perm m2' b2 ofs2 Cur Readable).
-         apply unchanged_on_perm; eauto. split. auto.
-         rewrite inject_other_thread; eauto.
-         eauto with mem.
-         inv Hm23. inv mi_inj. exploit mi_memval; eauto.
-         intro VINJ1.
-         inv Hm'3. inv mi_inj. exploit mi_memval0; eauto.
-         intro VINJ2.
-         admit. (** Theproblem? *)
-      -- eapply Mem.loc_in_reach_find_none in FIND23; eauto.
-         eapply H20; eauto. split. auto. auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H as [X Y]. split; auto.
+    red. red in X. unfold compose_meminj in X.
+    destruct (j12 b) as [[b2 d]|] eqn: Hj12; try congruence.
+    destruct (j23 b2) as [[b3 d2]|] eqn:Hj23; try congruence.
+    eapply Hconstr1 in Hj12; eauto. congruence.
+    erewrite <- inject_other_thread; eauto.
+  - destruct H19 as [S19 H19]. split. auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H as [X Y]. split; auto.
+    red. intros. red in X. intro.
+    exploit Hconstr2; eauto. intros (b1 & ofs1 & Hp1 & Hj12).
+    exploit X. unfold compose_meminj. rewrite Hj12, H. reflexivity.
+    replace (ofs - (ofs - delta - ofs1 + delta)) with ofs1 by lia. auto.
+    auto.
   - rauto.
   - red.
     intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
@@ -508,28 +427,21 @@ Proof.
         + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
           destruct (j23 b) as [[? ?] |] eqn: Hb2.
           unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
-          exfalso. exploit H22; eauto. intros [X Y].
+          exfalso. exploit H21; eauto. intros [X Y].
           eapply Mem.valid_block_inject_2 in Hb1; eauto.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H22; eauto. intros [X1 Y1]. intuition auto.
-  - red. intros. unfold compose_meminj in H.
-    destruct (j12 b1) as [[bi ?] |] eqn:Hj1; try congruence.
-    destruct (j23 bi) as [[? ?] |] eqn: Hj2; try congruence.
-    inv H.
-    red in H15.
-    specialize (H15 _ _ _ _ Hj1 H0 H1) as Hpm2'.
-    eapply Mem.perm_inject in H0 as Hpm2. 3: eauto. 2: eauto.
-    red in H23.
-    specialize (H23 _ _ _ _ Hj2 Hpm2 Hpm2') as Hpm3'.
-    replace (ofs1 + (z + z0)) with (ofs1 + z + z0) by lia.
-    auto.
-Admitted.
+          exploit H21; eauto. intros [X1 Y1]. intuition auto.
+Qed.
 
+Definition match_12_cctrans : injp_world * injp_world -> injp_world -> Prop :=
+  fun w2 w =>
+    match_injp_comp_world w2 w /\ external_mid_hidden (fst w2) (snd w2).
+  
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
 Proof.
-  econstructor. instantiate (1:= match_injp_comp_world).
+  econstructor. instantiate (1:= match_12_cctrans).
   - (*incoming construction*)
     red. intros. inv H0. inv H3. simpl in H2, H1.
     inv H.
@@ -541,7 +453,10 @@ Proof.
       econstructor; simpl; eauto. eapply val_inject_dom; eauto.
       eapply val_inject_list_dom; eauto.
       econstructor; eauto. simpl. econstructor; eauto.
-    + econstructor. rewrite meminj_dom_compose. reflexivity. 
+    + econstructor. rewrite meminj_dom_compose. reflexivity.
+    + econstructor; eauto. intros. unfold meminj_dom in H0.
+      destruct (f b1) as [[? ?]|] eqn: Hf; inv H0. congruence.
+      intros. exists b2, ofs2. split. auto. admit. (*wrong, Hconstr2 is too strong for initial*)
     + intros r1 r3 wp1 wp2 wp1' Hmatch [Hae1 Hae2] HACCI Hr. simpl in Hae1, Hae2.
       destruct wp1' as [wp11' wp12']. simpl. simpl in *.
       destruct wp1 as [wp11 wp12]. simpl in *. destruct HACCI as [HAci1 HAci2].
@@ -554,28 +469,29 @@ Proof.
       -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2.
          econstructor; eauto.
          econstructor; eauto.
-      -- eapply injp_comp_acci; eauto. econstructor; eauto.
+      -- inv Hmatch. eapply injp_comp_acci; eauto. econstructor; eauto.
       -- econstructor; simpl; eauto. eapply val_inject_compose; eauto.
   - (* outgoing construction *)
     red. intros wp1 wp2 w1 se1 se2 q1 q3 Hs Hq HACI Hmatch.
     inv Hmatch. destruct w1 as [x [w11 w12]].
-    inv HACI. simpl in H,H0. 
+    inv HACI. simpl in H1,H2. 
     (** Basiclly the same as old injp_comp (the hard part), plus a ACCI preservation *)
     destruct w11 as [j12' m1' m2' Hm12'].
     destruct w12 as [j23' m2'_ m3' Hm23'].
     assert (m2'_ = m2').
-    { destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2. simpl in *. inv H3. inv H12. reflexivity. }
+    { destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2. simpl in *. inv H5. inv H14.
+      reflexivity. }
     subst m2'_.
     exists (injpw (compose_meminj j12' j23')  m1' m3' (Mem.inject_compose _ _ _ _ _ Hm12' Hm23') ).
     repeat apply conj; eauto.
-    + simpl.
-      eapply injp_comp_acci. 3: apply H. 3: apply H0.
+    + simpl. inv H; simpl in *.
+      eapply injp_comp_acci; eauto.
       econstructor; eauto.
       econstructor; eauto.
-    + inv Hs. inv H1. inv H2. econstructor; eauto.
+    + inv Hs. inv H3. inv H4. econstructor; eauto.
       eapply Genv.match_stbls_compose; eauto.
     + destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2.
-      inv H3. inv H12. simpl in *.
+      inv H5. inv H14. simpl in *.
       econstructor; simpl; eauto. eapply val_inject_compose; eauto.
       eapply CKLRAlgebra.val_inject_list_compose; eauto.
     + (** The accessbility construction : use acco*)

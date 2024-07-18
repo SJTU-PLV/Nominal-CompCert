@@ -828,6 +828,8 @@ Qed.
     Proof.
       intros. inv H.
       constructor; try red; intros; eauto.
+      setoid_rewrite <- Mem.sup_yield_in in H1. exfalso. apply H, H1.
+      setoid_rewrite <- Mem.sup_yield_in in H1. exfalso. apply H, H1.
       split. simpl. simpl in H0. constructor. reflexivity.
       simpl. eauto.
       constructor; try red; intros; eauto.
@@ -1364,6 +1366,8 @@ Qed.
      apply Mem.unchanged_on_support in H10 as SUP1.
      apply Mem.unchanged_on_support in H12 as SUP2.
      constructor; eauto.
+     - red. intros. eapply Hnb1; eauto with mem.
+     - red. intros. eapply Hnb2; eauto with mem.
      - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
      - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
      - red. intros. eapply H8; eauto. eapply Mem.perm_store_2; eauto.

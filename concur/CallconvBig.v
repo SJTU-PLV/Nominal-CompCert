@@ -372,9 +372,15 @@ Definition free_preserved j m1 m1' m2' :=
     ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
  *)
 
+Definition new_block_local m1 m2 :=
+  forall b, ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
+       fst b = Mem.tid (Mem.support m1).
+
 Inductive injp_acci : relation injp_world :=
     injp_acci_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
-                       (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
+                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2')
+                     (Hnb1: new_block_local m1 m1')
+                     (Hnb2:new_block_local m2 m2'),
                      Mem.ro_unchanged m1 m1' ->
                      Mem.ro_unchanged m2 m2' ->
                      injp_max_perm_decrease m1 m1' ->
@@ -427,6 +433,8 @@ Proof.
   split.
   - intros [f m1 m2].
     constructor.
+    + red. intros. congruence.
+    + red. intros. congruence.
     + red. eauto.
     + red. eauto.
     + red. eauto.
@@ -437,9 +445,15 @@ Proof.
     + intros b ofs. congruence.
     (* + red. intros. congruence. *)
   - intros w1 w2 w3 H12 H23.
-    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 [S1 H1] [S2 H2] Hf Hs].
-    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' [S1' H1'] [S2' H2'] Hf' Hs']; subst.
+    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hb1 Hb2 Hr1 Hr2 Hp1 Hp2 [S1 H1] [S2 H2] Hf Hs].
+    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hb1' Hb2' Hr1' Hr2' Hp1' Hp2' [S1' H1'] [S2' H2'] Hf' Hs']; subst.
     constructor.
+    + red. intros. destruct (Mem.sup_dec b (Mem.support m1')).
+      exploit Hb1; eauto. exploit Hb1'; eauto.
+      inv S1. congruence.
+    + red. intros. destruct (Mem.sup_dec b (Mem.support m2')).
+      exploit Hb2; eauto. exploit Hb2'; eauto.
+      inv S2. congruence.
     + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
       inversion H1. apply unchanged_on_support; eauto.
       intros. intro. eapply H3; eauto.
@@ -453,18 +467,18 @@ Proof.
     + split. eauto.
       eapply mem_unchanged_on_trans_implies_valid; eauto.
       unfold loc_unmapped, Mem.thread_external_P. simpl.
-      intros b1 _ [Hb Hb0] Hb1. split.
+      intros b1 _ [Hb Hb0'] Hb1''. split.
       destruct (f' b1) as [[b2 delta] | ] eqn:Hb'; eauto.
       edestruct Hs; eauto. contradiction. auto.
       inv S1. congruence.
     + split. eauto.
       eapply mem_unchanged_on_trans_implies_valid; eauto.
       unfold loc_out_of_reach, Mem.thread_external_P. simpl.
-      intros b2 ofs2 [Hb2 Hb2'] Hv. split. intros b1 delta Hb'.
+      intros b2 ofs2 [Hbb2 Hbb2'] Hv. split. intros b1 delta Hb'.
       destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
             by (eapply Hf in Hb; split; congruence); subst.
-        specialize (Hb2 b1 delta Hb). intro. apply Hb2.
+        specialize (Hbb2 b1 delta Hb). intro. apply Hbb2.
         eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
       * edestruct Hs; eauto.
       * inv S2. congruence.
