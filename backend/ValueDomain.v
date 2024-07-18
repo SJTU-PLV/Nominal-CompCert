@@ -4420,6 +4420,8 @@ Lemma mmatch_inj:
   forall bc m am, mmatch bc m am -> bc_below bc (Mem.support m) -> Mem.inject (inj_of_bc bc) m m.
 Proof.
   intros. constructor. eauto.
+  constructor; auto. red. intros. unfold inj_of_bc in H1.
+  destruct (bc b); inv H1; eauto.
   constructor.
 - (* perms *)
   intros. exploit inj_of_bc_inv; eauto. intros (A & B & C); subst.

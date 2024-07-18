@@ -233,7 +233,7 @@ Proof.
     assert (Htm: Mem.inject j m tm).
     { clear - Hm3 H3. inversion Hm3.
       constructor; eauto.
-      - erewrite <- (Mem.support_free _ _ _ _ _ H3). eauto.
+      - inv mi_thread. constructor; auto. erewrite <- (Mem.support_free _ _ _ _ _ H3). eauto.
       - inversion  mi_inj.
         constructor; eauto.
         + intros. eapply Mem.perm_free_3; eauto.
@@ -387,7 +387,7 @@ Proof.
   intros until P. intros INJ UNC SUP DEC OUT. inversion INJ.
   inversion UNC.
   intros. constructor; eauto.
-  - rewrite <- SUP. auto.
+  - inv mi_thread. constructor; auto. rewrite <- SUP. auto.
   - inversion mi_inj. constructor; eauto.
     + intros. eapply unchanged_on_perm; eauto.
       edestruct DEC; eauto. apply OUT in n. red in n. exfalso.

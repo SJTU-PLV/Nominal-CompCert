@@ -3952,10 +3952,17 @@ Qed.
   representable after the injection.
 *)
 
+Definition meminj_thread_local (f:meminj) : Prop := forall b b' d, f b = Some (b',d) -> fst b = fst b'.
+Inductive mem_inj_thread : meminj -> mem -> mem -> Prop :=
+|inject_thread_intro f m1 m2
+   (Hms: match_sup (Mem.support m1) (Mem.support m2))
+   (Hjs: meminj_thread_local f):
+  mem_inj_thread f m1 m2.
+
 Record inject' (f: meminj) (m1 m2: mem) : Prop :=
   mk_inject {
     mi_thread:
-      match_sup (Mem.support m1) (Mem.support m2);
+      mem_inj_thread f m1 m2;
     mi_inj:
       mem_inj f m1 m2;
     mi_freeblocks:
@@ -4000,7 +4007,7 @@ Record inject_nothread (f: meminj) (m1 m2: mem) : Prop :=
     }.
 
 Lemma inject_nothread_inv : forall f m1 m2,
-    inject f m1 m2 <-> inject_nothread f m1 m2 /\ match_sup (support m1) (support m2).
+    inject f m1 m2 <-> inject_nothread f m1 m2 /\ mem_inj_thread f m1 m2.
 Proof.
   intros. split; intros.
   inv H. split. constructor; eauto. auto.
@@ -4323,9 +4330,11 @@ Proof.
   intros. inversion H.
   exploit store_mapped_inj; eauto. intros [n2 [STORE MI]].
   exists n2; split. eauto. constructor.
-(* thread*)
+  (* thread*)
+  inv mi_thread0.
+  econstructor; auto.
   erewrite support_store; eauto.
-  rewrite (support_store _ _ _ _ _ _ STORE); eauto.
+  rewrite (support_store _ _ _ _ _ _ STORE); eauto. 
 (* inj *)
   auto.
 (* freeblocks *)
@@ -4352,6 +4361,7 @@ Proof.
   intros. inversion H.
   constructor.
 (* thread *)
+  inv mi_thread0. econstructor; auto.
   erewrite support_store; eauto.
 (* inj *)
   eapply store_unmapped_inj; eauto.
@@ -4380,6 +4390,7 @@ Theorem store_outside_inject:
   inject f m1 m2'.
 Proof.
   intros. inversion H. constructor.
+  inv mi_thread0. constructor; auto.
   rewrite (support_store _ _ _ _ _ _ H1); eauto.
 (* inj *)
   eapply store_outside_inj; eauto.
@@ -4425,6 +4436,7 @@ Proof.
   intros. inversion H.
   exploit storebytes_mapped_inj; eauto. intros [n2 [STORE MI]].
   exists n2; split. eauto. constructor.
+  inv mi_thread0. constructor; auto.
   erewrite support_storebytes; eauto.
   rewrite (support_storebytes _ _ _ _ _ STORE); eauto.
 (* inj *)
@@ -4452,6 +4464,7 @@ Theorem storebytes_unmapped_inject:
 Proof.
   intros. inversion H.
   constructor.
+  inv mi_thread0. constructor; auto.
   erewrite support_storebytes; eauto.
 (* inj *)
   eapply storebytes_unmapped_inj; eauto.
@@ -4480,6 +4493,7 @@ Theorem storebytes_outside_inject:
   inject f m1 m2'.
 Proof.
   intros. inversion H. constructor.
+  inv mi_thread0. constructor; auto.
   rewrite (support_storebytes _ _ _ _ _ H1); eauto.
 (* inj *)
   eapply storebytes_outside_inj; eauto.
@@ -4503,6 +4517,7 @@ Theorem storebytes_empty_inject:
   inject f m1' m2'.
 Proof.
   intros. inversion H. constructor; intros.
+  inv mi_thread0. constructor; auto.
   erewrite support_storebytes; eauto.
   rewrite (support_storebytes _ _ _ _ _ H1); eauto.
 (* inj *)
@@ -4531,6 +4546,7 @@ Theorem alloc_right_inject:
 Proof.
   intros. injection H0. intros NEXT MEM.
   inversion H. constructor.
+  inv mi_thread0. constructor; auto.
   rewrite (support_alloc _ _ _ _ _ H0); eauto.
   red. simpl. rewrite update_list_length. eauto.
 (* inj *)
@@ -4571,9 +4587,11 @@ Proof.
     unfold f'; intros. destruct (eq_block b0 b1). congruence. eauto.
     unfold f'; intros. destruct (eq_block b0 b1). congruence.
     apply memval_inject_incr with f; auto.
-  exists f'; split. constructor.
+    exists f'; split. constructor.
+    inv mi_thread0. constructor; auto.
   erewrite support_alloc; eauto. red. simpl. rewrite update_list_length.
-  auto.
+  auto. red. intros. subst f'. simpl in H3. destruct (eq_block b b1); try congruence.
+  eapply Hjs; eauto.
 (* inj *)
   eapply alloc_left_unmapped_inj; eauto. unfold f'; apply dec_eq_true.
 (* freeblocks *)
@@ -4605,7 +4623,8 @@ Proof.
 Qed.
 
 Theorem alloc_left_mapped_inject:
-  forall f m1 m2 lo hi m1' b1 b2 delta,
+  forall f m1 m2 lo hi m1' b1 b2 delta
+  (Htb2: fst b2 = Mem.tid (Mem.support m2)),
   inject f m1 m2 ->
   alloc m1 lo hi = (m1', b1) ->
   valid_block m2 b2 ->
@@ -4645,8 +4664,11 @@ Proof.
       elim (fresh_block_alloc _ _ _ _ _ H0). eauto with mem.
       apply memval_inject_incr with f; auto.
       exists f'. split. constructor.
+  inv mi_thread0. constructor; auto.
   erewrite support_alloc; eauto. red. simpl. rewrite update_list_length.
-  auto.    
+  auto. red. intros. subst f'. simpl in H9. destruct (eq_block b b1); inv H9.
+  rewrite Htb2. apply alloc_result in H0; eauto. inv Hms. simpl. auto.
+  eapply Hjs; eauto.
 (* inj *)
   eapply alloc_left_mapped_inj; eauto. unfold f'; apply dec_eq_true.
 (* freeblocks *)
@@ -4711,9 +4733,11 @@ Proof.
   intros.
   case_eq (alloc m2 lo2 hi2). intros m2' b2 ALLOC.
   exploit alloc_left_mapped_inject.
-  eapply alloc_right_inject; eauto.
+  2: eapply alloc_right_inject; eauto.
+  apply alloc_result in ALLOC as RES. instantiate (1:= b2). rewrite RES. simpl.
+  inv ALLOC. reflexivity.
   eauto.
-  instantiate (1 := b2). eauto with mem.
+  eauto with mem.
   instantiate (1 := 0). unfold Ptrofs.max_unsigned. generalize Ptrofs.modulus_pos; lia.
   auto.
   intros. apply perm_implies with Freeable; auto with mem.
@@ -4733,6 +4757,7 @@ Lemma free_left_inject:
   inject f m1' m2.
 Proof.
   intros. inversion H. constructor.
+  inv mi_thread0. constructor; auto.
   erewrite support_free; eauto.
 (* inj *)
   eapply free_left_inj; eauto.
@@ -4774,6 +4799,7 @@ Lemma free_right_inject:
   inject f m1 m2'.
 Proof.
   intros. inversion H. constructor.
+  inv mi_thread0. constructor; auto.
   erewrite (support_free _ _ _ _ _ H0); eauto.
 (* inj *)
   eapply free_right_inj; eauto.
@@ -4860,6 +4886,7 @@ Lemma drop_outside_inject: forall f m1 m2 b lo hi p m2',
   inject f m1 m2'.
 Proof.
   intros. destruct H. constructor; eauto.
+  inv mi_thread0. constructor; auto.
   erewrite (support_drop _ _ _ _ _ _ H0); eauto.
   eapply drop_outside_inj; eauto.
   intros. unfold valid_block in *. erewrite support_drop; eauto.
@@ -4900,7 +4927,11 @@ Theorem inject_compose:
 Proof.
   unfold compose_meminj; intros.
   inv H; inv H0. constructor.
-  red. destruct mi_thread0. destruct mi_thread1. split; congruence.
+  inv mi_thread0. inv mi_thread1.
+  constructor. auto.
+  red. destruct Hms, Hms0. split; congruence.
+  red. intros. destruct (f b) as [[bi ?]|] eqn:Hj1; try congruence.
+  destruct (f' bi) as [[? ?]|] eqn:Hj2; inv H. apply Hjs in Hj1. apply Hjs0 in Hj2. congruence.
 (* inj *)
   eapply mem_inj_compose; eauto.
 (* unmapped *)
@@ -4968,6 +4999,7 @@ Lemma extends_inject_compose:
   extends m1 m2 -> inject f m2 m3 -> inject f m1 m3.
 Proof.
   intros. inversion H; inv H0. constructor; intros.
+  inv mi_thread0. constructor; auto.
   congruence.
 (* inj *)
   replace f with (compose_meminj inject_id f). eapply mem_inj_compose; eauto.
@@ -4993,6 +5025,7 @@ Lemma inject_extends_compose:
   inject f m1 m2 -> extends m2 m3 -> inject f m1 m3.
 Proof.
   intros. inv H; inversion H0. constructor; intros.
+  inv mi_thread0. constructor; auto.
   congruence.
 (* inj *)
   replace f with (compose_meminj f inject_id). eapply mem_inj_compose; eauto.
@@ -5050,7 +5083,9 @@ Theorem neutral_inject:
   forall m, inject_neutral (support m) m -> inject (flat_inj (support m)) m m.
 Proof.
   intros. constructor.
-  split; eauto.
+  constructor.
+  split; eauto. red. intros. unfold flat_inj in H0.
+  destruct sup_dec; inv H0. reflexivity.
 (* meminj *)
   auto.
 (* freeblocks *)
@@ -6191,7 +6226,7 @@ Lemma mix_left_inject:
 Proof.
   intros f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'' Hm1'' H H' Hb Hf Hm2' OOR AL.
   constructor.
-  - inv H'. erewrite support_mix; eauto.
+  - inv H'. inv mi_thread0. constructor. erewrite support_mix; eauto. auto.
   - eapply mix_left_mem_inj; eauto using mi_inj.
     eapply valid_block_inject_2; eauto.
   - intros. eapply mi_freeblocks; eauto.

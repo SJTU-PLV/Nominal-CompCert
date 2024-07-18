@@ -1184,8 +1184,10 @@ Axiom alloc_left_unmapped_inject:
 Definition inj_offset_aligned (delta: Z) (size: Z) : Prop :=
   forall chunk, size_chunk chunk <= size -> (align_chunk chunk | delta).
 
+(*
 Axiom alloc_left_mapped_inject:
   forall f m1 m2 lo hi m1' b1 b2 delta,
+  fst b2 = Mem.tid (Mem.support m2)  ->
   inject f m1 m2 ->
   alloc m1 lo hi = (m1', b1) ->
   valid_block m2 b2 ->
@@ -1202,6 +1204,7 @@ Axiom alloc_left_mapped_inject:
   /\ inject_incr f f'
   /\ f' b1 = Some(b2, delta)
   /\ (forall b, b <> b1 -> f' b = f b).
+ *)
 
 Axiom alloc_parallel_inject:
   forall f m1 m2 lo1 hi1 m1' b1 lo2 hi2,

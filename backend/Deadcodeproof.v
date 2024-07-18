@@ -39,7 +39,7 @@ Qed.
 Definition locset := block -> Z -> Prop.
 
 Record magree (f:meminj) (m1 m2: mem) (P: locset) : Prop := mk_magree {
-  ma_thread : Mem.match_sup (Mem.support m1) (Mem.support m2);             
+  ma_thread : Mem.mem_inj_thread f m1 m2;
   ma_perm:
     forall b1 b2 ofs delta k p,
       f b1 = Some (b2,delta) -> Mem.perm m1 b1 ofs k p -> Mem.perm m2 b2 (ofs + delta) k p;
@@ -175,8 +175,9 @@ Proof.
     eapply Mem.storebytes_range_perm; eauto. lia. }
   exists m2'; split; auto.
   constructor; intros.
-- erewrite (Mem.support_storebytes _ _ _ _ _ H0).
-  erewrite (Mem.support_storebytes _ _ _ _ _ ST2). inv H. eauto.
+- inv H. inv ma_thread0. constructor; auto.
+    erewrite (Mem.support_storebytes _ _ _ _ _ H0).
+    erewrite (Mem.support_storebytes _ _ _ _ _ ST2). auto.
 - eapply Mem.perm_storebytes_1; eauto. eapply ma_perm; eauto.
   eapply Mem.perm_storebytes_2; eauto.
 - exploit ma_align; eauto. red. eauto using Mem.perm_storebytes_2.
@@ -240,7 +241,7 @@ Lemma magree_storebytes_left:
   magree j m1' m2 P.
 Proof.
   intros. constructor; intros.
-  - erewrite (Mem.support_storebytes _ _ _ _ _ H0). inv H. auto.
+  - inv H. inv ma_thread0. constructor; auto. erewrite (Mem.support_storebytes _ _ _ _ _ H0). auto.
   - eapply ma_perm; eauto. eapply Mem.perm_storebytes_2; eauto.
   - eapply ma_align; eauto. red. intros. eauto using Mem.perm_storebytes_2.
   - exploit ma_perm_inv; eauto.
@@ -288,8 +289,8 @@ Proof.
   eapply ma_perm; eauto. eapply Mem.free_range_perm; eauto. lia.
   exists m2'; split; auto.
   constructor; intros.
-- rewrite (Mem.support_free _ _ _ _ _ H0).
-  rewrite (Mem.support_free _ _ _ _ _ FREE). inv H. auto.
+- inv H. inv ma_thread0. constructor; auto. rewrite (Mem.support_free _ _ _ _ _ H0).
+  rewrite (Mem.support_free _ _ _ _ _ FREE). auto.
 - (* permissions *)
   assert (Mem.perm m2 b3 (ofs + delta0) k p). { eapply ma_perm; eauto. eapply Mem.perm_free_3; eauto. }
   exploit Mem.perm_free_inv; eauto. intros [[A B] | A]; auto.
@@ -1626,6 +1627,10 @@ Proof.
           intros [C|C]. congruence. extlia.
         }
         constructor; eauto.
+        --  inv mi_thread. constructor; eauto. red. intros.
+           subst j''. simpl in H. destruct (bc b); simpl in H; eauto.
+           destruct (j b) eqn: Hj; simpl in H; eauto. inv H. inv MEM.
+           inv mi_thread. eapply Hjs0; eauto.
         -- inv mi_inj. constructor; eauto.
            ++ intros. destruct (bc b1) eqn:BC;
               unfold j'' in H; rewrite BC in H; eauto.

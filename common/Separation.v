@@ -684,7 +684,7 @@ Qed.
 Lemma loadv_parallel_rule:
   forall j m1 m2 chunk addr1 v1 addr2,
   m2 |= minjection j m1 ->
-  Mem.match_sup (Mem.support m1) (Mem.support m2) ->
+  Mem.mem_inj_thread j m1 m2 ->
   Mem.loadv chunk m1 addr1 = Some v1 ->
   Val.inject j addr1 addr2 ->
   exists v2, Mem.loadv chunk m2 addr2 = Some v2 /\ Val.inject j v1 v2.
@@ -694,16 +694,16 @@ Proof.
   apply Mem.inject_nothread_inv; auto.
 Qed.
 
-Definition thread_same (m1 m2 : mem) := Mem.match_sup (Mem.support m1) (Mem.support m2).
+Definition thread_same j (m1 m2 : mem) := Mem.mem_inj_thread j m1 m2.
 Ltac tinv := eapply Mem.inject_nothread_inv; eauto.
 
 Lemma storev_parallel_rule:
   forall j m1 m2 P chunk addr1 v1 m1' addr2 v2,
-  m2 |= minjection j m1 ** P -> thread_same m1 m2 ->
+  m2 |= minjection j m1 ** P -> thread_same j m1 m2 ->
   Mem.storev chunk m1 addr1 v1 = Some m1' ->
   Val.inject j addr1 addr2 ->
   Val.inject j v1 v2 ->
-  exists m2', Mem.storev chunk m2 addr2 v2 = Some m2' /\ m2' |= minjection j m1' ** P /\ thread_same m1' m2'.
+  exists m2', Mem.storev chunk m2 addr2 v2 = Some m2' /\ m2' |= minjection j m1' ** P /\ thread_same j m1' m2'.
 Proof.
   intros. destruct H as (A & B & C). simpl in A.
   exploit Mem.storev_mapped_inject; eauto. tinv.
@@ -731,7 +731,7 @@ Qed.
 Lemma alloc_parallel_rule:
   forall m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** P ->
-  thread_same m1 m2 ->  
+  thread_same j m1 m2 ->  
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -741,7 +741,7 @@ Lemma alloc_parallel_rule:
   0 <= delta -> hi <= sz2 ->
   exists j',
     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** P
-  /\ thread_same m1' m2' 
+  /\ thread_same j' m1' m2' 
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ (forall b, b <> b1 -> j' b = j b).
@@ -752,9 +752,12 @@ Proof.
   assert (FRESH2: ~Mem.valid_block m2 b2) by (eapply Mem.fresh_block_alloc; eauto).
   destruct SEP as (INJ & SP & DISJ). simpl in INJ.
   exploit Mem.alloc_left_mapped_inject.
+  - instantiate (1:= m2'). instantiate (1:= b2).
+    eapply Mem.alloc_result in ALLOC2 as RES.
+    rewrite RES. simpl. inv ALLOC2. reflexivity.
 - eapply Mem.alloc_right_inject; eauto. tinv.
 - eexact ALLOC1.
-- instantiate (1 := b2). eauto with mem.
+- eauto with mem.
 - instantiate (1 := delta). extlia.
 - intros. assert (0 <= ofs < sz2) by (eapply Mem.perm_alloc_3; eauto). lia.
 - intros. apply Mem.perm_implies with Freeable; auto with mem.
@@ -799,14 +802,14 @@ Qed.
 Lemma free_parallel_rule:
   forall j m1 b1 sz1 m1' m2 b2 sz2 lo hi delta P,
   m2 |= range b2 0 lo ** range b2 hi sz2 ** minjection j m1 ** P ->
-  thread_same m1 m2 ->  
+  thread_same j m1 m2 ->  
   Mem.free m1 b1 0 sz1 = Some m1' ->
   j b1 = Some (b2, delta) ->
   lo = delta -> hi = delta + Z.max 0 sz1 ->
   exists m2',
      Mem.free m2 b2 0 sz2 = Some m2'
      /\ m2' |= minjection j m1' ** P
-     /\ thread_same m1' m2' .
+     /\ thread_same j m1' m2' .
 Proof.
   intros. rewrite <- ! sep_assoc in H.
   destruct H as (A & B & C).
@@ -909,7 +912,7 @@ Lemma external_call_parallel_rule:
   forall ef ge1 ge2 vargs1 m1 t vres1 m1' m2 j P vargs2,
   external_call ef ge1 vargs1 m1 t vres1 m1' ->
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
-  thread_same m1 m2 ->
+  thread_same j m1 m2 ->
   Val.inject_list j vargs1 vargs2 ->
   exists j' vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
@@ -917,7 +920,7 @@ Lemma external_call_parallel_rule:
   /\ Mem.unchanged_on_tl (loc_unmapped j) m1 m1'
   /\ Mem.unchanged_on_tl (loc_out_of_reach j m1) m2 m2'
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
-  /\ thread_same m1 m2
+  /\ thread_same j' m1' m2'
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.
 Proof.
@@ -944,12 +947,13 @@ Proof.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
   eapply Mem.valid_block_inject_1; eauto. tinv.
 + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
+- inv INJ'. red. apply mi_thread.
 Qed.
 
 Lemma alloc_parallel_rule_2:
   forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
-  thread_same m1 m2 ->  
+  thread_same j m1 m2 ->  
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -959,7 +963,7 @@ Lemma alloc_parallel_rule_2:
   0 <= delta -> hi <= sz2 ->
   exists j',
     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
-  /\ thread_same m1' m2'
+  /\ thread_same j' m1' m2'
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ inject_separated j j' m1 m2 .

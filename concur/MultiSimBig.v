@@ -567,9 +567,10 @@ Qed.
     Proof.
       intros. inv H. inv H0. inv H1.
       split. constructor; eauto.
-      - inv mi_thread. simpl. red.
+      - inv mi_thread. simpl. inv Hms. constructor; auto.
         simpl. unfold Mem.sup_create. simpl.
-        rewrite !app_length. split; congruence.
+        split. simpl.
+        rewrite !app_length. simpl. lia. simpl. auto.
       - clear - mi_inj.
         inv mi_inj. constructor; eauto.
       - intros. eapply mi_freeblocks. unfold Mem.valid_block in *.
@@ -577,7 +578,7 @@ Qed.
         rewrite Mem.sup_create_in. eauto.
       - intros. unfold Mem.valid_block. simpl. rewrite <- Mem.sup_create_in.
         eapply mi_mappedblocks; eauto.
-      - inv mi_thread. unfold Mem.next_tid. eauto.
+      - inv mi_thread. inv Hms. unfold Mem.next_tid. eauto.
     Qed.
 
     Lemma yield_inject : forall j m tm n p tp,
@@ -586,7 +587,8 @@ Qed.
     Proof.
       intros. unfold Mem.yield. inv H.
       constructor; simpl; eauto.
-      - inv mi_thread. simpl. unfold Mem.sup_yield. red. split; eauto.
+      - inv mi_thread. inv Hms. constructor; auto.
+          simpl. unfold Mem.sup_yield. red. split; eauto.
       - inv mi_inj.
         constructor; eauto.
     Qed.
@@ -698,7 +700,7 @@ Qed.
     Lemma match_q_nid: forall qc qa w,
         GS.match_query cc_c_asm_injp_new w qc qa ->
         Mem.next_tid (Mem.support (cq_mem qc)) = Mem.next_tid (Mem.support (snd qa)).
-    Proof. intros. inv H. inv Hm. inv mi_thread.
+    Proof. intros. inv H. inv Hm. inv mi_thread. inv Hms.
            simpl. eauto.
     Qed.
     
@@ -798,7 +800,8 @@ Qed.
       constructor; try red; intros; eauto.
       split. simpl. simpl in H0. congruence.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0.  inv Hm.  inv mi_thread. congruence.
+      split. simpl. simpl in H0.  inv Hm.
+      inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
       congruence.
     Qed.
@@ -812,7 +815,8 @@ Qed.
       constructor; try red; intros; eauto.
       split. simpl. simpl in H0. congruence.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0.  inv Hm.  inv mi_thread. congruence.
+      split. simpl. simpl in H0.  inv Hm.
+      inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
       congruence.
     Qed.
@@ -827,7 +831,8 @@ Qed.
       split. simpl. simpl in H0. constructor. reflexivity.
       simpl. eauto.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0.  inv Hm.  inv mi_thread. constructor.
+      split. simpl. simpl in H0.  inv Hm.
+      inv mi_thread. inv Hms. constructor.
       reflexivity. simpl. eauto.
       constructor; try red; intros; eauto.
       congruence.
@@ -848,7 +853,8 @@ Qed.
           red. split. auto. simpl. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
-      - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+      - destruct H9 as [S9 H9]. inv S9.
+        apply Mem.mi_thread in Hm as Hs. inv Hs. destruct Hms as [X Y].
         split. simpl in H0. congruence.
         inv H9. constructor.
         + red. intros. eauto.
@@ -873,7 +879,7 @@ Qed.
           red. split. auto. simpl in B. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
-      - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+      - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. inv Hs. destruct Hms as [X Y].
         split. simpl. congruence.
         inv H9. constructor.
         + red. intros. eauto.
@@ -942,7 +948,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      assert (VALID2: forall b, Mem.valid_block m2' b <-> Mem.valid_block (Mem.yield m2' n tp) b).
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
-     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y].
+     apply Mem.mi_thread in Hm as Hmi. inv Hmi.  destruct Hms as [X Y].
      constructor; eauto.
      - destruct H6 as [S6 H6]. split. simpl. congruence.
         inv H6. constructor.
@@ -973,7 +979,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
-     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y]. simpl in Hid.
+     apply Mem.mi_thread in Hm as Hmi. inv Hmi. destruct Hms as [X Y]. simpl in Hid.
      constructor; eauto.
      - destruct H7 as [S7 H7]. split. simpl. congruence.
        inv H7. constructor.
@@ -983,7 +989,8 @@ Qed.
          red. split; auto. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-     - destruct H9 as [S9 H9]. split. apply Mem.mi_thread in Hm0 as Hs. destruct Hs as [Z Z'].
+     - destruct H9 as [S9 H9]. split.
+       apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
        simpl in *. congruence.
        inv H9. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
@@ -1004,7 +1011,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
-     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y]. simpl in Hid.
+     apply Mem.mi_thread in Hm as Hmi. inv Hmi. destruct Hms as [X Y]. simpl in Hid.
      constructor; eauto.
      - destruct H7 as [S7 H7]. split. simpl. congruence.
        inv H7. constructor.
@@ -1014,7 +1021,8 @@ Qed.
          red. split; auto. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-     - destruct H9 as [S9 H9]. split. apply Mem.mi_thread in Hm0 as Hs. destruct Hs as [Z Z'].
+     - destruct H9 as [S9 H9]. split.
+       apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
        simpl in *. congruence.
        inv H9. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
@@ -1079,7 +1087,7 @@ Qed.
        assert (wP = wPcur). congruence. subst wP.
        assert (tp : Mem.range_prop target (Mem.support(tm_q))).
        red. red in p. simpl in p. inv MQ. inv Hm0.
-       inv mi_thread. setoid_rewrite <- H. auto.
+       inv mi_thread. inv Hms. setoid_rewrite <- H. auto.
        set (tm' := Mem.yield tm_q target tp).
        inv MQ. simpl.
        set (wA := {| cajw_injp := injpw j m tm_q Hm; cajw_sg := sg; cajw_rs := rs_q |}).
@@ -1099,7 +1107,7 @@ Qed.
            rewrite <- SE_eq in H10.
            exploit match_senv_id. eauto. apply H13. eauto. intros [X Y].
            subst b delta. reflexivity.
-           simpl. simpl in H15. inv Hm0. inv mi_thread. unfold Mem.next_tid. auto.
+           simpl. simpl in H15. inv Hm0. inv mi_thread. inv Hms. unfold Mem.next_tid. auto.
          }
          reflexivity.
          reflexivity.
@@ -1166,7 +1174,7 @@ Qed.
        inv H5. eauto. destruct HRSI as [b_vptr' [ofs_vptr' HRSI]].
        assert (tp : Mem.range_prop target (Mem.support(tm_q))).
        red. red in p. simpl in p. inv Hm0.
-       inv mi_thread. setoid_rewrite <- H. auto.
+       inv mi_thread. inv Hms. setoid_rewrite <- H. auto.
        set (tm' := Mem.yield tm_q target tp).
        set (wA := {| cajw_injp := injpw j m tm_q Hm; cajw_sg := pthread_join_sig; cajw_rs := rs_q |}).
        set (wp := injpw j m tm_q Hm). simpl.
@@ -1230,7 +1238,7 @@ Qed.
        assert (wP = wPcur). congruence. subst wP.
        assert (tp : Mem.range_prop target (Mem.support(tm_r))).
        red. red in p. simpl in p. inv MR. inv Hm'0.
-       inv mi_thread. setoid_rewrite <- H1. auto.
+       inv mi_thread. inv Hms. setoid_rewrite <- H1. auto.
        set (tm' := Mem.yield tm_r target tp).
        set (m' := Mem.yield gmem target p).
        inv MR. rename j' into j. rename Hm' into Hm.
@@ -1977,7 +1985,7 @@ Qed.
             destruct CUR_INJP_TID as [_ Y].
             simpl in APP. apply injp_acci_nexttid in APP.
             rewrite <- Y in APP. unfold injp_nexttid in APP.
-            split. auto. inv Hm0. inv mi_thread. setoid_rewrite <- H.
+            split. auto. inv Hm0. inv mi_thread. inv Hms. setoid_rewrite <- H.
             eauto.
           }
           assert (p : Mem.range_prop next (Mem.support m')).

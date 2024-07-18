@@ -1359,7 +1359,7 @@ Proof.
         -- right. eapply Mem.valid_block_free_1; eauto.
            edestruct PERM as (sb2' & sofs2' & Hsp2 & ? & ?); eauto. inv Hsp2.
            eapply Mem.perm_valid_block; eauto.
-      * rewrite <- H28. inv Hm'. eauto.
+      * inv Hm'. inv mi_thread. constructor; auto. congruence.
     }
     exists (injpw f' m1' m2' Hm''); cbn.
     destruct H15 as [S15 H15]. destruct H16 as [S16 H16].

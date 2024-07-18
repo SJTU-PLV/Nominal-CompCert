@@ -378,6 +378,25 @@ Proof.
 Admitted.
  *)
 
+Lemma inject_preserve_tid : forall j m1 m2 b1 b2 d,
+    j b1 = Some (b2, d) ->
+    Mem.inject j m1 m2 ->
+    fst b1 = fst b2 /\ Mem.tid (Mem.support m1) = Mem.tid (Mem.support m2).
+Proof.
+  intros. inv H0. inv mi_thread. inv Hms. split; eauto.
+Qed.
+
+Lemma inject_other_thread : forall j m1 m2 b1 b2 d,
+    j b1 = Some (b2, d) ->
+    Mem.inject j m1 m2 ->
+    fst b1 <> Mem.tid (Mem.support m1) <->
+    fst b2 <> Mem.tid (Mem.support m2).
+Proof.
+  intros. edestruct inject_preserve_tid; eauto.
+  split;
+  congruence.
+Qed.
+
 Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
     match_injp_comp_world (w11, w12)  w1 ->
     match_injp_comp_world (w11', w12')  w2 ->
@@ -406,7 +425,7 @@ Proof.
            erewrite Mem.unchanged_on_perm in Hpm2; eauto.
            eapply Mem.perm_inject_inv in Hpm2 as H; eauto.
            destruct H. auto. exploit H15; eauto with mem.
-           intro. inv H0. red. split. auto. admit.
+           intro. inv H0. red. split. auto. rewrite <- inject_other_thread; eauto.
            eapply Mem.valid_block_inject_2; eauto.
          ** eapply Mem.perm_inject in Hpm1 as Hpm2. 3: eauto.
             2: eauto.
@@ -415,7 +434,7 @@ Proof.
             destruct H. auto. red in H9. exfalso.
             exploit H9. 2: eauto with mem. eauto with mem.
             intro. apply H. eauto with mem.
-            red. split; auto. admit.
+            red. split; auto. rewrite <- inject_other_thread; eauto. 
             eapply Mem.valid_block_inject_2; eauto.
       -- inv H11. eapply unchanged_on_perm; eauto. split; auto.
     + intros b ofs [X Y] Hv.
@@ -437,7 +456,7 @@ Proof.
          eapply Mem.loc_in_reach_find_none in FIND12; eauto.
          destruct H12 as [S12 H12]. inv H12.
          exploit unchanged_on_perm. red. split. apply FIND12.
-         admit. (*inject inv*)
+         rewrite inject_other_thread; eauto.
          eauto with mem.
          instantiate (1:= p).
          instantiate (1:= k).
@@ -466,15 +485,17 @@ Proof.
            destruct Hpm3; eauto. congruence. }
          destruct H12 as [S12 H12]. inv H12.
          exploit unchanged_on_contents. red. split. apply FIND12.
-         admit. eauto.
+         rewrite inject_other_thread; eauto. eauto.
          intro Hcon2eq.
          assert (Hpm2' : Mem.perm m2' b2 ofs2 Cur Readable).
-         apply unchanged_on_perm; eauto. split. auto. admit. eauto with mem.
+         apply unchanged_on_perm; eauto. split. auto.
+         rewrite inject_other_thread; eauto.
+         eauto with mem.
          inv Hm23. inv mi_inj. exploit mi_memval; eauto.
          intro VINJ1.
          inv Hm'3. inv mi_inj. exploit mi_memval0; eauto.
          intro VINJ2.
-         admit.
+         admit. (** Theproblem? *)
       -- eapply Mem.loc_in_reach_find_none in FIND23; eauto.
          eapply H20; eauto. split. auto. auto.
   - rauto.
@@ -558,7 +579,7 @@ Proof.
       econstructor; simpl; eauto. eapply val_inject_compose; eauto.
       eapply CKLRAlgebra.val_inject_list_compose; eauto.
     + (** The accessbility construction : use acco*)
-      admit.
+      admit. (** Does this construction also contains new problems????? *)
 Admitted.
 
 Theorem injp_pass_compose: forall (L1 L2 L3: semantics li_c li_c),

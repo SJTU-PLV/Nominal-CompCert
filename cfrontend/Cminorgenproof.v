@@ -778,6 +778,7 @@ Definition cenv_mem_separated (cenv: compilenv) (vars: list (ident * Z)) (f: mem
 
 Lemma match_callstack_alloc_variables_rec:
   forall tm sp sps tf cenv le te bes cs,
+  Mem.tid sps = Mem.tid (Mem.support tm) ->
   sp = fresh_block sps ->
   Mem.valid_block tm sp ->
   fn_stackspace tf <= Ptrofs.max_unsigned ->
@@ -801,7 +802,7 @@ Lemma match_callstack_alloc_variables_rec:
       (Mem.support m2) (Mem.support tm)
   /\ Mem.inject f2 m2 tm.
 Proof.
-  intros until cs; intros SPS VALID REPRES STKSIZE STKPERMS.
+  intros until cs; intros THE SPS VALID REPRES STKSIZE STKPERMS.
   induction 1; intros f1 NOREPET COMPAT SEP1 SEP2 UNBOUND MCS MINJ.
   (* base case *)
   simpl in MCS. exists f1; auto.
@@ -811,9 +812,9 @@ Proof.
   exploit Mem.support_alloc; eauto. intros NB.*)
   exploit (COMPAT id sz). auto with coqlib. intros [ofs [CENV [ALIGNED [LOB HIB]]]].
   exploit Mem.alloc_left_mapped_inject.
-    eexact MINJ.
-    eexact H.
-    eexact VALID.
+    2: eexact MINJ.
+    2: eexact H.
+    2: eexact VALID. simpl. auto.
     instantiate (1 := ofs). zify. lia.
     intros. exploit STKSIZE; eauto. lia.
     intros. apply STKPERMS. zify. lia.
@@ -856,6 +857,7 @@ Lemma match_callstack_alloc_variables:
 Proof.
   intros.
   eapply match_callstack_alloc_variables_rec; eauto.
+  inv H. reflexivity.
   eapply Mem.alloc_result; eauto.
   eapply Mem.valid_new_block; eauto.
   intros. eapply Mem.perm_alloc_3; eauto.

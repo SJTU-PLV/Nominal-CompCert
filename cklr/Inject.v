@@ -452,7 +452,7 @@ Lemma mem_inject_dom f m1 m2:
 Proof.
   intros H.
   split.
-  - eauto.
+  - constructor. auto. red. intros. unfold meminj_dom in H0. destruct (f b); congruence.
   - eapply mem_mem_inj_dom.
     eapply Mem.mi_inj; eauto.
   - unfold meminj_dom. intros.

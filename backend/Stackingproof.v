@@ -956,7 +956,7 @@ Lemma save_callee_save_rec_correct:
   /\ m' |= contains_callee_saves j sp pos l ls ** P
   /\ (forall ofs k p, Mem.perm m sp ofs k p -> Mem.perm m' sp ofs k p)
   /\ agree_regs j ls rs'
-  /\ thread_same m m'.
+  /\ Mem.match_sup (Mem.support m) (Mem.support m').
 Proof.
 Local Opaque mreg_type.
   induction l as [ | r l]; simpl; intros until P; intros CS SEP AG.
@@ -964,7 +964,7 @@ Local Opaque mreg_type.
   split. apply star_refl.
   split. rewrite sep_pure; split; auto. eapply sep_drop; eauto.
   split. auto.
-  split; auto. red. eauto.
+  split; auto.
 - set (ty := mreg_type r) in *.
   set (sz := AST.typesize ty) in *.
   set (pos1 := align pos sz) in *.
@@ -1048,7 +1048,7 @@ Lemma save_callee_save_correct:
   /\ m' |= contains_callee_saves j sp fe.(fe_ofs_callee_save) b.(used_callee_save) ls0 ** P
   /\ (forall ofs k p, Mem.perm m sp ofs k p -> Mem.perm m' sp ofs k p)
   /\ agree_regs j ls1 rs'
-  /\ thread_same m m'.
+  /\ Mem.match_sup (Mem.support m) (Mem.support m').
 Proof.
   intros until P; intros SEP TY AGCS AG; intros ls1 rs1.
   exploit (save_callee_save_rec_correct j cs fb sp ls1).
@@ -1089,7 +1089,7 @@ Lemma function_prologue_correct:
   Mem.alloc m1 0 f.(Linear.fn_stacksize) = (m2, sp) ->
   Val.has_type parent Tptr -> Val.has_type ra Tptr ->
   m1' |= minjection j m1 ** globalenv_inject se tse j m1 ** P ->
-  thread_same m1 m1' ->
+  thread_same j m1 m1' ->
   exists j', exists rs', exists m2', exists sp', exists m3', exists m4', exists m5',
      Mem.alloc m1' 0 tf.(fn_stacksize) = (m2', sp')
   /\ store_stack m2' (Vptr sp' Ptrofs.zero) Tptr tf.(fn_link_ofs) parent = Some m3'
@@ -1100,7 +1100,7 @@ Lemma function_prologue_correct:
   /\ agree_regs j' ls1 rs'
   /\ agree_locs ls1 ls0
   /\ m5' |= frame_contents j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject se tse j' m2 ** P
-  /\ thread_same m2 m5'
+  /\ thread_same j' m2 m5'
   /\ j' sp = Some(sp', fe.(fe_stack_data))
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m1'.
@@ -1191,9 +1191,9 @@ Local Opaque b fe.
     unfold mreg_within_bounds in H; tauto.
     unfold call_regs. apply AGARGS. apply incoming_slot_in_parameters; auto.
     split. exact SEPFINAL.
-    split. eapply Mem.match_sup_trans. apply TEQ'.
+    split. inv TEQ'. constructor. eapply Mem.match_sup_trans. apply Hms.
     erewrite Mem.support_storev. 2: eauto.
-    erewrite Mem.support_storev; eauto.
+    erewrite Mem.support_storev; eauto. auto.
   split. exact SAME.
   split. exact INCR. exact INJSEP.
 Qed.
@@ -1297,7 +1297,7 @@ Qed.
 Lemma function_epilogue_correct:
   forall m' j sp' ls ls0 pa ra P m rs sp m1 k cs fb,
   m' |= frame_contents j sp' ls ls0 pa ra ** minjection j m ** P ->
-  thread_same m m' ->  
+  thread_same j m m' ->  
   agree_regs j ls rs ->
   agree_locs ls ls0 ->
   j sp = Some(sp', fe.(fe_stack_data)) ->
@@ -1312,7 +1312,7 @@ Lemma function_epilogue_correct:
   /\ agree_regs j (return_regs ls0 ls) rs1
   /\ agree_callee_save (return_regs ls0 ls) ls0
   /\ m1' |= minjection j m1 ** P
-  /\ thread_same m1 m1'.
+  /\ thread_same j m1 m1'.
 Proof.
   intros until fb; intros SEP TEQ AGR AGL INJ FREE.
   (* Can free *)
@@ -1857,7 +1857,7 @@ Variables parent retaddr: val.
 Hypothesis INJ: j sp = Some(sp', fe.(fe_stack_data)).
 Hypothesis AGR: agree_regs j ls rs.
 Hypothesis SEP: m' |= frame_contents f j sp' ls ls0 parent retaddr ** minjection j m ** globalenv_inject se tse j m.
-Hypothesis TEQ: thread_same m m'.
+Hypothesis TEQ: thread_same j m m'.
 
 Lemma transl_builtin_arg_correct:
   forall a v,
@@ -2025,7 +2025,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
                  ** stack_contents j cs cs'
                  ** minjection j m
                  ** globalenv_inject se tse j m)
-        (TEQ: thread_same m m'),
+        (TEQ: thread_same j m m'),
       match_states (Linear.State cs f (Vptr sp Ptrofs.zero) c ls m)
                    (Mach.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
   | match_states_call:
@@ -2038,7 +2038,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
         (SEP: m' |= stack_contents j cs cs'
                  ** minjection j m
                  ** globalenv_inject se tse j m)
-        (TEQ: thread_same m m'),
+        (TEQ: thread_same j m m'),
       match_states (Linear.Callstate cs vf ls m)
                    (Mach.Callstate cs' vf' rs m')
   | match_states_return:
@@ -2049,7 +2049,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
         (SEP: m' |= stack_contents j cs cs'
                  ** minjection j m
                  ** globalenv_inject se tse j m)
-        (TEQ: thread_same m m'),
+        (TEQ: thread_same j m m'),
       match_states (Linear.Returnstate cs ls m)
                   (Mach.Returnstate cs' rs m').
 
@@ -2121,7 +2121,8 @@ Proof.
   econstructor. eauto. eauto. eauto. eauto.
   apply agree_regs_set_slot. apply agree_regs_undef_regs. auto.
   apply agree_locs_set_slot. apply agree_locs_undef_locs. auto. apply destroyed_by_setstack_caller_save. auto.
-  eauto. eauto with coqlib. eauto. inv STORE. red. apply Mem.support_storev in H0. red in TEQ. congruence.
+  eauto. eauto with coqlib. eauto. inv STORE. red. apply Mem.support_storev in H0.
+  inv TEQ. constructor; eauto. congruence.
 
 - (* Lop *)
   assert (exists v',
@@ -2240,9 +2241,7 @@ Proof.
   apply agree_locs_set_res; auto. apply agree_locs_undef_regs; auto.
   apply frame_set_res. apply frame_undef_regs. apply frame_contents_incr with j; auto.
   rewrite sep_swap2. apply stack_contents_change_meminj with j; auto. rewrite sep_swap2.
-  exact SEP. eapply Mem.match_sup_trans.
-  eapply Mem.match_sup_symm. inv UNCH1. apply unchanged_on_thread_tl.
-  eapply Mem.match_sup_trans. apply TEQ. inv UNCH2. auto.
+  exact SEP.
 
 - (* Llabel *)
   econstructor; split.
@@ -2350,10 +2349,7 @@ Proof.
   apply agree_regs_inject_incr with j; auto.
   auto.
   apply stack_contents_change_meminj with j; auto.
-  rewrite sep_comm, sep_assoc; auto. 
-  eapply Mem.match_sup_trans.
-  eapply Mem.match_sup_symm. inv C. apply unchanged_on_thread_tl.
-  eapply Mem.match_sup_trans. apply TEQ. inv D. auto.
+  rewrite sep_comm, sep_assoc; auto. auto.
 - (* return *)
   inv STACKS. exploit wt_returnstate_agree; eauto. intros [AGCS OUTU].
   simpl in AGCS. simpl in SEP. rewrite sep_assoc in SEP.

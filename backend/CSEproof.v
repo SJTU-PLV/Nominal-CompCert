@@ -1502,6 +1502,10 @@ Proof.
           intros [C|C]. congruence. extlia.
         }
         constructor; eauto.
+        --  inv mi_thread. constructor; eauto. red. intros.
+           subst j''. simpl in H. destruct (bc b); simpl in H; eauto.
+           destruct (j b) eqn: Hj; simpl in H; eauto. inv H. inv MEM.
+           inv mi_thread. eapply Hjs0; eauto.
         -- inv mi_inj. constructor; eauto.
            ++ intros. destruct (bc b1) eqn:BC;
               unfold j'' in H; rewrite BC in H; eauto.
