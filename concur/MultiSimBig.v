@@ -1360,9 +1360,9 @@ Qed.
      intros.
      inv H. 
      unfold Mem.storev in *. inv H1; try congruence.
-     destruct H10 as [S10 H10]. destruct H11 as [S11 H11].
+     destruct H10 as [S10 H10]. destruct H12 as [S12 H12].
      apply Mem.unchanged_on_support in H10 as SUP1.
-     apply Mem.unchanged_on_support in H11 as SUP2.
+     apply Mem.unchanged_on_support in H12 as SUP2.
      constructor; eauto.
      - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
      - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
@@ -1397,7 +1397,6 @@ Qed.
        intro. exploit H8; eauto. eauto with mem. intro. eapply A. eauto. eauto with mem.
        exploit H14; eauto. intros [X Y]. congruence.
        intros. red in H1.  simpl. split. apply H1. eauto.
-     - red. intros. intro. eapply H15; eauto with mem.
    Qed.
 
    Lemma injp_accg_storev : forall w1 j' m1' m2' Hm' m1'' m2'' Hm'' v tv r tr,
