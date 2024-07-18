@@ -109,11 +109,13 @@ drop flag, and whether it is fully own. Each place is used to generate
 a deterministic drop statement. For now, we do not distinguish fully
 owned or partial moved Box types, i.e., we do not use a single
 drop_in_place function to recursively drop the fully owned box *)
-Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
+(** The following definition is replaced by an implementation based on
+split_drop_place which does not require the fuel parameter *)
+Fixpoint elaborate_drop_for_unused (pc: node) (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
   match fuel with
   | O => error (msg "Running out of fuel in elaborate_drop_for")
   | S fuel' =>
-      let elaborate_drop_for := elaborate_drop_for pc mayinit mayuninit universe fuel' ce in
+      let elaborate_drop_for := elaborate_drop_for_unused pc mayinit mayuninit universe fuel' ce in
       if Paths.mem p universe then
         match typeof_place p with        
         | Tstruct _ _
@@ -174,7 +176,35 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
         | _ => ret nil
         end
   end.
-  
+
+Fixpoint generate_drop_flags_for (mayinit mayuninit: Paths.t) (l: list (place * bool)) : mon (list (place * option ident * bool)) :=
+  match l with
+  | nil => ret nil
+  | (p, full) :: l' =>
+      do flags <- generate_drop_flags_for mayinit mayuninit l';
+      if Paths.mem p mayinit then
+        if Paths.mem p mayuninit then
+        (* need drop flag *)
+        do drop_flag <- gensym type_bool p;
+        ret ((p, Some drop_flag, full) :: flags)
+        else
+          (* this place must be init, no need for drop flag *)
+          do flags <- generate_drop_flags_for mayinit mayuninit l';
+          ret ((p, None, full) :: flags)
+      else
+        (* this place must be uninit, no need to drop *)
+        ret flags
+  end.
+
+Definition elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
+  match split_drop_place ce universe p (typeof_place p) with
+  | OK drop_places =>      
+      (** may be we should check the disjointness of drop flags *)
+      generate_drop_flags_for mayinit mayuninit drop_places     
+  | Error msg =>
+      error msg
+  end.
+
 
 Section INIT_UNINIT.
 
@@ -198,10 +228,10 @@ Definition generate_drop (ce: composite_env) (p: place) (flag: option ident) (fu
                 drop_fully_own ce p (typeof_place p)
               else Sdrop p in
   match flag with
-  | Some id =>     
+  | Some id =>
       Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) drop Sskip
   | None => drop
-  end.             
+  end.
 
 (* Collect the to-drop places and its drop flag from a statement, meanwhile updating the statement *)
 Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instruction) (pc: node) : mon unit :=
@@ -218,7 +248,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
               let uninit := PathsMap.get id mayuninit in
               let universe := Paths.union init uninit in
               (* drops are the list of to-drop places and their drop flags *)
-              do drops <- elaborate_drop_for pc init uninit universe own_fuel ce p;
+              do drops <- elaborate_drop_for pc init uninit universe ce p;
               let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
           | _ => ret tt

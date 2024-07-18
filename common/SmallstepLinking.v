@@ -25,7 +25,7 @@ Inductive reachable {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
     Star L s0 t s ->
     reachable L s
 | external_reach: forall r s1 s2 t,
-    (* s1 also must be reachable *)
+    (* s1 also must be reachable. TODO: s1 should be in at_external? *)
     reachable L s1 ->
     after_external L s1 r s2 ->
     Star L s2 t s ->

@@ -178,12 +178,14 @@ Inductive state: Type :=
     (res: val)
     (k: cont)
     (m: mem) : state
-(* | Calldrop *)
-(*     (* It is necessary for reducing the number of states transition *) *)
-(*     (v: val) *)
-(*     (ty: type) *)
-(*     (k: cont)   *)
-(*     (m: mem): state *)
+(* Simulate elaborate drop *)
+| Dropplace
+    (f: function)
+    (l: list place)
+    (k: cont)
+    (e: env)
+    (own: own_env)
+    (m: mem) : state
 | Dropstate
     (* composite name *)
     (c: ident)
@@ -373,17 +375,17 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) m5 ->
     step (State f (Sbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
 
-(** TODO: support dynamic drop semantics *)
-(* (** Small-step drop semantics *) *)
-(* | step_drop_box: forall le m m' k ty b' ofs' f b ofs p *)
-(*     (* We assume that drop(p) where p is box type has been expanded in *)
-(*     drop elaboration (see drop_fully_own in ElaborateDrop.v) *) *)
-(*     (PADDR: eval_place ge le m p b ofs) *)
-(*     (PTY: typeof_place p = Tbox ty) *)
-(*     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs')) *)
-(*     (* Simulate free semantics *) *)
-(*     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'), *)
-(*     step (State f (Sdrop p) k le m) E0 (State f Sskip k le m') *)
+(** dynamic drop semantics: simulate the drop elaboration *)
+(** Small-step drop semantics *)
+| step_drop_box: forall le m m' k ty b' ofs' f b ofs p
+    (* We assume that drop(p) where p is box type has been expanded in *)
+(*     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (* Simulate free semantics *)
+    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
+    step (State f (Sdrop p) k le m) E0 (State f Sskip k le m')
 (* | step_drop_struct: forall m k orgs co id p b ofs f le *)
 (*     (* It corresponds to the call step to the drop glue of this struct *) *)
 (*     (PTY: typeof_place p = Tstruct orgs id) *)

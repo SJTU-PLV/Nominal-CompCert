@@ -8,6 +8,8 @@ Require Import FSetWeakList DecidableType.
 Require Import Rusttypes RustlightBase.
 
 Local Open Scope list_scope.
+Local Open Scope error_monad_scope.
+Import ListNotations.
 
 Lemma is_prefix_refl: forall p, is_prefix p p = true.
 Admitted.
@@ -203,4 +205,67 @@ Definition add_option (S: PathsMap.t) (p: option place) (m: PathsMap.t) : PathsM
   | None => m
   end.
 
+
+(* split places for drop statement based on the places appear in the
+universe *)
+Section SPLIT.
+Variable universe: Paths.t.
+  
+Variable ce: composite_env.
+
+Variable rec: forall (ce': composite_env), (PTree_Properties.cardinal ce' < PTree_Properties.cardinal ce)%nat -> place -> type -> res (list (place * bool)).
+
+(* Return the list of split places associated with a flag that
+indicates whether this place is fully owned or not (if it is init) *)
+(** Some property: the output places must be in universe so that we
+can check whether this place is initialized or not. So the fully owned
+flag is necessary *)
+Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
+  match ty with
+  | Tstruct _ id =>
+      (* p in universe indicates that p is fully owned/moved (no p's
+      children mentioned in this function) *)
+      if Paths.mem p universe then
+        OK [(p, true)]
+      else
+        match get_composite ce id with
+        | co_some _ i co P =>
+            let children := map (fun elt => match elt with
+                                         | Member_plain fid fty =>
+                                             (Pfield p fid fty, fty) end)
+                              co.(co_members) in
+            let foldf '(subfld, fty) acc :=
+              do drops <- acc;
+              do drops' <- rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) subfld fty;
+              OK (drops' ++ drops) in
+            fold_right foldf (OK nil) children
+        | co_none _ => Error[CTX id; MSG ": Unfound struct id in composite_env or wrong recursive data: split_drop_place"]
+        end
+  | Tvariant _ id =>
+      if Paths.mem p universe then
+        OK [(p, true)]
+      else
+        (* we must ensure that no p's children in universe? *)
+        Error ([MSG "place is "; CTX (local_of_place p); MSG ": enum does not exist in the universe set: split_drop_place"])
+  | Tbox ty =>
+      if Paths.mem p universe then
+        (* p must be not fully owned *)
+        if Paths.exists_ (fun p' => is_prefix_strict p p') universe then
+          do drops <- split_drop_place' (Pderef p ty) ty;
+          OK (drops ++ [(p, false)])
+        else
+          (* p is fully owned if it is initialized *)
+          OK [(p, true)]
+      else
+        Error ([MSG "place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: split_drop_place"])
+  (* Is it correct? *)
+  | _ => Error [MSG ": Normal types do not need drop: split_drop_place"]
+  end.
+
+End SPLIT.
+
+Require Import Wfsimpl.
+
+Definition split_drop_place (ce: composite_env) (universe: Paths.t) : place -> type -> res (list (place * bool)) :=
+  Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce.
     
