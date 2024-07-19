@@ -2,7 +2,7 @@ Require Import Coqlib .
 Require Import Errors Maps.
 Require Import Values.
 Require Import Integers.
-Require Import AST Errors.
+Require Import AST.
 Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
@@ -10,15 +10,8 @@ Require Import Smallstep SmallstepLinking SmallstepLinkingSafe.
 Require Import LanguageInterface Invariant.
 Require Import Rusttypes RustlightBase.
 Require Import RustIR BorrowCheckDomain BorrowCheckPolonius.
-
-(* move to rustlight  *)
-Definition is_owned (p: place) (own: own_env) : bool :=
-  match own ! (local_of_place p) with
-  | Some l =>
-      (** FIXME: consider partial ownership! *)
-      in_dec place_eq p l             
-  | None => false
-  end.
+Require Import Errors.
+Require Import RustIRown.
 
 Definition scalar_type (ty: type) : bool :=
   match ty with
@@ -65,11 +58,12 @@ Variable abs: mem_abstracter.
 
 (* The value stored in m[b, ofs] is consistent with the type of p *)
 Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -> Prop :=
-| bm_box: forall ty b1 ofs1
+| bm_box: forall ty
     (* valid resource. If the loaded value is not a pointer, it is a
     type error instead of a memory error *)
-    (VRES: Mem.load Mptr m b ofs = Some (Vptr b1 ofs1) ->
-           (abs b1 (Ptrofs.unsigned ofs1) = Some (Pderef p ty, 0) <-> is_owned p own = true)),
+    (VRES: forall b1 ofs1,
+        Mem.load Mptr m b ofs = Some (Vptr b1 ofs1) ->
+        (abs b1 (Ptrofs.unsigned ofs1) = Some (Pderef p ty, 0) <-> is_owned own p = true)),
     bmatch m b ofs p own (Tbox ty)
 | bm_struct: forall orgs id
     (* all fields in the struct satisfy bmatch *)
@@ -105,37 +99,141 @@ Definition mmatch (m: mem) (own: own_env) : Prop :=
     (Mem.range_perm m b (ofs - pofs) (ofs - pofs + (sizeof ce (typeof_place p))) Cur Freeable
     /\ bmatch m b (ofs - pofs) p own (typeof_place p)).
 
+Record wf_abs (e: env) : Prop :=
+  { wf_local_env: forall id b ty ofs,
+      e ! id = Some (b, ty) ->
+      0 <= ofs <= sizeof ce ty ->
+      abs b ofs = Some ((Plocal id ty), ofs) }.
+
 
 End MATCH.
 
 
+(* Some simple type checking (move to Rusttyping.v) *)
+
+Definition type_deref (ty: type) : res type :=
+  match ty with
+  | Tbox tyelt
+  | Treference _ _ tyelt => OK tyelt
+  | _ => Error (msg "type_deref error")
+  end.
+
+Definition typenv := PTree.t type.
+
+Section TYPING.
+
+Variable te: typenv.
+Variable ce: composite_env.
+
+Inductive wt_place : place -> Prop :=
+| wt_local: forall id ty,
+    te ! id = Some ty ->
+    wt_place (Plocal id ty)
+| wt_deref: forall p ty,
+    wt_place p ->
+    type_deref (typeof_place p) = OK ty ->
+    wt_place (Pderef p ty)
+| wt_field: forall p ty fid co orgs id,
+    wt_place p ->
+    typeof_place p = Tstruct orgs id ->
+    ce ! id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
+    wt_place (Pfield p fid ty)
+| wt_downcast: forall p ty fid co orgs id,
+    wt_place p ->
+    typeof_place p = Tvariant orgs id ->
+    ce ! id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
+    wt_place (Pdowncast p fid ty)
+.
+
+End TYPING.
+
+Definition env_to_tenv (e: env) : typenv :=
+  PTree.map1 snd e.
 
 Section BORCHK.
 
-Variable p: program.
+Variable prog: program.
 Variable w: inv_world wt_c.
 Variable se: Genv.symtbl.
-Hypothesis VALIDSE: Genv.valid_for (erase_program p) se.
+Hypothesis VALIDSE: Genv.valid_for (erase_program prog) se.
 Hypothesis INV: symtbl_inv wt_c w se.
-Let L := semantics p se.
-Let ge := globalenv se p.
+Let L := semantics prog se.
+Let ge := globalenv se prog.
 
 (* composite environment *)
 Let ce := ge.(genv_cenv).
 
 
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall
+| sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ abs
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (INSTR: cfg ! pc = Some instr)
     (MSTMT: match_instr_stmt f.(fn_body) instr s k)
     (CHK: borrow_check ce f = OK ae)
     (AS: ae ! pc = Some (AE.State Σ Γ Δ))
-    
-    sound_state (State f s k e m)
-  
+    (MM: mmatch ce abs m own)
+    (WF: wf_abs ce abs e),
+    sound_state (State f s k e own m)
+.
 
-  
+
+(** The address of a place is consistent with the abstracter. For now,
+we do not consider reference *)
+Lemma eval_place_sound: forall e m p b ofs abs own
+    (EVAL: eval_place ce e m p b ofs)
+    (MM: mmatch ce abs m own)
+    (WF: wf_abs ce abs e)
+    (WT: wt_place (env_to_tenv e) ce p)
+    (* evaluating the address of p does not require that p is owned *)
+    (POWN: prefix_is_owned own p = true),
+    abs b (Ptrofs.unsigned ofs) = Some (p, 0)
+    (* if consider reference, p ∈ Γ(type(p).origins) *)
+.
+Proof.
+  induction 1; intros.
+  (* Plocal *)
+  - rewrite Ptrofs.unsigned_zero. eapply wf_local_env; eauto.
+    generalize (sizeof_pos ce ty).
+    lia.
+  (* Pfield *)
+  - admit.
+  (* Pdowncast *)
+  - admit.
+  (* Pderef *)
+  - inv WT.
+    exploit IHEVAL. eauto. eauto. eauto.
+    eapply forallb_forall. intros.
+    eapply forallb_forall in POWN. eauto.
+    simpl. auto.
+    intros ABS.
+    eapply MM in ABS. destruct ABS as (A & B).
+    (* typeof_place p must be box/reference *)
+    destruct (typeof_place p) eqn: TYP; simpl in *; try congruence.
+    (* Tbox *)
+    + inv B. rewrite Z.sub_0_r in VRES.
+      assert (LOAD: Mem.load Mptr m l (Ptrofs.unsigned ofs) = Some (Vptr l' ofs')).
+      { inv H. simpl in H0. inv H0.  auto.
+        simpl in H1. inv H1.
+        simpl in H1. inv H1. }
+      inv H3.
+      generalize (VRES _ _ LOAD). intros ABS. apply ABS.
+      eapply prefix_owned_implies. eauto.
+      eapply proj_sumbool_is_true.
+      simpl. auto.
+      simpl in *. congruence.
+    (* reference *)
+    + admit.
+Admitted.
+      
+Lemma eval_place_no_mem_error: forall abs m own e p
+    (MM: mmatch ce abs m own)
+    (WF: wf_abs ce abs e)
+    (POWN: is_owned own p = true),
+    eval_place_mem_error ce e m p ->
+    False.
+Admitted.
 
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .

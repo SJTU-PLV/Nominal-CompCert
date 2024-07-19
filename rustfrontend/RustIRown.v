@@ -45,19 +45,29 @@ Definition is_deep_owned (own: own_env) (p: place) : bool :=
   (* p is owned and no p's children in uninit *)
   is_owned own p &&
     let id := local_of_place p in
-    let init := PathsMap.get id own.(own_init) in
     let uninit := PathsMap.get id own.(own_uninit) in
-    Paths.for_all (is_prefix p) uninit.
+    Paths.for_all (fun p' => negb (is_prefix p p')) uninit.
+
 
 (* check that parents of p are not in uninit (slightly different from
    the condition in is_owned) *)
 Definition prefix_is_owned (own: own_env) (p: place) : bool :=
-  let id := local_of_place p in
-  let uninit := PathsMap.get id own.(own_uninit) in
-  (* no p's prefix in uninit and there is some p's prefix in init *)
-  Paths.for_all (fun p' => negb (is_prefix_strict p' p)) uninit.
+  forallb (is_owned own) (parent_paths p).
+  (* let id := local_of_place p in *)
+  (* let uninit := PathsMap.get id own.(own_uninit) in *)
+  (* (* no p's prefix in uninit *) *)
+  (* Paths.for_all (fun p' => negb (is_prefix_strict p' p)) uninit. *)
 
-
+Lemma prefix_owned_implies: forall p p' own,
+    prefix_is_owned own p = true ->
+    is_prefix_strict p' p = true ->
+    is_owned own p' = true.
+Proof.
+  intros p p' own POWN PFX.
+  eapply forallb_forall in POWN; eauto.
+  eapply proj_sumbool_true in PFX. auto.
+Qed.  
+  
 (* place with succesive Pdowncast in the end is not a valid owner. For
 example, move (Pdowncast p) is equivalent to move p *)
 Fixpoint valid_owner (p: place) :=
