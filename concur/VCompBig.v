@@ -383,9 +383,10 @@ Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
         we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
     (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
                  j12 b1 = Some (b2, d) -> j23 b2 <> None)
-    (** This cases says that for any external stack block with permission in m2, it
-        comes from a corresponding position im m1*)
-    (Hconstr2: forall b2 ofs2, Mem.perm m2 b2 ofs2 Max Nonempty ->
+    (** This cases says that for any external stack block [with permission] in m2
+        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
+    (Hconstr2: forall b2 ofs2 b3 d2, fst b2 <> Mem.tid (Mem.support m2) ->
+                Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
                 exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
     external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
                                                                                              
@@ -413,7 +414,8 @@ Proof.
     eapply Mem.unchanged_on_implies; eauto.
     intros. destruct H as [X Y]. split; auto.
     red. intros. red in X. intro.
-    exploit Hconstr2; eauto. intros (b1 & ofs1 & Hp1 & Hj12).
+    exploit Hconstr2; eauto. erewrite inject_other_thread; eauto.
+    intros (b1 & ofs1 & Hp1 & Hj12).
     exploit X. unfold compose_meminj. rewrite Hj12, H. reflexivity.
     replace (ofs - (ofs - delta - ofs1 + delta)) with ofs1 by lia. auto.
     auto.
@@ -456,7 +458,8 @@ Proof.
     + econstructor. rewrite meminj_dom_compose. reflexivity.
     + econstructor; eauto. intros. unfold meminj_dom in H0.
       destruct (f b1) as [[? ?]|] eqn: Hf; inv H0. congruence.
-      intros. exists b2, ofs2. split. auto. admit. (*wrong, Hconstr2 is too strong for initial*)
+      intros. exists b2, ofs2. split. auto. unfold meminj_dom. rewrite H3.
+      replace (ofs2 - ofs2) with 0 by lia. reflexivity.
     + intros r1 r3 wp1 wp2 wp1' Hmatch [Hae1 Hae2] HACCI Hr. simpl in Hae1, Hae2.
       destruct wp1' as [wp11' wp12']. simpl. simpl in *.
       destruct wp1 as [wp11 wp12]. simpl in *. destruct HACCI as [HAci1 HAci2].
