@@ -45,19 +45,59 @@ Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont 
     match_instr_stmt body (Inop n) Scontinue k
 .
 
-(** Definition of abstracter which maps a memory location to place
-(i.e. the owner of this location) *)
+(** Definition of abstracter which maps a memory location to path (a
+uniform representation of place) (i.e. the owner of this location) *)
 
-Definition mem_abstracter : Type := block -> Z -> option (place * Z).
+(* a path with ofs zero must be the start of a memory block. It holds
+because path_deref only dereferencs box type. If two path are not
+equal, their memory location must not be equal *)
+Inductive path : Type :=
+| path_local (id: ident) (ofs: Z) (ty: type) (* stack *)
+| path_deref (p: path) (ofs: Z) (ty: type). (* the location of &*p + ofs *)
 
+Definition path_offset (p: path) (ofs: Z) (ty: type) :=
+  match p with
+  | path_local id ofs1 _ =>
+      path_local id (ofs1 + ofs) ty
+  | path_deref p' ofs1 _ =>
+      path_deref p' (ofs1 + ofs) ty
+  end.
+
+Definition typeof_path (p: path) : type :=
+  match p with
+  | path_local _ _ ty
+  | path_deref _ _ ty => ty
+  end.
+
+Definition mem_abstracter : Type := block -> Z -> option path.
+
+(* relation between place and path *)
+Inductive pmatch (ce: composite_env) : place -> path -> Prop :=
+| pm_local: forall id ty,
+    pmatch ce (Plocal id ty) (path_local id 0 ty)
+| pm_field: forall p ph id orgs co fofs bf fid fty
+    (TYP: typeof_place p = Tstruct orgs id)
+    (PM: pmatch ce p ph)
+    (CO: ce ! id = Some co)
+    (FOFS: field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    pmatch ce (Pfield p fid fty) (path_offset ph fofs fty)
+| pm_downcast: forall p ph id orgs co fofs bf fid fty
+    (TYP: typeof_place p = Tvariant orgs id)
+    (PM: pmatch ce p ph)
+    (CO: ce ! id = Some co)
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    pmatch ce (Pdowncast p fid fty) (path_offset ph fofs fty)
+| pm_deref: forall p ty ph
+    (PM: pmatch ce p ph),
+    pmatch ce (Pderef p ty) (path_deref ph 0 ty)
+.
 Section MATCH.
 
 Variable ce: composite_env.
 Variable abs: mem_abstracter.
 
-
 (* The value stored in m[b, ofs] is consistent with the type of p *)
-Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -> Prop :=
+Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: path) (own: own_env) : type -> Prop :=
 | bm_box: forall ty
     (* valid resource. If the loaded value is not a pointer, it is a
     type error instead of a memory error *)
@@ -188,7 +228,8 @@ Lemma eval_place_sound: forall e m p b ofs abs own
     (WT: wt_place (env_to_tenv e) ce p)
     (* evaluating the address of p does not require that p is owned *)
     (POWN: prefix_is_owned own p = true),
-    abs b (Ptrofs.unsigned ofs) = Some (p, 0)
+  exists p' ofs', abs b (Ptrofs.unsigned ofs) = Some (p', ofs')
+             /\ eval_place
     (* if consider reference, p ∈ Γ(type(p).origins) *)
 .
 Proof.
@@ -198,7 +239,7 @@ Proof.
     generalize (sizeof_pos ce ty).
     lia.
   (* Pfield *)
-  - admit.
+  - 
   (* Pdowncast *)
   - admit.
   (* Pderef *)
