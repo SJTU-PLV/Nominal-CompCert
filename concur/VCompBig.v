@@ -440,7 +440,74 @@ Qed.
 Definition match_12_cctrans : injp_world * injp_world -> injp_world -> Prop :=
   fun w2 w =>
     match_injp_comp_world w2 w /\ external_mid_hidden (fst w2) (snd w2).
-  
+
+Lemma external_mid_hidden_acci: forall j12 j23 m1 m2 m3 Hm12 Hm23 j12' j23' m1' m2' m3' Hm12' Hm23',
+    let w1 := injpw j12 m1 m2 Hm12 in
+    let w2 := injpw j23 m2 m3 Hm23 in
+    let w1' := injpw j12' m1' m2' Hm12' in
+    let w2' := injpw j23' m2' m3' Hm23' in
+    external_mid_hidden w1 w2 ->
+    injp_acci w1 w1' -> injp_acci w2 w2' ->
+    external_mid_hidden w1' w2'.
+Proof.
+  intros. inv H. inv H0. inv H1.
+  econstructor; eauto.
+  - intros. red in Hnb0. destruct (j12 b1) as [[b2' d']|] eqn:Hj12.
+    + apply H13 in Hj12 as Heq. rewrite H0 in Heq. inv Heq.
+      destruct (j23 b2') as [[b3 d'']|] eqn:Hj23.
+      * apply H20 in Hj23. congruence.
+      * exploit Hconstr1; eauto. inv H12. destruct unchanged_on_thread_i. congruence.
+    + exploit H14; eauto. intros [A B].
+      exfalso. exploit Hnb0; eauto. eapply Mem.valid_block_inject_2; eauto.
+      intro. apply H. destruct H18 as [[_ Z] _]. congruence.
+  - intros. red in Hnb3. destruct (j23 b2) as [[b3' d']|] eqn:Hj23.
+    + apply H20 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
+      destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1]|] eqn:FIND12.
+      * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
+        exists b1, ofs1. split. admit. eauto.
+      * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
+        exploit Hconstr2; eauto. congruence. inv Z.
+        eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
+        intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split. admit. eauto.
+    + exploit H21; eauto. intros [A B].
+      exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
+      erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
+      apply H.
+      destruct H19 as [[_ Z]_]. congruence.
+Admitted.
+      
+
+Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
+    let w1 := injpw j12 m1 m2 Hm12 in
+    let w2 := injpw j23 m2 m3 Hm23 in
+    injp_acce  (injpw (compose_meminj j12 j23) m1 m3 Hm13) (injpw j13' m1' m3' Hm13') -> external_mid_hidden w1 w2 ->
+    exists j12' j23' m2' Hm12' Hm23',
+      let w1' := injpw j12' m1' m2' Hm12' in
+      let w2' := injpw j23' m2' m3' Hm23' in
+      j13' = compose_meminj j12' j23' /\
+      injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
+Proof.
+  (*need to be proved in another file*)
+Admitted.
+
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite Valuesrel.add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
 Proof.
   econstructor. instantiate (1:= match_12_cctrans).
@@ -498,9 +565,23 @@ Proof.
       econstructor; simpl; eauto. eapply val_inject_compose; eauto.
       eapply CKLRAlgebra.val_inject_list_compose; eauto.
     + (** The accessbility construction : use acco*)
-      admit. (** Does this construction also contains new problems????? *)
-Admitted.
-
+      intros r1 r3 wp2' ACCO1 MR. simpl in ACCO1. inv MR. simpl in H3,H4.
+      destruct wp2' as [j13'' m1'' m3'' Hm13'].
+      simpl in H3, H4.
+      assert (Hhidden: external_mid_hidden (injpw j12' m1' m2' Hm12') (injpw j23' m2' m3' Hm23')).
+      destruct wp1. destruct w, w0.      inv H0.
+      exploit external_mid_hidden_acci; eauto. econstructor; eauto.
+      exploit injp_acce_outgoing_constr; eauto.
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
+      exists ((injpw j12'' m1'' m2'' Hm12''),(injpw j23'' m2'' m3'' Hm23'')).
+      repeat apply conj; eauto.
+      -- inv H4.
+         rename vres2 into vres3. exploit compose_meminj_midvalue; eauto.
+         intros [vres2 [RES1 RES2]]. 
+         exists (cr vres2 m2''). repeat econstructor; eauto.
+      -- econstructor; eauto.
+Qed.
+                                                                                                               
 Theorem injp_pass_compose: forall (L1 L2 L3: semantics li_c li_c),
     forward_simulation c_injp L1 L2 ->
     forward_simulation c_injp L2 L3 ->
