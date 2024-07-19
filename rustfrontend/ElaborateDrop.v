@@ -210,22 +210,14 @@ Section INIT_UNINIT.
 
 Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
 
-Fixpoint drop_fully_own (ce: composite_env) (p: place) (ty: type) :=
-  match ty with
-  | Tbox ty'  =>
-      Ssequence (drop_fully_own ce (Pderef p ty') ty') (Sdrop p)
-  | Tstruct _ _
-  | Tvariant _ _  =>
-      if own_type ce ty then
-        Sdrop p
-      else Sskip
-  | _ => Sskip
-  end.
+Definition drop_fully_own (p: place) :=
+  makeseq (map (fun p => Sdrop p) (split_fully_own_place p (typeof_place p))).
+
 
 (* create a drop statement using drop flag optionally *)
-Definition generate_drop (ce: composite_env) (p: place) (flag: option ident) (full: bool) : statement :=
+Definition generate_drop (p: place) (flag: option ident) (full: bool) : statement :=
   let drop := if full then
-                drop_fully_own ce p (typeof_place p)
+                drop_fully_own p
               else Sdrop p in
   match flag with
   | Some id =>
@@ -249,7 +241,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
               let universe := Paths.union init uninit in
               (* drops are the list of to-drop places and their drop flags *)
               do drops <- elaborate_drop_for pc init uninit universe ce p;
-              let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
+              let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
           | _ => ret tt
           end

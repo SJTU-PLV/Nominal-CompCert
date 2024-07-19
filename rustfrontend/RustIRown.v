@@ -33,7 +33,7 @@ every used is initialized. Maybe we should change the name?  *)
             own_uninit: PathsMap.t;
             own_universe: PathsMap.t } .
 
-Definition is_owned (p: place) (own: own_env) : bool :=
+Definition is_owned (own: own_env) (p: place ): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
   let uninit := PathsMap.get id own.(own_uninit) in
@@ -41,9 +41,9 @@ Definition is_owned (p: place) (own: own_env) : bool :=
   Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
   && Paths.exists_ (fun p' => is_prefix p' p) init.
 
-Definition is_deep_owned (p: place) (own: own_env) : bool :=
+Definition is_deep_owned (own: own_env) (p: place) : bool :=
   (* p is owned and no p's children in uninit *)
-  is_owned p own &&
+  is_owned own p &&
     let id := local_of_place p in
     let init := PathsMap.get id own.(own_init) in
     let uninit := PathsMap.get id own.(own_uninit) in
@@ -51,7 +51,7 @@ Definition is_deep_owned (p: place) (own: own_env) : bool :=
 
 (* check that parents of p are not in uninit (slightly different from
    the condition in is_owned) *)
-Definition prefix_is_owned (p: place) (own: own_env) : bool :=
+Definition prefix_is_owned (own: own_env) (p: place) : bool :=
   let id := local_of_place p in
   let uninit := PathsMap.get id own.(own_uninit) in
   (* no p's prefix in uninit and there is some p's prefix in init *)
@@ -74,7 +74,7 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
   | Eref _ _ p _ =>
       (* we only check p which represents/owns a memory location *)
       if place_owns_loc p then
-        is_owned p own
+        is_owned own p
       else
         false
   | Eunop _ pe _ =>
@@ -84,6 +84,10 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
   | _ => true
 end.          
 
+Definition move_place (own: own_env) (p: place) : own_env :=
+  (mkown (remove_place p own.(own_init))
+     (add_place own.(own_universe) p own.(own_uninit))
+     own.(own_universe)).
 
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
@@ -91,13 +95,11 @@ Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
   | Emoveplace p ty =>
       (** FIXME: when to use valid_owner? *)
       let p := valid_owner p in
-      if is_deep_owned p own then
+      if is_deep_owned own p then
         (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
         partial owned *)
         (* remove p from init and add p and its children to uninit *)
-        Some (mkown (remove_place p own.(own_init))
-                (add_place own.(own_universe) p own.(own_uninit))
-                own.(own_universe))
+        Some (move_place own p)
       else
         (* Error! We must move a deeply owned place! *)
         None
@@ -124,13 +126,21 @@ this assignment. *)
 Definition own_check_assign (own: own_env) (p: place) : option own_env :=
   (* check that parents of p are not in uninit (slightly different
   from the condition in is_owned) *)
-  if prefix_is_owned p own then
+  if prefix_is_owned own p then
     Some (mkown (add_place own.(own_universe) p own.(own_init))
             (remove_place p own.(own_uninit))
             own.(own_universe))
   else
     None.             
 
+
+(* Drop place state *)
+
+Inductive drop_place_state : Type :=
+| drop_fully_owned
+    (p: place)
+    (l: list place) : drop_place_state
+.
   
 (** Continuation *)
   
@@ -139,6 +149,8 @@ Inductive cont : Type :=
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
 | Kcall: option place -> function -> env -> own_env -> cont -> cont
+(* used to record Dropplace state *)
+| Kdropplace: function -> option drop_place_state -> list (place * bool) -> env -> own_env -> cont -> cont
 | Kdropcall: ident -> val -> option drop_member_state -> members -> cont -> cont
 .
 
@@ -181,7 +193,8 @@ Inductive state: Type :=
 (* Simulate elaborate drop *)
 | Dropplace
     (f: function)
-    (l: list place)
+    (s: option drop_place_state)
+    (l: list (place * bool))
     (k: cont)
     (e: env)
     (own: own_env)
@@ -249,10 +262,13 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     step_drop
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m) E0
       (Dropstate id (Vptr b ofs) None membs k m')
-| step_dropstate_return1: forall b ofs id m f e own k,
+| step_dropstate_return1: forall b ofs id m f e own k ps s,
     step_drop
-      (Dropstate id (Vptr b ofs) None nil (Kcall None f e own k) m) E0
-      (State f Sskip k e own m)
+      (* maybe we should separate step_dropstate_return to reuse
+      step_drop because of the mismatch between Kdropplace and Kcall
+      in RustIRown and RUstIRsem *)
+      (Dropstate id (Vptr b ofs) None nil (Kdropplace f s ps e own k) m) E0
+      (Dropplace f s ps k e own m)
 | step_dropstate_return2: forall b1 b2 ofs1 ofs2 id1 id2 m k membs s,
     step_drop
       (Dropstate id1 (Vptr b1 ofs1) None nil (Kdropcall id2 (Vptr b2 ofs2) s membs k) m) E0
@@ -312,6 +328,58 @@ Inductive step_drop_mem_error : state -> Prop :=
     (DROPB: drop_box_rec_mem_error ge b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys),
     step_drop_mem_error
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m)
+.
+
+
+Inductive step_dropplace : state -> trace -> state -> Prop :=
+| step_dropplace_init1: forall f p ps k le own m full
+    (* p is not owned, so just skip it (How to relate this case with
+    RustIRsem because drop elaboration removes this place earlier in
+    generate_drop_flag *)
+    (NOTOWN: is_owned own p = false),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f None ((p, full) :: ps) k le own m)
+| step_dropplace_init2: forall f p ps k le own m st (full: bool)
+    (OWN: is_owned own p = true)
+    (DPLACE: st = drop_fully_owned p (if full then split_fully_own_place p (typeof_place p) else [p])),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f (Some st) ps k le own m)
+| step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l fp
+    (* simulate step_drop_box in RustIRsem *)
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (* Simulate free semantics *)
+    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
+    (* We are dropping p. fp is the fully owned place which is split into p::l *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
+      (Dropplace f (Some (drop_fully_owned fp l)) ps k le own m')
+| step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l fp
+    (* It corresponds to the call step to the drop glue of this struct *)
+    (PTY: typeof_place p = Tstruct orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COSTRUCT: co.(co_sv) = Struct)
+    (PADDR: eval_place ge le m p b ofs),
+    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned fp l)) ps le own k) m)
+| step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l fp
+    (PTY: typeof_place p = Tvariant orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COENUM: co.(co_sv) = TaggedUnion)
+    (PADDR: eval_place ge le m p b ofs)
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
+    (* use tag to choose the member *)
+    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
+    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned fp l)) ps le own k) m)
+| step_dropplace_next: forall f ps k le own m fp,
+    step_dropplace (Dropplace f (Some (drop_fully_owned fp nil)) ps k le own m) E0
+      (Dropplace f None ps k le (move_place own fp) m)
+| step_dropplace_return: forall f k le own m,
+    step_dropplace (Dropplace f None nil k le own m) E0
+      (State f Sskip k le own m)
 .
 
 
@@ -376,41 +444,18 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
 
 (** dynamic drop semantics: simulate the drop elaboration *)
-(** Small-step drop semantics *)
-| step_drop_box: forall le m m' k ty b' ofs' f b ofs p
-    (* We assume that drop(p) where p is box type has been expanded in *)
-(*     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
-    (PADDR: eval_place ge le m p b ofs)
-    (PTY: typeof_place p = Tbox ty)
-    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
-    (* Simulate free semantics *)
-    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
-    step (State f (Sdrop p) k le m) E0 (State f Sskip k le m')
-(* | step_drop_struct: forall m k orgs co id p b ofs f le *)
-(*     (* It corresponds to the call step to the drop glue of this struct *) *)
-(*     (PTY: typeof_place p = Tstruct orgs id) *)
-(*     (SCO: ge.(genv_cenv) ! id = Some co) *)
-(*     (COSTRUCT: co.(co_sv) = Struct) *)
-(*     (PADDR: eval_place ge le m p b ofs), *)
-(*     step *)
-(*       (State f (Sdrop p) k le m) E0 *)
-(*       (Dropstate id (Vptr b ofs) None co.(co_members) (Kcall None f le k) m) *)
-(* | step_drop_enum: forall m k p orgs co id fid fty tag b ofs f le *)
-(*     (PTY: typeof_place p = Tvariant orgs id) *)
-(*     (SCO: ge.(genv_cenv) ! id = Some co) *)
-(*     (COENUM: co.(co_sv) = TaggedUnion) *)
-(*     (PADDR: eval_place ge le m p b ofs) *)
-(*     (* big step to evaluate the switch statement *) *)
-(*     (* load tag  *) *)
-(*     (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag)) *)
-(*     (* use tag to choose the member *) *)
-(*     (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)), *)
-(*     step *)
-(*     (State f (Sdrop p) k le m) E0 *)
-(*     (Dropstate id (Vptr b ofs) (type_to_drop_member_state fid fty) nil (Kcall None f le k) m) *)
-(* | step_dropstate: forall id v s membs k m S E *)
-(*     (SDROP: step_drop (Dropstate id v s membs k m) E S), *)
-(*     step (Dropstate id v s membs k m) E S *)
+| step_to_dropplace: forall f p le own m drops k universe
+    (UNI: own.(own_universe) ! (local_of_place p) = Some universe)
+    (SPLIT: split_drop_place ge universe p (typeof_place p) = OK drops),
+    (* get the owned place to drop *)
+    step (State f (Sdrop p) k le own m) E0
+      (Dropplace f None drops k le own m)
+| step_in_dropplace: forall f s ps k le own m E S
+    (SDROP: step_dropplace (Dropplace f s ps k le own m) E S),
+    step (Dropplace f s ps k le own m) E S
+| step_dropstate: forall id v s membs k m S E
+    (SDROP: step_drop (Dropstate id v s membs k m) E S),
+    step (Dropstate id v s membs k m) E S
     
 | step_storagelive: forall f k le m id own,
     step (State f (Sstoragelive id) k le own m) E0 (State f Sskip k le own m)
@@ -542,29 +587,29 @@ Inductive function_entry_mem_error (f: function) (vargs: list val) (m: mem) (e: 
       function_entry_mem_error f vargs m e.
 
 Inductive step_mem_error : state -> Prop :=
-| step_assign_error1: forall f e p k le m,
+| step_assign_error1: forall f e p k le m own,
     eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_error2: forall f e p k le m b ofs,
+    step_mem_error (State f (Sassign p e) k le own m)
+| step_assign_error2: forall f e p k le m b ofs own,
     eval_place ge le m p b ofs ->
     eval_expr_mem_error ge le m e ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_error3: forall f e p k le m b ofs v v1 ty,
+    step_mem_error (State f (Sassign p e) k le own m)
+| step_assign_error3: forall f e p k le m b ofs v v1 ty own,
     eval_place ge le m p b ofs ->
     eval_expr ge le m e v ->
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     assign_loc_mem_error ge ty m b ofs v1 ->
-    step_mem_error (State f (Sassign p e) k le m)
-| step_assign_variant_error1: forall f e p k le m enum_id fid,
+    step_mem_error (State f (Sassign p e) k le own m)
+| step_assign_variant_error1: forall f e p k le m enum_id fid own,
     (* error in evaluating lhs *)
     eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error2: forall f e p k le m b ofs enum_id fid,
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)
+| step_assign_variant_error2: forall f e p k le m b ofs enum_id fid own,
     (* error in storing the tag *)
     eval_place ge le m p b ofs ->
     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error3: forall f e p k le m m' tag b ofs enum_id fid co orgs,
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)
+| step_assign_variant_error3: forall f e p k le m m' tag b ofs enum_id fid co orgs own,
     typeof_place p = Tvariant orgs enum_id ->
     eval_place ge le m p b ofs ->
     ge.(genv_cenv) ! enum_id = Some co ->   
@@ -572,8 +617,8 @@ Inductive step_mem_error : state -> Prop :=
     Mem.storev Mint32 m (Vptr b ofs) (Vint (Int.repr tag)) = Some m' ->    
     (* error in evaluating the rhs *)
     eval_expr_mem_error ge le m' e ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
-| step_assign_variant_error4: forall f e p k le m1 m2 b ofs enum_id fid v v1 ty co tag orgs,
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)
+| step_assign_variant_error4: forall f e p k le m1 m2 b ofs enum_id fid v v1 ty co tag orgs own,
     typeof_place p = Tvariant orgs enum_id ->
     ge.(genv_cenv) ! enum_id = Some co ->
     field_type fid (co_members co) = OK ty ->
@@ -584,8 +629,8 @@ Inductive step_mem_error : state -> Prop :=
     eval_expr ge le m2 e v ->
     (* error in evaluating the address of the downcast *)
     eval_place_mem_error ge le m2 (Pdowncast p fid ty) ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1)
-| step_assign_variant_error5: forall f e p k le m1 m2 b ofs enum_id fid v v1 ty co tag orgs b1 ofs1,
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m1)
+| step_assign_variant_error5: forall f e p k le m1 m2 b ofs enum_id fid v v1 ty co tag orgs b1 ofs1 own ,
     typeof_place p = Tvariant orgs enum_id ->
     ge.(genv_cenv) ! enum_id = Some co ->
     field_type fid (co_members co) = OK ty ->
@@ -598,21 +643,21 @@ Inductive step_mem_error : state -> Prop :=
     eval_place ge le m2 (Pdowncast p fid ty) b1 ofs1 ->
     (* error in storing the rhs to downcast *)
     assign_loc_mem_error ge ty m2 b1 ofs1 v1 ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1)                   
-| step_box_error1: forall le e p k m1 m2 f b ty,
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m1)                   
+| step_box_error1: forall le e p k m1 m2 f b ty own,
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     (* error in storing the size *)
     ~ Mem.valid_access m2 Mptr b (- size_chunk Mptr) Writable ->
-    step_mem_error (State f (Sbox p e) k le m1)
-| step_box_error2: forall le e p k m1 m2 m3 f b ty,
+    step_mem_error (State f (Sbox p e) k le own m1)
+| step_box_error2: forall le e p k m1 m2 m3 f b ty own,
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
     (* error in evaluating the rhs *)
     eval_expr_mem_error ge le m3 e ->
-    step_mem_error (State f (Sbox p e) k le m1)
-| step_box_error3: forall le e p k m1 m2 m3 f b ty v v1,
+    step_mem_error (State f (Sbox p e) k le own m1)
+| step_box_error3: forall le e p k m1 m2 m3 f b ty v v1 own,
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
@@ -620,8 +665,8 @@ Inductive step_mem_error : state -> Prop :=
     sem_cast v (typeof e) ty = Some v1 ->
     (* error in storing the rhs *)
     assign_loc_mem_error ge ty m3 b Ptrofs.zero v1 ->
-    step_mem_error (State f (Sbox p e) k le m1)
-| step_box_error4: forall le e p k m1 m2 m3 m4 f b ty v v1,
+    step_mem_error (State f (Sbox p e) k le own m1)
+| step_box_error4: forall le e p k m1 m2 m3 m4 f b ty v v1 own,
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
@@ -630,8 +675,8 @@ Inductive step_mem_error : state -> Prop :=
     assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
     (* error in evaluating the address of lhs *)
     eval_place_mem_error ge le m4 p ->
-    step_mem_error (State f (Sbox p e) k le m1)
-| step_box_error5: forall le e p k m1 m2 m3 m4 f b ty v v1 pb pofs,
+    step_mem_error (State f (Sbox p e) k le own m1)
+| step_box_error5: forall le e p k m1 m2 m3 m4 f b ty v v1 pb pofs own,
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
@@ -641,77 +686,77 @@ Inductive step_mem_error : state -> Prop :=
     eval_place ge le m4 p pb pofs ->
     (* error in assigning the allocated block to the lhs *)
     assign_loc_mem_error ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) ->
-    step_mem_error (State f (Sbox p e) k le m1)
-| step_drop_box_error1: forall le m k f p
+    step_mem_error (State f (Sbox p e) k le own m1)
+| step_drop_box_error1: forall le m k f p own
     (PADDR: eval_place_mem_error ge le m p),
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_box_error2: forall le m k f b ofs p ty
+    step_mem_error (State f (Sdrop p) k le own m)
+| step_drop_box_error2: forall le m k f b ofs p ty own
     (PADDR: eval_place ge le m p b ofs)
     (PTY: typeof_place p = Tbox ty)
     (PVAL: deref_loc_mem_error (Tbox ty) m b ofs),
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_box_error3: forall le m k f b ofs p ty b' ofs'
+    step_mem_error (State f (Sdrop p) k le own m)
+| step_drop_box_error3: forall le m k f b ofs p ty b' ofs' own
     (PADDR: eval_place ge le m p b ofs)
     (PTY: typeof_place p = Tbox ty)
     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
     (FREE: extcall_free_sem_mem_error (Vptr b' ofs') m),
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_struct_error: forall p orgs id m k f le
+    step_mem_error (State f (Sdrop p) k le own m)
+| step_drop_struct_error: forall p orgs id m k f le own
     (PTY: typeof_place p = Tstruct orgs id)
     (PADDR: eval_place_mem_error ge le m p),
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_enum_error1: forall p orgs id m k f le
+    step_mem_error (State f (Sdrop p) k le own m)
+| step_drop_enum_error1: forall p orgs id m k f le own
     (PTY: typeof_place p = Tvariant orgs id)
     (* error in evaluating the place *)
     (PADDR: eval_place_mem_error ge le m p),
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_enum_error2: forall m k p orgs id b ofs f le
+    step_mem_error (State f (Sdrop p) k le own m)
+| step_drop_enum_error2: forall m k p orgs id b ofs f le own
     (PTY: typeof_place p = Tvariant orgs id)
     (PADDR: eval_place ge le m p b ofs)
     (* error in loading the tag *)
     (* load tag  *)
     (TAG: ~Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable),
-    step_mem_error (State f (Sdrop p) k le m)
+    step_mem_error (State f (Sdrop p) k le own m)
 | step_dropstate_error: forall id v s membs k m,
     step_drop_mem_error (Dropstate id v s membs k m) ->
     step_mem_error (Dropstate id v s membs k m)
                    
-| step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels,
+| step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels own,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist_mem_error ge le m al tyargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step_mem_error (State f (Scall p a al) k le m)
+    step_mem_error (State f (Scall p a al) k le own m)
 | step_internal_function_error: forall vf f vargs k m e
     (FIND: Genv.find_funct ge vf = Some (Internal f)),
     function_entry_mem_error f vargs m e ->
     step_mem_error (Callstate vf vargs k m)
-| step_return_0_error: forall f k le m,
+| step_return_0_error: forall f k le m own,
     Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn None) k le m)
-| step_return_1_error1: forall f a k le m,
+    step_mem_error (State f (Sreturn None) k le own m)
+| step_return_1_error1: forall f a k le m own,
     eval_expr_mem_error ge le m a ->
-    step_mem_error (State f (Sreturn (Some a)) k le m)
-| step_return_2_error2: forall f a k le m v,
+    step_mem_error (State f (Sreturn (Some a)) k le own m)
+| step_return_2_error2: forall f a k le m v own,
     eval_expr ge le m a v ->
     Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn (Some a)) k le m)
-| step_skip_call_error: forall f k le m,
+    step_mem_error (State f (Sreturn (Some a)) k le own m)
+| step_skip_call_error: forall f k le m own,
     is_call_cont k ->
     Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f Sskip k le m)
-| step_returnstate_error1: forall p v m f k e,
+    step_mem_error (State f Sskip k le own m)
+| step_returnstate_error1: forall p v m f k e own,
     eval_place_mem_error ge e m p ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
-| step_returnstate_error2: forall p v m f k e b ofs ty,
+    step_mem_error (Returnstate v (Kcall (Some p) f e own k) m)
+| step_returnstate_error2: forall p v m f k e b ofs ty own,
     ty = typeof_place p ->
     eval_place ge e m p b ofs ->
     assign_loc_mem_error ge ty m b ofs v ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
-| step_ifthenelse_error:  forall f a s1 s2 k e m,
+    step_mem_error (Returnstate v (Kcall (Some p) f e own k) m)
+| step_ifthenelse_error:  forall f a s1 s2 k e m own,
     eval_expr_mem_error ge e m a ->
-    step_mem_error (State f (Sifthenelse a s1 s2) k e m)
+    step_mem_error (State f (Sifthenelse a s1 s2) k e own m)
 .
          
 

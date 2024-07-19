@@ -657,6 +657,17 @@ Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> 
     drop_box_rec_mem_error b ofs m (ty :: tys)
 .
 
+Fixpoint split_fully_own_place (p: place) (ty: type) :=
+  match ty with
+  | Tbox ty'  =>
+      split_fully_own_place (Pderef p ty') ty' ++ [p]
+  | Tstruct _ _
+  | Tvariant _ _  =>
+      [p]
+  | _ => nil
+  end.
+
+
 End SMALLSTEP.
 
 End SEMANTICS.

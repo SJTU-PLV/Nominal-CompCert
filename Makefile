@@ -166,7 +166,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 # Rust front-end
 
 RUSTFRONTENT=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
-  RustIRsem.v\
+  RustIRsem.v RustIRown.v\
   Rustlightgen.v\
   RustIRgen.v \
   InitDomain.v InitAnalysis.v ElaborateDrop.v\
