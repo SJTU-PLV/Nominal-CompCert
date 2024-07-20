@@ -475,8 +475,11 @@ Proof.
       apply H.
       destruct H19 as [[_ Z]_]. congruence.
 Admitted.
-      
 
+(** Solution1: weaken Hconstr2 *)
+(** Solution2: add free_preservation back *)
+
+(** But the introduce of [mid_hidden] is to show the absence of such *weird* injection of positions, why it cannot work? *)
 Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
     let w1 := injpw j12 m1 m2 Hm12 in
     let w2 := injpw j23 m2 m3 Hm23 in
