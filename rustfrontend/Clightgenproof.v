@@ -294,6 +294,13 @@ simulation *)
 Definition well_formed_env (f: function) (e: env) : Prop :=
   forall id, ~ In id (var_names (f.(fn_params) ++ f.(fn_vars))) -> e!id = None.
 
+Lemma var_names_app: forall a b, 
+  var_names (a ++ b) = var_names a ++ var_names b. 
+Proof. 
+  induction a; intros. 
+  - simpl. auto. 
+  - simpl. f_equal. apply IHa.
+Qed.
 
 
 Lemma wf_env_target_none: forall j e te l id f,
@@ -303,7 +310,12 @@ Lemma wf_env_target_none: forall j e te l id f,
     In id l ->
     te!id = None.
 Proof.
-Admitted.
+  intros j e te l id f MENV WF DISJ IN. red in MENV. specialize (MENV id). 
+  eapply list_disjoint_sym in DISJ. 
+  eapply list_disjoint_notin in DISJ; eauto. 
+  apply WF in DISJ.   
+  rewrite DISJ in MENV. inv MENV. auto.  
+Qed. 
 
 Lemma alloc_variables_wf_env: forall ce l id e1 e2 m1 m2,
     alloc_variables ce e1 m1 l e2 m2 ->
@@ -961,6 +973,34 @@ Proof.
       eauto. eauto.
 Qed. 
 
+Lemma alignof_blockcopy_1248: forall ty ofs,
+  access_mode ty = By_copy
+  -> sizeof ge ty > 0 -> (alignof_blockcopy ge ty | Ptrofs.unsigned ofs)
+  -> (Ctypes.alignof_blockcopy tge (to_ctype ty) | Ptrofs.unsigned ofs). 
+Proof. 
+  intros. 
+  induction ty; inv H; simpl in *; eauto.
+  - destruct ((prog_comp_env prog) ! i) eqn: A; inv H0.
+    inv TRANSL. 
+    apply match_prog_comp_env0 in A. 
+    destruct (co_sv c). 
+    destruct A as (tco & B & C & D & E & F). 
+    rewrite B. rewrite <- F.
+    eauto. 
+    destruct A as ( tco & uid & tfid & ufid & un & B & C & D & E & F & I & J & K).
+    rewrite B. rewrite J. eauto. 
+  - destruct ((prog_comp_env prog) ! i) eqn: A; inv H0. 
+    inv TRANSL. 
+    apply match_prog_comp_env0 in A. 
+    destruct (co_sv c). 
+    destruct A as (tco & B & C & D & E & F). 
+    rewrite B. rewrite <- F.
+    eauto. 
+    destruct A as ( tco & uid & tfid & ufid & un & B & C & D & E & F & I & J & K).
+    rewrite B. rewrite J. eauto. 
+Qed. 
+  
+(* cited from SimplLocalsproof.v assign_loc_inject *)
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->
     Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
@@ -970,13 +1010,176 @@ Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
       Clight.assign_loc tge (to_ctype ty) tm loc' ofs' Full v' tm'
       /\ Mem.inject f' m' tm'
       /\ inj_incr (injw f (Mem.support m) (Mem.support tm)) (injw f' (Mem.support m') (Mem.support tm')).
-Admitted.
+Proof. 
+  intros f ty m loc ofs v m' tm loc' ofs' v' Hassign Hloc Hval Hmem. 
+  inv Hassign.
+  - exploit Mem.storev_mapped_inject; eauto.  
+    intros. destruct H1 as [m2 [MSTOREV MINJM2]].      
+    eexists. eexists.
+    esplit. 
+    + econstructor; eauto. 
+      destruct ty; eauto. 
+    + split. eauto. 
+    inv Hmem.
+    
+    econstructor. eauto. unfold inject_incr_disjoint. intros. 
+    rewrite H1 in H2. inv H2. 
+    inv GE. unfold  Mem.sup_include. unfold sup_In.
+    apply Mem.support_storev in H0. congruence.  
+    apply Mem.support_storev in MSTOREV. congruence. 
+  - (* by copy *)
+    inv Hloc. inv Hval.
+    rename b' into bsrc. rename ofs'0 into osrc. 
+    rename loc into bdst. rename ofs into odst.
+    rename loc' into bdst'. rename b2 into bsrc'.
+    exploit sizeof_match; eauto. inv TRANSL.  
+    assert (Ctypes.prog_comp_env tprog = tge) by auto. 
+    rewrite H6 in match_prog_comp_env0. eauto. 
+    intros EQSIZE. 
+    destruct (zeq (sizeof ge ty) 0). 
+    + assert (bytes = nil).
+      { exploit (Mem.loadbytes_empty m bsrc (Ptrofs.unsigned osrc) (sizeof ge ty)).
+        lia. congruence. }
+      subst.
+      destruct (Mem.range_perm_storebytes tm bdst' (Ptrofs.unsigned (Ptrofs.add odst (Ptrofs.repr delta))) nil)
+      as [tm' SB].
+      simpl. red; intros; extlia.
+      exists f. exists tm'.
+      split. eapply Clight.assign_loc_copy; eauto.
+      destruct ty; simpl in *; congruence.  
+      intros; extlia.  
+      intros; extlia.
+      rewrite EQSIZE. 
+      rewrite e; right; lia.
+      apply Mem.loadbytes_empty. lia.
+      exploit Mem.storebytes_empty_inject; eauto. 
+      intro TMINJ. 
+      split. eauto.
+      (* inj_incr *)
+      econstructor. eauto. unfold inject_incr_disjoint. intros. 
+      rewrite H6 in H7. inv H7. 
+      exploit Mem.support_storebytes. eapply H5. congruence.
+      exploit Mem.support_storebytes. eapply SB. congruence.
+    + exploit Mem.loadbytes_length. eauto. intro LEN. 
+      assert (SZPOS: sizeof ge ty > 0). 
+      {generalize (sizeof_pos ge ty). lia. }
+      assert (RPSRC: Mem.range_perm m bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sizeof ge ty) Cur Nonempty).
+        eapply Mem.range_perm_implies. eapply Mem.loadbytes_range_perm. eauto. auto with mem. 
+      assert (RPDST: Mem.range_perm m bdst (Ptrofs.unsigned odst) (Ptrofs.unsigned odst + sizeof ge ty) Cur Nonempty).
+        replace (sizeof ge ty) with (Z.of_nat (List.length bytes)).
+        eapply Mem.range_perm_implies. eapply Mem.storebytes_range_perm. eauto. eauto with mem.   
+        rewrite LEN. apply Z2Nat.id. lia.
+      assert (PSRC: Mem.perm m bsrc (Ptrofs.unsigned osrc) Cur Nonempty).
+        apply RPSRC. lia. 
+      assert (PDST: Mem.perm m bdst (Ptrofs.unsigned odst) Cur Nonempty).
+        apply RPDST. lia.
+      exploit Mem.address_inject.  eauto. eapply PSRC.  eauto. intros EQ1.
+      exploit Mem.address_inject.  eauto. eexact PDST. eauto. intros EQ2.
+      exploit Mem.loadbytes_inject; eauto. intros [bytes2 [A B]].
+      exploit Mem.storebytes_mapped_inject; eauto. intros [tm' [C D]].
+      exists f. exists tm'. 
+      split. eapply Clight.assign_loc_copy; try rewrite EQ1; try rewrite EQ2; eauto. 
+      destruct ty; simpl in *; eauto. 
+      intros; eapply Mem.aligned_area_inject with (m := m); eauto. 
+      apply Ctypes.alignof_blockcopy_1248. 
+      apply sizeof_alignof_blockcopy_compat.
+      rewrite EQSIZE. auto.  
+      exploit alignof_blockcopy_1248. eauto. eauto. eapply H1. eauto. eauto. 
+      intros; eapply Mem.aligned_area_inject with (m := m); eauto. 
+      apply Ctypes.alignof_blockcopy_1248. 
+      apply sizeof_alignof_blockcopy_compat.
+      rewrite EQSIZE. auto.    
+      exploit alignof_blockcopy_1248. eauto. eauto. eapply H2. eauto. eauto. 
+      rewrite EQSIZE.   
+      eapply Mem.disjoint_or_equal_inject with (m := m); eauto.
+      apply Mem.range_perm_max with Cur; auto. 
+      apply Mem.range_perm_max with Cur; auto.
+      rewrite EQSIZE. auto. 
+      split. auto. 
+      (* inj_incr *)
+      econstructor. eauto. unfold inject_incr_disjoint. intros. 
+      rewrite H6 in H7. inv H7. 
+      exploit Mem.support_storebytes. eapply H5. congruence.
+      exploit Mem.support_storebytes. eapply C. congruence.
+Qed. 
+
+Ltac TrivialInject :=
+  match goal with
+  | [ H: None = Some _ |- _ ] => discriminate
+  | [ H: Some _ = Some _ |- _ ] => inv H; TrivialInject
+  | [ H: match ?x with Some _ => _ | None => _ end = Some _ |- _ ] => destruct x; TrivialInject
+  | [ H: match ?x with true => _ | false => _ end = Some _ |- _ ] => destruct x eqn:?; TrivialInject
+  | [ |- exists v2', Some ?v = Some v2' /\ _ ] => exists v; split; auto
+  (* | [ H:  match match ?i0 with IBool  => _ | _ => _ end with ?v4 => ?v5 | _ => _ end = _ |- Some _ ] => destruct i0; simpl in *; TrivialInject *)
+  | _ => idtac
+  end.
 
 Lemma sem_cast_to_ctype_inject: forall f v1 v1' v2 t1 t2 m,
     sem_cast v1 t1 t2 = Some v2 ->
     Val.inject f v1 v1' ->
     exists v2', Cop.sem_cast v1' (to_ctype t1) (to_ctype t2) m = Some v2' /\ Val.inject f v2 v2'.
-Admitted.
+Proof. 
+  unfold sem_cast; unfold Cop.sem_cast; intros; destruct t1; simpl in *; TrivialInject.
+  - destruct t2; inv H0; simpl in *;
+     try (destruct i; simpl in *);
+    try (destruct f0; simpl in *); TrivialInject.  
+  -  destruct t2; inv H0; simpl in *; TrivialInject; try(destruct i0; destruct (Archi.ptr64); simpl in *; TrivialInject; simpl in *);
+    try (destruct (intsize_eq I8 I32); TrivialInject; inv e);
+    try (destruct (intsize_eq I16 I32); TrivialInject; inv e);
+    try (destruct f0; simpl in *; TrivialInject).  
+    destruct (intsize_eq I32 I32).  esplit.  eauto. exfalso. apply n. auto.        
+  - destruct t2; inv H0; simpl in *; 
+    try(destruct i);  
+    try(destruct Archi.ptr64 );
+    try (destruct f0; simpl in *);
+    TrivialInject. 
+    econstructor. eauto. auto.    
+  - destruct t2; inv H0; simpl in *;
+    try (destruct f0);
+    try (destruct i); 
+    try (destruct f1); TrivialInject. 
+  - destruct t2; inv H0; simpl in *; 
+    try(destruct i; destruct (Archi.ptr64)); 
+    try (destruct f0); TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i; destruct (Archi.ptr64));
+    try (destruct f0); TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i; destruct (Archi.ptr64));
+    try (destruct f0); TrivialInject. 
+    econstructor; eauto; TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i; destruct (Archi.ptr64));
+    try (destruct f0); TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i0; destruct (Archi.ptr64)); 
+    try (destruct f0); 
+    try (destruct (ident_eq i i0~1); TrivialInject); 
+    try (destruct (ident_eq i i0~0); TrivialInject); 
+    try (inv H);
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i0; destruct (Archi.ptr64)); 
+    try (destruct f0); 
+    try (destruct (ident_eq i i0~1); TrivialInject); 
+    try (destruct (ident_eq i i0~0); TrivialInject); 
+    try (inv H);
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+  Qed. 
 
 Lemma extcall_free_injp: forall se tse v tv m m' tm t j Hm,
     extcall_free_sem se [v] m t Vundef m' ->
@@ -1150,8 +1353,9 @@ Lemma function_entry_inject:
       /\ match_env j2 e te
       /\ Mem.inject j2 m2 tm2
       /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
-Admitted.
-
+Proof. 
+Admitted. 
+  
 (* transition of match_cont *)
 Lemma unchanged_on_blocks_match_cont: forall m tm tm' bs j k tk,
     Mem.unchanged_on (fun b ofs => In b bs) tm tm' ->
@@ -2576,7 +2780,7 @@ Proof.
     exploit eval_expr_inject; eauto. instantiate (1:= le0).
     intros (v' & ER & INJV1).
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
-    intros (v1' & CASTINJ & INJV2).
+    intros (v1' & CASTINJ & INJV2).  
     exploit assign_loc_inject. eauto. eauto. eapply INJV2. eauto.
     intros (j2 & tm2 & TASS & INJA & INCR2).
     erewrite place_to_cexpr_type in *;eauto.

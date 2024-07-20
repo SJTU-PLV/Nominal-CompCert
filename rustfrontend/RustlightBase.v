@@ -275,6 +275,7 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
       assign_loc ce ty m b ofs v m'
   | assign_loc_copy: forall b' ofs' bytes m',
       access_mode ty = By_copy ->
+      complete_type ce ty = true ->
       (* consider a = b ( a and b are struct ) *)
       (* evaluate b is (Vptr b' ofs'), evaluate a is (b,ofs) *)      
       (sizeof ce ty > 0 -> (alignof_blockcopy ce ty | Ptrofs.unsigned ofs')) ->
