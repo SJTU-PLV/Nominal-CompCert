@@ -1850,8 +1850,8 @@ Qed.
   Proof.
     constructor.
     - constructor. rewrite m2'_support. constructor. admit. (*wrong*)
-      inv MATCHSUP2. rewrite <- H0. inv UNCHANGE1. rewrite <- unchanged_on_thread_e.
-      inv INJ12. inv mi_thread. inv Hms. auto.
+      inv MATCHSUP2. rewrite <- H0. destruct UNCHANGE1 as [[_ X]_].
+      inv INJ12. inv mi_thread. inv Hms. congruence.
       auto.
     - constructor.
       + intros.
@@ -1993,8 +1993,8 @@ Qed.
      constructor.
      - constructor. constructor. admit.
        inv MATCHSUP2. rewrite m2'_support. rewrite <- H0.
-       inv INJ23. inv mi_thread. inv Hms. rewrite H2. inv UNCHANGE3.
-       auto.
+       inv INJ23. inv mi_thread. inv Hms. rewrite H2. destruct UNCHANGE3 as [[_ X]_].
+       congruence.
        auto.
     - (*mem_inj*)
       constructor.
@@ -2254,5 +2254,29 @@ Proof.
   intro. congruence. lia. auto. auto.
 Qed.
 
+Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
+|external_mid_hidden_intro :
+  forall j12 j23 m1 m2 m3 Hm12 Hm23
+    (** This case says that for any related external blocks [j13 b1 = Some b3],
+        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
+    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
+                 j12 b1 = Some (b2, d) -> j23 b2 <> None)
+    (** This cases says that for any external stack block [with permission] in m2
+        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
+    (Hconstr2: forall b2 ofs2 b3 d2, fst b2 <> Mem.tid (Mem.support m2) ->
+                Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
+                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
+    external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
 
+Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
+    let w1 := injpw j12 m1 m2 Hm12 in
+    let w2 := injpw j23 m2 m3 Hm23 in
+    injp_acce  (injpw (compose_meminj j12 j23) m1 m3 Hm13) (injpw j13' m1' m3' Hm13') -> external_mid_hidden w1 w2 ->
+    exists j12' j23' m2' Hm12' Hm23',
+      let w1' := injpw j12' m1' m2' Hm12' in
+      let w2' := injpw j23' m2' m3' Hm23' in
+      j13' = compose_meminj j12' j23' /\
+      injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
+Proof.
+Admitted.
 (* Lemma injp_acco_outgoing_construction : forall  *)

@@ -730,7 +730,7 @@ Qed.
 
      Lemma injp_acce_tid : forall w1 w2, injp_acce w1 w2 -> injp_tid w2 = injp_tid w1.
     Proof.
-      intros. inv H. inv H4. simpl. auto.
+      intros. inv H. destruct H4 as [[_ X] _]. simpl. auto.
     Qed.
 
     Lemma injp_acc_thc_tid : forall w1 w2, injp_acc_thc w1 w2 -> injp_tid w2 = injp_tid w1.
@@ -755,7 +755,7 @@ Qed.
     Proof.
       intros. destruct w1 as [j1 m1 tm1 Htm1]. destruct w2 as [j2 m2 tm2 Htm2].
       destruct w3 as [j3 m3 tm3 Htm3].
-      inv H. inv H0. destruct H11 as [S11 H11]. destruct H12 as [S12 H12].
+      inv H. inv H0. destruct H11 as [[S11 S11'] H11]. destruct H12 as [[S12 S12'] H12].
       destruct H18 as [[A B] H18]. destruct H19 as [[C D] H19].
       constructor; eauto.
       - eapply Mem.ro_unchanged_trans; eauto. inversion H11. eauto.
@@ -764,13 +764,13 @@ Qed.
          eapply H9, H16; eauto using Mem.valid_block_unchanged_on.
       - intros b ofs p Hb ?.
         eapply H10, H17; eauto using Mem.valid_block_unchanged_on.
-      - split. congruence.
+      - split. split. setoid_rewrite <- A.  auto. congruence.
         eapply mem_unchanged_on_trans_implies_valid; eauto.
         unfold loc_unmapped, Mem.thread_external_P. simpl.
         intros b1 _ [Hb Hb0] Hb1. split.
         destruct (j2 b1) as [[b2 delta] | ] eqn:Hb'; eauto.
         edestruct H14; eauto. contradiction. congruence.
-      - split. congruence.
+      - split. split. setoid_rewrite <- C. auto. congruence.
         eapply mem_unchanged_on_trans_implies_valid; eauto.
         unfold loc_out_of_reach, Mem.thread_external_P. simpl.
         intros b2 ofs2 [Hb2 Hb2'] Hv. split. intros b1 delta Hb'.
@@ -798,9 +798,9 @@ Qed.
     Proof.
       intros. inv H.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0. congruence.
+      split. split. unfold Mem.next_tid. simpl. lia. simpl in H0. simpl. congruence.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0.  inv Hm.
+      split. split; simpl. unfold Mem.next_tid. simpl. lia. simpl in H0.  inv Hm.
       inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
       congruence.
@@ -813,9 +813,9 @@ Qed.
     Proof.
       intros. inv H.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0. congruence.
+      split. constructor; simpl. lia. simpl in H0. lia.
       constructor; try red; intros; eauto.
-      split. simpl. simpl in H0.  inv Hm.
+      split. constructor; simpl. lia. simpl in H0.  inv Hm.
       inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
       congruence.
@@ -847,7 +847,9 @@ Qed.
       intros. inv H.
       inv H0. simpl in H1.
       constructor; eauto.
-      - destruct H8 as [S8 H8]. inv S8. simpl in H0. split. simpl. congruence.
+      - destruct H8 as [S8 H8]. inv S8. simpl in H0. split. split; simpl.
+        simpl in H. setoid_rewrite <- H. reflexivity.
+        congruence.
         inv H8. constructor.
         + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
@@ -857,7 +859,7 @@ Qed.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
       - destruct H9 as [S9 H9]. inv S9.
         apply Mem.mi_thread in Hm as Hs. inv Hs. destruct Hms as [X Y].
-        split. simpl in H0. congruence.
+        split. split.  simpl in H. setoid_rewrite <- H. auto. simpl in H0. congruence.
         inv H9. constructor.
         + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -873,7 +875,7 @@ Qed.
       intros. inv H.
       inv H0. simpl in H1.
       constructor; eauto.
-      - destruct H8 as [S8 H8]. inv S8. split. simpl. congruence.
+      - destruct H8 as [S8 H8]. inv S8. split. split; simpl. setoid_rewrite <- H. auto. congruence.
         inv H8. constructor.
         + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
@@ -882,7 +884,7 @@ Qed.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
       - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. inv Hs. destruct Hms as [X Y].
-        split. simpl. congruence.
+        split. split; simpl. setoid_rewrite <- H. auto. congruence.
         inv H9. constructor.
         + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -921,7 +923,9 @@ Qed.
      intros. unfold Mem.valid_block. inv Htc2. simpl. apply Mem.sup_create_in.
      inv Htc1. inv Htc2. simpl in *.
      constructor; eauto.
-     - destruct H7 as [S7 H7]. split. simpl. congruence.
+     - destruct H7 as [[S7 S7'] H7]. split. split; simpl. unfold Mem.next_tid. simpl.
+       rewrite app_length. simpl. unfold Mem.next_tid in S7. lia.
+       congruence.
        inv H7. constructor.
        + red. intros. apply VALID1. eapply unchanged_on_support; eauto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
@@ -929,8 +933,8 @@ Qed.
          red. split; auto. simpl. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-      - destruct H9 as [S9 H9]. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
-        split. simpl. congruence.
+      - destruct H9 as [[S9 S9'] H9]. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+        split. split; simpl. unfold Mem.next_tid in *. simpl. rewrite app_length. simpl. lia. congruence.
         inv H9. constructor.
         + red. intros. eauto. apply VALID2. apply unchanged_on_support. auto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -952,7 +956,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      apply Mem.mi_thread in Hm as Hmi. inv Hmi.  destruct Hms as [X Y].
      constructor; eauto.
-     - destruct H6 as [S6 H6]. split. simpl. congruence.
+     - destruct H6 as [[S6 S6'] H6]. split. split; simpl. auto. congruence.
         inv H6. constructor.
         + red. intros.  apply VALID1. apply unchanged_on_support. auto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1' b ofs k p0).
@@ -960,8 +964,8 @@ Qed.
           red. split. auto. congruence. reflexivity.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. auto.
-      - destruct H7 as [S7 H7]. 
-        split. simpl. congruence.
+      - destruct H7 as [[S7 S7'] H7]. 
+        split. split; simpl. auto. congruence.
         inv H7. constructor.
         + red. intros. apply VALID2. apply unchanged_on_support. auto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -983,7 +987,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      apply Mem.mi_thread in Hm as Hmi. inv Hmi. destruct Hms as [X Y]. simpl in Hid.
      constructor; eauto.
-     - destruct H7 as [S7 H7]. split. simpl. congruence.
+     - destruct H7 as [[S7 S7'] H7]. split. split; simpl. auto. congruence.
        inv H7. constructor.
        + red. intros. apply VALID1. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
@@ -993,7 +997,7 @@ Qed.
          eapply unchanged_on_contents; eauto. split; auto.
      - destruct H9 as [S9 H9]. split.
        apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
-       simpl in *. congruence.
+       simpl in *. split; simpl. unfold Mem.next_tid in *. simpl. lia. congruence.
        inv H9. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -1015,7 +1019,7 @@ Qed.
      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
      apply Mem.mi_thread in Hm as Hmi. inv Hmi. destruct Hms as [X Y]. simpl in Hid.
      constructor; eauto.
-     - destruct H7 as [S7 H7]. split. simpl. congruence.
+     - destruct H7 as [[S7 S7'] H7]. split. split; simpl. auto. congruence.
        inv H7. constructor.
        + red. intros. apply VALID1. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
@@ -1023,9 +1027,9 @@ Qed.
          red. split; auto. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-     - destruct H9 as [S9 H9]. split.
+     - destruct H9 as [[S9 S9'] H9]. split.
        apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
-       simpl in *. congruence.
+       simpl in *. split; auto.
        inv H9. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
@@ -1952,10 +1956,10 @@ Qed.
             inv Htc1. inv Htc2.
             unfold wP', wP''.
             econstructor; try red; intros; eauto.
-            - split. simpl. eauto.
+            - split. split; simpl. rewrite app_length. simpl. lia. eauto.
               constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
               intros. simpl. reflexivity. intros. reflexivity.
-            - split. simpl. eauto.
+            - split. split;  simpl. rewrite app_length. simpl. lia. eauto.
               constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
               intros. simpl. reflexivity. intros. reflexivity.
             - congruence.

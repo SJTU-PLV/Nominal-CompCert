@@ -11,7 +11,7 @@ Require Import Integers.
 Require Import Values.
 Require Import Memory.
 
-Require Import CallconvBig.
+Require Import CallconvBig InjpAccoComp.
 
 Require Import RelClasses.
 
@@ -375,7 +375,7 @@ Proof.
   split;
   congruence.
 Qed.
-
+(*
 Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
 |external_mid_hidden_intro :
   forall j12 j23 m1 m2 m3 Hm12 Hm23
@@ -389,7 +389,7 @@ Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
                 Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
                 exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
     external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
-
+ *)
 
 (** From the incoming world [w1], where the internal memory is hidden, we will construct a 
     mid-level memory [m2] to get [w11] and [w12]. This construction is either [I: Initial state]
@@ -534,9 +534,7 @@ Proof.
       destruct H20 as [[_ Z]_]. congruence.
 Qed.
 
-(** Solution1: weaken Hconstr2 *)
-(** Solution2: add free_preservation back *)
-
+(*
 (** But the introduce of [mid_hidden] is to show the absence of such *weird* injection of positions, why it cannot work? *)
 Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
     let w1 := injpw j12 m1 m2 Hm12 in
@@ -550,7 +548,7 @@ Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12
 Proof.
   (*need to be proved in another file*)
 Admitted.
-
+*)
 Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
     Val.inject (compose_meminj j1 j2) v1 v3 ->
     exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.

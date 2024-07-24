@@ -5523,10 +5523,13 @@ Record unchanged_on_i (m_before m_after: mem) : Prop := mk_unchanged_on_i {
     unchanged_on (thread_external_P m_before) m_before m_after
 }.
 
+Definition match_sup_e (s1 s2 : sup) :=
+  (length (stacks s1) <= length (stacks s2))%nat /\ tid s1 = tid s2.
+
 (** The external context switch : other threads should not modify [my] private memory *)
 Record unchanged_on_e (m_before m_after: mem) : Prop := mk_unchanged_on_e {
   unchanged_on_thread_e:
-    tid (support m_before) = tid (support m_after);
+    match_sup_e (support m_before) (support m_after);
   unchanged_on_e':
     unchanged_on (thread_internal_P m_before) m_before m_after
 }.

@@ -407,9 +407,11 @@ Inductive injp_acce :  relation injp_world :=
                      inject_separated f f' m1 m2 ->
                      injp_acce (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
-Record unchanged_on_g (P : block -> Z -> Prop) (m_before m_after : mem) : Prop := mk_unchanged_on_g
-  { unchanged_on_thread_g : Mem.tid (Mem.support m_before) <> Mem.tid (Mem.support m_after);
-    unchanged_on_g' : Mem.unchanged_on (Mem.thread_internal_P P m_before) m_before m_after }.
+Record unchanged_on_g (P : block -> Z -> Prop) (m_before m_after : mem) : Prop :=
+  mk_unchanged_on_g
+    { unchanged_on_thread_g : (Mem.next_tid (Mem.support m_before) <= Mem.next_tid (Mem.support m_after))%nat
+                              /\ Mem.tid (Mem.support m_before) <> Mem.tid (Mem.support m_after);
+      unchanged_on_g' : Mem.unchanged_on (Mem.thread_internal_P P m_before) m_before m_after }.
 
 (** injp_accg: the transition for one thread [t] to another (usually the current running) thread,
                New threads may be introduced, the thread [t] has switched out and never runs again yet, thus its
