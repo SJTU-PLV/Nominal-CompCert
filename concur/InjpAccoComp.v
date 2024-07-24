@@ -1906,24 +1906,26 @@ Qed.
                 inversion INJ12. inversion mi_inj.
                 eapply memval_inject_incr; eauto.
           -- assert (PERM1 : Mem.perm m1 b1 ofs Cur Readable).
-             inversion UNCHANGE1. eapply unchanged_on_perm; eauto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
+             inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm; eauto.
+             red. split; auto.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
              unfold Mem.valid_block. eauto.
              assert (PERM2 : Mem.perm m2 b2 (ofs + delta) Cur Readable).
              eapply Mem.perm_inject; eauto.
              generalize UNCHANGE22. intro UNCHANGE22.
              inversion UNCHANGE22. rewrite unchanged_on_contents; eauto.
-             inversion INJ12. eauto.
-             inversion UNCHANGE1. rewrite unchanged_on_contents0; eauto.
+             inversion INJ12. 
+             inversion UNCHANGE1. inversion unchanged_on_e'. rewrite unchanged_on_contents0; eauto.
              inversion mi_inj.
              eapply memval_inject_incr; eauto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
+             red. split; auto.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
         * eapply step2_content_inject; eauto. replace (ofs + delta - ofs) with delta by lia.
           eauto.
     - intros.
       destruct (j1' b) as [[b2 d]|] eqn:?.
       exploit ADDEXISTS; eauto. inversion INJ12.
-      eapply mi_freeblocks. inversion UNCHANGE1.
+      eapply mi_freeblocks. inversion UNCHANGE1. inversion unchanged_on_e'.
       intro. apply H. apply unchanged_on_support. eauto.
       intros (b3 & ofs3 & MAP).
       inversion INJ13'. exploit mi_freeblocks; eauto.
@@ -1955,12 +1957,14 @@ Qed.
              inversion INJ12. exploit mi_perm_inv; eauto.
              intros [A|B].
              left.
-             inversion UNCHANGE1. eapply unchanged_on_perm0; eauto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
+             inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm0; eauto.
+             red. split; auto.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
              unfold Mem.valid_block. eauto.
              right. intro. apply B.
-             inversion UNCHANGE1. eapply unchanged_on_perm0; eauto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
+             inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm0; eauto.
+             red. split; auto.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
              unfold Mem.valid_block. eauto.
         * left. eapply step2_perm2; eauto. replace (ofs + delta - ofs) with delta by lia.
           eauto.
@@ -1987,7 +1991,11 @@ Qed.
      assert (IMGIN2: inject_image_in j2 (Mem.support m3)).
      eapply inject_implies_image_in; eauto.
      constructor.
-     - admit.
+     - constructor. constructor. admit.
+       inv MATCHSUP2. rewrite m2'_support. rewrite <- H0.
+       inv INJ23. inv mi_thread. inv Hms. rewrite H2. inv UNCHANGE3.
+       auto.
+       auto.
     - (*mem_inj*)
       constructor.
       + (*perm*)
@@ -2014,7 +2022,8 @@ Qed.
             eapply unchanged_on_perm; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
             eapply loc_out_of_reach_trans; eauto.
-            inversion UNCHANGE3. eapply unchanged_on_perm; eauto.
+            inversion UNCHANGE3. inversion unchanged_on_e'.  eapply unchanged_on_perm; eauto.
+            red. split; auto. admit.
             inversion INJ23. eauto.
             eapply Mem.perm_inject; eauto.
         * assert (MAP2: j2 b2 = None).
@@ -2094,11 +2103,12 @@ Qed.
             eapply Mem.perm_inject; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
             eapply loc_out_of_reach_trans; eauto.
-            inversion UNCHANGE3. erewrite unchanged_on_contents; eauto.
+            inversion UNCHANGE3. inversion unchanged_on_e'. erewrite unchanged_on_contents; eauto.
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             erewrite unchanged_on_contents0; eauto.
             eapply memval_inject_incr; eauto.
             inversion INJ23. inversion mi_inj. eauto.
+            red. split; auto. admit.
         * assert (MAP2: j2 b2 = None).
           { inversion INJ23. eauto. }
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
@@ -2184,7 +2194,8 @@ Qed.
           assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
           eapply loc_out_of_reach_trans; eauto.
           assert (PERM3: Mem.perm m3 b3 (o2 + d2) k p).
-          inversion UNCHANGE3. eapply unchanged_on_perm; eauto.
+          inversion UNCHANGE3. inversion unchanged_on_e'. eapply unchanged_on_perm; eauto.
+          red. split; auto. admit.
           eapply IMGIN2; eauto.
           inversion INJ23. exploit mi_perm_inv. eauto. apply PERM3.
           intros [A|B]; try congruence.
@@ -2202,9 +2213,10 @@ Qed.
         replace (o2 - o2) with 0 by lia. eauto.
   Admitted.
 
-  Lemma tid_s2 :
+  (*Lemma tid_s2 :
     Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2').
   Admitted.
+ *)
   
 End CONSTR_PROOF.
 
@@ -2243,4 +2255,4 @@ Proof.
 Qed.
 
 
-Lemma injp_acco_outgoing_construction : forall 
+(* Lemma injp_acco_outgoing_construction : forall  *)
