@@ -389,7 +389,21 @@ Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
                 Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
                 exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
     external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
-                                                                                             
+
+
+(** From the incoming world [w1], where the internal memory is hidden, we will construct a 
+    mid-level memory [m2] to get [w11] and [w12]. This construction is either [I: Initial state]
+    or [Y: After external].   
+
+    For I, [m2] is exactlt [m1]. For Y, [m2] is constructed by the "injp construction" algorithm.
+    These constructions are defined by us, therefore we can ensure that for any "thread-external block"
+    (i.e. allocated by other threads) [b2] in [m2], it must be *public* in both [w11] and [w12].
+    Otherwise it should not be created. 
+    
+    Therefore, we can prove the following lemma, which states that the internal accessbility of
+    [w11, w12] to [w11',w12'] can indicate the same accessbility of [w2] which hides the mid-level
+    memory
+*)
 Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
     match_injp_comp_world (w11, w12)  w1 ->
     external_mid_hidden w11 w12 ->
@@ -410,7 +424,7 @@ Proof.
     destruct (j23 b2) as [[b3 d2]|] eqn:Hj23; try congruence.
     eapply Hconstr1 in Hj12; eauto. congruence.
     erewrite <- inject_other_thread; eauto.
-  - destruct H19 as [S19 H19]. split. auto.
+  - destruct H20 as [S20 H20]. split. auto.
     eapply Mem.unchanged_on_implies; eauto.
     intros. destruct H as [X Y]. split; auto.
     red. intros. red in X. intro.
@@ -429,18 +443,59 @@ Proof.
         + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
           destruct (j23 b) as [[? ?] |] eqn: Hb2.
           unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
-          exfalso. exploit H21; eauto. intros [X Y].
+          exfalso. exploit H22; eauto. intros [X Y].
           eapply Mem.valid_block_inject_2 in Hb1; eauto.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H21; eauto. intros [X1 Y1]. intuition auto.
+          exploit H22; eauto. intros [X1 Y1]. intuition auto.
+  - red. intros. unfold compose_meminj in H. rename b2 into b3.
+    destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
+    destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
+    red in H15. specialize (H15 _ _ _ _ Hj12 H0 H1) as Hp2'.
+    eapply Mem.perm_inject in H0 as Hp2. 3: eauto. 2: eauto.
+    red in H23. specialize (H23 _ _ _ _ Hj23 Hp2 Hp2') as Hp3.
+    rewrite Z.add_assoc. auto.
 Qed.
 
 Definition match_12_cctrans : injp_world * injp_world -> injp_world -> Prop :=
   fun w2 w =>
     match_injp_comp_world w2 w /\ external_mid_hidden (fst w2) (snd w2).
 
+(** Problem : Although the "thread-external" blocks in [m2] is perfectly public from construction.
+    It may be changed during the internal execution.
+
+    [b1]                                         [xx] <- freed
+     w1                                           w1'
+    [b2] -----------------ACCI--------------->   [b2]
+     w2                                           w2'
+    [b3]                                         [b3]
+   
+    After internal execution, the [Hconstr2] may be destoryed. Why?
+    
+    When the block [b] is transfered to external, and back to internal again.
+    It is possible for the internal executions to change the values of [b3] because 
+    it is now public in second [w2'] but private in the composed world. 
+
+    Which breaks the ACCI: 
+    For values, there is a case such that the value in [b2] is Vundef but [b3] = Vint 1.
+    Then L2 does sth like [b++;], therefore Vundef -> Vundef. Vint 1 -> Vint 2. 
+    It is possbie according to the definition of ACCI.
+    
+    But the point here is: "How can L2 opearates on [b2]?" It is a private external block.
+    Since L2 cannot even see [b2], the values of its corresponding block in [b3] should
+    not change either. 
+    In other words, The simulation L1 <= L2 indicates that [b2] is not changed via ACCI.
+    But such unchanged property cannot be transfer to [b3] vid L2 <= L3.
+
+    Now the solution is we add [free_preserved] in ACCI, which requires that [b2] is freed
+    if its inverse image [b1] is freed. 
+    Therefore we can ensure that an [out_of_reach] position in m2 is not only "unchanged",
+    but also *inaccessible*. 
+    Therefore we do not have to worry the change of values in [b3] because it is also 
+    [out_of_reach] now in [w2'].
+
+    *)
 Lemma external_mid_hidden_acci: forall j12 j23 m1 m2 m3 Hm12 Hm23 j12' j23' m1' m2' m3' Hm12' Hm23',
     let w1 := injpw j12 m1 m2 Hm12 in
     let w2 := injpw j23 m2 m3 Hm23 in
@@ -455,26 +510,29 @@ Proof.
   - intros. red in Hnb0. destruct (j12 b1) as [[b2' d']|] eqn:Hj12.
     + apply H13 in Hj12 as Heq. rewrite H0 in Heq. inv Heq.
       destruct (j23 b2') as [[b3 d'']|] eqn:Hj23.
-      * apply H20 in Hj23. congruence.
+      * apply H21 in Hj23. congruence.
       * exploit Hconstr1; eauto. inv H12. destruct unchanged_on_thread_i. congruence.
     + exploit H14; eauto. intros [A B].
       exfalso. exploit Hnb0; eauto. eapply Mem.valid_block_inject_2; eauto.
-      intro. apply H. destruct H18 as [[_ Z] _]. congruence.
+      intro. apply H. destruct H19 as [[_ Z] _]. congruence.
   - intros. red in Hnb3. destruct (j23 b2) as [[b3' d']|] eqn:Hj23.
-    + apply H20 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
+    + apply H21 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
       destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1]|] eqn:FIND12.
       * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
-        exists b1, ofs1. split. admit. eauto.
+        exists b1, ofs1. split. edestruct Mem.perm_dec; eauto. exfalso.
+        eapply H15; eauto. replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
       * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
         exploit Hconstr2; eauto. congruence. inv Z.
         eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
-        intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split. admit. eauto.
-    + exploit H21; eauto. intros [A B].
+        intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
+        edestruct Mem.perm_dec; eauto. exfalso.
+        eapply H15; eauto. replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
+    + exploit H22; eauto. intros [A B].
       exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
       erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
       apply H.
-      destruct H19 as [[_ Z]_]. congruence.
-Admitted.
+      destruct H20 as [[_ Z]_]. congruence.
+Qed.
 
 (** Solution1: weaken Hconstr2 *)
 (** Solution2: add free_preservation back *)

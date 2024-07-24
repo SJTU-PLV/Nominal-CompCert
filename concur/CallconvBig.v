@@ -364,13 +364,13 @@ Next Obligation. destruct t. reflexivity. Qed.
 (** Issue: the passes using [Mem.free_left_inject] *may* break this relation, we need to check them
     They are: Inliningproof, Separation, Serverproof (*should be ok*) *)
 
-(*
+
 Definition free_preserved j m1 m1' m2' :=
   forall b1 ofs1 b2 delta,
     j b1 = Some (b2, delta) ->
     Mem.perm m1 b1 ofs1 Max Nonempty -> ~ Mem.perm m1' b1 ofs1 Max Nonempty ->
     ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
- *)
+
 
 Definition new_block_local m1 m2 :=
   forall b, ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
@@ -389,7 +389,7 @@ Inductive injp_acci : relation injp_world :=
                      Mem.unchanged_on_i (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
                      inject_separated f f' m1 m2 ->
-                     (* free_preserved f m1 m1' m2' -> *)
+                     free_preserved f m1 m1' m2' ->
                      injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 (** injp_acce: the transition for external calls: when the current thread takes the control again (thread id is the same), new threads may be introduced
@@ -443,7 +443,7 @@ Proof.
     + split. eauto. apply Mem.unchanged_on_refl.
     + apply inject_incr_refl.
     + intros b ofs. congruence.
-    (* + red. intros. congruence. *)
+    + red. intros. congruence.
   - intros w1 w2 w3 H12 H23.
     destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hb1 Hb2 Hr1 Hr2 Hp1 Hp2 [S1 H1] [S2 H2] Hf Hs].
     inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hb1' Hb2' Hr1' Hr2' Hp1' Hp2' [S1' H1'] [S2' H2'] Hf' Hs']; subst.
@@ -456,10 +456,10 @@ Proof.
       inv S2. congruence.
     + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
       inversion H1. apply unchanged_on_support; eauto.
-      intros. intro. eapply H3; eauto.
+      intros. intro. eapply H5; eauto.
     + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
       inversion H2. apply unchanged_on_support; eauto.
-      intros. intro. eapply H3; eauto.
+      intros. intro. eapply H5; eauto.
     + intros b ofs p Hb ?.
       eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
     + intros b ofs p Hb ?.
@@ -490,12 +490,12 @@ Proof.
         eapply Hs; eauto.
       * edestruct Hs'; eauto.
         intuition eauto using Mem.valid_block_unchanged_on.
-    (* + red. intros. red in H0. red in H.
+    + red. intros. red in H0. red in H.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty).
       * eapply H0; eauto.
       * red in Hp2'. intro. apply Hp2' in H6.
         eapply H; eauto. inv H2. apply unchanged_on_support.
-        eapply Mem.valid_block_inject_2; eauto. *)
+        eapply Mem.valid_block_inject_2; eauto.
 Qed.
 
 (*
