@@ -1006,16 +1006,16 @@ Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
     Val.inject f v v' ->
     Mem.inject f m tm ->
-    exists f' tm',
+    exists tm',
       Clight.assign_loc tge (to_ctype ty) tm loc' ofs' Full v' tm'
-      /\ Mem.inject f' m' tm'
-      /\ inj_incr (injw f (Mem.support m) (Mem.support tm)) (injw f' (Mem.support m') (Mem.support tm')).
+      /\ Mem.inject f m' tm'
+      /\ inj_incr (injw f (Mem.support m) (Mem.support tm)) (injw f (Mem.support m') (Mem.support tm')).
 Proof. 
   intros f ty m loc ofs v m' tm loc' ofs' v' Hassign Hloc Hval Hmem. 
   inv Hassign.
   - exploit Mem.storev_mapped_inject; eauto.  
     intros. destruct H1 as [m2 [MSTOREV MINJM2]].      
-    eexists. eexists.
+    eexists.
     esplit. 
     + econstructor; eauto. 
       destruct ty; eauto. 
@@ -1044,7 +1044,7 @@ Proof.
       destruct (Mem.range_perm_storebytes tm bdst' (Ptrofs.unsigned (Ptrofs.add odst (Ptrofs.repr delta))) nil)
       as [tm' SB].
       simpl. red; intros; extlia.
-      exists f. exists tm'.
+       exists tm'.
       split. eapply Clight.assign_loc_copy; eauto.
       destruct ty; simpl in *; congruence.  
       intros; extlia.  
@@ -1077,7 +1077,7 @@ Proof.
       exploit Mem.address_inject.  eauto. eexact PDST. eauto. intros EQ2.
       exploit Mem.loadbytes_inject; eauto. intros [bytes2 [A B]].
       exploit Mem.storebytes_mapped_inject; eauto. intros [tm' [C D]].
-      exists f. exists tm'. 
+      exists tm'. 
       split. eapply Clight.assign_loc_copy; try rewrite EQ1; try rewrite EQ2; eauto. 
       destruct ty; simpl in *; eauto. 
       intros; eapply Mem.aligned_area_inject with (m := m); eauto. 
@@ -1341,21 +1341,214 @@ Proof.
     inv Hm. simpl. reflexivity.
 Qed.
 
-Lemma function_entry_inject:
-  forall f tf m1 m2 tm1 j1 vargs tvargs e
-    (VARS:  Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars))
-    (PARAMS: Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params)),
-    function_entry ge f vargs m1 e m2 ->
-    Mem.inject j1 m1 tm1 ->
-    Val.inject_list j1 vargs tvargs ->
-    exists j2 te tm2,
-      Clight.function_entry1 tge tf tvargs tm1 te (create_undef_temps (fn_temps tf)) tm2
-      /\ match_env j2 e te
-      /\ Mem.inject j2 m2 tm2
-      /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
+Lemma Clight_list_norepet: forall f, 
+  list_norepet (var_names (fn_params f) ++ var_names (fn_vars f))
+  -> list_norepet
+  (Clight.var_names
+     (map
+        (fun elt : ident * type =>
+         (fst elt, to_ctype (snd elt)))
+        (fn_params f)) ++
+   Clight.var_names
+     (map
+        (fun elt : ident * type =>
+         (fst elt, to_ctype (snd elt)))
+        (fn_vars f))). 
 Proof. 
-Admitted. 
-  
+  intros. 
+  assert (var_names (fn_params f) = Clight.var_names
+  (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) (fn_params f))). 
+  {
+    induction (fn_params f).
+    simpl in *. auto. 
+    simpl in *. f_equal. 
+    eapply IHl. 
+    inv H. eauto. 
+  } 
+  assert (var_names (fn_vars f) = Clight.var_names
+  (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) (fn_vars f))). 
+  { apply list_norepet_append_commut in H. 
+    induction (fn_vars f).
+    simpl in *. auto. 
+    simpl in *. f_equal. 
+    eapply IHl. 
+    inv H. eauto. 
+  } 
+  congruence. 
+Qed. 
+
+Lemma sizeof_ge_tge_relation: forall ty,
+sizeof ge ty <= Ctypes.sizeof tge (to_ctype ty). 
+Proof. 
+  intros. 
+  induction ty; simpl in *; try (lia). 
+  zify. 
+  destruct H0. destruct H. subst. 
+  eapply Zmult_lt_0_le_compat_r. auto. 
+  auto. 
+  destruct H. lia. 
+  - inv TRANSL. 
+    inv match_prog_comp_env0. 
+    destruct ((prog_comp_env prog) ! i) eqn : Q.
+    apply tr_composite_some in Q. 
+    destruct (co_sv c). 
+    destruct Q as (tco & B & C & D & E & F). 
+    rewrite B. lia. 
+    destruct Q as ( tco & uid & tfid & ufid & un & B & C & D & E & F & I & J & K).
+    rewrite B. lia. 
+    destruct ((Ctypes.prog_comp_env tprog) ! i). 
+    generalize (Ctypes.co_sizeof_pos c). lia. 
+    lia. 
+    - inv TRANSL. 
+    inv match_prog_comp_env0. 
+    destruct ((prog_comp_env prog) ! i) eqn : Q.
+    apply tr_composite_some in Q. 
+    destruct (co_sv c). 
+    destruct Q as (tco & B & C & D & E & F). 
+    rewrite B. lia. 
+    destruct Q as ( tco & uid & tfid & ufid & un & B & C & D & E & F & I & J & K).
+    rewrite B. lia. 
+    destruct ((Ctypes.prog_comp_env tprog) ! i). 
+    generalize (Ctypes.co_sizeof_pos c). lia. 
+    lia. 
+Qed. 
+
+Lemma map_nil : forall (A B: Type) (f: A -> B) l, 
+nil = map f l -> l = nil.
+Proof. 
+  induction l. 
+  - auto. 
+  - simpl. intros. congruence. Qed. 
+
+Lemma bind_parameters_trans: forall vargs l e m m' te' tm tvargs j1,
+Val.inject_list j1 vargs tvargs ->
+Mem.inject j1 m tm ->
+(* Mem.inject j1 m0 m1' -> *)
+bind_parameters ge e m l vargs m' ->
+match_env j1 e te' ->
+exists tm', Clight.bind_parameters tge te' tm (map (fun elt => (fst elt, to_ctype (snd elt))) l) tvargs tm'
+/\ Mem.inject j1 m' tm' 
+/\ inj_incr (injw j1 (Mem.support m) (Mem.support tm)) (injw j1 (Mem.support m') (Mem.support tm')).
+Proof. 
+  intros vargs l e m m' te' tm tvargs j1 VINJL MINJ BIND MATCH. 
+  revert BIND MINJ MATCH. 
+  revert  l e m m' te' tm. 
+  induction VINJL. 
+  - intros. inv BIND. simpl. eexists. split; eauto. econstructor. 
+    split. auto. econstructor; eauto. 
+    econstructor; rewrite H in H0; inv H0.
+  - intros. destruct l. inv BIND. 
+    inv BIND. 
+    generalize (MATCH id). intros REL. 
+    rewrite H5 in REL. inv REL. destruct y as (b' & ty').  
+    inv H2. 
+    exploit assign_loc_inject; eauto.
+    intros (tm' & A & B & C).
+    exploit IHVINJL; eauto. 
+    intros D. destruct D as (tm'' & E & F & G).
+    eexists. split; eauto. 
+    econstructor; eauto. split; eauto. 
+    inv G. inv C. econstructor; try (eapply Mem.sup_include_trans); eauto. 
+Qed. 
+
+
+Lemma alloc_variables_inject_match: forall tm e m l j1 m' e0 e0',
+alloc_variables ge e0 m l e m'
+-> Mem.inject j1 m tm
+-> match_env j1 e0 e0'
+-> exists te' tm' j2,  Clight.alloc_variables tge e0' tm
+(map (fun elt => (fst elt, to_ctype (snd elt))) l) te' tm'
+/\ Mem.inject j2 m' tm' 
+/\ match_env j2 e te' 
+/\ inj_incr (injw j1 (Mem.support m) (Mem.support tm)) (injw j2 (Mem.support m') (Mem.support tm')).
+Proof.
+  intros tm e m l j1 m' e0 e0' ALLOC INJ MATCH. 
+  revert ALLOC INJ MATCH. 
+  revert tm e m j1 m' e0 e0'. 
+  induction l. 
+  - intros. 
+    inv ALLOC. 
+    simpl. eexists. eexists. eexists. split. econstructor. split; eauto. split. auto. split; auto. 
+    econstructor; auto;
+    rewrite H in H0; inv H0.
+  - intros. inv ALLOC. 
+    exploit Mem.alloc_parallel_inject; eauto. 
+    instantiate (1:=0). lia. instantiate (1 := (Ctypes.sizeof tge (to_ctype ty))).
+    eapply sizeof_ge_tge_relation. 
+    intros K. destruct K as (f' & m2' & b2 & ALLOCINJ & INJ2 & P & Q & R).
+    exploit IHl. eauto. eapply INJ2. 
+    (* prove IH match_env *)
+    instantiate (1:= (PTree.set id (b2, to_ctype ty) e0')).
+    red. intros. repeat rewrite PTree.gsspec. 
+    generalize (MATCH id0). intros MATCH'.
+    destruct (peq id0 id). econstructor. econstructor; eauto.
+    exploit match_env_incr; eauto.
+    simpl.
+    intro A. destruct A as (te' & tm' & j2 & TALLOC & MATCH2 & K & J ). 
+    exploit Mem.support_alloc. eapply ALLOCINJ.
+    exploit Mem.support_alloc. eapply H3. intros SUP1 SUP2. 
+    rewrite SUP1 in J.  rewrite SUP2 in J. inv J.
+    assert (INJ12: inject_incr j1 j2). 
+    {
+      eapply inject_incr_trans; eauto. 
+    }
+    exists te'. exists tm'. exists j2.  
+    split; econstructor; eauto. 
+    split; eauto.   
+    econstructor; eauto.
+    unfold inject_incr_disjoint in *.
+    intros.   
+    destruct (peq b b1). subst.  
+    + exploit H5; eauto. intros. rewrite H0 in H1. inv H1. 
+    exploit Mem.alloc_result. eapply H3. intros FM. 
+    exploit Mem.alloc_result. eapply ALLOCINJ. intros FTM. 
+    subst.  
+    unfold Mem.nextblock. 
+    split; apply Mem.freshness. 
+    + apply R in n. rewrite H in n.
+      generalize (H8 b b' delta). intros.
+      apply H1 in n; auto.
+      unfold not in *. split. intros. 
+      destruct n. apply H4. apply Mem.sup_incr_in. right; auto. 
+      destruct n. intros. apply H4. apply Mem.sup_incr_in. right; auto.  
+Qed.
+
+Lemma function_entry_inject:
+forall f tf m1 m2 tm1 j1 vargs tvargs e
+  (VARS:  Clight.fn_vars tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars))
+  (PARAMS: Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params)),
+  function_entry ge f vargs m1 e m2 ->
+  Mem.inject j1 m1 tm1 ->
+  Val.inject_list j1 vargs tvargs ->
+  exists j2 te tm2,
+    Clight.function_entry1 tge tf tvargs tm1 te (create_undef_temps (fn_temps tf)) tm2
+    /\ match_env j2 e te
+    /\ Mem.inject j2 m2 tm2
+    /\ inj_incr (injw j1 (Mem.support m1) (Mem.support tm1)) (injw j2 (Mem.support m2) (Mem.support tm2)).
+ Proof. 
+  intros f tf m1 m2 tm1 j1 vargs tvargs e. 
+  intro. intro. intros FUNCENT MEMINJ VALINJ.
+  inv FUNCENT.   
+  exploit alloc_variables_inject_match; eauto. 
+  instantiate (1:= Clight.empty_env). econstructor. 
+  intros. destruct H2 as (te' & m1' & j2 & ALLOC' & MEMINJ2 & MATCH & INJ_INCR).
+  inv INJ_INCR. 
+  exploit val_inject_list_incr; eauto. 
+  intros VALINJL2. 
+  exploit bind_parameters_trans; eauto. eauto. eauto.  
+  intros W. destruct W as (tm'  & BIND & MINJ2 & INJINCRB).  
+  eexists. eexists. eexists. split.
+  - econstructor; eauto.
+    + exploit Clight_list_norepet; eauto. intros. congruence. 
+    + rewrite VARS. rewrite PARAMS. 
+      erewrite <- map_app. eauto. 
+    + rewrite PARAMS. eauto.
+  - split; eauto. 
+    split. eauto.  
+    inv INJINCRB.
+    econstructor; try (eapply  Mem.sup_include_trans); eauto. 
+Qed.  
+
 (* transition of match_cont *)
 Lemma unchanged_on_blocks_match_cont: forall m tm tm' bs j k tk,
     Mem.unchanged_on (fun b ofs => In b bs) tm tm' ->
@@ -2762,7 +2955,6 @@ Proof.
         
 Qed.
 
-    
   
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
@@ -2782,7 +2974,7 @@ Proof.
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
     intros (v1' & CASTINJ & INJV2).  
     exploit assign_loc_inject. eauto. eauto. eapply INJV2. eauto.
-    intros (j2 & tm2 & TASS & INJA & INCR2).
+    intros (tm2 & TASS & INJA & INCR2).
     erewrite place_to_cexpr_type in *;eauto.
     erewrite expr_to_cexpr_type in *;eauto.
     eexists. split.
@@ -2794,15 +2986,15 @@ Proof.
          2. evaluation of well typed expression produces casted value (val_casted)
          3. use cast_val_casted *)
     (* match state *)
-    + assert (INCR3: inj_incr w (injw j2 (Mem.support m2) (Mem.support tm2))).
+    + assert (INCR3: inj_incr w (injw j (Mem.support m2) (Mem.support tm2))).
       etransitivity. eauto. eauto.      
       eapply match_regular_state. eauto. eauto. eauto.
       econstructor. simpl. instantiate (1 := g). eauto.
-      instantiate (1 := j2).
+      instantiate (1 := j).
       (* inject_incr and match_cont *)
-      { eapply match_cont_inj_incr; auto. inv INCR2. auto. }
+      { eapply match_cont_inj_incr; auto. }
       eauto. eauto.
-      eapply match_env_incr;eauto. inv INCR2. auto.
+      eapply match_env_incr;eauto. 
       
   (* assign_variant *)
   - inv MSTMT. simpl in H9.
@@ -2859,7 +3051,7 @@ Proof.
     intros (tv1 & SEMCAST & VINJ5).
     (* assign_loc inject *)
     exploit assign_loc_inject; eauto.
-    intros (j1 & tm3 & TASSLOC & MINJ3 & INCR3).
+    intros (tm3 & TASSLOC & MINJ3 & INCR3).
     
     (* step in target *)
     eexists. split.
@@ -2889,18 +3081,16 @@ Proof.
       econstructor.
       1-4 : eauto.
 
-    + eapply match_regular_state with (j := j1);eauto.
+    + eapply match_regular_state with (j := j);eauto.
       econstructor. instantiate (1 := initial_generator).
       auto. 
       (* inject_incr and match_cont *)
-      { eapply match_cont_inj_incr; auto. inv INCR3. auto. }
       (* inj_incr *)
       etransitivity. eauto.
       replace (Mem.support m1) with (Mem.support m2).
       replace (Mem.support tm) with (Mem.support tm2). auto.
       eapply Mem.support_store; eauto.
       eapply Mem.support_store; eauto.
-      inv INCR3. eapply match_env_incr; eauto. 
       
   (* box *)
   - inv MSTMT. simpl in H7.
@@ -2957,9 +3147,9 @@ Proof.
     exploit assign_loc_inject. eapply H4. instantiate (3 := j2).
     econstructor;eauto. eauto. eauto.
     rewrite Ptrofs.add_zero_l.
-    intros (j3 & tm4 & ASSIGNLOC1 & INJ4 & INCR3).
-    cut (match_env j3 le te).
-    2: { eapply match_env_incr;eauto. inv INCR3. eauto. }
+    intros (tm4 & ASSIGNLOC1 & INJ4 & INCR3).
+    cut (match_env j2 le te).
+    2: { eapply match_env_incr;eauto. }
     intros MENV3.
     (* eval_lvalue lhs *)
     exploit eval_place_inject. eauto. eauto.
@@ -2967,13 +3157,13 @@ Proof.
     instantiate (1 := (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
     intros (tpb & tpofs & ELHS & VINJ3).
     (* assign_loc for lhs *)
-    exploit assign_loc_inject. eapply H6. instantiate (3 := j3).
+    exploit assign_loc_inject. eapply H6. instantiate (3 := j2).
     eauto. 
     econstructor. inv INCR3. eapply H12. eauto. eauto.
     eauto. rewrite Ptrofs.add_zero_l.
-    intros (j4 & tm5 & ASSIGNLOC2 & INJ5 & INCR4).
-    cut (match_env j4 le te).
-    2: { eapply match_env_incr;eauto. inv INCR4. eauto. }
+    intros (tm5 & ASSIGNLOC2 & INJ5 & INCR4).
+    cut (match_env j2 le te).
+    2: { eapply match_env_incr;eauto. }
     intros MENV4.
     
     eexists. split.
@@ -3042,9 +3232,9 @@ Proof.
     (* match_states *)
     + econstructor. 1-3 : eauto.      
       econstructor. simpl. instantiate (1 := initial_generator). eauto.
-      instantiate (1 := j4).
+      instantiate (1 := j2).
       (* inject_incr and match_cont *)
-      assert (inject_incr j j4).
+      assert (inject_incr j j2).
       { inv INCR3. inv INCR4. eapply inject_incr_trans. eauto.
         eapply inject_incr_trans. eauto. auto. }
       { eapply match_cont_inj_incr; auto. }
@@ -3380,7 +3570,7 @@ Proof.
     inv TF. inv H1;try congruence.
 
     (* function entry inject *)
-    exploit function_entry_inject; eauto.
+    exploit function_entry_inject; eauto. 
     intros (j' & te & tm' & TENTRY & MENV1 & MINJ1 & INCR1).
     exists (Clight.State tf tf.(Clight.fn_body) tk te (create_undef_temps (fn_temps tf)) tm').
     (* step and match states *)

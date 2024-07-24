@@ -1098,8 +1098,8 @@ Proof.
   rename b' into bsrc. rename ofs'0 into osrc.
   rename loc into bdst. rename ofs into odst.
   rename loc' into bdst'. rename b2 into bsrc'.
-  rewrite <- comp_env_preserved in *.
-  destruct (zeq (sizeof tge ty) 0).
+  rewrite <- comp_env_preserved in *. 
+  destruct (zeq (sizeof tge ty) 0). 
 + (* special case size = 0 *)
   assert (bytes = nil).
   { exploit (Mem.loadbytes_empty m bsrc (Ptrofs.unsigned osrc) (sizeof tge ty)).
@@ -1109,8 +1109,8 @@ Proof.
   as [tm' SB].
   simpl. red; intros; extlia.
   exists tm'.
-  split. eapply assign_loc_copy; eauto.
-  intros; extlia.
+  split. eapply assign_loc_copy; eauto. 
+  intros; extlia.  
   intros; extlia.
   rewrite e; right; lia.
   apply Mem.loadbytes_empty. lia.
@@ -1118,20 +1118,21 @@ Proof.
   intros. rewrite <- H0. eapply Mem.load_storebytes_other; eauto.
   left. congruence.
 + (* general case size > 0 *)
-  exploit Mem.loadbytes_length; eauto. intros LEN.
-  assert (SZPOS: sizeof tge ty > 0).
-  { generalize (sizeof_pos tge ty); lia. }
+  exploit Mem.loadbytes_length. eapply H7. 
+  intros LEN.
+  assert (SZPOS: sizeof tge ty > 0). 
+  { generalize (sizeof_pos tge ty). lia. }
   assert (RPSRC: Mem.range_perm m bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sizeof tge ty) Cur Nonempty).
-    eapply Mem.range_perm_implies. eapply Mem.loadbytes_range_perm; eauto. auto with mem.
+    eapply Mem.range_perm_implies. eapply Mem.loadbytes_range_perm. eapply H7. auto with mem. 
   assert (RPDST: Mem.range_perm m bdst (Ptrofs.unsigned odst) (Ptrofs.unsigned odst + sizeof tge ty) Cur Nonempty).
     replace (sizeof tge ty) with (Z.of_nat (List.length bytes)).
-    eapply Mem.range_perm_implies. eapply Mem.storebytes_range_perm; eauto. auto with mem.
+    eapply Mem.range_perm_implies. eapply Mem.storebytes_range_perm. eauto. eauto with mem.   
     rewrite LEN. apply Z2Nat.id. lia.
   assert (PSRC: Mem.perm m bsrc (Ptrofs.unsigned osrc) Cur Nonempty).
     apply RPSRC. lia.
   assert (PDST: Mem.perm m bdst (Ptrofs.unsigned odst) Cur Nonempty).
     apply RPDST. lia.
-  exploit Mem.address_inject.  eauto. eexact PSRC. eauto. intros EQ1.
+  exploit Mem.address_inject.  eauto. eapply PSRC.  eauto. intros EQ1.
   exploit Mem.address_inject.  eauto. eexact PDST. eauto. intros EQ2.
   exploit Mem.loadbytes_inject; eauto. intros [bytes2 [A B]].
   exploit Mem.storebytes_mapped_inject; eauto. intros [tm' [C D]].
