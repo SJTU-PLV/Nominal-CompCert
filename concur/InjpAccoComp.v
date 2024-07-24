@@ -2279,4 +2279,15 @@ Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12
       injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
 Proof.
 Admitted.
+
+
+
+(** TO fix this proof:
+    1.  change the construction of s2': it should copy the more threads in (Mem.support m1'), add several
+        empty lists of positive for these threads
+    2. The Mem.next_tid s2' should be the same of Mem.next_tid (Mem.support m1')
+    3. Add the external_mid_hidden to the Section above
+    4. Fix the admits in INJ12 and INJ23 using [external_mid_hidden]
+    5. Prove that [external_mid_hidden] is preserved in our construction.
+  *)
 (* Lemma injp_acco_outgoing_construction : forall  *)
