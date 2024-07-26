@@ -171,9 +171,49 @@ Definition update_meminj12 (s1 : sup) (j1 j2 j': meminj) (si2 : sup)  :=
   update_meminj12_threads (tl (Mem.stacks s1)) (1%nat) j1 j2 j' si2.
  *)
 
-(** The constrution of memory injections *)
 
- Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
+
+(** The constrution of memory injections and the s2' *)
+
+(* Add several nil stack in stacks2 *)
+Fixpoint update_threads (stacks1 stacks2 : list (list positive)) :=
+  match stacks1, stacks2 with
+  |hd1 :: tl1, hd2 :: tl2 => hd2 :: (update_threads tl1 tl2)
+  |hd1 :: tl1, nil => nil :: (update_threads tl1 nil)
+  |nil, s2 => s2
+  end.
+
+Lemma update_threads_longer : forall s1 s2,
+    (length (update_threads s1 s2) >= length s2)%nat.
+Proof.
+  induction s1; intros; simpl.
+  - lia.
+  - destruct s2; simpl. lia. specialize (IHs1 s2). lia.
+Qed.
+
+Lemma update_threads_length_1 : forall s1 s2,
+    (length s1 >= length s2)%nat ->
+    length (update_threads s1 s2) = length s1. (** need more?*)
+Proof.
+  induction s1; intros; simpl.
+  destruct s2; inv H. reflexivity.
+  destruct s2; simpl.
+  specialize (IHs1 nil). exploit IHs1.
+  destruct s1; simpl; lia. intro. lia.
+  specialize (IHs1 s2). exploit IHs1. simpl in H. lia. intro. lia.
+Qed.
+
+Program Definition update_threads_sup2 (s1' : sup) (s2 : sup) :=
+  let stacks1 := Mem.stacks s1' in
+  let stacks2 := Mem.stacks s2 in
+  let tid := Mem.tid s2 in
+  Mem.mksup (update_threads stacks1 stacks2) tid _.
+Next Obligation.
+  generalize (update_threads_longer (Mem.stacks s1') (Mem.stacks s2)).
+  intro. generalize (Mem.tid_valid s2). intro. lia.
+Qed.
+
+Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
   match sd1' with
     |nil => (j1,j2,si1)
     |hd::tl =>
@@ -187,6 +227,10 @@ Definition update_meminj12 (s1 : sup) (j1 j2 j': meminj) (si2 : sup)  :=
        | _,_ => update_meminj12 tl j1 j2 j' si1
        end
   end.
+
+Definition update_meminj_sup (s1' : sup) (j1 j2 j': meminj) (si1 : sup) :=
+  let sd1' := Mem.sup_list s1' in
+  update_meminj12 sd1' j1 j2 j' (update_threads_sup2 s1' si1).
 
 (* results of update_meminj*)
 Definition inject_incr_no_overlap' (j j' : meminj) : Prop :=
@@ -671,12 +715,51 @@ Proof.
   + exploit H; eauto. intros (b3 & ofs3 & Hj'). eauto.
 Qed.
 
+Lemma update_threads_nth_error_1 : forall s1 s2 n p,
+    nth_error s2 n = Some p ->
+    nth_error (update_threads s1 s2) n = Some p.
+Proof.
+  induction s1; simpl; intros.
+  - eauto.
+  - destruct s2; simpl.  destruct n; inv H.
+    destruct n; inv H. reflexivity.
+    simpl. rewrite H1. eapply IHs1; eauto.
+Qed.
+
+Lemma update_threads_nth_error_2 : forall s1 s2 n p,
+        nth_error (update_threads s1 s2) n = Some p ->
+        nth_error s2 n = Some p \/ p = nil.
+Proof.
+  induction s1; simpl; intros.
+  - eauto.
+  - destruct s2; simpl. destruct n; inv H. auto.
+    exploit IHs1; eauto. intros [A | B].
+    destruct n; inv A. auto.
+    destruct n; inv H. auto.
+    simpl. exploit IHs1; eauto. intros [A | B].
+    left. rewrite H1. auto. auto.
+Qed.
+
+Lemma update_threads_sup2_In : forall b s1' s2,
+    sup_In b (update_threads_sup2 s1' s2) <-> sup_In b s2.
+Proof.
+  intros. split.
+  - intros. inv H. econstructor; eauto.
+    destruct s2. simpl in *.
+    edestruct update_threads_nth_error_2; eauto.
+    rewrite H in H1. inv H1.
+  - intros. inv H. econstructor; eauto.
+    destruct s2. simpl in *.
+    eapply update_threads_nth_error_1; eauto.
+Qed.
+
 (** Summerize of the memory injection composition. *)
 Lemma inject_incr_inv: forall j1 j2 j' s1 s2 s3 s1',
-    valid_t_blocks (Mem.sup_list s1') s2 ->
+    (* valid_t_blocks (Mem.sup_list s1') s2 -> *)
     Mem.meminj_thread_local j1 ->
     Mem.meminj_thread_local j2 ->
     Mem.meminj_thread_local j' ->
+    (Mem.next_tid s1' >= Mem.next_tid s2)%nat ->
     inject_dom_in j1 s1 ->
     inject_image_in j1 s2 ->
     inject_dom_in j2 s2 ->
@@ -699,22 +782,43 @@ Lemma inject_incr_inv: forall j1 j2 j' s1 s2 s3 s1',
                update_add_same j2 j2' j1' /\
                Mem.meminj_thread_local j1' /\
                Mem.meminj_thread_local j2' /\
-               Mem.match_sup s2 s2'.
+               Mem.tid s2 = Mem.tid s2' /\
+               Mem.next_tid s2' = Mem.next_tid s1'.
+
 Proof.
-  intros until s1'. intros Hvt Htl1 Htl2 Htl'. intros.
-  destruct (update_meminj12 (Mem.sup_list s1') j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE.
+  intros until s1'. intros Htl1 Htl2 Htl' Hntid. intros.
+  destruct (update_meminj_sup s1' j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE.
+  unfold update_meminj_sup in UPDATE.
+  (* destruct (update_meminj12 (Mem.sup_list s1') j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE. *)
   exists j1' ,j2' ,s2'.
   apply inject_dom_in_eqv in H as H'.
   apply inject_dom_in_eqv in H2 as H2'.
   apply inject_incr_disjoint_eqv in H5 as H5'.
+  assert (Hv: valid_t_blocks (Mem.sup_list s1') (update_threads_sup2 s1' s2) ).
+  red. intros. red. unfold update_threads_sup2. simpl.
+  rewrite update_threads_length_1.
+  apply Mem.sup_list_in in H6.
+  inv H6. simpl.
+  split. lia. apply nth_error_Some. congruence. auto.
+  auto.
+  assert (Hjii :  inject_image_in j1 (update_threads_sup2 s1' s2) ).
+  red. intros. apply update_threads_sup2_In. eauto.
+  assert (Hjdi : inject_dom_in j2 (update_threads_sup2 s1' s2)).
+  red. intros. apply update_threads_sup2_In. eauto.
   exploit update_compose; eauto.
   intro COMPOSE.
   exploit update_properties'; eauto.
   rewrite inject_incr_disjoint_eqv.
   intros (A & B & C & D & E & F & G & I & J & K & L & M & N & P & Q).
-  repeat apply conj; eauto. eapply add_from_to_dom_in; eauto.
+  repeat apply conj; eauto.
+  red. intros. red in C. apply C. rewrite update_threads_sup2_In; eauto.
+  eapply add_from_to_dom_in; eauto.
+  red. intros. exploit F; eauto. intros [X Y]. split; auto. rewrite <- update_threads_sup2_In; eauto.
+  red. intros. exploit G; eauto. intros [X Y]. split; auto. rewrite <- update_threads_sup2_In; eauto.
+  setoid_rewrite <- P.
+  unfold update_threads_sup2. unfold Mem.next_tid. simpl.
+  rewrite update_threads_length_1. reflexivity. auto.
 Qed.
-
 
 (* no_overlaping from update_meminj12 *)
 Lemma update_meminj_no_overlap1 : forall m1' m1 m2 j1 j1',
@@ -843,6 +947,23 @@ Proof.
   - constructor.
 Qed.
 
+
+Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
+|external_mid_hidden_intro :
+  forall j12 j23 m1 m2 m3 Hm12 Hm23
+    (** This case says that for any related external blocks [j13 b1 = Some b3],
+        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
+    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
+                 j12 b1 = Some (b2, d) -> j23 b2 <> None)
+    (** This cases says that for any external stack block [with permission] in m2
+        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
+    (Hconstr2: forall b2 ofs2 b3 d2, fst b2 <> Mem.tid (Mem.support m2) ->
+                Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
+                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
+    external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
+
+
+
 (** * The construction of intermidiate memory state m2' *)
 Section CONSTR_PROOF.
   Variable m1 m2 m3 m1' m3': mem.
@@ -872,7 +993,10 @@ Section CONSTR_PROOF.
   Hypothesis ADDSAME : update_add_same j2 j2' j1'.
   Hypothesis THREADLOCAL1: Mem.meminj_thread_local j1'.
   Hypothesis THREADLOCAL2: Mem.meminj_thread_local j2'.
-  Hypothesis MATCHSUP2: Mem.match_sup (Mem.support m2) s2'.
+  Hypothesis TID2: Mem.tid (Mem.support m2) = Mem.tid s2'.
+  Hypothesis NTID2: Mem.next_tid (Mem.support m1') = Mem.next_tid s2'.
+
+  Hypothesis EXT_HIDDEN: external_mid_hidden (injpw j1 m1 m2 INJ12) (injpw j2 m2 m3 INJ23).
 
   (** step2 of Definition C.7, defined in common/Memory.v as memory operation *)
   Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
@@ -1608,7 +1732,8 @@ Qed.
     exploit map_sup_rev'; eauto.
     intros (b1' & o1' & A & B & C & D).
     assert (b1 = b1').
-    { destruct (eq_block b1 b1'). auto.
+    { clear EXT_HIDDEN.
+      destruct (eq_block b1 b1'). auto.
       exploit INCRNOLAP'1; eauto.
       inv INJ12; eauto. inv INJ12; eauto.
       intro. inv H6.
@@ -1849,8 +1974,8 @@ Qed.
   Theorem INJ12' : Mem.inject j1' m1' m2'.
   Proof.
     constructor.
-    - constructor. rewrite m2'_support. constructor. admit. (*wrong*)
-      inv MATCHSUP2. rewrite <- H0. destruct UNCHANGE1 as [[_ X]_].
+    - constructor. rewrite m2'_support. constructor. auto.
+      destruct UNCHANGE1 as [[_ X]_].     clear EXT_HIDDEN.
       inv INJ12. inv mi_thread. inv Hms. congruence.
       auto.
     - constructor.
@@ -1868,7 +1993,10 @@ Qed.
              inversion UNCHANGE1. inversion unchanged_on_e'.
              eapply unchanged_on_perm0; eauto. red. split; auto.
              red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
-             admit.
+             inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+             destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+             inversion INJ12. inv mi_thread. exploit Hjs. eauto. intro.
+             inv Hms. congruence. exploit Hconstr1; eauto. intro. inv H1.
              unfold Mem.valid_block. eauto.
         * exploit ADDZERO; eauto. intro. subst.
           replace (ofs + 0) with ofs by lia.
@@ -1905,10 +2033,15 @@ Qed.
                 intros [PERM2 MVAL2]. rewrite <- MVAL2.
                 inversion INJ12. inversion mi_inj.
                 eapply memval_inject_incr; eauto.
-          -- assert (PERM1 : Mem.perm m1 b1 ofs Cur Readable).
+          -- assert (Htl1 : fst b1 = Mem.tid (Mem.support m1)).
+             inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+             destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+             inversion INJ12. inv mi_thread. exploit Hjs. eauto. intro.
+             inv Hms. congruence. exploit Hconstr1; eauto. intro. inv H1.             
+             assert (PERM1 : Mem.perm m1 b1 ofs Cur Readable).
              inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm; eauto.
              red. split; auto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
              unfold Mem.valid_block. eauto.
              assert (PERM2 : Mem.perm m2 b2 (ofs + delta) Cur Readable).
              eapply Mem.perm_inject; eauto.
@@ -1919,7 +2052,7 @@ Qed.
              inversion mi_inj.
              eapply memval_inject_incr; eauto.
              red. split; auto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
         * eapply step2_content_inject; eauto. replace (ofs + delta - ofs) with delta by lia.
           eauto.
     - intros.
@@ -1950,7 +2083,11 @@ Qed.
              replace (ofs + delta - ofs) with delta by lia. eauto.
              eapply MAXPERM1; eauto. unfold Mem.valid_block. eauto.
              eauto with mem. congruence.
-          -- 
+          -- assert (Htl1 : fst b1 = Mem.tid (Mem.support m1)).
+             inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+             destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+             inversion INJ12. inv mi_thread. exploit Hjs. eauto. intro.
+             inv Hms. congruence. exploit Hconstr1; eauto. intro. inv H1.
              generalize UNCHANGE22. intro UNCHANGE22.
              inversion UNCHANGE22. apply unchanged_on_perm in H0 as PERM2; eauto.
              2: inversion INJ12; eauto.
@@ -1959,16 +2096,16 @@ Qed.
              left.
              inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm0; eauto.
              red. split; auto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
              unfold Mem.valid_block. eauto.
              right. intro. apply B.
              inversion UNCHANGE1. inversion unchanged_on_e'. eapply unchanged_on_perm0; eauto.
              red. split; auto.
-             red. unfold compose_meminj. rewrite e, j2b2. reflexivity. admit.
+             red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
              unfold Mem.valid_block. eauto.
         * left. eapply step2_perm2; eauto. replace (ofs + delta - ofs) with delta by lia.
           eauto.
-  Admitted.
+  Qed.
 
 
   Lemma step2_perm2': forall b1 o1 b2 o2 b3 d k p,
@@ -1991,9 +2128,10 @@ Qed.
      assert (IMGIN2: inject_image_in j2 (Mem.support m3)).
      eapply inject_implies_image_in; eauto.
      constructor.
-     - constructor. constructor. admit.
-       inv MATCHSUP2. rewrite m2'_support. rewrite <- H0.
-       inv INJ23. inv mi_thread. inv Hms. rewrite H2. destruct UNCHANGE3 as [[_ X]_].
+     - constructor. constructor. rewrite m2'_support. setoid_rewrite <- NTID2. inv INJ13'.
+       inv mi_thread. inv Hms. auto.
+       rewrite m2'_support. rewrite <- TID2. clear EXT_HIDDEN.
+       inv INJ23. inv mi_thread. inv Hms. rewrite H0. destruct UNCHANGE3 as [[_ X]_].
        congruence.
        auto.
     - (*mem_inj*)
@@ -2016,14 +2154,23 @@ Qed.
             reflexivity. intro. replace (o1 + (o2 - o1 + d2)) with (o2 + d2) in H by lia.
             auto.
           --
+            
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             assert (PERM2 : Mem.perm m2 b2 o2 k p).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
+            assert (Htl3 : fst b3 = Mem.tid (Mem.support m3)).
+            inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+            destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+            inv INJ23. inv mi_thread. inv Hms. exploit Hjs; eauto. intro. congruence.
+            exploit Hconstr2; eauto. eauto with mem.
+            intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+            rewrite Hj1. reflexivity.
+            replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
             eapply loc_out_of_reach_trans; eauto.
             inversion UNCHANGE3. inversion unchanged_on_e'.  eapply unchanged_on_perm; eauto.
-            red. split; auto. admit.
+            red. split; auto.
             inversion INJ23. eauto.
             eapply Mem.perm_inject; eauto.
         * assert (MAP2: j2 b2 = None).
@@ -2099,6 +2246,14 @@ Qed.
             assert (PERM2 : Mem.perm m2 b2 o2 Cur Readable).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
+             assert (Htl3 : fst b3 = Mem.tid (Mem.support m3)).
+            inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+            destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+            inv INJ23. inv mi_thread. inv Hms. exploit Hjs; eauto. intro. congruence.
+            exploit Hconstr2; eauto. eauto with mem.
+            intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+            rewrite Hj1. reflexivity.
+            replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
             assert (PERM3 : Mem.perm m3 b3 (o2 + d2) Cur Readable).
             eapply Mem.perm_inject; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
@@ -2108,7 +2263,7 @@ Qed.
             erewrite unchanged_on_contents0; eauto.
             eapply memval_inject_incr; eauto.
             inversion INJ23. inversion mi_inj. eauto.
-            red. split; auto. admit.
+            red. split; auto. 
         * assert (MAP2: j2 b2 = None).
           { inversion INJ23. eauto. }
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
@@ -2193,9 +2348,17 @@ Qed.
           inversion UNC2. eapply unchanged_on_perm; eauto. eapply DOMIN2; eauto.
           assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
           eapply loc_out_of_reach_trans; eauto.
+           assert (Htl3 : fst b3 = Mem.tid (Mem.support m3)).
+            inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+            destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m2))).
+            inv INJ23. inv mi_thread. inv Hms. exploit Hjs; eauto. intro. congruence.
+            exploit Hconstr2; eauto. eauto with mem.
+            intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+            rewrite Hj1. reflexivity.
+            replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
           assert (PERM3: Mem.perm m3 b3 (o2 + d2) k p).
           inversion UNCHANGE3. inversion unchanged_on_e'. eapply unchanged_on_perm; eauto.
-          red. split; auto. admit.
+          red. split; auto.
           eapply IMGIN2; eauto.
           inversion INJ23. exploit mi_perm_inv. eauto. apply PERM3.
           intros [A|B]; try congruence.
@@ -2211,25 +2374,54 @@ Qed.
         left. eapply step2_perm1; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
         right. intro. apply P1. eapply step2_perm2; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
-  Admitted.
+  Qed.
 
-  (*Lemma tid_s2 :
-    Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2').
-  Admitted.
- *)
+  Lemma EXT_HIDDEN' : forall Hp1 Hp2,
+    external_mid_hidden (injpw j1' m1' m2' Hp1) (injpw j2' m2' m3' Hp2).
+  Proof.
+    inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+    constructor.
+    - intros.
+      rewrite m2'_support in H. rewrite <- TID2 in H.
+      destruct (j1 b1) as [[b2' d']|] eqn: Hj1.
+      + apply INCR1 in Hj1 as Heq. rewrite H0 in Heq. inv Heq.
+        specialize (Hconstr1 _ _ _ H Hj1).
+        destruct (j2 b2') as [[b3 d'']|] eqn: Hj2; try congruence.
+        apply INCR2 in Hj2. congruence.
+      + exploit ADDEXISTS; eauto.
+        intros (b3 & o3 & Hj3).
+        unfold compose_meminj in Hj3. rewrite H0 in Hj3.
+        destruct (j2' b2) as [[b3' d'']|] eqn: Hj2'; try congruence.
+    - intros. rewrite m2'_support in H. rewrite <- TID2 in H.
+      destruct (j2 b2) as [[b3' d2']|] eqn:Hj2.
+      + apply INCR2 in Hj2 as Heq. rewrite H1 in Heq. inv Heq.
+        generalize MAXPERM2. intro MAXPERM2. apply MAXPERM2 in H0 as Hpm2.
+        specialize (Hconstr2 _ _ _ _ H Hpm2 Hj2).
+        destruct Hconstr2 as (b1 & ofs1 & A & B).
+        exists b1, ofs1. split. eapply copy_perm_2; eauto. apply INCR1. auto.
+        eapply Mem.valid_block_inject_1; eauto.
+      + exploit ADDSAME; eauto. intros (b1 & A & B).
+        destruct (j1 b1) as [[b2' d']|] eqn:Hj1.
+        apply INCR1 in Hj1 as Heq. rewrite A in Heq. inv Heq.
+        specialize (Hconstr1 _ _ _ H Hj1). congruence.
+        exists b1, ofs2. split.
+        eapply step2_perm2; eauto.
+        replace (ofs2 - ofs2) with 0 by lia. auto.
+        replace (ofs2 - ofs2) with 0 by lia. auto.
+  Qed.
   
 End CONSTR_PROOF.
 
 (** main content of Lemma C.16*)
 Lemma out_of_reach_trans: forall j12 j23 m1 m2 m3 m3',
     Mem.inject j12 m1 m2 ->
-    Mem.unchanged_on (loc_out_of_reach (compose_meminj j12 j23) m1) m3 m3' ->
-    Mem.unchanged_on (loc_out_of_reach j23 m2) m3 m3'.
+    Mem.unchanged_on_e (loc_out_of_reach (compose_meminj j12 j23) m1) m3 m3' ->
+    Mem.unchanged_on_e (loc_out_of_reach j23 m2) m3 m3'.
 Proof.
-  intros.
+  intros. destruct H0 as [H' H0]. split. auto.
   inv H0. constructor; auto.
   - intros. eapply unchanged_on_perm; auto.
-  red in H. red.
+  destruct H0 as [H0 H0']. split; auto. red.
   intros b1 delta23 MAP13.  unfold compose_meminj in MAP13.
   destruct (j12 b1) as [[b2 delta2]|] eqn: MAP12; try congruence.
   destruct (j23 b2) as [[b3 delta3]|] eqn: MAP23; try congruence.
@@ -2241,7 +2433,7 @@ Proof.
   replace (ofs - (delta2 + delta3) + delta2) with (ofs - delta3).
   intro. congruence. lia. auto.
   - intros. eapply unchanged_on_contents.
-  red in H. red.
+  destruct H0 as [H0 H0']. split; auto. red.
   intros b1 delta23 MAP13. unfold compose_meminj in MAP13.
   destruct (j12 b1) as [[b2 delta2]|] eqn: MAP12; try congruence.
   destruct (j23 b2) as [[b3 delta3]|] eqn: MAP23; try congruence.
@@ -2254,20 +2446,6 @@ Proof.
   intro. congruence. lia. auto. auto.
 Qed.
 
-Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
-|external_mid_hidden_intro :
-  forall j12 j23 m1 m2 m3 Hm12 Hm23
-    (** This case says that for any related external blocks [j13 b1 = Some b3],
-        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
-    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
-                 j12 b1 = Some (b2, d) -> j23 b2 <> None)
-    (** This cases says that for any external stack block [with permission] in m2
-        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
-    (Hconstr2: forall b2 ofs2 b3 d2, fst b2 <> Mem.tid (Mem.support m2) ->
-                Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
-                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
-    external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
-
 Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
     let w1 := injpw j12 m1 m2 Hm12 in
     let w2 := injpw j23 m2 m3 Hm23 in
@@ -2278,16 +2456,47 @@ Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12
       j13' = compose_meminj j12' j23' /\
       injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
 Proof.
-Admitted.
+  intros. rename Hm12 into INJ12. rename Hm23 into INJ23. rename Hm13' into INJ13'.
+  inversion H as [? ? ? ? ? ? ? ? ROUNC1 ROUNC3 MAXPERM1 MAXPERM3 [S1 UNCHANGE1] [S3 UNCHANGE3] INCR13 DISJ13]. subst.
+   generalize (inject_implies_image_in _ _ _ INJ12).
+    intros IMGIN12.
+    generalize (inject_implies_image_in _ _ _ INJ23).
+    intros IMGIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ12).
+    intros DOMIN12.
+    generalize (inject_implies_dom_in _ _ _ INJ23).
+    intros DOMIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ13').
+    intros DOMIN13'.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
+    intros SUPINCL1.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
+    intros SUPINCL3.
+    assert (Hmtl1 : Mem.meminj_thread_local j12). inversion INJ12. inv mi_thread. auto.
+    assert (Hmtl2 : Mem.meminj_thread_local j23). inversion INJ23. inv mi_thread. auto.
+    assert (Hmtl3 : Mem.meminj_thread_local j13'). inversion INJ13'. inv mi_thread. auto.
+    assert (NTID : (Mem.next_tid (Mem.support m1') >= Mem.next_tid (Mem.support m2))%nat).
+    inversion INJ12. inv mi_thread. inv Hms. destruct S1. unfold Mem.next_tid. lia.
+     generalize (inject_incr_inv _ _ _ _ _ _ _ Hmtl1 Hmtl2 Hmtl3 NTID DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & Hmtl1' & Hmtl2' & HTID & HNTID).
+    subst.
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
+    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto. split; auto.
+    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto. split; auto. split; auto.
+    assert (SUP2' : Mem.support m2' = m2'_sup).
+    unfold m2'. rewrite m2'_support. reflexivity. auto.
+    exists j12', j23', m2', INJ12', INJ23'.
+    repeat apply conj; eauto.
+  - constructor; eauto. eapply ROUNC2; eauto. eapply MAXPERM2; eauto.
+    split; auto. eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H1. split; auto. red. unfold compose_meminj. rewrite H1. auto.
+    split. split; rewrite SUP2'. setoid_rewrite HNTID. auto. auto.
+    eapply Mem.unchanged_on_implies.
+    eapply UNCHANGE21; eauto. intros. apply H1.
+  - constructor; eauto. eapply ROUNC2; eauto. eapply MAXPERM2; eauto.
+    split. split; rewrite SUP2'. setoid_rewrite HNTID. auto. auto.
+    eapply Mem.unchanged_on_implies. eapply UNCHANGE22; eauto. intros. apply H1.
+    eapply out_of_reach_trans; eauto. split; auto.
+  - eapply EXT_HIDDEN'; eauto.
+Qed.
 
-
-
-(** TO fix this proof:
-    1.  change the construction of s2': it should copy the more threads in (Mem.support m1'), add several
-        empty lists of positive for these threads
-    2. The Mem.next_tid s2' should be the same of Mem.next_tid (Mem.support m1')
-    3. Add the external_mid_hidden to the Section above
-    4. Fix the admits in INJ12 and INJ23 using [external_mid_hidden]
-    5. Prove that [external_mid_hidden] is preserved in our construction.
-  *)
-(* Lemma injp_acco_outgoing_construction : forall  *)
