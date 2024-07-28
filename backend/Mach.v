@@ -286,7 +286,8 @@ Inductive state: Type :=
 Definition parent_sp (s: list stackframe) : val :=
   match s with
   (* TODO: should the following case be Vundef? *)
-  | nil => Vptr (Stack 1%positive) Ptrofs.zero
+  (* | nil => Vptr (Stack 1%positive) Ptrofs.zero *)
+  | nil => Vundef
   | Stackbase sp ra :: s' => sp
   | Stackframe f sp ra c :: s' => sp
   end.
@@ -353,6 +354,7 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s vf sp sig ros c rs m f ra id,
       Genv.find_funct ge vf = Some (Internal f) ->
       ros_is_ident ros rs id ->
+      (exists fd, Genv.find_funct ge (ros_address ge ros rs) = Some fd) ->
       return_address_offset f c ra ->
       step (State s vf sp (Mcall sig ros :: c) rs m)
         E0 (Callstate (Stackframe vf sp (Val.offset_ptr vf ra) c :: s)
@@ -361,6 +363,7 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s vf stk soff sig ros c rs m f m' m'' id,
       Genv.find_funct ge vf = Some (Internal f) ->
       ros_is_ident ros rs id ->
+      (exists fd, Genv.find_funct ge (ros_address ge ros rs) = Some fd) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk (Ptrofs.unsigned soff) (Ptrofs.unsigned soff + f.(fn_stacksize)) = Some m' ->
@@ -408,7 +411,7 @@ Inductive step: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some (Internal f) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
-      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      Mem.free m stk (Ptrofs.unsigned soff) (Ptrofs.unsigned soff + f.(fn_stacksize)) = Some m' ->
       Mem.pop_stage m' = Some m'' ->
       step (State s vf (Vptr stk soff) (Mreturn :: c) rs m)
         E0 (Returnstate s rs m'')
@@ -438,7 +441,8 @@ Inductive step: state -> trace -> state -> Prop :=
 (* maybe use it maybe to other place *)
 Inductive callstack_function_defined : list stackframe -> Prop :=
 | cfd_empty:
-    callstack_function_defined nil
+    forall sp ra,
+      callstack_function_defined (Stackbase sp ra :: nil)
 | cfd_cons:
     forall vf sp' ra c' cs' trf
       (FINDF: Genv.find_funct ge vf = Some (Internal trf))

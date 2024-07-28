@@ -4175,6 +4175,53 @@ Proof.
   intros. rewrite FREE; simpl. eauto with mem.
 Qed.
 
+Lemma free_nothing_inj:
+  forall m b lo hi m',
+  lo >= hi ->
+  free m b lo hi = Some m' ->
+  mem_inj inject_id m m'.
+Proof.
+  intros. unfold inject_id. exploit free_result; eauto. intros FREE. constructor; intros; inv H1.
+(* perm *)
+  rewrite Z.add_0_r. repeat red in H2. repeat red. simpl.
+  unfold setpermN, interval_length.
+  destruct (lo <? hi) eqn:?. red in H. unfold "<?" in Heqb0. destr_in Heqb0. clear Heqb0.
+  destruct m; cbn in *. unfold setpermN'.
+  unfold NMap.get. destruct Block.eq_block. subst b2. rewrite NMap.gss. auto. rewrite NMap.gso; auto.
+(* align *)
+  apply Z.divide_0_r.
+(* mem_contents *)
+  unfold unchecked_free. simpl. rewrite Z.add_0_r.
+  generalize (((mem_contents m) # b2) ## ofs). intros.
+  destruct m0; constructor. destruct v; econstructor; eauto.
+  rewrite Ptrofs.add_zero. auto.
+Qed.
+
+Lemma free_nothing_inj_reverse:
+  forall m b lo hi m',
+  lo >= hi ->
+  free m b lo hi = Some m' ->
+  mem_inj inject_id m' m.
+Proof.
+  intros. unfold inject_id. exploit free_result; eauto. intros FREE. constructor; intros; inv H1.
+(* perm *)
+  rewrite Z.add_0_r. repeat red in H2. repeat red. simpl in H2.
+  unfold setpermN, interval_length in H2.
+  destruct (lo <? hi) eqn:?. red in H. unfold "<?" in Heqb0. destr_in Heqb0. clear Heqb0.
+  destruct m; cbn in *.
+  unfold NMap.get in H2. destruct Block.eq_block.
+  subst b2. rewrite NMap.gss in H2. auto.
+  rewrite NMap.gso in H2; auto.
+(* align *)
+  apply Z.divide_0_r.
+(* mem_contents *)
+  unfold unchecked_free. simpl. rewrite Z.add_0_r.
+  generalize (((mem_contents m) # b2) ## ofs). intros.
+  destruct m0; constructor. destruct v; econstructor; eauto.
+  rewrite Ptrofs.add_zero. auto.
+Qed.
+
+
 Lemma free_right_inj:
   forall f m1 m2 b lo hi m2',
   mem_inj f m1 m2 ->
@@ -4391,6 +4438,34 @@ Proof.
   intros. unfold inject_id in H; inv H. replace (ofs + 0) with ofs by lia.
   apply memval_lessdef_refl.
   tauto.
+Qed.
+
+Lemma memval_lessdef_trans:
+  forall v1 v2 v3, memval_lessdef v1 v2 -> memval_lessdef v2 v3 -> memval_lessdef v1 v3.
+Proof.
+  unfold memval_lessdef, inject_id. intros.
+  inv H; inv H0; constructor. rewrite val_inject_id in *.
+  eapply Val.lessdef_trans; eauto.
+Qed.
+
+Theorem extends_trans:
+  forall m1 m2 m3, extends m1 m2 -> extends m2 m3 -> extends m1 m3.
+Proof.
+  intros. inv H. inv H0. constructor; unfold inject_id in *.
+  congruence.
+  inv mext_inj0. inv mext_inj1. constructor; intros; inv H.
+  exploit mi_perm0; eauto. rewrite Z.add_0_r. intros.
+  exploit mi_perm1; eauto. rewrite Z.add_0_r. auto.
+  apply Z.divide_0_r.
+  rewrite Z.add_0_r.
+  exploit mi_memval0; eauto. rewrite ! Z.add_0_r. intros.
+  exploit mi_memval1; eauto. rewrite ! Z.add_0_r. intros.
+  eapply memval_lessdef_trans; eauto.
+  intros.
+  exploit mext_perm_inv1; eauto. intros.
+  destruct H0.
+  exploit mext_perm_inv0; eauto.
+  right. intro. inv mext_inj0. exploit mi_perm0; eauto. rewrite Z.add_0_r. auto.
 Qed.
 
 Theorem load_extends:
@@ -4743,6 +4818,44 @@ Proof.
   eapply perm_free_inv in A; eauto. destruct A as [[A B]|A]; auto.
   subst b0. right; eapply perm_free_2; eauto.
   right; intuition eauto using perm_free_3.
+Qed.
+
+Theorem free_nothing_extends:
+  forall m b lo hi m',
+  lo >= hi ->
+  free m b lo hi = Some m' ->
+  extends m m'.
+Proof.
+  intros m b lo hi m' LE FREE. constructor.
+  erewrite <- support_free; eauto.
+  eapply free_nothing_inj; eauto.
+  exploit free_result; eauto. intros FREE'. subst m'.
+  assert (LE': lo <? hi = false). unfold "<?". destr.
+  left. repeat red in H. repeat red. unfold unchecked_free in H. simpl in H.
+  destruct m. cbn in *.
+  unfold setpermN, interval_length, NMap.get in H. rewrite LE' in H. simpl in H.
+  destruct Block.eq_block.
+  subst b0. rewrite NMap.gss in H. auto.
+  rewrite NMap.gso in H; auto.
+Qed.
+
+Theorem free_nothing_extends_reverse:
+  forall m b lo hi m',
+  lo >= hi ->
+  free m b lo hi = Some m' ->
+  extends m' m.
+Proof.
+  intros m b lo hi m' LE FREE. constructor.
+  erewrite support_free; eauto.
+  eapply free_nothing_inj_reverse; eauto.
+  exploit free_result; eauto. intros FREE'. subst m'.
+  assert (LE': lo <? hi = false). unfold "<?". destr.
+  left. repeat red in H. repeat red. unfold unchecked_free. simpl.
+  destruct m. cbn in *.
+  unfold setpermN, interval_length, NMap.get. rewrite LE'. simpl.
+  destruct Block.eq_block.
+  subst b0. rewrite NMap.gss. auto.
+  rewrite NMap.gso; auto.
 Qed.
 
 Theorem valid_block_extends:

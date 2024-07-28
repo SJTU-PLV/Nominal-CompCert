@@ -2326,7 +2326,8 @@ Proof.
   rewrite H1 in H. inv H; (try congruence). injg H8.
   }
   econstructor; split.
-  eapply plus_right. eexact S. econstructor; eauto. eauto.
+  eapply plus_right. eexact S. econstructor; eauto.
+  eauto.
   econstructor; eauto.
   eapply Mem.sup_include_trans; eauto. red. intros.
   rewrite <- SF' in H2. erewrite Mem.support_pop_stage_1 in H2; eauto.

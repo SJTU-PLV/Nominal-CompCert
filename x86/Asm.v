@@ -432,7 +432,7 @@ Definition top_sp_stack (astk : stackadt) : val :=
 Definition parent_sp_stack' (s: list block) : val :=
   match s with
   |hd :: pa :: tl => Vptr pa Ptrofs.zero
-  |_ => Vptr (Stack 1%positive) Ptrofs.zero
+  |_ => Vundef
   end.
 
 Definition parent_sp_stack (astk : stackadt) : val :=
@@ -827,7 +827,7 @@ Definition goto_label (f: function) (lbl: label) (rs: regset) (m: mem) :=
   | Some pos =>
       match rs#PC with
       | Vptr b ofs =>
-        match Genv.find_funct ge (Vptr b ofs) with
+        match Genv.find_funct_ptr ge b with
         | Some _ => Next (rs#PC <- (Vptr b (Ptrofs.repr pos))) m
         | None => Stuck
         end
@@ -1243,12 +1243,13 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
     | _ => Stuck
     end
   | Pret =>
-    (* match inner_sp rs#SP with
-    | Some b => Next' (rs#PC <- (rs#RA)) m b
+    match inner_sp rs#SP with
+    | Some true =>
+      if check_ra_after_call ge (rs#RA) then Next' (rs#PC <- (rs#RA) #RA <- Vundef) m true else Stuck
+    | Some false =>
+      Next' (rs#PC <- (rs#RA) #RA <- Vundef) m false
     | None => Stuck
     end
-======= *)
-    if check_ra_after_call ge (rs#RA) then Next (rs#PC <- (rs#RA) #RA <- Vundef) m else Stuck
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -1292,11 +1293,10 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some sp =>
               match rs#RSP with
               | Vptr stk ofs =>
-                  (* match free' m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with *)
                   if check_topframe fsz (Mem.astack (Mem.support m)) then
                   if Val.eq sp (parent_sp_stack (Mem.astack (Mem.support m))) then
                   if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.astack (Mem.support m))) then
-                  match free' m stk 0 fsz with
+                  match free' m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + fsz) with
                   | None => Stuck
                   | Some m' =>
                       match Mem.pop_stage m' with
@@ -1451,7 +1451,7 @@ Inductive step (init_sup: sup) (ge: genv): state -> trace -> state -> Prop :=
       rs PC = Vptr b ofs ->
       forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
       forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i,
-      forall EXEC: exec_instr ge f i rs m = Next' rs' m' live,
+      forall EXEC: exec_instr init_sup ge f i rs m = Next' rs' m' live,
       step init_sup ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
@@ -1482,10 +1482,10 @@ Inductive step (init_sup: sup) (ge: genv): state -> trace -> state -> Prop :=
         (SP_NOT_VUNDEF: rs RSP <> Vundef)
         (RA_NOT_VUNDEF: rs RA <> Vundef),
       forall CALL: external_call ef ge args m t res m',
-      no_rsp_pair (loc_external_result (ef_sig ef)) ->
-      ra_after_call ge (rs#RA)->
-      rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
       forall ISP: inner_sp init_sup rs#SP = Some live,
+      no_rsp_pair (loc_external_result (ef_sig ef)) ->
+      (live = true -> ra_after_call ge (rs#RA)) ->
+      rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
       step init_sup ge (State rs m true) t (State rs' m' live).
 (* =======
       Genv.find_funct_ptr ge b = Some (External ef) ->
@@ -1649,6 +1649,8 @@ Qed.
 
 End INSTRSIZE.
 
+Notation Next rs m := (Next' rs m true).
+
 (** instrsize instantiation *)
 
 Definition instr_size_1 (i : Asm.instruction) : Z := 1.
@@ -1685,11 +1687,18 @@ Unset Program Cases.
 
 (** ** Calling convention from [li_mach] *)
 
+Variant cc_asm_mach_match_astack : stackadt -> regset -> Prop :=
+  cc_asm_mach_match_astack_intro: forall hd t tl (rs: regset),
+    rs#SP = Vptr (frame_block hd) Ptrofs.zero ->
+    cc_asm_mach_match_astack ((hd :: t) :: tl) rs.
+
 Inductive cc_mach_asm_mq (rs: regset): sup -> mach_query -> query li_asm -> Prop :=
   cc_mach_asm_mq_intro (mrs: Mach.regset) m:
     rs#PC <> Vundef ->
     valid_blockv (Mem.support m) rs#SP ->
     rs#RA <> Vundef ->
+    Val.has_type rs#RA Tptr ->
+    cc_asm_mach_match_astack (Mem.astack (Mem.support m)) rs ->
     (forall r, mrs r = rs (preg_of r)) ->
     cc_mach_asm_mq rs
       (Mem.support m)
@@ -1701,6 +1710,7 @@ Inductive cc_mach_asm_mr (rs: regset) (s: sup): mach_reply -> reply li_asm -> Pr
     rs'#SP = rs#SP ->
     rs'#PC = rs#RA ->
     Mem.sup_include s (Mem.support m') ->
+    Mem.astack s = Mem.astack (Mem.support m') ->
     (forall r, mrs' r = rs' (preg_of r)) ->
     cc_mach_asm_mr rs s (mr mrs' m') (rs', m').
 

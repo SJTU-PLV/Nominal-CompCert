@@ -35,12 +35,13 @@ Qed.
 
 Section INSTRSIZE.
 Variable instr_size : instruction -> Z.
+Variable init_sup: sup.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 
 Definition asm_instr_unchange_rsp (i : instruction) : Prop :=
   forall ge f rs m rs' m',
     stk_unrelated_instr i = true ->
-    Asm.exec_instr instr_size  ge f i rs m = Next rs' m' ->
+    Asm.exec_instr instr_size init_sup ge f i rs m = Next rs' m' ->
     rs # RSP = rs' # RSP.
 
  Lemma find_instr_eq:
@@ -328,7 +329,7 @@ Definition written_regs i : list preg :=
   
   Lemma exec_instr_only_written_regs:
     forall (ge: Genv.t Asm.fundef unit) rs1 m1 rs2 m2 f i r,
-      Asm.exec_instr instr_size ge f i rs1 m1 = Next rs2 m2 ->
+      Asm.exec_instr instr_size init_sup ge f i rs1 m1 = Next rs2 m2 ->
       ~ In  r (PC :: RA :: CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: written_regs i) ->
       rs2 # r = rs1 # r.
   Proof.
@@ -835,7 +836,7 @@ Proof.
 Definition asm_instr_unchange_sup (i : instruction) : Prop :=
   stk_unrelated_instr i = true ->
   forall ge rs m rs' m' f,
-    Asm.exec_instr instr_size ge f i rs m = Next rs' m' ->
+    Asm.exec_instr instr_size init_sup ge f i rs m = Next rs' m' ->
     Mem.support m = Mem.support m' /\
     (forall b o k p, Mem.perm m b o k p <-> Mem.perm m' b o k p).
 
@@ -913,7 +914,7 @@ Qed.
 
 Definition asm_instr_unchange_support (i : instruction) : Prop :=
   forall ge rs m rs' m' f,
-    Asm.exec_instr instr_size ge f i rs m = Next rs' m' ->
+    Asm.exec_instr instr_size init_sup ge f i rs m = Next rs' m' ->
     Mem.sup_include (Mem.support m) (Mem.support m').
 
 Lemma asm_prog_unchange_support (i : instruction) :
@@ -931,8 +932,10 @@ Proof.
     apply Mem.sup_include_alloc in Heqp. simpl in Heqp.
     eapply Mem.sup_include_trans. eauto.
     simpl. unfold Mem.sup_push_stage.  intro. destruct b; simpl; auto.
-  + erewrite <- Mem.support_free; eauto.
+  + unfold free' in Heqo1. destr_in Heqo1.
+    erewrite <- Mem.support_free. 2:eauto.
     eapply Mem.sup_include_pop_stage; eauto.
+    inv Heqo1. eapply Mem.sup_include_pop_stage; eauto.
 Qed.
 
   Section WITH_SAEQ.

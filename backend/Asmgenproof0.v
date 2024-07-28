@@ -73,6 +73,12 @@ Proof.
   intros. unfold preg_of; destruct r; simpl; congruence.
 Qed.
 
+Lemma preg_of_not_RA:
+  forall r, preg_of r <> RA.
+Proof.
+  intros. unfold preg_of; destruct r; simpl; congruence.
+Qed.
+
 Lemma preg_of_not_PC:
   forall r, preg_of r <> PC.
 Proof.
@@ -809,7 +815,7 @@ Qed.
 Section STRAIGHTLINE.
 
 Variable init_sup: sup.
-Variable ge: Genv.symtbl.
+Variable ge: genv.
 Variable fn: function.
 
 (** Straight-line code is composed of processor instructions that execute
@@ -823,23 +829,13 @@ Inductive exec_straight: code -> regset -> mem ->
                          code -> regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-<<<<<<< HEAD
-      exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
-      rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-      exec_straight (i1 :: c) rs1 m1 c rs2 m2
-  | exec_straight_step:
-      forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
-      rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-=======
-      exec_instr instr_size ge fn i1 rs1 m1 = Next rs2 m2 ->
+      exec_instr instr_size init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC (Ptrofs.repr (instr_size i1)) ->
       exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr instr_size ge fn i rs1 m1 = Next rs2 m2 ->
+      exec_instr instr_size init_sup ge fn i rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC (Ptrofs.repr (instr_size i)) ->
->>>>>>> origin/StackAware-new
       exec_straight c rs2 m2 c' rs3 m3 ->
       exec_straight (i :: c) rs1 m1 c' rs3 m3.
 
@@ -856,17 +852,10 @@ Qed.
 
 Lemma exec_straight_two:
   forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
-<<<<<<< HEAD
-  exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
-  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-  rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
-=======
-  exec_instr instr_size ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr instr_size ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr instr_size init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr instr_size init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
   rs2#PC = Val.offset_ptr rs1#PC  (Ptrofs.repr (instr_size i1)) ->
   rs3#PC = Val.offset_ptr rs2#PC  (Ptrofs.repr (instr_size i2)) ->
->>>>>>> origin/StackAware-new
   exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
 Proof.
   intros. apply exec_straight_step with rs2 m2; auto.
@@ -875,21 +864,12 @@ Qed.
 
 Lemma exec_straight_three:
   forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
-<<<<<<< HEAD
-  exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr init_sup ge fn i3 rs3 m3 = Next rs4 m4 ->
-  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-  rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
-  rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
-=======
-  exec_instr instr_size ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr instr_size ge fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr instr_size ge fn i3 rs3 m3 = Next rs4 m4 ->
+  exec_instr instr_size init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr instr_size init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr instr_size init_sup ge fn i3 rs3 m3 = Next rs4 m4 ->
   rs2#PC = Val.offset_ptr rs1#PC  (Ptrofs.repr (instr_size i1)) ->
   rs3#PC = Val.offset_ptr rs2#PC  (Ptrofs.repr (instr_size i2)) ->
   rs4#PC = Val.offset_ptr rs3#PC  (Ptrofs.repr (instr_size i3)) ->
->>>>>>> origin/StackAware-new
   exec_straight (i1 :: i2 :: i3 :: c) rs1 m1 c rs4 m4.
 Proof.
   intros. apply exec_straight_step with rs2 m2; auto.
@@ -902,24 +882,14 @@ End STRAIGHTLINE.
   (predicate [exec_straight]) correspond to correct Asm executions. *)
 
 Lemma exec_straight_steps_1:
-<<<<<<< HEAD
-  forall init_sup (ge: genv) fn c rs m c' rs' m',
+  forall init_sup ge fn c rs m c' rs' m',
   exec_straight init_sup ge fn c rs m c' rs' m' ->
-  list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
-=======
-  forall c rs m c' rs' m',
-  exec_straight c rs m c' rs' m' ->
   code_size instr_size (fn_code fn) <= Ptrofs.max_unsigned ->
->>>>>>> origin/StackAware-new
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
   code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
-<<<<<<< HEAD
-  plus (step init_sup) ge (State rs m true) E0 (State rs' m' true).
-=======
-  plus (step instr_size) ge (State rs m) E0 (State rs' m').
->>>>>>> origin/StackAware-new
+  plus (step instr_size init_sup) ge (State rs m true) E0 (State rs' m' true).
 Proof.
   induction 1; intros.
   apply plus_one.
@@ -936,15 +906,9 @@ Proof.
 Qed.
 
 Lemma exec_straight_steps_2:
-<<<<<<< HEAD
-  forall init_sup (ge: genv) fn c rs m c' rs' m',
+  forall init_sup ge fn c rs m c' rs' m',
   exec_straight init_sup ge fn c rs m c' rs' m' ->
-  list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
-=======
-  forall c rs m c' rs' m',
-  exec_straight c rs m c' rs' m' ->
   code_size instr_size (fn_code fn) <= Ptrofs.max_unsigned ->
->>>>>>> origin/StackAware-new
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
@@ -967,7 +931,7 @@ Qed.
 Section STRAIGHTLINE_OPT.
 
 Variable init_sup: sup.
-Variable ge: Genv.symtbl.
+Variable ge: genv.
 Variable fn: function.
 
 Inductive exec_straight_opt: code -> regset -> mem -> code -> regset -> mem -> Prop :=
@@ -997,13 +961,8 @@ Qed.
 
 Lemma exec_straight_opt_step:
   forall i c rs1 m1 rs2 m2 c' rs3 m3,
-<<<<<<< HEAD
-  exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
-  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-=======
-  exec_instr instr_size ge fn i rs1 m1 = Next rs2 m2 ->
+  exec_instr instr_size init_sup ge fn i rs1 m1 = Next rs2 m2 ->
   rs2#PC = Val.offset_ptr rs1#PC (Ptrofs.repr (instr_size i)) ->
->>>>>>> origin/StackAware-new
   exec_straight_opt c rs2 m2 c' rs3 m3 ->
   exec_straight init_sup ge fn (i :: c) rs1 m1 c' rs3 m3.
 Proof.
@@ -1014,13 +973,8 @@ Qed.
 
 Lemma exec_straight_opt_step_opt:
   forall i c rs1 m1 rs2 m2 c' rs3 m3,
-<<<<<<< HEAD
-  exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
-  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-=======
-  exec_instr instr_size ge fn i rs1 m1 = Next rs2 m2 ->
+  exec_instr instr_size init_sup ge fn i rs1 m1 = Next rs2 m2 ->
   rs2#PC = Val.offset_ptr rs1#PC (Ptrofs.repr (instr_size i)) ->
->>>>>>> origin/StackAware-new
   exec_straight_opt c rs2 m2 c' rs3 m3 ->
   exec_straight_opt (i :: c) rs1 m1 c' rs3 m3.
 Proof.
@@ -1047,6 +1001,7 @@ Inductive match_stack (bound: sup): list Mach.stackframe -> Prop :=
   | match_stack_nil:
       init_rs#SP <> Vundef ->
       init_rs#RA <> Vundef ->
+      Val.has_type init_rs#RA Tptr ->
       (* problem here? init_sup used as support
         valid_blockv init_sup init_rs#SP ->
       Ple init_sup bound -> *)
@@ -1084,7 +1039,7 @@ Qed.
 Lemma parent_sp_ptr: forall b s, match_stack b s -> exists b ofs, parent_sp s = Vptr b ofs.
 Proof.
   induction 1; simpl; eauto using inner_sp_ptr.
-  inv H1. repeat eexists.
+  inv H2. repeat eexists.
 Qed.
 
 Lemma parent_ra_def: forall b s, match_stack b s -> parent_ra s <> Vundef.
@@ -1093,10 +1048,10 @@ Proof.
   inv H0. congruence.
 Qed.
 
-Lemma parent_ra_type: forall s, match_stack s -> Val.has_type (parent_ra s) Tptr.
+Lemma parent_ra_type: forall b s, match_stack b s -> Val.has_type (parent_ra s) Tptr.
 Proof.
-  induction 1; simpl.
-  unfold Vnullptr; unfold Tptr; destruct Archi.ptr64; simpl; auto. inv H0. constructor.
+  induction 1; simpl. auto.
+  unfold Tptr in *; destruct Archi.ptr64 eqn:?; simpl; auto; unfold Val.has_type; rewrite Heqb0; inv H0; constructor.
 Qed.
 
 Lemma lessdef_parent_sp:
@@ -1125,7 +1080,7 @@ Lemma match_stack_incr_bound:
   Mem.sup_include b b' -> match_stack b s -> match_stack b' s.
 Proof.
   intros b b' s Hb Hs. induction Hs.
-  - constructor; auto. inv H1. eauto.
+  - constructor; auto. inv H2. eauto.
   - econstructor; eauto using valid_blockv_support.
 Qed.
 

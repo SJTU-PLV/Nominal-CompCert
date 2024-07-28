@@ -1054,6 +1054,51 @@ Definition globals_operation (op: operation) : list ident :=
 
 (** * Invariance and compatibility properties. *)
 
+Section GENV_TRANSF.
+
+Variable F1 F2 V1 V2: Type.
+Variable ge1: Genv.t F1 V1.
+Variable ge2: Genv.t F2 V2.
+Hypothesis agree_on_symbols:
+  forall (s: ident), Genv.find_symbol ge2 s = Genv.find_symbol ge1 s.
+
+Lemma eval_addressing32_preserved:
+  forall sp addr vl,
+  eval_addressing32 ge2 sp addr vl = eval_addressing32 ge1 sp addr vl.
+Proof.
+  intros.
+  unfold eval_addressing32, Genv.symbol_address; destruct addr; try rewrite agree_on_symbols;
+  reflexivity.
+Qed.
+
+Lemma eval_addressing64_preserved:
+  forall sp addr vl,
+  eval_addressing64 ge2 sp addr vl = eval_addressing64 ge1 sp addr vl.
+Proof.
+  intros.
+  unfold eval_addressing64, Genv.symbol_address; destruct addr; try rewrite agree_on_symbols;
+  reflexivity.
+Qed.
+
+Lemma eval_addressing_preserved:
+  forall sp addr vl,
+  eval_addressing ge2 sp addr vl = eval_addressing ge1 sp addr vl.
+Proof.
+  intros.
+  unfold eval_addressing; destruct Archi.ptr64; auto using eval_addressing32_preserved, eval_addressing64_preserved.
+Qed.
+
+Lemma eval_operation_preserved:
+  forall sp op vl m,
+  eval_operation ge2 sp op vl m = eval_operation ge1 sp op vl m.
+Proof.
+  intros.
+  unfold eval_operation; destruct op; auto using eval_addressing32_preserved, eval_addressing64_preserved.
+  unfold Genv.symbol_address. rewrite agree_on_symbols. auto.
+Qed.
+
+End GENV_TRANSF.
+
 (** Compatibility of the evaluation functions with value injections. *)
 
 Section EVAL_COMPAT.
