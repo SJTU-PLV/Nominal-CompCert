@@ -680,6 +680,61 @@ Proof.
         eapply Mem.valid_block_inject_2; eauto.
 Qed.
 
+Instance injp_acce_preo : PreOrder injp_acce.
+Proof.
+  split.
+  - intros [f m1 m2].
+    constructor.
+    + red. intros. congruence.
+    + red. intros. congruence.
+    + red. eauto.
+    + red. eauto.
+    + split. split; eauto. apply Mem.unchanged_on_refl.
+    + split. split; eauto. apply Mem.unchanged_on_refl.
+    + apply inject_incr_refl.
+    + intros b ofs. congruence.
+  - intros w1 w2 w3 H12 H23.
+    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 [S1 H1] [S2 H2] Hf Hs].
+    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' [S1' H1'] [S2' H2'] Hf' Hs']; subst.
+    constructor.
+    + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
+      inversion H1. apply unchanged_on_support; eauto.
+      intros. intro. eapply H3; eauto.
+    + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
+      inversion H2. apply unchanged_on_support; eauto.
+      intros. intro. eapply H3; eauto.
+    + intros b ofs p Hb ?.
+      eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
+    + intros b ofs p Hb ?.
+      eapply Hp2, Hp2'; eauto using Mem.valid_block_unchanged_on.
+    + split. inv S1. inv S1'. split. lia. congruence.
+      eapply mem_unchanged_on_trans_implies_valid; eauto.
+      unfold loc_unmapped, Mem.thread_internal_P. simpl.
+      intros b1 _ [Hb Hb0'] Hb1''. split.
+      destruct (f' b1) as [[b2 delta] | ] eqn:Hb'; eauto.
+      edestruct Hs; eauto. contradiction. auto.
+      inv S1. congruence.
+    + split. inv S2. inv S2'. split. lia. congruence.
+      eapply mem_unchanged_on_trans_implies_valid; eauto.
+      unfold loc_out_of_reach, Mem.thread_external_P. simpl.
+      intros b2 ofs2 [Hbb2 Hbb2'] Hv. split. intros b1 delta Hb'.
+      destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+            by (eapply Hf in Hb; split; congruence); subst.
+        specialize (Hbb2 b1 delta Hb). intro. apply Hbb2.
+        eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
+      * edestruct Hs; eauto.
+      * inv S2. congruence.
+    + eapply inject_incr_trans; eauto.
+    + intros b1 b2 delta Hb Hb''.
+      destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply Hf' in Hb'; split; congruence); subst.
+        eapply Hs; eauto.
+      * edestruct Hs'; eauto.
+        intuition eauto using Mem.valid_block_unchanged_on.
+Qed.
+
 (*
 Instance injp_accg_refl : Reflexive injp_accg.
 Proof.
