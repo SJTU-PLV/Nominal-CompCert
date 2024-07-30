@@ -13,6 +13,69 @@ Require Import RustIR BorrowCheckDomain BorrowCheckPolonius.
 Require Import Errors.
 Require Import RustIRown.
 
+
+(* try to define top-most shallow prefix (whose starting offset of its
+address is zero). [p'] is in the offset [ofs] of [p] *)
+(* For subplace ce p1 p2 ofs: it means that p2 is in p1 with the
+offset [ofs] *)
+Inductive subplace (ce: composite_env) (p: place) : place -> Z -> Prop :=
+| subplace_eq: subplace ce p p 0
+| subplace_field: forall p' ofs orgs id co fofs bf fid fty
+    (* &p‘ = &p + ofs *)
+    (SUB: subplace ce p p' ofs)
+    (TY: typeof_place p' = Tstruct orgs id)
+    (CO: ce ! id = Some co)
+    (FOFS: field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    (* &p'.fid = &p + ofs + fofs *)
+    subplace ce p (Pfield p' fid fty) (ofs + fofs)
+| subplace_downcast: forall p' ofs orgs id co fofs bf fid fty
+    (* &p‘ = &p + ofs *)
+    (SUB: subplace ce p p' ofs)
+    (TY: typeof_place p' = Tvariant orgs id)
+    (CO: ce ! id = Some co)
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    subplace ce p (Pdowncast p' fid fty) (ofs + fofs)
+.
+
+(** Test: try to define semantics well-typedness for a memory location *)
+
+Definition footprint := block -> Z -> Prop. 
+
+Definition empty_footprint : footprint := fun b ofs => False.
+
+Definition footprint_equiv (fp1 fp2: footprint) :=
+  forall b ofs, fp1 b ofs <-> fp2 b ofs.
+
+Definition footprint_incr (fp1 fp2: footprint) :=
+  forall b ofs, fp1 b ofs -> fp2 b ofs.
+
+Definition remove_footprint (fp: footprint) b ofs sz :=
+  fun b1 ofs1 =>
+    ((b1 = b /\ ofs <= ofs1 < ofs + sz) -> False)
+    /\ fp b1 ofs1.
+
+Definition add_footprint (fp: footprint) b ofs sz :=
+  fun b1 ofs1 =>
+    ((b1 = b /\ ofs <= ofs1 < ofs + sz))
+    \/ fp b1 ofs1.
+
+Definition in_footprint (fp: footprint) b ofs sz :=
+  forall ofs1, ofs <= ofs1 < ofs + sz -> fp b ofs1.
+
+Definition merge_footprint (fp1 fp2: footprint) :=
+  fun b ofs => fp1 b ofs \/ fp2 b ofs.
+
+Definition merge_footprint_list (l: list footprint) :=
+  fun b ofs => exists fp, In fp l -> fp b ofs.
+
+Definition footprint_disjoint (fp1 fp2: footprint) :=
+  forall b ofs, fp1 b ofs -> fp2 b ofs -> False.
+
+Definition footprint_disjoint_list (l: list footprint) :=
+  forall fp1 fp2, In fp1 l -> In fp2 l ->
+             ~ footprint_equiv fp1 fp2 ->
+             footprint_disjoint fp1 fp2.
+
 Definition scalar_type (ty: type) : bool :=
   match ty with
   | Tunit
@@ -23,6 +86,188 @@ Definition scalar_type (ty: type) : bool :=
   | Tarray _ _ => true
   | _ => false
   end.
+
+Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> type -> Prop :=
+| sem_wt_box: forall ty b ofs fp
+    (INFP: in_footprint fp b ofs (size_chunk Mptr))
+    (VALID: Mem.valid_access m Mptr b ofs Freeable)
+    (WT: forall b' ofs',
+        (* We do not restrict the value in this location *)
+        Mem.load Mptr m b ofs = Some (Vptr b' ofs') ->
+        (* Box pointer must points to the start of a block *)
+        (ofs' = Ptrofs.zero
+         /\ sem_wt_loc ce m (remove_footprint fp b ofs (size_chunk Mptr)) b' 0 ty)),
+    sem_wt_loc ce m fp b ofs (Tbox ty)
+| sem_wt_struct: forall fp b ofs co fpl orgs id
+    (CO: ce ! id = Some co)
+    (INFP: in_footprint fp b ofs (co_sizeof co))
+    (VALID: Mem.range_perm m b ofs (ofs + co_sizeof co) Cur Freeable)
+    (FPL: footprint_disjoint_list fpl)
+    (FPLCON: footprint_equiv fp (merge_footprint_list fpl))
+    (* all fields are semantically well typed *)
+    (FWT: forall n fid fty ffp fofs bf,
+        nth_error co.(co_members) n = Some (Member_plain fid fty) ->
+        nth_error fpl n = Some ffp ->
+        field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+        sem_wt_loc ce m ffp b (ofs + fofs) fty),
+    sem_wt_loc ce m fp b ofs (Tstruct orgs id)
+| sem_wt_enum: forall fp b ofs orgs id co
+    (CO: ce ! id = Some co)
+    (INFP: in_footprint fp b ofs (co_sizeof co))
+    (VALID: Mem.range_perm m b ofs (ofs + co_sizeof co) Cur Freeable)
+    (* Interpret the field by the tag and prove that it is well-typed *)
+    (FWT: forall tag fid fty fofs bf,
+        Mem.load Mint32 m b ofs = Some (Vint tag) ->
+        list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
+        variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+        sem_wt_loc ce m (remove_footprint fp b ofs fofs) b (ofs + fofs) fty),
+    sem_wt_loc ce m fp b ofs (Tvariant orgs id)
+| sem_wt_scalar: forall ty b ofs
+    (TY: scalar_type ty = true)
+    (VALID: Mem.range_perm m b ofs (ofs + sizeof ce ty) Cur Freeable)
+    (* To make sure that well-typed footprint is closed? *)
+    (WT: forall v chunk b' ofs',
+        Mem.load chunk m b ofs = Some v ->
+        v <> Vptr b' ofs'),
+    sem_wt_loc ce m (add_footprint empty_footprint b ofs (sizeof ce ty)) b ofs ty
+.
+
+(* similar to val_casted ? *)
+Inductive sem_wt_val (ce: composite_env) (m: mem) : footprint -> val -> type -> Prop :=
+| wt_val_unit:
+  sem_wt_val ce m empty_footprint (Vint Int.zero) Tunit
+| wt_val_int: forall sz si n,
+    Cop.cast_int_int sz si n = n ->
+    sem_wt_val ce m empty_footprint (Vint n) (Tint sz si)
+| wt_val_float: forall n,
+    sem_wt_val ce m empty_footprint (Vfloat n) (Tfloat Ctypes.F64)
+| wt_val_single: forall n,
+    sem_wt_val ce m empty_footprint (Vsingle n) (Tfloat Ctypes.F32)
+| wt_val_long: forall si n,
+    sem_wt_val ce m empty_footprint (Vlong n) (Tlong si)
+| wt_val_box: forall b ty fp,
+    (** Box pointer must be in the starting point of a block *)
+    sem_wt_loc ce m fp b 0 ty ->
+    sem_wt_val ce m fp (Vptr b Ptrofs.zero) (Tbox ty)
+(* TODO *)
+(* | wt_val_ref: forall b ofs ty org mut, *)
+(*     sem_vt_val (Vptr b ofs) (Treference org mut ty) *)
+| wt_val_struct: forall id orgs b ofs fp co fpl
+    (CO: ce ! id = Some co)
+    (FPL: footprint_disjoint_list fpl)
+    (FPLCON: footprint_equiv fp (merge_footprint_list fpl))
+    (* Because struct value is passed by its address, we need to show
+    that all the fields in this address is well typed value *)
+    (FWT: forall n fid fty fofs bf v ffp,
+        nth_error co.(co_members) n = Some (Member_plain fid fty) ->
+        nth_error fpl n = Some ffp ->
+        field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+        deref_loc fty m b (Ptrofs.add ofs (Ptrofs.repr fofs)) v -> 
+        sem_wt_val ce m ffp v fty),
+    sem_wt_val ce m fp (Vptr b ofs) (Tstruct orgs id)
+| wt_val_enum: forall id orgs b ofs fp co
+    (CO: ce ! id = Some co)
+    (FWT: forall tag fid fty fofs bf v,
+        Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+        list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
+        variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+        deref_loc fty m b (Ptrofs.add ofs (Ptrofs.repr fofs)) v -> 
+        sem_wt_val ce m fp v fty),
+    sem_wt_val ce m fp (Vptr b ofs) (Tvariant orgs id)
+.
+
+Inductive sem_wt_val_list (ce: composite_env) (m: mem) : list footprint -> list val -> list type -> Prop :=
+| sem_wt_val_nil:
+    sem_wt_val_list ce m nil nil nil
+| sem_wt_val_cons: forall fpl fp vl tyl v ty,
+    sem_wt_val_list ce m fpl vl tyl ->
+    sem_wt_val ce m fp v ty ->
+    sem_wt_val_list ce m (fp::fpl) (v::vl) (ty::tyl)
+.
+  
+(** Semantics Interface *)
+
+(** ** Rust Interface *)
+
+Record rust_signature : Type := mksignature {
+  sig_generic_origins: list origin;
+  sig_origins_relation: list origin_rel;
+  sig_args: list type;
+  sig_res: type;
+  sig_cc: calling_convention;
+  sig_comp_env: composite_env;
+}.
+  
+Record rust_query :=
+  rsq {
+    rsq_vf: val;
+    rsq_sg: rust_signature;
+    rsq_args: list val;
+    rsq_mem: mem;
+  }.
+
+Record rust_reply :=
+  rsr {
+    rsr_retval: val;
+    rsr_mem: mem;
+  }.
+
+Canonical Structure li_rs :=
+  {|
+    query := rust_query;
+    reply := rust_reply;
+    entry := rsq_vf;
+  |}.
+
+Inductive wt_rs_world :=
+  rsw (sg: rust_signature) (fp: footprint) (m: mem).
+
+Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
+| wt_rs_query_intro: forall sg fp m vf args fpl
+    (FPL: footprint_disjoint_list fpl)
+    (FPLCON: footprint_equiv fp (merge_footprint_list fpl))                       
+    (WT: sem_wt_val_list (sig_comp_env sg) m fpl args (sig_args sg)),
+    wt_rs_query (rsw sg fp m) (rsq vf sg args m)
+.
+
+(* Only consider ownership transfer for now. The footprints of generic
+origins are more complicated *)
+Inductive rsw_acc : wt_rs_world -> wt_rs_world -> Prop :=
+| rsw_acc_intro: forall sg fp fp' m m'
+    (UNC: Mem.unchanged_on (fun b ofs => ~ fp b ofs) m m')
+    (FPINCR: footprint_incr fp fp'),
+    rsw_acc (rsw sg fp m) (rsw sg fp' m').
+
+Inductive wt_rs_reply : wt_rs_world -> rust_reply -> Prop :=
+| wt_rs_reply_intro: forall rfp m rv sg fp
+    (WT: sem_wt_val (sig_comp_env sg) m rfp rv (sig_res sg))
+    (FPINCR: footprint_incr rfp fp),
+    wt_rs_reply (rsw sg fp m) (rsr rv m)
+.
+
+Definition wt_rs : invariant li_rs :=
+  {|
+    inv_world := Genv.symtbl * wt_rs_world;
+    symtbl_inv := fun '(se, _) => eq se;
+    query_inv := fun '(_, w) q => wt_rs_query w q;
+    reply_inv := fun '(_, w) r => exists w', rsw_acc w w' /\ wt_rs_reply w' r |}.
+
+
+(* Unused: Rust type used in interface *)
+Inductive rtype : Type :=
+(* primitive types excluding struct and enum *)
+| rt_int (sz: Ctypes.intsize) (sg: Ctypes.signedness)
+| rt_box (ty: rtype)
+| rt_comp
+    (id: ident)
+    (sv: struct_or_variant)
+    (fields: list (ident * rtype))
+    (attr: Ctypes.attr)
+    (orgs: list origin)
+    (rels: list origin_rel)
+(* used in recursive type  *)
+| rt_comp_rec (id: ident)
+.
 
 (* relation between the selector and the (stmt, cont) pair *)
 Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont -> Prop :=
@@ -45,65 +290,74 @@ Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont 
     match_instr_stmt body (Inop n) Scontinue k
 .
 
-(** Definition of abstracter which maps a memory location to path (a
-uniform representation of place) (i.e. the owner of this location) *)
 
-(* a path with ofs zero must be the start of a memory block. It holds
-because path_deref only dereferencs box type. If two path are not
-equal, their memory location must not be equal *)
-Inductive path : Type :=
-| path_local (id: ident) (ofs: Z) (ty: type) (* stack *)
-| path_deref (p: path) (ofs: Z) (ty: type). (* the location of &*p + ofs *)
+(** Footprint map which records the footprint starting from stack
+blocks (denoted by variable names). It represents the ownership chain
+from a stack block. *)
 
-Definition path_offset (p: path) (ofs: Z) (ty: type) :=
-  match p with
-  | path_local id ofs1 _ =>
-      path_local id (ofs1 + ofs) ty
-  | path_deref p' ofs1 _ =>
-      path_deref p' (ofs1 + ofs) ty
-  end.
+Definition fp_map := PTree.t footprint.
 
-Definition typeof_path (p: path) : type :=
-  match p with
-  | path_local _ _ ty
-  | path_deref _ _ ty => ty
-  end.
+(** Definition of abstracter which maps a memory block to a place
+(i.e. the owner of this block) *)
 
-Definition mem_abstracter : Type := block -> Z -> option path.
-
-(* relation between place and path *)
-Inductive pmatch (ce: composite_env) : place -> path -> Prop :=
-| pm_local: forall id ty,
-    pmatch ce (Plocal id ty) (path_local id 0 ty)
-| pm_field: forall p ph id orgs co fofs bf fid fty
-    (TYP: typeof_place p = Tstruct orgs id)
-    (PM: pmatch ce p ph)
-    (CO: ce ! id = Some co)
-    (FOFS: field_offset ce fid co.(co_members) = OK (fofs, bf)),
-    pmatch ce (Pfield p fid fty) (path_offset ph fofs fty)
-| pm_downcast: forall p ph id orgs co fofs bf fid fty
-    (TYP: typeof_place p = Tvariant orgs id)
-    (PM: pmatch ce p ph)
-    (CO: ce ! id = Some co)
-    (FOFS: variant_field_offset ce fid co.(co_members) = OK (fofs, bf)),
-    pmatch ce (Pdowncast p fid fty) (path_offset ph fofs fty)
-| pm_deref: forall p ty ph
-    (PM: pmatch ce p ph),
-    pmatch ce (Pderef p ty) (path_deref ph 0 ty)
-.
+(* Definition mem_abstracter : Type := block -> Z -> option (place * Z). *)
+Definition mem_abstracter : Type := block -> option place.
+  
 Section MATCH.
 
 Variable ce: composite_env.
 Variable abs: mem_abstracter.
+Variable fpm: fp_map.
+
+(* The footprint of a place *)
+Inductive place_footprint : place -> footprint -> Prop :=
+| place_footprint_deref: forall p p' fp ofs b ty
+    (FP: place_footprint p fp)
+    (ABS: abs b = Some p')
+    (SUBP: subplace ce p' p ofs),
+    place_footprint (Pderef p ty) (remove_footprint fp b ofs (sizeof ce (typeof_place p)))
+| place_footprint_field: forall p p' fp ofs b orgs id fid fty co fofs bf
+    (FP: place_footprint p fp)
+    (ABS: abs b = Some p')
+    (SUBP: subplace ce p' p ofs)
+    (TY: typeof_place p = Tstruct orgs id)
+    (CO: ce!id = Some co)
+    (FOFS: field_offset ce id co.(co_members) = OK (fofs, bf)),
+    (* fp - [(b,ofs), (b, ofs+sizeof(p))) + [(b,ofs+fofs), (b, ofs+fofs+sizeof(fty))) *)
+    place_footprint (Pfield p fid fty)
+    (add_footprint (remove_footprint fp b ofs (co_sizeof co)) b (ofs+fofs) (sizeof ce fty))
+| place_footprint_enum: forall p fp fid fty
+    (** FIXME: is it correct?  *)
+    (FP: place_footprint p fp),
+    place_footprint (Pdowncast p fid fty) fp
+| place_footprint_local: forall id fp ty
+    (FP: fpm ! id = Some fp),
+    place_footprint (Plocal id ty) fp
+.
+
 
 (* The value stored in m[b, ofs] is consistent with the type of p *)
-Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: path) (own: own_env) : type -> Prop :=
+Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -> Prop :=
 | bm_box: forall ty
     (* valid resource. If the loaded value is not a pointer, it is a
     type error instead of a memory error *)
+    (* N.B. A compilcated situation is that [p] may fully own the
+    resource so that the all the blocks of the owned chain it points
+    to are not in the range of [own] environment. In this case, we
+    should show that the ownership chain is semantics well typed. But
+    if [p] just partially own the resoruce, we need to explicitly show
+    that the owner of the block it points to is [*p]. *)
     (VRES: forall b1 ofs1,
         Mem.load Mptr m b ofs = Some (Vptr b1 ofs1) ->
-        (abs b1 (Ptrofs.unsigned ofs1) = Some (Pderef p ty, 0) <-> is_owned own p = true)),
+        (** Case1: p is partially owned *)
+        (* p owns the location it points to. Box pointer must points
+        to the start of a block and *p is the owner of this block *)
+        (is_shallow_owned own p = true -> (ofs1 = Ptrofs.zero /\ abs b1 = Some (Pderef p ty)))
+        (** Case2: p is fully owned: own b1 is None. How to get the
+        footprint of this semantics well typedness? *)
+        /\ (is_deep_owned own p = true ->
+           (exists fp, place_footprint p fp
+                  /\ sem_wt_loc ce m fp b ofs (typeof_place p)))),
     bmatch m b ofs p own (Tbox ty)
 | bm_struct: forall orgs id
     (* all fields in the struct satisfy bmatch *)
@@ -127,24 +381,18 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: path) (own: own_env) : type ->
     bmatch m b ofs p own ty
 (** TODO: bm_reference  *)
 .
-  
 
+(** TODO: support alias analysis domain *)
 Definition mmatch (m: mem) (own: own_env) : Prop :=
-  forall b ofs p pofs,
-    abs b ofs = Some (p, pofs) ->
-    (** TODO: how to represent the align_chunk property in
-    valid_access ? I think the permission depends on the type of p *)
-    (** p may be an enum whose body has been moved, but its tag is
-    still owned by p? *)
-    (Mem.range_perm m b (ofs - pofs) (ofs - pofs + (sizeof ce (typeof_place p))) Cur Freeable
-    /\ bmatch m b (ofs - pofs) p own (typeof_place p)).
+  forall b p,
+    abs b = Some p ->
+    (Mem.range_perm m b 0 (sizeof ce (typeof_place p)) Cur Freeable
+    /\ bmatch m b 0 p own (typeof_place p)).
 
 Record wf_abs (e: env) : Prop :=
-  { wf_local_env: forall id b ty ofs,
+  { wf_local_env: forall id b ty,
       e ! id = Some (b, ty) ->
-      0 <= ofs <= sizeof ce ty ->
-      abs b ofs = Some ((Plocal id ty), ofs) }.
-
+      abs b = Some (Plocal id ty) }.
 
 End MATCH.
 
@@ -195,26 +443,25 @@ Definition env_to_tenv (e: env) : typenv :=
 Section BORCHK.
 
 Variable prog: program.
-Variable w: inv_world wt_c.
+Variable w: inv_world wt_rs.
 Variable se: Genv.symtbl.
 Hypothesis VALIDSE: Genv.valid_for (erase_program prog) se.
-Hypothesis INV: symtbl_inv wt_c w se.
+Hypothesis INV: symtbl_inv wt_rs w se.
 Let L := semantics prog se.
 Let ge := globalenv se prog.
 
 (* composite environment *)
 Let ce := ge.(genv_cenv).
 
-
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ abs
+| sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ abs fpm
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (INSTR: cfg ! pc = Some instr)
     (MSTMT: match_instr_stmt f.(fn_body) instr s k)
     (CHK: borrow_check ce f = OK ae)
     (AS: ae ! pc = Some (AE.State Σ Γ Δ))
-    (MM: mmatch ce abs m own)
-    (WF: wf_abs ce abs e),
+    (MM: mmatch ce abs fpm m own)
+    (WF: wf_abs abs e),
     sound_state (State f s k e own m)
 .
 
@@ -281,6 +528,7 @@ Lemma sound_state_no_mem_error: forall s,
 Admitted.
 
 Lemma initial_state_sound: forall q s,
+    wt_rs_query w q ->
     Smallstep.initial_state L q s ->
     sound_state s.
 Admitted.

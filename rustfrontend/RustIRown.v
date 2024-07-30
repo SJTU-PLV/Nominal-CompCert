@@ -48,7 +48,10 @@ Definition is_deep_owned (own: own_env) (p: place) : bool :=
     let uninit := PathsMap.get id own.(own_uninit) in
     Paths.for_all (fun p' => negb (is_prefix p p')) uninit.
 
-
+(* Is owned but is not deeply owned *)
+Definition is_shallow_owned (own: own_env) (p: place) : bool :=
+  is_owned own p && negb (is_deep_owned own p).
+  
 (* check that parents of p are not in uninit (slightly different from
    the condition in is_owned) *)
 Definition prefix_is_owned (own: own_env) (p: place) : bool :=
@@ -479,6 +482,8 @@ Inductive step : state -> trace -> state -> Prop :=
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
+    (* Cannot call drop glue *)
+    (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le own2 k) m)
 
 | step_internal_function: forall vf f vargs k m e m' uninit

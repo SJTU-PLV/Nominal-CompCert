@@ -273,7 +273,9 @@ Inductive val_casted : val -> type -> Prop :=
     val_casted (Vsingle n) (Tfloat F32)
 | val_casted_long: forall si n,
     val_casted (Vlong n) (Tlong si)
-| val_casted_ptr_ptr: forall b ofs ty org mut,
+| val_casted_box: forall b ofs ty,
+    val_casted (Vptr b ofs) (Tbox ty)
+| val_casted_ref: forall b ofs ty org mut,
     val_casted (Vptr b ofs) (Treference org mut ty)
 | val_casted_struct: forall id orgs b ofs,
     val_casted (Vptr b ofs) (Tstruct orgs id)

@@ -32,13 +32,13 @@ Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invar
       (* SI L s -> *)
       Step L s t s' ->
       SI L s';
-    initial_progress q:
+    initial_safe q:
       valid_query L q = true ->
       query_inv IB w q ->
-      exists s, initial_state L q s;
-    initial_safe q s:
-      initial_state L q s ->
-      SI L s;
+      (* initial_progress *)
+      (exists s, initial_state L q s)
+      (* initial_safe *)
+      /\ (forall s, initial_state L q s -> SI L s);
     external_safe s q (REACH: reachable L s):
       at_external L s q ->
       exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\
@@ -93,34 +93,34 @@ Proof.
     intros (wA & SYMBINV & QINV & AFTER).
     destruct (valid_query (L i se) q) eqn: VQ1.
     -- right. right.
-       generalize (initial_progress _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ VQ1 QINV).
-       intros (initS & INIT).
+       generalize (initial_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) SYMBINV) _ VQ1 QINV).
+       intros ((initS & INIT) & INITSAFE).
        do 2 eexists.
        eapply step_push; eauto.
     -- destruct i; simpl in *.
        ++ destruct (valid_query (L2 se) q) eqn: VQ2.
           ** right. right.
-             generalize (initial_progress _ _ _ _ _ _ (SAFE false _ _ (VALIDSE false) SYMBINV) _ VQ2 QINV).
-             intros (initS & INIT).
+             generalize (initial_safe _ _ _ _ _ _ (SAFE false _ _ (VALIDSE false) SYMBINV) _ VQ2 QINV).
+             intros ((initS & INIT) & INITSAFE).
              do 2 eexists.
-             eapply step_push. eauto. eauto.
+             eapply step_push. eauto.
              instantiate (1 := false). auto.
              simpl. eauto.
           ** right. left.
              eexists. econstructor.
-             simpl. eauto. eauto.
+             simpl. eauto.
              intros. destruct j; simpl; auto.
        ++  destruct (valid_query (L1 se) q) eqn: VQ2.
            ** right. right.
-              generalize (initial_progress _ _ _ _ _ _ (SAFE true _ _ (VALIDSE true) SYMBINV) _ VQ2 QINV).
-              intros (initS & INIT).
+              generalize (initial_safe _ _ _ _ _ _ (SAFE true _ _ (VALIDSE true) SYMBINV) _ VQ2 QINV).
+              intros ((initS & INIT) & INITSAFE).
               do 2 eexists.
-              eapply step_push. eauto. eauto.
+              eapply step_push. eauto.
               instantiate (1 := true). auto.
               simpl. eauto.
            ** right. left.
               eexists. econstructor.
-              simpl. eauto. eauto.
+              simpl. eauto.
               intros. destruct j; simpl; auto.
   * right. right. do 2 eexists.
     eapply step_internal. simpl. eauto.
@@ -158,7 +158,10 @@ Proof.
     (* step_push *)
     + assert (A: safe (L i se) s0). right. left. eauto.
       assert (B: safe (L j se) s'0).
-      eapply initial_safe. eapply SAFE; eauto. eauto.
+      { inv REACH. subst_dep.
+        generalize (external_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) s0 q H4 H).
+        intros (wA & SYMBINV & QINV & AFTER).
+        eapply initial_safe. eapply SAFE; eauto. eauto. auto. auto. }
       eapply safe_internal;eauto.
       constructor; eauto. econstructor; eauto.
       eapply star_refl.
@@ -180,27 +183,29 @@ Proof.
       eapply safe_internal; eauto.
       econstructor;eauto. eapply external_reach. eapply H5. eapply H0.
       eapply star_refl.
-  (* initial_progress *)
+  (* initial_safe *)
   - intros q VQ SQ. simpl in *.
     unfold SmallstepLinking.valid_query in VQ.
-    simpl in *.
-    destruct (valid_query (L1 se) q) eqn: VQ1.
-    + generalize (initial_progress _ _ _ _ _ _ (SAFE true _ _ (VALIDSE true) INV) _ VQ1 SQ).
-      intros (s & INIT).
-      exists (st L true s :: nil). econstructor; eauto.
-    + rewrite orb_false_l in VQ.
-      generalize (initial_progress _ _ _ _ _ _ (SAFE false _ _ (VALIDSE false) INV) _ VQ SQ).
-      intros (s & INIT).
-      exists (st L false s :: nil). econstructor; eauto.
-  (* initial_safe *)
-  - intros q s INIT.
-    inv INIT.    
-    generalize (initial_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) q s0 H0).
-    intros A.
-    (* repeated work *)
-    eapply safe_internal; eauto.
-    econstructor. eapply initial_reach; eauto.
-    eapply star_refl. constructor.
+    simpl in *. split.
+    + (* progress *)
+      destruct (valid_query (L1 se) q) eqn: VQ1.
+      * generalize (initial_safe _ _ _ _ _ _ (SAFE true _ _ (VALIDSE true) INV) _ VQ1 SQ).
+        intros ((s & INIT) & INITSAFE).
+        exists (st L true s :: nil). econstructor; eauto.
+      * rewrite orb_false_l in VQ.
+        generalize (initial_safe _ _ _ _ _ _ (SAFE false _ _ (VALIDSE false) INV) _ VQ SQ).
+        intros ((s & INIT) & INITSAFE).
+        exists (st L false s :: nil). econstructor; eauto.
+    + (* safe *)
+      intros s INIT.
+      inv INIT.
+      generalize (initial_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) _ H SQ).
+      intros ((s & INIT) & INITSAFE).
+      (* repeated work *)
+      clear INIT.
+      eapply safe_internal; eauto.
+      econstructor. eapply initial_reach; eauto.
+      eapply star_refl. constructor.  
   - intros s q REACH EXT. inv EXT.
     eapply reachable_wf_state in REACH. inv REACH. subst_dep.
     generalize (external_safe _ _ _ _ _ _ (SAFE i _ _ (VALIDSE i) INV) s0 q H3 H).
