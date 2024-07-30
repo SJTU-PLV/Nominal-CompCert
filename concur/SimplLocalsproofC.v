@@ -2922,9 +2922,8 @@ Proof.
   reflexivity.
 Qed.
 
-Locate gworld.
 Lemma final_states_simulation:
-  forall S R r1 gw, match_states gw S R -> final_state S r1 ->
+  forall (gw: injp_world) S R r1, match_states gw S R -> final_state S r1 ->
   exists r2 gw', final_state R r2 /\ w o-> gw' /\ gw *-> gw' /\ (cc_c_reply injp) gw' r1 r2.
 Proof.
   intros. inv H0. inv H.
@@ -2958,41 +2957,38 @@ Proof.
     + inv GE. eapply Mem.sup_include_trans; eauto.
       rewrite <- H2 in ACCE. inv ACCE. destruct H14 as [_ H14]. inversion H14. auto.
   - inv H0.
-    destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H12. eexists. split.
+    inv H1. inv H2. inv H10. eexists. split.
     + econstructor; eauto.
-    + inversion H7. inversion H8. econstructor; eauto.
+    + inversion H8. inversion H9. econstructor; eauto.
       intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
       eapply match_cont_extcall; eauto.
+      admit. (*The [match_cont_extcall] needs to be changed*)
       eapply Mem.unchanged_on_support; eauto.
       eapply Mem.unchanged_on_support; eauto.
       simpl. etransitivity; eauto.
-      instantiate (1:= Hm4).
-      constructor; eauto.
-Qed.
+      instantiate (1:= Hm').
+      constructor; eauto. simpl. reflexivity.
+Admitted.
 
 End PRESERVATION.
 
+Require Import VCompBig.
 Theorem transf_program_correct' prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_c injp) (cc_c injp) (semantics1 prog) (semantics2 tprog).
+  GS.forward_simulation (c_injp) (semantics1 prog) (semantics2 tprog).
 Proof.
-  fsim eapply forward_simulation_plus.
-  { intros. destruct Hse, H. cbn in *.
-    eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
-    intros _ [|] [|] Hf; monadInv Hf; auto. }
-  apply initial_states_simulation; eauto.
-  eapply final_states_simulation; eauto.
-  intros. cbn. eapply external_states_simulation; eauto.
-  apply step_simulation; eauto.
-Qed.
-
-Theorem transf_program_correct prog tprog:
-  match_prog prog tprog ->
-  forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
-Proof.
-  intros.
-  rewrite sub_inj_injp.
-  eapply transf_program_correct'; eauto.
+  intros. red. constructor. econstructor.
+  - fsim_skel H.
+  - intros. eapply GS.forward_simulation_plus; eauto.
+    + intros. destruct H0, H. cbn in *.
+    eapply (Genv.is_internal_match (H)); eauto 1.
+    intros _ [|] [|] Hf; monadInv Hf; auto. inv H2. simpl. eauto.
+    inv H2. eauto.
+    + apply initial_states_simulation; eauto.
+    + eapply final_states_simulation; eauto.
+    + eapply external_states_simulation; eauto.
+    + apply step_simulation; eauto.
+  - auto using well_founded_ltof.
 Qed.
 
 (** ** Commutation with linking *)
