@@ -239,6 +239,186 @@ Section FSIM.
       left; exists s2'; split; auto. econstructor; eauto.
     Qed.
 
+    
+    (** ** Forward simulation diagrams. *)
+
+    (** Various simulation diagrams that imply forward simulation *)
+    
+    Section FORWARD_SIMU_DIAGRAMS.
+      
+      Variable L1: lts li1 li1 state1.
+      Variable L2: lts li2 li2 state2.
+
+      Variable match_states: gw_type -> state1 -> state2 -> Prop.
+
+      Hypothesis match_valid_query:
+        forall q1 q2, match_query cc wb q1 q2 ->
+                 valid_query L2 q2 = valid_query L1 q1.
+
+      Hypothesis match_initial_states:
+        forall q1 q2 s1, match_query cc wb q1 q2 -> initial_state L1 q1 s1 ->
+        exists s2, initial_state L2 q2 s2 /\ match_states (get wb) s1 s2.
+
+      Hypothesis match_final_states:
+        forall gw s1 s2 r1, match_states gw s1 s2 -> final_state L1 s1 r1 ->
+        exists r2 gw', final_state L2 s2 r2 /\ (get wb) o-> gw' /\ gw *-> gw'  /\ match_reply cc (set wb gw') r1 r2.
+
+      (* fsim_match_external:
+          forall gw i s1 s2 q1, match_states gw i s1 s2 -> at_external L1 s1 q1 ->
+          exists wa q2 , at_external L2 s2 q2 /\ gw *-> (get wa) /\
+          match_query cc wa q1 q2 /\ match_senv cc wa se1 se2 /\
+          forall r1 r2 s1' gw'', (get wa) o-> gw'' -> match_reply cc (set wa gw'') r1 r2 ->
+          after_external L1 s1 r1 s1' ->
+          exists i' s2', after_external L2 s2 r2 s2' /\
+          match_states gw'' i' s1' s2';
+          (* exists gw''' , gw'' *-> gw''' /\ match_states gw''' i' s1' s2'; (*The problem of va passes*) *)
+        fsim_simulation:
+          forall s1 t s1', Step L1 s1 t s1' ->
+          forall gw i s2, match_states gw i s1 s2 ->
+          exists i', exists s2', (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order i' i)) /\
+          match_states gw i' s1' s2';*)
+      Hypothesis match_external:
+        forall gw s1 s2 q1, match_states gw s1 s2 -> at_external L1 s1 q1 ->
+            exists wA q2, at_external L2 s2 q2 /\ gw *-> (get wA) /\
+                       match_query cc wA q1 q2 /\ match_senv cc wA se1 se2 /\
+                       forall r1 r2 s1' gw'', (get wA) o-> gw'' /\ match_reply cc (set wA gw'') r1 r2 ->
+                                         after_external L1 s1 r1 s1' ->
+                                         exists s2', after_external L2 s2 r2 s2' /\ match_states gw'' s1' s2'.
+
+      Let ms gw idx s1 s2 := idx = s1 /\ match_states gw s1 s2.
+
+(** Simulation when one transition in the first program
+    corresponds to zero, one or several transitions in the second program.
+    However, there is no stuttering: infinitely many transitions
+    in the source program must correspond to infinitely many
+    transitions in the second program. *)
+
+Section SIMULATION_STAR_WF.
+
+(** [order] is a well-founded ordering associated with states
+  of the first semantics.  Stuttering steps must correspond
+  to states that decrease w.r.t. [order]. *)
+
+Variable order: state1 -> state1 -> Prop.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2 gw, match_states gw s1 s2 ->
+  exists s2',
+  (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order s1' s1))
+  /\ match_states gw s1' s2'.
+
+Lemma forward_simulation_star_wf:
+  fsim_properties L1 L2 state1 order ms.
+Proof.
+  subst ms;
+  constructor.
+- auto.
+- intros. exploit match_initial_states; eauto. intros [s2 [A B]].
+    exists s1; exists s2; auto.
+- intros. destruct H. eapply match_final_states; eauto.
+- intros. destruct H. edestruct match_external as (w & q2 & H2 & Hac & Hq & Hw & Hr); eauto.
+  exists w, q2. intuition auto. edestruct Hr as (s2' & Hs2' & Hs'); eauto.
+- intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
+  exists s1'; exists s2'; intuition auto.
+Qed.
+
+End SIMULATION_STAR_WF.
+
+Section SIMULATION_STAR.
+
+(** We now consider the case where we have a nonnegative integer measure
+  associated with states of the first semantics.  It must decrease when we take
+  a stuttering step. *)
+
+Variable measure: state1 -> nat.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2 gw, match_states gw s1 s2 ->
+  (exists s2', Plus L2 s2 t s2' /\ match_states gw s1' s2')
+  \/ (measure s1' < measure s1 /\ t = E0 /\ match_states gw s1' s2)%nat.
+
+Lemma forward_simulation_star:
+  fsim_properties L1 L2 state1 (ltof _ measure) ms.
+Proof.
+  apply forward_simulation_star_wf.
+  intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
+  exists s2'; auto.
+  exists s2; split. right; split. rewrite B. apply star_refl. auto. auto.
+Qed.
+
+End SIMULATION_STAR.
+
+(** Simulation when one transition in the first program corresponds
+    to one or several transitions in the second program. *)
+
+Section SIMULATION_PLUS.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2 gw, match_states gw s1 s2 ->
+  exists s2', Plus L2 s2 t s2' /\ match_states gw s1' s2'.
+
+Lemma forward_simulation_plus:
+  fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
+Proof.
+  apply forward_simulation_star.
+  intros. exploit simulation; eauto.
+Qed.
+
+End SIMULATION_PLUS.
+
+(** Lock-step simulation: each transition in the first semantics
+    corresponds to exactly one transition in the second semantics. *)
+
+Section SIMULATION_STEP.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2 gw, match_states gw s1 s2 ->
+  exists s2', Step L2 s2 t s2' /\ match_states gw s1' s2'.
+
+Lemma forward_simulation_step:
+  fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
+Proof.
+  apply forward_simulation_plus.
+  intros. exploit simulation; eauto. intros [s2' [A B]].
+  exists s2'; split; auto. apply plus_one; auto.
+Qed.
+
+End SIMULATION_STEP.
+
+(** Simulation when one transition in the first program
+    corresponds to zero or one transitions in the second program.
+    However, there is no stuttering: infinitely many transitions
+    in the source program must correspond to infinitely many
+    transitions in the second program. *)
+
+Section SIMULATION_OPT.
+
+Variable measure: state1 -> nat.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2 gw, match_states gw s1 s2 ->
+  (exists s2', Step L2 s2 t s2' /\ match_states gw s1' s2')
+  \/ (measure s1' < measure s1 /\ t = E0 /\ match_states gw s1' s2)%nat.
+
+Lemma forward_simulation_opt:
+  fsim_properties L1 L2 state1 (ltof _ measure) ms.
+Proof.
+  apply forward_simulation_star.
+  intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
+  left; exists s2'; split; auto. apply plus_one; auto.
+  right; auto.
+Qed.
+
+End SIMULATION_OPT.
+
+End FORWARD_SIMU_DIAGRAMS.
+
+
     Section SIMULATION_SEQUENCES.
 
       Context L1 L2 index order match_states
@@ -553,4 +733,3 @@ Next Obligation.
 Qed.
 
 (** Note : the preo of acci can be omitted? *)
-
