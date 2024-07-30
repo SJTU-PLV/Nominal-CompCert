@@ -198,6 +198,20 @@ Inductive step_drop_mem_error : state -> Prop :=
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m)
 .
 
+Definition good_function fd : Prop :=
+  match fd with
+  | Internal f =>
+    match fn_drop_glue f with
+    | None => True
+    | Some _ => False
+    end
+  | External _ _ EF _ _ _ =>
+    match EF with
+    | EF_malloc => False
+    | EF_free => False
+    | _ => True
+    end
+  end.
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1,
@@ -297,6 +311,7 @@ Inductive step : state -> trace -> state -> Prop :=
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
+    good_function fd ->
     step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall (Some p) f le k) m)
 
 | step_internal_function: forall vf f vargs k m e m'
@@ -589,4 +604,3 @@ End SEMANTICS.
 
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
-
