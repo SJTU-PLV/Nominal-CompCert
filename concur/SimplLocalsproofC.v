@@ -2602,27 +2602,34 @@ Proof.
     eapply free_blocks_of_env_perm_1; eauto.
 Qed.
 
-Lemma injp_acci_assign_loc : forall m tm j m' tm' ge tge ty b ofs b' ofs' bf v tv (Hm: Mem.inject j m tm) (Hm': Mem.inject j m' tm'),
+Lemma injp_acci_assign_loc : forall m tm j m' tm' ty b ofs b' ofs' bf v tv (Hm: Mem.inject j m tm) (Hm': Mem.inject j m' tm'),
     assign_loc ge ty m b ofs bf v m' ->
     assign_loc tge ty tm b' ofs' bf tv tm' ->
     Val.inject j (Vptr b ofs) (Vptr b' ofs') ->
     Val.inject j v tv ->
     injp_acci (injpw j m tm Hm) (injpw j m' tm' Hm').
 Proof.
+  Locate composite_env.
+  Search composite_env genv.
   intros. inv H; inv H0; try congruence.
   - (*value*)
-    Search Mem.storev injp_acc.
-    simpl in H4. simpl in H5.
-    Lemma storev_injp_acci : forall m b ofs v m'
-    (*storev_acci*)
-    rewrite H3 in H. inv H. admit.
+    rewrite H3 in H. inv H.
+    eapply injp_acci_storev; eauto.
   - (*copy*)
-    (*storebytes_acci*)
-    admit.
+    eapply injp_acci_storebytes; eauto.
+    erewrite Mem.loadbytes_length; eauto.
+    erewrite Mem.loadbytes_length. 2: eauto.
+    rewrite comp_env_preserved. reflexivity.
   - (*bitfield*)
     inv H3. inv H9. clear H14.
-    admit. (*storev_acci*)
-Admitted.
+    eapply injp_acci_storev; eauto.
+    inv H2. Search Mem.loadv Mem.inject.
+    exploit Mem.loadv_inject. apply Hm.
+    eauto. eauto.
+    intros [v2 [A B]]. rewrite H23 in A.
+    inv A. inv B.
+    econstructor.
+Qed.
 
 Lemma step_simulation:
   forall S1 t S2, step1 ge S1 t S2 ->
@@ -3105,13 +3112,15 @@ Proof.
       intros. destruct H4. destruct H4. auto.
   }
   etransitivity. eauto. etransitivity. instantiate (1:= injpw j' m0 tm0 C).
-  admit. (*use alloc_variables_acci or added in [match_alloc_variables]*)
+  admit.
+  (*use alloc_variables_acci or added in [match_alloc_variables]*)
   { econstructor; eauto.
     - red. intros. apply bind_parameters_support in H2. unfold Mem.valid_block in *. congruence.
     - red. intros. exfalso. apply H3. unfold Mem.valid_block in *. rewrite <- T. auto.
     - eapply bind_parameters_ro; eauto.
     - eapply bind_parameters_max_perm; eauto.
-    - admit. (*TODO: mapped parallel stores*)
+    - Search bind_parameters.
+      admit. (*TODO: mapped parallel stores*)
     - admit. (*TODO: need to be added in [store_params_correct]*)
     - red. intros. congruence.
    - admit. (*need to be added in [store_params_correct]*)

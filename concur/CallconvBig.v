@@ -925,3 +925,71 @@ Proof.
   destruct H as [A B].
   apply A. destruct chunk; simpl; lia.
 Qed.
+
+Lemma injp_acci_storebytes' : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2' Hm Hm',
+    Mem.storebytes m1 b1 ofs1 vs1 = Some m1' ->
+    Mem.storebytes m2 b2 (ofs1 + delta) vs2 = Some m2' ->
+    length vs1 = length vs2 ->
+    f b1 = Some (b2, delta) ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_storebytes in H4; eauto. congruence.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_storebytes in H4; eauto. congruence.
+  - eauto using Mem.ro_unchanged_storebytes.
+  - eauto using Mem.ro_unchanged_storebytes.
+  - red. eauto using Mem.perm_storebytes_2.
+  - red. eauto using Mem.perm_storebytes_2.
+  - eapply unchanged_on_tl_i.
+    eapply Mem.storebytes_unchanged_on_tl; eauto.
+    unfold loc_unmapped. congruence.
+  - eapply unchanged_on_tl_i.
+    eapply Mem.storebytes_unchanged_on_tl; eauto.
+    unfold loc_out_of_reach.
+    intros ofs Hofs HH. 
+    eelim HH; eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply Mem.storebytes_range_perm; eauto.
+    extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
+  - red. intros. exfalso. apply H5. eauto with mem.
+Qed.
+
+Lemma injp_acci_storebytes : forall f b1 b2 ofs1 ofs2 vs1 vs2 m1 m2 m1' m2' Hm Hm',
+    Mem.storebytes m1 b1 (Ptrofs.unsigned ofs1) vs1 = Some m1' ->
+    Mem.storebytes m2 b2 (Ptrofs.unsigned ofs2) vs2 = Some m2' ->
+    length vs1 = length vs2 ->
+    Val.inject f (Vptr b1 ofs1) (Vptr b2 ofs2) ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. destruct vs1.
+  - destruct vs2; inv H1.
+    constructor.
+    + red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_storebytes in H3; eauto. congruence.
+    + red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_storebytes in H3; eauto. congruence.
+    + eauto using Mem.ro_unchanged_storebytes.
+    + eauto using Mem.ro_unchanged_storebytes.
+    + red. eauto using Mem.perm_storebytes_2.
+    + red. eauto using Mem.perm_storebytes_2.
+    + eapply unchanged_on_tl_i.
+      eapply Mem.storebytes_unchanged_on_tl; eauto.
+      unfold loc_unmapped. inv H2. congruence.
+    + eapply unchanged_on_tl_i.
+      eapply Mem.storebytes_unchanged_on_tl; eauto.
+      simpl. intro. extlia.
+    + apply inject_incr_refl.
+    + apply inject_separated_refl.
+    + red. intros. exfalso. apply H4. eauto with mem.
+  - inv H2.
+    eapply injp_acci_storebytes'; eauto.
+    erewrite <- Mem.address_inject; eauto.
+    eapply Mem.perm_storebytes_1; eauto.
+    apply Mem.storebytes_range_perm in H.
+    eapply H. simpl. lia.
+Qed.
