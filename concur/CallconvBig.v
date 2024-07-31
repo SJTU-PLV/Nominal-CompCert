@@ -788,3 +788,140 @@ Next Obligation.
 Qed.
 
 (** Note : the preo of acci can be omitted? *)
+
+(** The properties about the preservation of injp accessibility
+    by corresponding memory operations on related memories. *)
+
+Lemma unchanged_on_tl_i : forall m P m',
+    Mem.unchanged_on_tl P m m' ->
+    Mem.unchanged_on_i P m m'.
+Proof.
+  intros. inv H. split. auto. eapply Mem.unchanged_on_implies; eauto.
+  intros. apply H.
+Qed.
+
+Lemma injp_acci_alloc: forall f f' m1 m2 b1 b2 lo hi m1' m2' Hm Hm',
+    Mem.alloc m1 lo hi = (m1',b1) ->
+    Mem.alloc m2 lo hi = (m2',b2) ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, 0) ->
+    (forall b, b<> b1 -> f' b = f b) ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. intros.
+    exploit Mem.valid_block_alloc_inv. apply H. eauto. intros [|]. subst.
+    apply Mem.alloc_result in H. subst. reflexivity. congruence.
+  - red. intros.
+    exploit Mem.valid_block_alloc_inv. apply H0. eauto. intros [|]. subst.
+    apply Mem.alloc_result in H0. subst. reflexivity. congruence.
+  - eauto using Mem.ro_unchanged_alloc.
+  - eauto using Mem.ro_unchanged_alloc.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_inv in Hp; eauto.
+    destruct (eq_block b b1); eauto; subst.
+    eelim (Mem.fresh_block_alloc m1); eauto.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_inv in Hp; eauto.
+    destruct (eq_block b b2); eauto; subst.
+    eelim (Mem.fresh_block_alloc m2); eauto.
+  - eapply unchanged_on_tl_i.
+    eapply Mem.alloc_unchanged_on_tl; eauto.
+  - eapply unchanged_on_tl_i. eapply Mem.alloc_unchanged_on_tl; eauto.
+  - assumption.
+  - red. intros b b' delta Hb Hb'.
+    assert (b = b1).
+    {
+      destruct (eq_block b b1); eauto.
+      rewrite H3 in Hb'; eauto.
+      congruence.
+    }
+    assert (b' = b2) by congruence.
+    subst.
+    split; eauto using Mem.fresh_block_alloc.
+  - red. intros. exfalso. apply H6. eauto with mem.
+Qed.
+
+
+Lemma injp_acci_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
+    Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
+    Mem.free m2 b2 (lo1 + delta) (lo1 + sz + delta) = Some m2' ->
+    f b1 = Some (b2, delta) ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_free in H3; eauto. congruence.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_free in H3; eauto. congruence.
+  - eauto using Mem.ro_unchanged_free.
+  - eauto using Mem.ro_unchanged_free.
+  - red. eauto using Mem.perm_free_3.
+  - red. eauto using Mem.perm_free_3.
+  - split. erewrite <- Mem.support_free; eauto. eapply Mem.free_unchanged_on; eauto.
+    unfold loc_unmapped. intros.  intro. destruct H3. congruence.
+  - eapply unchanged_on_tl_i.
+    eapply Mem.free_unchanged_on_tl; eauto.
+    unfold loc_out_of_reach.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply Mem.free_range_perm; eauto.
+    extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
+  - red. intros. 
+    eapply Mem.perm_free_inv in H as Hd; eauto. destruct Hd.
+    + destruct H5. subst. rewrite H1 in H2. inv H2.
+      eapply Mem.perm_free_2; eauto. lia.
+    + congruence.
+Qed.
+
+
+Lemma injp_acci_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
+    Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
+    Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
+    Val.inject f v1 v2 ->
+    f b1 = Some (b2,delta) ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_store in H4; eauto. congruence.
+  - red. intros. unfold Mem.valid_block in *.
+    erewrite Mem.support_store in H4; eauto. congruence.
+  - eauto using Mem.ro_unchanged_store.
+  - eauto using Mem.ro_unchanged_store.
+  - red. eauto using Mem.perm_store_2.
+  - red. eauto using Mem.perm_store_2.
+  - eapply unchanged_on_tl_i. eapply Mem.store_unchanged_on_tl; eauto.
+    unfold loc_unmapped. congruence.
+  - eapply unchanged_on_tl_i. eapply Mem.store_unchanged_on_tl; eauto.
+    unfold loc_out_of_reach.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
+    edestruct (Mem.store_valid_access_3 chunk m1); eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply H3; eauto.
+    extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
+  - red. intros. exfalso. apply H5. eauto with mem.
+Qed.
+
+Lemma injp_acci_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
+    Mem.storev chunk m1 a1 v1 = Some m1' ->
+    Mem.storev chunk m2 a2 v2 = Some m2' ->
+    Val.inject f a1 a2 -> Val.inject f v1 v2 ->
+    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. unfold Mem.storev in *. destruct a1; try congruence.
+  inv H1.
+  erewrite Mem.address_inject in H0. 2: apply Hm. 3: eauto.
+  eapply injp_acci_store; eauto.
+  apply Mem.store_valid_access_3 in H.
+  destruct H as [A B].
+  apply A. destruct chunk; simpl; lia.
+Qed.

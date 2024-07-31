@@ -2473,6 +2473,95 @@ Proof.
     intros. destruct H5. destruct H5. auto.
 Qed.
 
+Lemma free_list_unchanged_on_local_1 :
+  forall m m' j f e le lo hi te tle tlo thi,
+  Mem.free_list m (blocks_of_env ge e) = Some m' ->
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  Mem.unchanged_on (fun b _ => fst b <> Mem.tid (Mem.support m)) m m'.
+Proof.
+  intros.
+  eapply free_list_unchanged_on; eauto.
+  intros.
+  unfold blocks_of_env in H1.
+  apply list_in_map_inv in H1.
+  destruct H1 as [[id [b' ty]] [A B]].
+  simpl in A. inv A.
+  apply PTree.elements_complete in B.
+  inv H0. eauto.
+Qed.
+
+Lemma free_list_unchanged_on_local_2 :
+  forall m tm tm' j f e le lo hi te tle tlo thi,
+  Mem.free_list tm (blocks_of_env tge te) = Some tm' ->
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  Mem.inject j m tm ->
+  Mem.unchanged_on (fun b _ => fst b <> Mem.tid (Mem.support tm)) tm tm'.
+Proof.
+  intros.
+  eapply free_list_unchanged_on; eauto.
+  intros.
+  unfold blocks_of_env in H2.
+  apply list_in_map_inv in H2.
+  destruct H2 as [[id [b' ty]] [A B]].
+  simpl in A. inv A.
+  apply PTree.elements_complete in B.
+  inv H0. inv H1. inv mi_thread. inv Hms. rewrite <- H1. eauto.
+Qed.
+
+Lemma free_list_in : forall l m tm b ofs, 
+    Mem.free_list m l = Some tm ->
+    Mem.perm m b ofs Max Nonempty ->
+    ~ Mem.perm tm b ofs Max Nonempty ->
+    exists z1 z2, In (b,z1,z2) l /\ z1 <= ofs < z2.
+Proof.
+  induction l; intros.
+  - inv H. congruence.
+  - inv H. destruct a. destruct p. destruct Mem.free eqn:Hf in H3; try congruence.
+    destruct (eq_block b b0).    
+    subst.
+    eapply Mem.perm_free_inv in Hf; eauto.  destruct Hf; eauto. destruct H.
+    do 2 eexists. split. left. auto. auto.
+    exploit IHl; eauto.
+    intros (z1 & z2 & A & B). do 2 eexists. split. right. eauto. eauto.
+    exploit IHl; eauto. eauto with mem.
+    intros (z1 & z2 & A & B). do 2 eexists. split. right. eauto. eauto.
+Qed.
+  
+Lemma match_envs_inject :
+  forall m j f e le lo hi te tle tlo thi b1 ty b2 delta id,
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  e!id = Some (b1, ty) ->
+  j b1 = Some (b2 ,delta) ->
+  te ! id = Some (b2, ty) /\ delta = 0.
+Proof.
+  intros. inv H.
+  specialize (me_vars0 id).
+  inv me_vars0; try congruence.
+  rewrite H0 in ENV. inv ENV. rewrite H1 in MAPPED. inv MAPPED.
+  split. auto. reflexivity.
+Qed.
+  
+Lemma match_envs_blocks_in :
+  forall m j f e le lo hi te tle tlo thi b1 lo1 hi1 b2 delta,
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  In (b1, lo1, hi1) (blocks_of_env ge e) ->
+  j b1 = Some (b2 ,delta) ->
+  In (b2, lo1, hi1) (blocks_of_env tge te) /\ delta = 0.
+Proof.
+  intros. unfold blocks_of_env in H0.
+  apply list_in_map_inv in H0.
+  destruct H0 as [[id [b' ty]] [A B]].
+  simpl in A. inv A.
+  apply PTree.elements_complete in B.
+  exploit match_envs_inject; eauto.
+  intros [X Y]. subst. simpl.
+  rewrite blocks_of_env_translated.
+  split; auto.
+  eapply in_map_iff. exists (id, (b2, ty)).
+  split. simpl. reflexivity.
+  eapply PTree.elements_correct; eauto.
+Qed.
+
 Lemma injp_acci_return:
   forall m m' tm tm' j f k tk e le lo hi te tle tlo thi Hm Hm',
     match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
@@ -2481,7 +2570,37 @@ Lemma injp_acci_return:
     Mem.free_list tm (blocks_of_env tge te) = Some tm' ->
     injp_acci (injpw j m tm Hm) (injpw j m' tm' Hm').
 Proof.
-Admitted.
+  intros.
+  econstructor; eauto.
+  - red. intros. unfold Mem.valid_block in *.
+    exfalso. apply H3.
+    erewrite <- free_list_support; eauto.
+  - red. intros. unfold Mem.valid_block in *.
+    exfalso. apply H3.
+    erewrite <- free_list_support; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply free_list_max_perm; eauto.
+  - eapply free_list_max_perm; eauto.
+  - split. erewrite <- free_list_support; eauto.
+    eapply Mem.unchanged_on_implies.
+    eapply free_list_unchanged_on_local_1; eauto.
+    intros. red. apply H3.
+  - split. erewrite <- free_list_support; eauto.
+    eapply Mem.unchanged_on_implies.
+    eapply free_list_unchanged_on_local_2; eauto.
+    intros. red. apply H3.
+  - red. intros. congruence.
+  - red. intros. eapply Mem.perm_inject in H4 as Hp2; eauto.
+    exploit free_list_in. apply H1. eauto. eauto. intros (lo1 & hi1 & IN1 & OFS).
+    exploit match_envs_blocks_in; eauto. intros [X Y]. subst. rewrite Z.add_0_r.
+    apply list_in_map_inv in X.
+    destruct X as [[id [b' ty]] [A B]].
+    simpl in A. inv A.
+    apply PTree.elements_complete in B.
+    intro.
+    eapply free_blocks_of_env_perm_1; eauto.
+Qed.
 
 Lemma injp_acci_assign_loc : forall m tm j m' tm' ge tge ty b ofs b' ofs' bf v tv (Hm: Mem.inject j m tm) (Hm': Mem.inject j m' tm'),
     assign_loc ge ty m b ofs bf v m' ->
@@ -2492,6 +2611,9 @@ Lemma injp_acci_assign_loc : forall m tm j m' tm' ge tge ty b ofs b' ofs' bf v t
 Proof.
   intros. inv H; inv H0; try congruence.
   - (*value*)
+    Search Mem.storev injp_acc.
+    simpl in H4. simpl in H5.
+    Lemma storev_injp_acci : forall m b ofs v m'
     (*storev_acci*)
     rewrite H3 in H. inv H. admit.
   - (*copy*)
