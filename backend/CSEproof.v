@@ -1212,7 +1212,7 @@ Proof.
   exploit tr_builtin_args; eauto.
   intros (vargs' & A & B).
   exploit external_call_mem_inject; eauto.
-  intros (j' & v' & m1' & P & Q & R & S & T & U & V).
+  intros (j' & v' & m1' & P & Q & R & S & T & U & V & W).
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
   econstructor. 5: eapply match_stackframes_incr; eauto. all: eauto.
@@ -1313,7 +1313,7 @@ Proof.
   exploit functions_translated; eauto. cbn. intros (tf & FIND' & TFD).
   monadInv TFD.
   exploit external_call_mem_inject; eauto.
-  intros (j' & v' & m1' & P & Q & R & S & U & V & W).
+  intros (j' & v' & m1' & P & Q & R & S & U & V & W & X).
   econstructor; split.
   eapply exec_function_external; eauto.
   econstructor. eapply match_stackframes_incr; eauto. all: eauto.

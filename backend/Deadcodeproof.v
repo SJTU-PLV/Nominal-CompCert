@@ -1370,7 +1370,7 @@ Ltac UseTransfer :=
   exploit transfer_builtin_args_sound; eauto. intros (tvl & A & B & C & D).
   exploit external_call_mem_inject; eauto 2 with na.
   eapply magree_inject; eauto. intros. apply nlive_all.
-  intros (j' & v' & tm' & P & Q & R & S & T & U & V).
+  intros (j' & v' & tm' & P & Q & R & S & T & U & V & W).
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
   eapply match_succ_states. instantiate (1:= j').
@@ -1450,7 +1450,7 @@ Ltac UseTransfer :=
   exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
   exploit functions_translated; eauto. intros (tf & FIND' & FUN).
   exploit external_call_mem_inject; eauto.
-  intros (j' & res' & tm' & A & B & C & D & E & F & G).
+  intros (j' & res' & tm' & A & B & C & D & E & F & G & I).
   simpl in FUN. inv FUN.
   econstructor; split.
   econstructor; eauto.

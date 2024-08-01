@@ -922,12 +922,15 @@ Lemma external_call_parallel_rule:
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ thread_same j' m1' m2'
   /\ inject_incr j j'
-  /\ inject_separated j j' m1 m2.
+  /\ inject_separated j j' m1 m2
+  /\ new_block_local m1 m1'
+  /\ new_block_local m2 m2'
+  /\ free_preserved j m1 m1' m2'.
 Proof.
   intros until vargs2; intros CALL SEP TEQ ARGS.
   destruct SEP as (A & B & C). simpl in A.
   exploit external_call_mem_inject; eauto. apply B. tinv.
-  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP).
+  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP & A1 & A2 & A3).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }

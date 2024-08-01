@@ -1159,7 +1159,7 @@ Proof.
   exploit match_stacks_inside_globalenvs; eauto. intros SEINJ.
   exploit tr_builtin_args; eauto. intros (vargs' & P & Q).
   exploit external_call_mem_inject; eauto.
-  intros [F1 [v1 [m1' [A [B [C [D [E [J K]]]]]]]]].
+  intros [F1 [v1 [m1' [A [B [C [D [E [J [K L]]]]]]]]]].
   left; econstructor; split.
   eapply plus_one. eapply exec_Ibuiltin; eauto.
   econstructor.
@@ -1338,7 +1338,7 @@ Proof.
 - (* external function *)
   exploit match_stacks_globalenvs; eauto. intros SEINJ.
   exploit external_call_mem_inject; eauto.
-  intros [F1 [v1 [m1' [A [B [C [D [E [J K]]]]]]]]].
+  intros [F1 [v1 [m1' [A [B [C [D [E [J [K L]]]]]]]]]].
   edestruct functions_translated as (cu & fd' & Hfd' & FD & Hcu); eauto.
   simpl in FD. inv FD.
   left; econstructor; split.

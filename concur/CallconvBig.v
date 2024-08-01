@@ -545,16 +545,6 @@ Next Obligation. destruct t. reflexivity. Qed.
     They are: Inliningproof, Separation, Serverproof (*should be ok*) *)
 
 
-Definition free_preserved j m1 m1' m2' :=
-  forall b1 ofs1 b2 delta,
-    j b1 = Some (b2, delta) ->
-    Mem.perm m1 b1 ofs1 Max Nonempty -> ~ Mem.perm m1' b1 ofs1 Max Nonempty ->
-    ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
-
-
-Definition new_block_local m1 m2 :=
-  forall b, ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
-       fst b = Mem.tid (Mem.support m1).
 
 Inductive injp_acci : relation injp_world :=
     injp_acci_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 

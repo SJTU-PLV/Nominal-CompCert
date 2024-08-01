@@ -2229,7 +2229,7 @@ Proof.
   pose proof SEP as SEP'.
   rewrite <- sep_assoc, sep_comm, sep_assoc in SEP.
   exploit external_call_parallel_rule; eauto.
-  clear SEP; intros (j' & res' & m1' & EC & RES & UNCH1 & UNCH2 & SEP & TEQ' & INCR & ISEP).
+  clear SEP; intros (j' & res' & m1' & EC & RES & UNCH1 & UNCH2 & SEP & TEQ' & INCR & ISEP & X).
   rewrite <- sep_assoc, sep_comm, sep_assoc in SEP.
   econstructor; split.
   apply plus_one. econstructor; eauto.
@@ -2337,7 +2337,7 @@ Proof.
   pose proof SEP as SEP'.
   rewrite sep_comm, sep_assoc in SEP.
   exploit external_call_parallel_rule; eauto.
-  intros (j' & res' & m1' & A & B & C & D & E & F & G & I).
+  intros (j' & res' & m1' & A & B & C & D & E & F & G & I & J).
   econstructor; split.
   apply plus_one. eapply exec_function_external; eauto.
   eapply match_states_return with (j := j'). destruct C as [_ C].

@@ -584,7 +584,7 @@ Opaque builtin_strength_reduction.
     exploit tr_builtin_args; eauto.
     intros (vargs'' & U & V).
     exploit external_call_mem_inject; eauto.
-    intros (f' & v' & m2' & A & B & C & D & E & F & G).
+    intros (f' & v' & m2' & A & B & C & D & E & F & G & I).
     econstructor; econstructor; split.
     eapply exec_Ibuiltin; eauto.
     eapply match_states_succ. 3: eauto.
@@ -689,7 +689,7 @@ Opaque builtin_strength_reduction.
   exploit match_stbls_incr; eauto. intro MSTB.  
   exploit functions_translated; eauto. intro FIND'.
   exploit external_call_mem_inject; eauto.
-  intros [f' [v' [m2' [A [B [C [D [E [F G]]]]]]]]].
+  intros [f' [v' [m2' [A [B [C [D [E [F [G I]]]]]]]]]].
   simpl. left; econstructor; econstructor; split.
   eapply exec_function_external; eauto.
   econstructor. 2: eauto. all: eauto.

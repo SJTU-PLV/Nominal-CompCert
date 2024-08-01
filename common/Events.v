@@ -621,6 +621,17 @@ Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   f b1 = None -> f' b1 = Some(b2, delta) ->
   ~Mem.valid_block m1 b1 /\ ~Mem.valid_block m2 b2.
 
+Definition free_preserved j m1 m1' m2' :=
+  forall b1 ofs1 b2 delta,
+    j b1 = Some (b2, delta) ->
+    Mem.perm m1 b1 ofs1 Max Nonempty -> ~ Mem.perm m1' b1 ofs1 Max Nonempty ->
+    ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
+
+
+Definition new_block_local m1 m2 :=
+  forall b, ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
+       fst b = Mem.tid (Mem.support m1).
+
 Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   mk_extcall_properties {
 
@@ -682,7 +693,10 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
     /\ Mem.unchanged_on_tl (loc_unmapped f) m1 m2
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
-    /\ inject_separated f f' m1 m1';
+    /\ inject_separated f f' m1 m1'
+    /\ new_block_local m1 m2
+    /\ new_block_local m1' m2'
+    /\ free_preserved f m1 m2 m2';
 
 (** External calls produce at most one event. *)
   ec_trace_length:
@@ -780,6 +794,9 @@ Proof.
   exploit volatile_load_inject; eauto. intros [v' [A B]].
   exists f; exists v'; exists m1'; intuition. constructor; auto.
   red; intros. congruence.
+  red. intros. congruence.
+  red. intros. congruence.
+  red. intros. congruence.
 (* trace length *)
 - inv H; inv H0; simpl; lia.
 (* receptive *)
@@ -929,6 +946,12 @@ Proof.
   exploit volatile_store_inject; eauto. intros [m2' [A [B [C D]]]].
   exists f; exists Vundef; exists m2'; intuition. constructor; auto.
   red; intros; congruence.
+  red. intros. inv H3. congruence.
+  exfalso. apply H0. unfold Mem.valid_block. setoid_rewrite <- Mem.support_store; eauto.
+  red. intros. inv A. congruence. exfalso. apply H0.
+  unfold Mem.valid_block. setoid_rewrite <- Mem.support_store; eauto.
+  red. intros. inv H3. congruence. exfalso. apply H7.
+  eauto with mem.
 (* trace length *)
 - inv H; inv H0; simpl; lia.
 (* receptive *)
@@ -1021,6 +1044,15 @@ Proof.
   red; intros. destruct (eq_block b1 b).
   subst b1. rewrite C in H2. inv H2. eauto with mem.
   rewrite D in H2 by auto. congruence.
+  red. intros. 
+  eapply Mem.store_valid_block_2 in H2; eauto.
+  eapply Mem.valid_block_alloc_inv in H2; eauto. destruct H2.
+  subst. apply Mem.alloc_result in H3. subst. reflexivity. congruence.
+  red. intros. 
+  eapply Mem.store_valid_block_2 in E; eauto.
+  eapply Mem.valid_block_alloc_inv in E; eauto. destruct E.
+  subst. apply Mem.alloc_result in ALLOC. subst. reflexivity. congruence.
+  red. intros. exfalso. apply H5. eauto with mem.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1118,10 +1150,19 @@ Proof.
     apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
     apply P. lia.
   split. auto.
-  red; intros. congruence.
+  split. red; intros. congruence.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  red. intros.
+  eapply Mem.perm_free_inv in H2; eauto. destruct H2 as [[X Y]|X]; try congruence.
+  subst b1. rewrite H6 in H0. inv H0.
+  eapply Mem.perm_free_2; eauto. lia.
 + inv H2. inv H6. replace v' with Vnullptr.
   exists f, Vundef, m1'; intuition auto using Mem.unchanged_on_refl_tl.
   constructor.
+  red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
   red; intros; congruence.
   unfold Vnullptr in *; destruct Archi.ptr64; inv H4; auto.
 (* trace length *)
@@ -1215,7 +1256,11 @@ Proof.
   eapply Mem.storebytes_unchanged_on_tl; eauto.
   simpl; intros; extlia.
   split. apply inject_incr_refl.
-  red; intros; congruence.
+  split. red; intros; congruence.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  red. intros. exfalso. apply H12. eauto with mem.
+  
 + (* general case sz > 0 *)
   exploit Mem.loadbytes_length; eauto. intros LEN.
   assert (RPSRC: Mem.range_perm m1 bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sz) Cur Nonempty).
@@ -1252,7 +1297,10 @@ Proof.
   erewrite list_forall2_length; eauto.
   lia.
   split. apply inject_incr_refl.
-  red; intros; congruence.
+  split. red; intros; congruence.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  split. red. intros. exfalso. apply H0. eauto with mem.
+  red. intros. elim H12. eauto with mem.
 - (* trace length *)
   intros; inv H. simpl; lia.
 - (* receptive *)
@@ -1296,6 +1344,9 @@ Proof.
   econstructor; eauto.
   eapply eventval_list_match_inject; eauto.
   red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1338,6 +1389,9 @@ Proof.
   econstructor; eauto.
   eapply eventval_match_inject; eauto.
   red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1376,6 +1430,9 @@ Proof.
 - inv H0.
   exists f; exists Vundef; exists m1'; intuition.
   econstructor; eauto.
+  red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
@@ -1428,6 +1485,9 @@ Proof.
   destruct (bsem vargs') as [vres'|] eqn:?; try contradiction.
   exists f, vres', m1'; intuition auto using Mem.extends_refl, Mem.unchanged_on_refl_tl.
   constructor; auto.
+  red; intros; congruence.
+  red; intros; congruence.
+  red; intros; congruence.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
@@ -1566,7 +1626,10 @@ Lemma external_call_mem_inject:
     /\ Mem.unchanged_on_tl (loc_unmapped f) m1 m2
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
-    /\ inject_separated f f' m1 m1'.
+    /\ inject_separated f f' m1 m1'
+    /\ new_block_local m1 m2
+    /\ new_block_local m1' m2'
+    /\ free_preserved f m1 m2 m2'.
 Proof.
   intros. eapply external_call_mem_inject_gen with (ge1 := se) (ge2 := tse); eauto.
   repeat split; intros.

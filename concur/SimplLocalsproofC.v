@@ -643,6 +643,13 @@ Lemma alloc_variables_max_perm :
   eauto with mem.
 Qed.
 
+Lemma alloc_variables_perm :
+    forall ge e m vars e' m' b ofs k p,
+  alloc_variables ge e m vars e' m' -> Mem.perm m b ofs k p -> Mem.perm m' b ofs k p.
+  induction 1. auto.
+  intros. apply IHalloc_variables. eauto with mem.
+Qed.
+
 Lemma alloc_variables_unchanged_on :
   forall ge e m vars e' m' P,
     alloc_variables ge e m vars e' m' -> Mem.unchanged_on P m m'.
@@ -1305,13 +1312,14 @@ Theorem store_params_correct:
   /\ Mem.support tm' = Mem.support tm
   /\ Mem.ro_unchanged tm tm'
   /\ injp_max_perm_decrease tm tm'
-  /\ Mem.unchanged_on (fun b _  => Mem.valid_block wm2 b) tm tm'.
+  /\ Mem.unchanged_on (fun b _  => Mem.valid_block wm2 b) tm tm'
+  /\ Mem.unchanged_on_i (fun b _ => True) tm tm'.
 Proof.
   induction 1; simpl; intros until targs; intros NOREPET CASTED VINJ MENV MINJ TLE LE.
   (* base case *)
   inv VINJ. exists tle2; exists tm; split. apply star_refl. split. auto. split. auto.
   split. apply match_envs_temps_exten with tle1; auto. split. auto. split.
-  red. eauto. split. auto. eauto with mem.
+  red. eauto. split. auto. split; eauto with mem. split; eauto with mem.
   (* inductive case *)
   inv NOREPET. inv CASTED. inv VINJ.
   exploit me_vars; eauto. instantiate (1 := id); intros MV.
@@ -1360,12 +1368,21 @@ Proof.
   rewrite ASSSUP in Z1. intuition auto.
   red. intros. eapply ASSRO; eauto. eapply H; eauto.
   unfold Mem.valid_block. rewrite ASSSUP. eauto.
-  intros. intro. eapply H12; eauto.
+  intros. intro. eapply H13; eauto.
   eapply max_perm_decrease_trans; eauto. rewrite ASSSUP. eauto.
   eapply Mem.unchanged_on_trans. 2: eauto.
   eapply Mem.unchanged_on_implies.
   eapply assign_loc_unchanged_on; eauto.
   intros. inv Y. apply me_tinitial0 in TENV. congruence.
+  destruct H11. split.
+  erewrite <- assign_loc_support; eauto.
+  eapply Mem.unchanged_on_trans.
+  eapply Mem.unchanged_on_implies. eapply assign_loc_unchanged_on; eauto.
+  intros. red. destruct H8. intro.  subst b0. apply H12. inv MENV.
+  exploit me_tid0; eauto. intro. inv MINJ. inv mi_thread. inv Hms.
+  erewrite <- Hjs; eauto. congruence.
+  eapply Mem.unchanged_on_implies. eauto.
+  intros. destruct H8. split; auto. erewrite assign_loc_support; eauto.
 Qed.
 
 Lemma bind_parameters_support:
@@ -1388,10 +1405,19 @@ Proof.
   erewrite <- assign_loc_support; eauto.
 Qed.
 
+Lemma bind_parameters_perm :
+  forall ge e m params args m' b ofs k p,
+    bind_parameters ge e m params args m' -> Mem.perm m b ofs k p <-> Mem.perm m' b ofs k p.
+Proof.
+  induction 1. reflexivity.
+  etransitivity. 2: eauto. inv H0.
+  split; eauto with mem. split; eauto with mem.
+Qed.
+
 Lemma bind_parameters_unchanged_on :
-  forall ge e m params args m' j ce te e' te' s1 s2 s3 s4 m'',
+  forall ge e m params args m' j ce te e' te' s1 s2 s3 s4,
     bind_parameters ge e m params args m' ->
-    match_envs j ce e te m'' s1 s2 e' te' s3 s4 ->
+    match_envs j ce e te m' s1 s2 e' te' s3 s4 ->
     Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
 Proof.
   induction 1; intros.
@@ -1400,6 +1426,24 @@ Proof.
   eapply Mem.unchanged_on_implies.
   eapply assign_loc_unchanged_on; eauto.
   intros. inv H2. apply me_initial0 in H. congruence.
+Qed.
+
+Lemma bind_parameters_unchanged_on_1 :
+    forall ge e m params args m' j ce te e' te' s1 s2 s3 s4,
+    bind_parameters ge e m params args m' ->
+    match_envs j ce e te m' s1 s2 e' te' s3 s4 ->
+    Mem.unchanged_on (fun b _ => fst b <> Mem.tid (Mem.support m)) m m'.
+Proof.
+  induction 1; intros.
+  - apply Mem.unchanged_on_refl.
+  - eapply Mem.unchanged_on_trans.
+    + eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on; eauto.
+      intros. red. intro. apply H3. subst b.
+      inv H2. erewrite <- assign_loc_support. 2: eauto.
+      erewrite <- bind_parameters_support. 2: eauto. eauto.
+    + eapply Mem.unchanged_on_implies. eauto.
+      intros. red. erewrite assign_loc_support; eauto.
 Qed.
 
 Lemma bind_parameters_ro :
@@ -2865,7 +2909,7 @@ Proof.
 (* builtin *)
   exploit eval_simpl_exprlist; eauto with compat. intros [CASTED [tvargs [C D]]].
   exploit external_call_mem_inject; eauto with compat.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
   destruct S as [S0 S1]. destruct T as [T0 T1].
   assert (ACCE': injp_acce (injpw j m tm Hm) (injpw j' m' tm' R)).
   {
@@ -2880,15 +2924,12 @@ Proof.
   assert (ACCI': injp_acci (injpw j m tm Hm) (injpw j' m' tm' R)).
   {
     econstructor; eauto.
-    red. intros. admit. (*to be added (proved) in Events.v *)
-    red. intros. admit. (*to be added in Events.v *)
     red. eauto using external_call_readonly.
     red. eauto using external_call_readonly.
     red. intros. eapply external_call_max_perm; eauto.
     red. intros. eapply external_call_max_perm; eauto.
     split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
     split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
-    red. intros. admit. (* same as above *)
   }
   econstructor; split.
   apply plus_one. econstructor; eauto.
@@ -3038,7 +3079,7 @@ Proof.
     intros. apply (create_undef_temps_lifted id f). auto.
     intros. destruct (create_undef_temps (fn_temps f))!id as [v|] eqn:?; auto.
     exploit create_undef_temps_inv; eauto. intros [P Q]. elim (l id id); auto.
-  intros [tel [tm1 [P [Q [R [S [T [U [V W]]]]]]]]].
+  intros [tel [tm1 [P [Q [R [S [T [U [V [W W']]]]]]]]]].
   change (cenv_for_gen (addr_taken_stmt (fn_body f)) (fn_params f ++ fn_vars f))
     with (cenv_for f) in *.
   generalize (vars_and_temps_properties (cenv_for f) (fn_params f) (fn_vars f) (fn_temps f)).
@@ -3112,18 +3153,34 @@ Proof.
       intros. destruct H4. destruct H4. auto.
   }
   etransitivity. eauto. etransitivity. instantiate (1:= injpw j' m0 tm0 C).
-  admit.
+  {
+    constructor; eauto.
+    - red. intros. eapply alloc_variables_new_block_tid; eauto.
+    - red. intros. eapply alloc_variables_new_block_tid; eauto.
+    - eapply alloc_variables_ro; eauto.
+    - eapply alloc_variables_ro; eauto.
+    - eapply alloc_variables_max_perm; eauto.
+    - eapply alloc_variables_max_perm; eauto.
+    - split. eapply alloc_variables_support1; eauto. eapply alloc_variables_unchanged_on; eauto.
+    - split. eapply alloc_variables_support1; eauto. eapply alloc_variables_unchanged_on; eauto.
+    - red. intros. split; intro. exploit E; eauto. intro. congruence.
+      exploit F; eauto. intro. congruence.
+    - red. intros. elim H5. eapply alloc_variables_perm; eauto.
+  }
   (*use alloc_variables_acci or added in [match_alloc_variables]*)
-  { econstructor; eauto.
+  { (*bind_parameters*)
+    econstructor; eauto.
     - red. intros. apply bind_parameters_support in H2. unfold Mem.valid_block in *. congruence.
     - red. intros. exfalso. apply H3. unfold Mem.valid_block in *. rewrite <- T. auto.
     - eapply bind_parameters_ro; eauto.
     - eapply bind_parameters_max_perm; eauto.
-    - Search bind_parameters.
-      admit. (*TODO: mapped parallel stores*)
-    - admit. (*TODO: need to be added in [store_params_correct]*)
+    - split. erewrite <- bind_parameters_support; eauto.
+      eapply Mem.unchanged_on_implies. eapply bind_parameters_unchanged_on_1; eauto.
+      intros. apply H3.
+    - destruct W'. split; auto. eapply Mem.unchanged_on_implies; eauto.
+      intros. red. split; auto. apply H3.
     - red. intros. congruence.
-   - admit. (*need to be added in [store_params_correct]*)
+    - red. intros. elim H5. erewrite <- bind_parameters_perm; eauto.
   }
   apply compat_cenv_for.
   rewrite (bind_parameters_support _ _ _ _ _ _ H2). eauto.
@@ -3135,16 +3192,36 @@ Proof.
   eapply functions_translated in FIND as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD. inv FUNTY.
   exploit external_call_mem_inject; eauto.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
+  destruct S as [S0 S1]. destruct T as [T0 T1].
+  assert (ACCE': injp_acce (injpw j m tm Hm) (injpw j' m' tm' R)).
+  {
+    econstructor; eauto.
+    red. eauto using external_call_readonly.
+    red. eauto using external_call_readonly.
+    red. intros. eapply external_call_max_perm; eauto.
+    red. intros. eapply external_call_max_perm; eauto.
+    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
+    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
+  }
+  assert (ACCI': injp_acci (injpw j m tm Hm) (injpw j' m' tm' R)).
+  {
+    econstructor; eauto.
+    red. eauto using external_call_readonly.
+    red. eauto using external_call_readonly.
+    red. intros. eapply external_call_max_perm; eauto.
+    red. intros. eapply external_call_max_perm; eauto.
+    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
+    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
+  }
   econstructor; eauto.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
-  eapply match_cont_extcall; eauto. admit.
+  eapply match_cont_extcall; eauto. inv ACCE'. auto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
-  instantiate (1:= R).
-  admit. admit. (*same as builtin *)
+  instantiate (1:= R). etransitivity; eauto. etransitivity; eauto.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.
@@ -3152,7 +3229,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Admitted.
+Qed.
 
 Lemma initial_states_simulation:
   forall q1 q2 S, (cc_c_query injp) w q1 q2 -> initial_state ge q1 S ->

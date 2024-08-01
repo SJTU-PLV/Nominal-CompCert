@@ -1110,7 +1110,10 @@ Lemma external_call_inject:
     /\ Mem.unchanged_on_tl (loc_unmapped f) m1 m2
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
-    /\ inject_separated f f' m1 m1'.
+    /\ inject_separated f f' m1 m1'
+    /\ new_block_local m1 m2
+    /\ new_block_local m1' m2'
+    /\ free_preserved f m1 m2 m2'.                
 Proof.
   intros. eapply external_call_mem_inject_gen; eauto.
   apply globals_symbols_inject; auto.
@@ -1342,7 +1345,7 @@ Proof.
   intros (vargs' & P & Q).
   exploit external_call_inject; eauto.
   eapply match_stacks_preserves_globals; eauto.
-  intros (j' & tv & tm' & A & B & C & D & E & F & G).
+  intros (j' & tv & tm' & A & B & C & D & E & F & G & I).
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
   eapply match_states_regular with (j := j'); eauto.
@@ -1409,7 +1412,7 @@ Proof.
 - (* external function *)
   exploit external_call_inject; eauto.
   eapply match_stacks_preserves_globals; eauto.
-  intros (j' & tres & tm' & A & B & C & D & E & F & G).
+  intros (j' & tres & tm' & A & B & C & D & E & F & G & I).
   econstructor; split.
   rewrite FIND in FUN. inv FUN.
   eapply exec_function_external; eauto.

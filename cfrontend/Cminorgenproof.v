@@ -2005,7 +2005,7 @@ Proof.
   intros [tvargs [EVAL2 VINJ2]].
   exploit match_callstack_match_globalenvs; eauto. intros MG.
   exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR SEPARATED]]]]]]]]].
+  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED X]]]]]]]]]].
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   assert (MCS': match_callstack f' m' tm'
@@ -2160,7 +2160,7 @@ Opaque PTree.set.
   exploit functions_translated; eauto. intros [tfd [TFIND TR]].
   monadInv TR.
   exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR SEPARATED]]]]]]]]].
+  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED X]]]]]]]]]].
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.

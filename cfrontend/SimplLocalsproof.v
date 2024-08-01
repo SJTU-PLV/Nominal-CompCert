@@ -2601,7 +2601,7 @@ Proof.
 (* builtin *)
   exploit eval_simpl_exprlist; eauto with compat. intros [CASTED [tvargs [C D]]].
   exploit external_call_mem_inject; eauto with compat.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor. eauto. eauto.
@@ -2840,7 +2840,7 @@ Proof.
   eapply functions_translated in FIND as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD. inv FUNTY.
   exploit external_call_mem_inject; eauto.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.
