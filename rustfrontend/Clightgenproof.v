@@ -1000,7 +1000,7 @@ Proof.
     rewrite B. rewrite J. eauto. 
 Qed. 
   
-(* cited from SimplLocalsproof.v assign_loc_inject *)
+(* based on SimplLocalsproof.v assign_loc_inject *)
 Lemma assign_loc_inject: forall f ty m loc ofs v m' tm loc' ofs' v',
     assign_loc ge ty m loc ofs v m' ->
     Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
@@ -1992,6 +1992,14 @@ Proof.
     eauto.
 Qed.
 
+Lemma type_of_params_trans: forall l,
+Ctypes.type_of_params (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) l) =
+to_ctypelist (type_of_params l).
+Proof. 
+  intros. induction l. eauto.
+  simpl. rewrite IHl. destruct a. auto. 
+Qed.  
+
 
 Lemma step_drop_simulation:
   forall S1 t S2, step_drop ge S1 t S2 ->
@@ -2035,7 +2043,7 @@ Proof.
                         
     (* evaluate (deref_arg_rec field_param tys)  *)
     exploit deref_loc_rec_inject; eauto. instantiate (1:= Tstruct orgs0 id).
-    simpl. f_equal. eapply drop_glue_children_types_last;eauto.
+    simpl. f_equal. eapply drop_glue_children_types_last; eauto.
     inv VINJ.
     econstructor; eauto. do 2 rewrite Ptrofs.add_assoc. f_equal.
     eapply Ptrofs.add_commut.
@@ -2717,7 +2725,7 @@ Proof.
     simpl. unfold co_ty. eauto.
     eauto. auto.
     eauto. eapply Clight.deref_loc_copy. auto.
-    simpl. eauto. eauto. auto.
+    simpl. eauto. eauto. auto. 
     (* evaluation get *)
     instantiate (1 := MINJ). instantiate (1 := (Clight.Kseq Clight.Sbreak (Clight.Kseq uts (Kswitch tk)))).
     instantiate (1 := tf).
@@ -2954,14 +2962,198 @@ Proof.
         eapply match_dropstate_enum; eauto.
         
 Qed.
+(* Cop.classify_fun (Clight.typeof e') = Cop.fun_case_f ?tyargs ?tyres ?cconv *)
 
-  
+Lemma eval_expr_cexprlist: forall al j le m tyargs vargs te le0 tm l',
+eval_exprlist ge le m al tyargs vargs
+-> expr_to_cexpr_list ce tce al = OK l'
+-> match_env j le te
+-> Mem.inject j m tm
+-> exists Tvargs, Clight.eval_exprlist tge te le0 tm l' (to_ctypelist tyargs) Tvargs
+/\ Val.inject_list j vargs Tvargs.
+Proof. 
+  induction al.  
+  intros. inv H. inv H0. simpl. eexists. split. econstructor. eauto. 
+  intros. inv H. monadInv H0. exploit eval_expr_inject; eauto.
+  intros (v & EV & INJ). 
+  exploit sem_cast_to_ctype_inject; eauto. 
+  intros (v' & CAST & INJ2).  
+  exploit IHal; eauto. intros (Tvargs & EVL & INJL).  
+  simpl.  eexists. split. econstructor; eauto. 
+  exploit expr_to_cexpr_type; eauto. intro TYPE_CONV. rewrite <- TYPE_CONV. eauto. 
+  econstructor; eauto. 
+Qed. 
+
+Fixpoint freelist_no_overlap (l: list (block * Z * Z)) : Prop :=
+  match l with
+  | nil => True
+  | (b, lo, hi) :: l' =>
+      freelist_no_overlap l' /\
+      (forall b' lo' hi', In (b', lo', hi') l' ->
+       b' <> b \/ hi' <= lo \/ hi <= lo')
+  end.
+
+
+(*copy from SimplLocalsproof*)
+Lemma can_free_list:
+  forall l m,
+  (forall b lo hi, In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable) ->
+  freelist_no_overlap l ->
+  exists m', Mem.free_list m l = Some m'.
+Proof.
+  induction l; simpl; intros.
+- exists m; auto.
+- destruct a as [[b lo] hi]. destruct H0.
+  destruct (Mem.range_perm_free m b lo hi) as [m1 A]; auto. 
+  rewrite A. apply IHl; auto.
+  intros. red; intros. eapply Mem.perm_free_1; eauto.
+  exploit H1; eauto. intros [B|B]. auto. right; lia.
+  eapply H; eauto.
+Qed.
+
+(*copied from Simplocalsproof*)
+Lemma free_list_perm':
+  forall b lo hi l m m',
+  Mem.free_list m l = Some m' ->
+  In (b, lo, hi) l ->
+  Mem.range_perm m b lo hi Cur Freeable.
+Proof.
+  induction l; simpl; intros.
+  contradiction.
+  destruct a as [[b1 lo1] hi1].
+  destruct (Mem.free m b1 lo1 hi1) as [m1|] eqn:?; try discriminate.
+  destruct H0. inv H0. eapply Mem.free_range_perm. eauto.
+  red. intros. eapply Mem.perm_free_3. eauto. eapply IHl; eauto.
+Qed.  
+
+
+
+
+
+(* based on SimplLocalsproof *)
+Lemma free_list_inject: forall m1 e te m2 tm tm1 j,
+  Mem.free_list m1 (blocks_of_env ge e) = Some m2
+  -> match_env j e te
+  -> Mem.inject j m1 tm
+  -> (forall id b t, e ! id = Some (b, t) -> complete_type ge t = true) 
+  -> exists tm2, Mem.free_list tm1 (Clight.blocks_of_env tge te) = Some tm2
+  /\ Mem.inject j m1 tm2.
+Proof. 
+  intros. 
+  rename H into RFREEL. 
+  rename H0 into MATCH. 
+  rename H1 into INJ. 
+  rename H2 into COMPT.
+  assert (X: exists tm', Mem.free_list tm (Clight.blocks_of_env tge te) = Some tm'). 
+  {
+    apply can_free_list. 
+    - (* permissions *)
+      intros. unfold Clight.blocks_of_env in H. 
+      exploit list_in_map_inv. eauto. intros [[id [b' ty]] [EQ IN]]. 
+      unfold Clight.block_of_binding in EQ. inv EQ. 
+      unfold match_env in MATCH. generalize (MATCH id). 
+      remember IN as INCP. clear HeqINCP. 
+      eapply PTree.elements_complete in IN. rewrite IN. intros. inv H0.  
+      destruct x. inv H3. 
+      change 0 with (0 + 0).
+      replace (Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t)) with (Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t) + 0) by lia.
+      eapply Mem.range_perm_inject; eauto. 
+      eapply free_list_perm'; eauto. 
+      unfold blocks_of_env. 
+      change (b', 0, Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t)) with (Clight.block_of_binding tge (id, (b', (to_ctype t)))) in H.
+      change (b, 0, Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t)) with (Clight.block_of_binding tge (id, (b, (to_ctype t)))).       
+      assert (Clight.block_of_binding tge (id, (b, to_ctype t)) = block_of_binding ge (id, (b, t))).
+      {
+        unfold Clight.block_of_binding. unfold block_of_binding. 
+        symmetry in H1. 
+        generalize (COMPT id b t H1). inv TRANSL. simpl. intros. exploit sizeof_match; eauto. congruence.  
+      }
+      rewrite H2. apply in_map. apply PTree.elements_correct. eauto.
+    - unfold Clight.blocks_of_env. 
+      
+  }
+  Admitted. 
+
+
+Lemma blocks_of_env_no_overlap: 
+  forall l j e te m tm,
+  match_env j e te ->
+  Mem.inject j m tm ->
+  (forall id rb rt,
+  e!id = Some(rb, rt) -> Mem.range_perm m rb 0 (sizeof ge rt) Cur Freeable) -> 
+  list_norepet (List.map fst l) ->
+  (forall id cb, In (id, cb) l -> te!id = Some cb) ->
+  (forall id rb rt, e ! id = Some (rb, rt) -> complete_type ge rt = true) ->
+  freelist_no_overlap (map (Clight.block_of_binding tge) l). 
+Proof. 
+  unfold blocks_of_env.
+  induction l. 
+  - intros. simpl. auto. 
+  - intros. rename H into MATCH. rename H0 into MINJ. rename H1 into RP. 
+    rename H2 into PERM. rename H3 into INL. rename H4 into COMP.   
+    simpl. destruct a as [id [b ty]]. simpl in *. inv PERM. split. 
+    + exploit IHl; eauto. 
+    + intros. exploit list_in_map_inv; eauto. intros [[id' [b'' ty']] [A B]].
+      simpl in A. inv A. rename b'' into b'.
+      assert (TE': te ! id' = Some (b', ty')) by eauto.
+      assert (TE: te ! id = Some (b, ty)) by eauto. 
+      generalize (MATCH id'). rewrite TE'. intros. inv H0. destruct x. inv H5.
+      generalize (MATCH id). rewrite TE. intros. inv H4. destruct x. inv H7.
+      symmetry in H3. generalize (RP id' b0 t H3). intro C. 
+      symmetry in H5. generalize (RP id b1 t0 H5). intro D. 
+      destruct (zle (Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t) ) 0). auto. 
+      destruct (zle (Ctypes.sizeof (Ctypes.prog_comp_env tprog) (to_ctype t0)) 0). auto.
+      assert (Mem.perm m b0 0 Max Nonempty).
+      { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable.
+        eapply RP; eauto. generalize (sizeof_pos (prog_comp_env prog) t). intros.   
+        split. lia. generalize (COMP id' b0 t H3). intros. inv TRANSL. erewrite <- sizeof_match; eauto.
+        lia. auto with mem. 
+      }
+      assert (Mem.perm m b1 0 Max Nonempty).
+      { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable.
+        eapply RP; eauto. generalize (sizeof_pos (prog_comp_env prog) t). auto.    
+        intros. auto. generalize (COMP id b1 t0 H5). intros. inv TRANSL. erewrite <- sizeof_match; eauto.
+        lia. auto with mem. 
+      }
+
+      exploit Mem.mi_no_overlap. eauto.  
+Admitted. 
+
+(* based on cfrontend/SimplLocalsproof.v*)
+
+
+(* Lemma blocks_of_env_no_overlap:
+  forall (ge: genv) j e te m tm tge,
+  match_env j e te ->
+  Mem.inject j m tm ->
+  (forall id b ty,
+   e!id = Some(b, ty) -> Mem.range_perm m b 0 (sizeof ge ty) Cur Freeable) ->
+  forall l,
+  list_norepet (List.map fst l) ->
+  (forall id bty, In (id, bty) l -> te!id = Some bty) ->
+  freelist_no_overlap (map (Clight.block_of_binding tge) l). 
+Proof.
+  intros. rename H into MATCH. rename H0 into INJ. 
+  rename H1 into PERM. rename H2 into NO_REP. rename H3 into IN. 
+  revert NO_REP. revert IN. induction l; intros. 
+  - simpl. auto. 
+  - simpl. destruct a as [id [b ty]]. simpl in *. inv NO_REP. split.
+    admit. 
+    intros. exploit list_in_map_inv; eauto. intros [[id' [b'' ty']] [A B]]. 
+    simpl in A. inv A. rename b'' into b'.   *)
+
+
+
+
+
+
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step1 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   unfold build_clgen_env in *. unfold ctx in *. simpl in *.
-  induction 1; intros; inv MS.
+  induction 1; intros; inv MS. 
           
   (* assign *)
   - inv MSTMT. simpl in H3.
@@ -2979,8 +3171,8 @@ Proof.
     erewrite expr_to_cexpr_type in *;eauto.
     eexists. split.
     (* step *)
-    + eapply plus_one.
-      eapply Clight.step_assign;eauto.
+    + eapply plus_one. 
+      eapply Clight.step_assign; eauto.
       (* Other proof strategy for sem_cast:
          1. type equal between lhs and rhs
          2. evaluation of well typed expression produces casted value (val_casted)
@@ -3151,7 +3343,7 @@ Proof.
     cut (match_env j2 le te).
     2: { eapply match_env_incr;eauto. }
     intros MENV3.
-    (* eval_lvalue lhs *)
+    (* eval_lvalue lhs *) 
     exploit eval_place_inject. eauto. eauto.
     eauto. eauto.
     instantiate (1 := (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
@@ -3168,7 +3360,7 @@ Proof.
     
     eexists. split.
     + econstructor. econstructor. eapply star_step.
-      econstructor. eapply star_left.
+      econstructor. eapply star_left. 
       (* step_call to malloc *)
       { eapply Clight.step_call.
         * simpl. eauto.
@@ -3280,7 +3472,7 @@ Proof.
       erewrite Ptrofs.add_zero_l in TFINDFUN. unfold tge.
       inv TRFREE. eauto. intuition. }
     (* deref_loc inject *)
-    exploit deref_loc_inject;eauto. intros (tv' & TDEREF & VINJ2).    
+    exploit deref_loc_inject; eauto. intros (tv' & TDEREF & VINJ2).    
     (* extcall_free_sem inject *)
     exploit extcall_free_injp; eauto.
     instantiate (1:= MINJ). instantiate (1 := tge).
@@ -3546,17 +3738,65 @@ Proof.
     eapply match_dropstate_enum; eauto.
 
   (* step_storagelive *)
-  - admit.
-  (* step_storagedead *)
-  - admit.
+  - inv MSTMT. inv H.    
+    eexists. split. 
+    + eapply plus_one.     admit. 
+    + eapply match_regular_state; eauto. 
+      econstructor. econstructor. 
+  (* step_storagedead *) 
+  - inv MSTMT. inv H. 
+    eexists. split. 
+    + admit. 
+    + eapply match_regular_state; eauto. 
+      econstructor. econstructor. 
 
   (* step_call *)
-  - inv MSTMT. simpl in H4.
-    monadInv_comb H4. monadInv_sym EQ3. unfold gensym in EQ2. inv EQ2.
-    destruct g. simpl in H6. inv H6. eapply list_cons_neq in H5.
-    contradiction.
-    admit.
-
+  - inv MSTMT. simpl in H5. 
+    monadInv_comb H5. monadInv_sym EQ3. unfold gensym in EQ2. inv EQ2.
+    destruct g. simpl in H7. inv H7. eapply list_cons_neq in H6.
+    contradiction. exploit eval_expr_inject; eauto. 
+    instantiate (1:= le0).
+    intros (vf' & EVALF & INJF).   
+    exploit expr_to_cexpr_type; eauto. intros TYPF. 
+    exploit eval_expr_cexprlist; eauto. intros EVAL_EVAL_LIST'. 
+    destruct EVAL_EVAL_LIST' as (Tvargs' & EVAL_EVAL_LIST' & INJL). 
+    assert (MSTBL: Genv.match_stbls j se tse). {   
+      destruct w. inv GE. simpl in *. inv INCR. 
+      eapply Genv.match_stbls_incr; eauto. 
+      (* disjoint *)
+      intros. exploit H15; eauto. intros (A & B). split; eauto. }
+    exploit find_funct_match; eauto. 
+    intros A. simpl. destruct A as (tf' & A & B).
+    inv B. 
+    inv H5. 
+    + eexists. split. 
+      eapply plus_left. eapply Clight.step_seq. eapply star_one. econstructor; eauto.  
+        (* classify_fun *)
+        rewrite <- TYPF. destruct (typeof a); simpl in *; try (congruence).   
+        inv H. eauto. 
+        simpl in *. unfold type_of_function in H3. inv H3.  
+        rewrite <- H10. rewrite <- H12. 
+        assert (C: Ctypes.type_of_params (Clight.fn_params tf0) = (to_ctypelist (type_of_params (fn_params f0)))). 
+        {
+          rewrite H13. eapply type_of_params_trans with (l := (fn_params f0)). 
+        }
+        rewrite <- C. eauto.  
+        (* eval_exprlist *) 
+        eauto. 
+        (* match_states *)
+        econstructor; eauto. econstructor; eauto. 
+    + simpl in H4. rewrite H6 in H4. contradiction.    
+    + simpl in H4. contradiction. 
+    + simpl in H4. contradiction. 
+    + simpl in H4. 
+      eexists. split. 
+      eapply plus_left. eapply Clight.step_seq. eapply star_one. econstructor; eauto.  
+        (* classify_fun *)
+        rewrite <- TYPF. destruct (typeof a); simpl in *; try (congruence).   
+        inv H. eauto. 
+        simpl in *. unfold type_of_function in H3. inv H3. auto. auto.
+        (* match_states *)
+        econstructor; eauto. econstructor; eauto. 
   (* step_internal_function *)
   - (* how to prove tr_function f tf because we should guarantee that
     f is not a drop glue *)
@@ -3585,21 +3825,64 @@ Proof.
       (* inject_incr and match_cont *)
       { eapply match_cont_inj_incr. auto. inv INCR1. auto. }
       eauto.
-      etransitivity;eauto. auto.
+      etransitivity; eauto. auto.
       
   (* step_external_function *)
-  - admit.
-
+  - assert (MSTBL: Genv.match_stbls j se tse). {   
+    destruct w. inv GE. simpl in *. inv INCR. 
+    eapply Genv.match_stbls_incr; eauto. 
+    (* disjoint *)
+    intros. exploit H7; eauto. intros (A & B). split; eauto. }    
+    exploit find_funct_match; eauto. 
+    intros A. simpl. destruct A as (tf' & A & B). 
+    exploit external_call_mem_inject; eauto.
+    intros C. destruct C as (f' & vres' & m2' & C & D & E & F & J & I & K).  
+    inv B. 
+    + exists(Clight.Returnstate vres' tk m2'). split. eapply plus_one. eapply Clight.step_external_function. eauto. eauto.  
+      econstructor. intros. exploit match_cont_inj_incr; eauto. auto.  
+      eapply transitivity; eauto. 
+      econstructor; auto. eapply (Mem.unchanged_on_support _ _ _ F).
+      eapply (Mem.unchanged_on_support _ _ _ J).
+      eauto using val_inject_incr. 
+    + exists(Clight.Returnstate vres' tk m2'). split. eapply plus_one. eapply Clight.step_external_function; eauto. 
+      econstructor. intros. exploit match_cont_inj_incr; eauto. auto.  
+      eapply transitivity; eauto. 
+      econstructor; auto. eapply (Mem.unchanged_on_support _ _ _ F).
+      eapply (Mem.unchanged_on_support _ _ _ J).
+      eauto using val_inject_incr. 
+    + exists(Clight.Returnstate vres' tk m2'). split. eapply plus_one. eapply Clight.step_external_function; eauto. 
+      econstructor. intros. exploit match_cont_inj_incr; eauto. auto.  
+      eapply transitivity; eauto. 
+      econstructor; auto. eapply (Mem.unchanged_on_support _ _ _ F).
+      eapply (Mem.unchanged_on_support _ _ _ J).
+      eauto using val_inject_incr. 
   (* step_return_0 *)
-  - admit.
+  - inv MSTMT. inv H0. 
+    eexists. split. eapply plus_one. eapply Clight.step_return_0. 
+    admit. 
+    admit. 
   (* step_return_1 *)
   - admit.
   (* step_skip_call *)
-  - admit.
+  - inv MSTMT. inv H0. admit. 
+    (* destruct tk; simpl; eexists; split.  
+    + eapply plus_one. econstructor. simpl. eauto. admit.  
+    + admit.  
+    + eapply plus_one. econstructor. 
+    + admit. 
+    + eapply plus_one. econstructor. left. eauto. 
+    + admit. 
+    + eapply plus_one. econstructor. 
+    + admit. 
+    + eapply plus_one. econstructor. simpl. generalize (MCONT m1 tm nil). intros MCONT1. 
+      inv MCONT1. eauto. admit. 
+       *)
   (* step_returnstate *)
   - admit.
   (* step_seq *)
-  - admit.
+  - inv MSTMT. inv H.      
+    monadInv_sym H1. eexists. split. apply plus_one.   
+    admit. admit. admit. 
   (* step_skip_seq *)
   - admit.
   (* step_continue_seq *)
@@ -3657,6 +3940,7 @@ Proof.
       eapply match_cont_inj_incr; eauto.
       auto. etransitivity; eauto.
       auto.
+      
 Qed.
 
 End PRESERVATION.
@@ -3671,7 +3955,7 @@ Proof.
     eapply is_internal_match. eapply MATCH.
     eauto.
     (* tr_fundef relates internal function to internal function *)
-    intros. inv H3;auto.
+    intros. inv H3; auto.
     auto. auto.
   (* initial state *)
   - eapply initial_states_simulation; eauto. 

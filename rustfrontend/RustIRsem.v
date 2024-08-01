@@ -212,6 +212,8 @@ Definition good_function fd : Prop :=
     | _ => True
     end
   end.
+    
+
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1,
@@ -325,9 +327,10 @@ Inductive step : state -> trace -> state -> Prop :=
     (NORMAL: ef <> EF_malloc /\ ef <> EF_free),
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
-
+   
 (** Return cases *)
-| step_return_0: forall e lb m1 m2 f k ,
+| step_return_0: forall e lb m1 m2 f k,
+    (forall id b t, e ! id = Some (b, t) -> complete_type ge t = true) ->
     blocks_of_env ge e = lb ->
     (* drop the stack blocks *)
     Mem.free_list m1 lb = Some m2 ->
