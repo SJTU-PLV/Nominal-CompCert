@@ -1034,7 +1034,6 @@ Proof.
   induction vars; intros.
   - inv H. congruence.
   - inv H.
-    Search Mem.alloc.
     destruct (Mem.sup_dec b (Mem.support m1)).
     + eapply Mem.valid_block_alloc_inv in s; eauto. destruct s. subst.
       apply Mem.alloc_result in H6. rewrite H6. reflexivity. congruence.
@@ -2653,8 +2652,6 @@ Lemma injp_acci_assign_loc : forall m tm j m' tm' ty b ofs b' ofs' bf v tv (Hm: 
     Val.inject j v tv ->
     injp_acci (injpw j m tm Hm) (injpw j m' tm' Hm').
 Proof.
-  Locate composite_env.
-  Search composite_env genv.
   intros. inv H; inv H0; try congruence.
   - (*value*)
     rewrite H3 in H. inv H.
@@ -2667,7 +2664,7 @@ Proof.
   - (*bitfield*)
     inv H3. inv H9. clear H14.
     eapply injp_acci_storev; eauto.
-    inv H2. Search Mem.loadv Mem.inject.
+    inv H2.
     exploit Mem.loadv_inject. apply Hm.
     eauto. eauto.
     intros [v2 [A B]]. rewrite H23 in A.

@@ -813,10 +813,10 @@ Proof.
     econstructor; eauto. auto.
 Qed.
 
-(*
-Lemma oldfsim_newfsim_ext : forall {li : language_interface} (L1 L2: semantics li li),
-    Smallstep.forward_simulation LanguageInterface.cc_id LanguageInterface.cc_id L1 L2 ->
-    forward_simulation cc_id L1 L2.
+
+Lemma oldfsim_newfsim_ext_c : forall  (L1 L2: semantics li_c li_c),
+    Smallstep.forward_simulation (cc_c ext) (cc_c ext) L1 L2 ->
+    forward_simulation c_ext L1 L2.
 Proof.
   intros. red in H. inv H. constructor.
   inv X. econstructor; eauto.
@@ -827,12 +827,13 @@ Proof.
   inv FPros. econstructor; eauto.
   - intros. exploit fsim_match_final_states0; eauto.
     intros [r2 [A B]]. exists r2. exists tt. intuition auto. reflexivity. reflexivity.
+    destruct B as [x [X Y]]. simpl. destruct x. destruct w. auto.
   - intros. exploit fsim_match_external0; eauto.
     intros (w0 & q2 & A & B & C).
     exists w0, q2. intuition auto. reflexivity.
-    eapply H4; eauto.
+    eapply H4; eauto. econstructor. split; eauto.
 Qed.
- *)
+
 
 (** Idea: first try to compose all C level passes? Clight -> LTL *)
 
