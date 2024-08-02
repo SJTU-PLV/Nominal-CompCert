@@ -22,6 +22,9 @@ Require Import Csharpminor Switch Cminor Cminorgen.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 
 Require Import CallconvBig.
+Require Import SimplLocalsproofC.
+
+
 Local Open Scope error_monad_scope.
 
 Definition match_prog (p: Csharpminor.program) (tp: Cminor.program) :=
@@ -1940,6 +1943,31 @@ Definition measure (S: Csharpminor.state) : nat :=
   | _ => O
   end.
 
+
+Lemma injp_acc_small_free : forall j m tm Hm m' tm' Hm' cenv sz tfn es bes cs sps e le te f,
+      Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.free tm (fresh_block sps) 0 (fn_stackspace tfn) = Some tm' ->
+       match_callstack j m tm (Frame cenv tfn e le te (fresh_block sps) sps bes es :: cs) 
+         (Mem.support m) (Mem.support tm) ->
+       transl_funbody cenv sz f = OK tfn ->
+       injp_acc_small w (injpw j m tm Hm) (injpw j m' tm' Hm').
+Proof.
+  intros. destruct w.
+  econstructor; eauto; try (red; intros; congruence).
+  - red. intros. unfold Mem.valid_block in *. exfalso.
+    apply H3. erewrite <- free_list_support; eauto.
+  - red. intros. unfold Mem.valid_block in *. exfalso. 
+    apply H3. erewrite <- Mem.support_free; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply Mem.ro_unchanged_free; eauto.
+  - eapply free_list_max_perm; eauto.
+  - red. intros. eauto with mem.
+  - admit.
+  - admit.
+  - red. intros. admit.
+    (** The match_callstack should show that freed space are all related*)
+Admitted.
+
 Lemma transl_step_correct:
   forall S1 t S2, Csharpminor.step ge S1 t S2 ->
   forall T1 Wp, match_states Wp S1 T1 ->
@@ -1973,11 +2001,12 @@ Proof.
   monadInv TR. left.
   exploit match_is_call_cont; eauto. intros [tk' [A [B C]]].
   exploit match_callstack_freelist; eauto. intros [tm' [P [Q R]]].
+  exploit injp_acc_small_free; eauto. intro ACCS.
   econstructor; split.
   eapply plus_right. eexact A. apply step_skip_call. auto. eauto. traceEq.
   econstructor; eauto. instantiate (1:= R).
-  etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  eapply injp_acce_small; eauto.
+  etransitivity. eauto. eapply injp_acc_small_acci; eauto.
 
 (* set *)
   monadInv TR.
@@ -1994,12 +2023,14 @@ Proof.
   exploit transl_expr_correct. eauto. eauto. eexact H0. eauto.
   intros [tv2 [EVAL2 VINJ2]].
   exploit Mem.storev_mapped_inject; eauto. intros [tm' [STORE' MINJ']].
+  exploit injp_acc_tl_storev. apply H1. apply STORE'. eauto. eauto.
+  intro ACCS.
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.
   instantiate (1:= MINJ').
-  etransitivity. eauto. admit.
-  etransitivity. eauto. eapply injp_acci_storev; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_i; eauto. 
   inv VINJ1; simpl in H1; try discriminate. unfold Mem.storev in STORE'.
   rewrite (Mem.support_store _ _ _ _ _ _ H1).
   rewrite (Mem.support_store _ _ _ _ _ _ STORE').
@@ -2027,24 +2058,28 @@ Proof.
   intros [tvargs [EVAL2 VINJ2]].
   exploit match_callstack_match_globalenvs; eauto. intros MG.
   exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED X]]]]]]]]]].
+  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED [X [Y Z]]]]]]]]]]]].
+  assert (ACCS: injp_acc_tl (injpw f0 m tm Hm) (injpw f' m' tm' MINJ')).
+  econstructor; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   assert (MCS': match_callstack f' m' tm'
                  (Frame cenv tfn e le te (fresh_block sps) sps bes es :: cs)
                  (Mem.support m') (Mem.support tm')).
   apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-  
   eapply match_callstack_external_call; eauto.
-  (* eapply unchanged_on_tl_e. *) admit.
-  (* eapply unchanged_on_tl_e. *) admit.
-  (* apply UNMAPPED. apply OUTOFREACH. *)
+  inv ACCS. eapply unchanged_on_tl_e; eauto.
+  inv ACCS. eapply unchanged_on_tl_e; eauto.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
   econstructor; eauto.
-  instantiate (1:= MINJ'). etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  instantiate (1:= MINJ'). etransitivity. eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   Opaque PTree.set.
   unfold set_optvar. destruct optid; simpl.
   eapply match_callstack_set_temp; eauto.
@@ -2134,10 +2169,12 @@ Proof.
 (* return none *)
   monadInv TR. left.
   exploit match_callstack_freelist; eauto. intros [tm' [A [B C]]].
+  exploit injp_acc_small_free; eauto. intro ACCS.
   econstructor; split.
   apply plus_one. eapply step_return_0. eauto.
-  econstructor; eauto. instantiate (1:=C). etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  econstructor; eauto. instantiate (1:=C).
+  eapply injp_acce_small; eauto.
+  etransitivity. eauto. eapply injp_acc_small_acci; eauto.
   eapply match_call_cont; eauto.
   simpl; auto.
 
@@ -2145,10 +2182,12 @@ Proof.
   monadInv TR. left.
   exploit transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
   exploit match_callstack_freelist; eauto. intros [tm' [A [B C]]].
+  exploit injp_acc_small_free; eauto. intro ACCS.
   econstructor; split.
   apply plus_one. eapply step_return_1. eauto. eauto.
-  econstructor; eauto. instantiate (1:=C). etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  econstructor; eauto. instantiate (1:=C).
+  eapply injp_acce_small; eauto.
+  etransitivity. eauto. eapply injp_acc_small_acci; eauto.
   eapply match_call_cont; eauto.
 
 (* label *)
@@ -2181,12 +2220,30 @@ Proof.
   caseEq (Mem.alloc tm 0 (fn_stackspace tf)). intros tm' sp ALLOC'.
   exploit match_callstack_function_entry; eauto. simpl; eauto. simpl; auto.
   intros [f2 [MCS2 MINJ2]].
+  assert (ACCS: injp_acc_tl (injpw f0 m tm Hm) (injpw f2 m1 tm' MINJ2)).
+  { econstructor; eauto.
+    - red. intros. admit. (* [alloc_variables_tid]*)
+    - red. intros.
+      edestruct Mem.valid_block_alloc_inv in H5; eauto. subst.
+      apply Mem.alloc_result in ALLOC'. subst. reflexivity. congruence.
+    - admit. (*alloc_variables_ro*)
+    - eapply Mem.ro_unchanged_alloc; eauto.
+    - red. intros. admit. (*alloc_variables_maxperm *)
+    - red. intros. eauto with mem.
+    - admit. (*alloc_variables_unchanged_on_tl*)
+    - split. apply Mem.support_alloc in ALLOC'. rewrite ALLOC'.
+      constructor; auto. simpl. rewrite Mem.update_list_length. reflexivity.
+      eapply Mem.alloc_unchanged_on; eauto.
+    - admit. (*to be added in [match_callstack_function_entry]*)
+    - admit. (*same as above*)
+    - red. intros. exfalso. apply H6. (*alloc_variables_perm1*) admit.
+  }
   left; econstructor; split.
   apply plus_one. constructor; simpl; eauto.
   econstructor. eapply Mem.alloc_result. eauto.
   eexact TRBODY. eauto. instantiate (1:= MINJ2).
-  etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  etransitivity. eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   eexact MCS2.
   inv MK; simpl in ISCC; contradiction || econstructor; eauto.
 
@@ -2195,16 +2252,22 @@ Proof.
   exploit functions_translated; eauto. intros [tfd [TFIND TR]].
   monadInv TR.
   exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED X]]]]]]]]]].
+  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR [SEPARATED [X[Y Z]]]]]]]]]]]].
+  assert (ACCS: injp_acc_tl (injpw f m tm Hm) (injpw f' m' tm' MINJ')).
+  econstructor; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor; eauto. instantiate (1:= MINJ').
-  etransitivity. eauto. admit.
-  etransitivity. eauto. admit.
+  etransitivity. eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
   eapply match_callstack_external_call; eauto.
-  admit. admit.
-  (* apply UNMAPPED. apply OUTOFREACH. *)
+  inv ACCS. eapply unchanged_on_tl_e; eauto.
+  inv ACCS. eapply unchanged_on_tl_e; eauto.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
@@ -2215,7 +2278,7 @@ Proof.
   apply plus_one. econstructor; eauto.
   unfold set_optvar. destruct optid; simpl; econstructor; eauto.
   eapply match_callstack_set_temp; eauto.
-Admitted.
+Qed.
 
 Require Import VCompBig.
 

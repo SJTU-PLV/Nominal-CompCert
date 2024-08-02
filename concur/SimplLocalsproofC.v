@@ -2645,25 +2645,25 @@ Proof.
     eapply free_blocks_of_env_perm_1; eauto.
 Qed.
 
-Lemma injp_acci_assign_loc : forall m tm j m' tm' ty b ofs b' ofs' bf v tv (Hm: Mem.inject j m tm) (Hm': Mem.inject j m' tm'),
+Lemma injp_acc_tl_assign_loc : forall m tm j m' tm' ty b ofs b' ofs' bf v tv (Hm: Mem.inject j m tm) (Hm': Mem.inject j m' tm'),
     assign_loc ge ty m b ofs bf v m' ->
     assign_loc tge ty tm b' ofs' bf tv tm' ->
     Val.inject j (Vptr b ofs) (Vptr b' ofs') ->
     Val.inject j v tv ->
-    injp_acci (injpw j m tm Hm) (injpw j m' tm' Hm').
+    injp_acc_tl (injpw j m tm Hm) (injpw j m' tm' Hm').
 Proof.
   intros. inv H; inv H0; try congruence.
   - (*value*)
     rewrite H3 in H. inv H.
-    eapply injp_acci_storev; eauto.
+    eapply injp_acc_tl_storev; eauto.
   - (*copy*)
-    eapply injp_acci_storebytes; eauto.
+    eapply injp_acc_tl_storebytes; eauto.
     erewrite Mem.loadbytes_length; eauto.
     erewrite Mem.loadbytes_length. 2: eauto.
     rewrite comp_env_preserved. reflexivity.
   - (*bitfield*)
     inv H3. inv H9. clear H14.
-    eapply injp_acci_storev; eauto.
+    eapply injp_acc_tl_storev; eauto.
     inv H2.
     exploit Mem.loadv_inject. apply Hm.
     eauto. eauto.
@@ -2879,7 +2879,8 @@ Proof.
       -- intros [Z1 Z2]. congruence.
   }
   etransitivity. eauto.
-  eapply injp_acci_assign_loc; eauto.
+  eapply injp_acc_tl_i.
+  eapply injp_acc_tl_assign_loc; eauto.
   eauto with compat.
   erewrite assign_loc_support; eauto.
   erewrite assign_loc_support; eauto.
@@ -2907,37 +2908,26 @@ Proof.
   exploit eval_simpl_exprlist; eauto with compat. intros [CASTED [tvargs [C D]]].
   exploit external_call_mem_inject; eauto with compat.
   intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
-  destruct S as [S0 S1]. destruct T as [T0 T1].
-  assert (ACCE': injp_acce (injpw j m tm Hm) (injpw j' m' tm' R)).
+  assert (ACCTL: injp_acc_tl (injpw j m tm Hm) (injpw j' m' tm' R)).
   {
-    econstructor; eauto.
+    constructor; eauto.
     red. eauto using external_call_readonly.
     red. eauto using external_call_readonly.
     red. intros. eapply external_call_max_perm; eauto.
     red. intros. eapply external_call_max_perm; eauto.
-    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
-    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
   }
-  assert (ACCI': injp_acci (injpw j m tm Hm) (injpw j' m' tm' R)).
-  {
-    econstructor; eauto.
-    red. eauto using external_call_readonly.
-    red. eauto using external_call_readonly.
-    red. intros. eapply external_call_max_perm; eauto.
-    red. intros. eapply external_call_max_perm; eauto.
-    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
-    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H1.
-  }
+  (* destruct S as [S0 S1]. destruct T as [T0 T1]. *)
   econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor. eauto. eauto.
   eapply match_envs_set_opttemp; eauto.
-  eapply match_envs_extcall; eauto. inv ACCE'. eauto.
-  eapply match_cont_extcall; eauto. inv ACCE'. eauto.
+  eapply match_envs_extcall; eauto. eapply unchanged_on_tl_e. eauto.
+  eapply match_cont_extcall; eauto. eapply unchanged_on_tl_e. eauto.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
   instantiate (1:= R).
-  etransitivity; eauto. etransitivity; eauto.
+  etransitivity; eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity; eauto. eapply injp_acc_tl_i; eauto.
   eauto with compat.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
@@ -3192,33 +3182,22 @@ Proof.
   intros [j' [tvres [tm' [P [Q [R [S [T [U [V [W [X Y]]]]]]]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
-  destruct S as [S0 S1]. destruct T as [T0 T1].
-  assert (ACCE': injp_acce (injpw j m tm Hm) (injpw j' m' tm' R)).
+  assert (ACCTL: injp_acc_tl (injpw j m tm Hm) (injpw j' m' tm' R)).
   {
     econstructor; eauto.
     red. eauto using external_call_readonly.
     red. eauto using external_call_readonly.
     red. intros. eapply external_call_max_perm; eauto.
     red. intros. eapply external_call_max_perm; eauto.
-    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
-    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
-  }
-  assert (ACCI': injp_acci (injpw j m tm Hm) (injpw j' m' tm' R)).
-  {
-    econstructor; eauto.
-    red. eauto using external_call_readonly.
-    red. eauto using external_call_readonly.
-    red. intros. eapply external_call_max_perm; eauto.
-    red. intros. eapply external_call_max_perm; eauto.
-    split. inv S0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
-    split. inv T0. constructor. lia. auto. eapply Mem.unchanged_on_implies; eauto. intros. apply H0.
   }
   econstructor; eauto.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
-  eapply match_cont_extcall; eauto. inv ACCE'. auto.
+  eapply match_cont_extcall; eauto. eapply unchanged_on_tl_e; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
-  instantiate (1:= R). etransitivity; eauto. etransitivity; eauto.
+  instantiate (1:= R).
+  etransitivity; eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity; eauto. eapply injp_acc_tl_i; eauto.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.

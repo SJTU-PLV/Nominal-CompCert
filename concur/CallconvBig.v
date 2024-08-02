@@ -798,7 +798,8 @@ Proof.
   intros. apply H.
 Qed.
 
-(* thread_local, the local accessibility for internel transitions and builtin functions *)
+(* thread_local, the local accessibility for internel transitions and builtin functions
+   which only change public memories  *)
 Inductive injp_acc_tl : relation injp_world :=
     injp_acc_tl_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
                         (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2')
@@ -806,7 +807,7 @@ Inductive injp_acc_tl : relation injp_world :=
                      (Hnb2:new_block_local m2 m2'),
                      Mem.ro_unchanged m1 m1' ->
                      Mem.ro_unchanged m2 m2' ->
-                     injp_max_perm_decrease m1 m1' ->
+                      injp_max_perm_decrease m1 m1' ->
                      injp_max_perm_decrease m2 m2' ->
                      Mem.unchanged_on_tl (loc_unmapped f) m1 m1' ->
                      Mem.unchanged_on_tl (loc_out_of_reach f m1) m2 m2' ->
@@ -1012,3 +1013,87 @@ Proof.
     apply Mem.storebytes_range_perm in H.
     eapply H. simpl. lia.
 Qed.
+
+
+(* The internal changes which may change the [private] regions which are not in the
+   initial world *)
+
+(** able to change: 1. all public 
+                    2. private : only local & not in initial 
+
+    unchanged : private & ( other threads \/ in intial)
+*)
+
+(** This should indicate acci, which says that private & other threads are unchanged *)
+Inductive injp_acc_small (w0: injp_world) : relation injp_world :=
+    injp_acc_small_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
+                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2') j m10 m20 Hm0
+                     (Hnb1: new_block_local m1 m1')
+                     (Hnb2:new_block_local m2 m2'),
+                     w0 = injpw j m10 m20 Hm0 ->
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                      injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     Mem.unchanged_on_tl (fun b ofs => loc_unmapped f b ofs /\
+                                        (fst b <> Mem.tid (Mem.support m1) \/ Mem.valid_block m10 b)) m1 m1' ->
+                     Mem.unchanged_on_tl (fun b ofs => loc_out_of_reach f m1 b ofs /\
+                                        (fst b <> Mem.tid (Mem.support m1) \/ Mem.valid_block m20 b)) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     free_preserved f m1 m1' m2' ->
+                     injp_acc_small w0 (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Lemma injp_acce_small : forall w0 w1 w2,
+    injp_acce w0 w1 -> injp_acc_small w0 w1 w2 -> injp_acce w0 w2.
+Proof.
+  intros.
+  inv H. inv H0. inv H11.
+  destruct H5 as [[S51 S52] H5].
+  destruct H6 as [[S61 S62] H6].
+  destruct H16 as [[S161 S162] H16].
+  destruct H17 as [[S171 S172] H17].
+  econstructor; eauto.
+  - eapply Mem.ro_unchanged_trans; eauto. inv H5. auto.
+  - eapply Mem.ro_unchanged_trans; eauto. inv H6. auto.
+  - red. intros. eapply H3; eauto. eapply H14; eauto. inv H5.
+    apply unchanged_on_support. auto.
+  - red. intros. eapply H4; eauto. eapply H15; eauto. inv H6.
+    apply unchanged_on_support. auto.
+  - split. constructor. lia. congruence.
+    eapply mem_unchanged_on_trans_implies_valid; eauto.
+    intros. simpl. destruct H. split; auto. red in H.
+    destruct (f' b) as [[? ?]|] eqn: Hf'.
+    exploit H8; eauto. intros [X Y]. congruence.
+    auto.
+  - split. constructor. lia. congruence.
+    eapply mem_unchanged_on_trans_implies_valid; eauto.
+    intros. simpl. destruct H. split; auto. red in H.
+    red. intros. destruct (j b0) as [[b' d']|] eqn:Hj.
+    apply H7 in Hj as Heq. rewrite H10 in Heq. inv Heq.
+    intro. eapply H; eauto. eapply H3; eauto using Mem.valid_block_inject_1.
+    exploit H8; eauto. intros [X Y]. congruence.
+  - eapply inject_incr_trans; eauto.
+  - intros b1 b2 delta Hb Hb''.
+      destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply H18 in Hb'; split; congruence); subst.
+        eapply H8; eauto.
+      * edestruct H20; eauto.
+        intuition eauto using Mem.valid_block_unchanged_on.
+Qed.
+
+Lemma injp_acc_small_acci : forall w0 w1 w2,
+    injp_acc_small w0 w1 w2 ->
+    injp_acci w1 w2.
+Proof.
+  intros. inv H. constructor; eauto.
+  - destruct H5. split; auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H. split. auto. left. auto.
+  - destruct H6. split; auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H. split. auto. left. inv Hm.
+    inv mi_thread. inv Hms. congruence.
+Qed.
+    
