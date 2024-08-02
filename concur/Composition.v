@@ -20,7 +20,7 @@ Unset Program Cases.
 
     SimplLocals : injp
     Cshmgen: id
-    Cminorgen: wt_c @ injp
+    Cminorgen: injp
     Selection : wt_c @ ext
     RTLgen : ext
     Tailcall : ext
@@ -35,14 +35,13 @@ Unset Program Cases.
     Alloc : wt_c @ ext @ CL
  *)
 
-(**  step1 : injp @ wt_c @ injp @ wt_c @ ext @ ext @ ext @ injp @ id ==========> wt_c @ injp *)
+(**  step1 : injp @ injp @ wt_c @ ext @ ext @ ext @ injp @ id ==========> wt_c @ injp *)
 
-(**  1. injp @ wt_c @ injp @ wt_c @ ext @ injp 
-     2. wt_c @ injp @ injp @ wt_c @ ext @ injp              
-     3. wt_c @ injp @ wt_c @ ext @ injp
-     4. wt_c @ wt_c @ injp @ ext @ injp
-     5. wt_c @ injp @ ext @ injp 
-*)
+(**  1. injp @ wt_c @ ext @ injp 
+     2. wt_c @ injp @ ext @ injp
+     3. wt_c @ injp
+ *)
+
 (** lemmas about [wt_c] *)
 
 Program Coercion cc_inv {li : language_interface} (I : invariant li) : GS.callconv li li :=
@@ -214,6 +213,11 @@ Proof.
     constructor.
 Qed.
 
+Lemma cctrans_injp_ext:
+  cctrans (c_injp @ c_ext @ c_injp) c_injp.
+Proof.
+  (** TODO: in 1 step or two steps, not sure yet*)
+  Abort.
 
 
 

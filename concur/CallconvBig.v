@@ -777,7 +777,6 @@ Next Obligation.
   apply H2. eauto.
 Qed.
 
-(** Note : the preo of acci can be omitted? *)
 
 (** The properties about the preservation of injp accessibility
     by corresponding memory operations on related memories. *)
@@ -790,13 +789,49 @@ Proof.
   intros. apply H.
 Qed.
 
-Lemma injp_acci_alloc: forall f f' m1 m2 b1 b2 lo hi m1' m2' Hm Hm',
+Lemma unchanged_on_tl_e : forall m P m',
+    Mem.unchanged_on_tl P m m' ->
+    Mem.unchanged_on_e P m m'.
+Proof.
+  intros. inv H. split. inv unchanged_on_thread_tl. split. lia. auto.
+  eapply Mem.unchanged_on_implies; eauto.
+  intros. apply H.
+Qed.
+
+(* thread_local, the local accessibility for internel transitions and builtin functions *)
+Inductive injp_acc_tl : relation injp_world :=
+    injp_acc_tl_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
+                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2')
+                     (Hnb1: new_block_local m1 m1')
+                     (Hnb2:new_block_local m2 m2'),
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                     injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     Mem.unchanged_on_tl (loc_unmapped f) m1 m1' ->
+                     Mem.unchanged_on_tl (loc_out_of_reach f m1) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     free_preserved f m1 m1' m2' ->
+                     injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Lemma injp_acc_tl_i : forall w1 w2, injp_acc_tl w1 w2 -> injp_acci w1 w2.
+Proof.
+  intros. inv H. constructor; eauto using unchanged_on_tl_i.
+Qed.
+
+Lemma injp_acc_tl_e : forall w1 w2, injp_acc_tl w1 w2 -> injp_acce w1 w2.
+Proof.
+  intros. inv H. constructor; eauto using unchanged_on_tl_e.
+Qed.
+
+Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo hi m1' m2' Hm Hm',
     Mem.alloc m1 lo hi = (m1',b1) ->
     Mem.alloc m2 lo hi = (m2',b2) ->
     inject_incr f f' ->
     f' b1 = Some (b2, 0) ->
     (forall b, b<> b1 -> f' b = f b) ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 Proof.
   intros. constructor.
   - red. intros.
@@ -815,9 +850,8 @@ Proof.
     eapply Mem.perm_alloc_inv in Hp; eauto.
     destruct (eq_block b b2); eauto; subst.
     eelim (Mem.fresh_block_alloc m2); eauto.
-  - eapply unchanged_on_tl_i.
-    eapply Mem.alloc_unchanged_on_tl; eauto.
-  - eapply unchanged_on_tl_i. eapply Mem.alloc_unchanged_on_tl; eauto.
+  - eapply Mem.alloc_unchanged_on_tl; eauto.
+  - eapply Mem.alloc_unchanged_on_tl; eauto.
   - assumption.
   - red. intros b b' delta Hb Hb'.
     assert (b = b1).
@@ -833,11 +867,11 @@ Proof.
 Qed.
 
 
-Lemma injp_acci_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
+Lemma injp_acc_tl_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
     Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
     Mem.free m2 b2 (lo1 + delta) (lo1 + sz + delta) = Some m2' ->
     f b1 = Some (b2, delta) ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -848,10 +882,9 @@ Proof.
   - eauto using Mem.ro_unchanged_free.
   - red. eauto using Mem.perm_free_3.
   - red. eauto using Mem.perm_free_3.
-  - split. erewrite <- Mem.support_free; eauto. eapply Mem.free_unchanged_on; eauto.
-    unfold loc_unmapped. intros.  intro. destruct H3. congruence.
-  - eapply unchanged_on_tl_i.
-    eapply Mem.free_unchanged_on_tl; eauto.
+  - eapply Mem.free_unchanged_on_tl; eauto.
+    intros. intro. congruence.
+  - eapply Mem.free_unchanged_on_tl; eauto.
     unfold loc_out_of_reach.
     intros ofs Hofs H'.
     eelim H'; eauto.
@@ -869,12 +902,12 @@ Proof.
 Qed.
 
 
-Lemma injp_acci_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
     Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
     Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
     Val.inject f v1 v2 ->
     f b1 = Some (b2,delta) ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -885,9 +918,9 @@ Proof.
   - eauto using Mem.ro_unchanged_store.
   - red. eauto using Mem.perm_store_2.
   - red. eauto using Mem.perm_store_2.
-  - eapply unchanged_on_tl_i. eapply Mem.store_unchanged_on_tl; eauto.
+  - eapply Mem.store_unchanged_on_tl; eauto.
     unfold loc_unmapped. congruence.
-  - eapply unchanged_on_tl_i. eapply Mem.store_unchanged_on_tl; eauto.
+  - eapply Mem.store_unchanged_on_tl; eauto.
     unfold loc_out_of_reach.
     intros ofs Hofs H'.
     eelim H'; eauto.
@@ -901,27 +934,27 @@ Proof.
   - red. intros. exfalso. apply H5. eauto with mem.
 Qed.
 
-Lemma injp_acci_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
     Mem.storev chunk m1 a1 v1 = Some m1' ->
     Mem.storev chunk m2 a2 v2 = Some m2' ->
     Val.inject f a1 a2 -> Val.inject f v1 v2 ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. unfold Mem.storev in *. destruct a1; try congruence.
   inv H1.
   erewrite Mem.address_inject in H0. 2: apply Hm. 3: eauto.
-  eapply injp_acci_store; eauto.
+  eapply injp_acc_tl_store; eauto.
   apply Mem.store_valid_access_3 in H.
   destruct H as [A B].
   apply A. destruct chunk; simpl; lia.
 Qed.
 
-Lemma injp_acci_storebytes' : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_storebytes' : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2' Hm Hm',
     Mem.storebytes m1 b1 ofs1 vs1 = Some m1' ->
     Mem.storebytes m2 b2 (ofs1 + delta) vs2 = Some m2' ->
     length vs1 = length vs2 ->
     f b1 = Some (b2, delta) ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -932,11 +965,9 @@ Proof.
   - eauto using Mem.ro_unchanged_storebytes.
   - red. eauto using Mem.perm_storebytes_2.
   - red. eauto using Mem.perm_storebytes_2.
-  - eapply unchanged_on_tl_i.
-    eapply Mem.storebytes_unchanged_on_tl; eauto.
+  - eapply Mem.storebytes_unchanged_on_tl; eauto.
     unfold loc_unmapped. congruence.
-  - eapply unchanged_on_tl_i.
-    eapply Mem.storebytes_unchanged_on_tl; eauto.
+  - eapply Mem.storebytes_unchanged_on_tl; eauto.
     unfold loc_out_of_reach.
     intros ofs Hofs HH. 
     eelim HH; eauto.
@@ -949,12 +980,12 @@ Proof.
   - red. intros. exfalso. apply H5. eauto with mem.
 Qed.
 
-Lemma injp_acci_storebytes : forall f b1 b2 ofs1 ofs2 vs1 vs2 m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_storebytes : forall f b1 b2 ofs1 ofs2 vs1 vs2 m1 m2 m1' m2' Hm Hm',
     Mem.storebytes m1 b1 (Ptrofs.unsigned ofs1) vs1 = Some m1' ->
     Mem.storebytes m2 b2 (Ptrofs.unsigned ofs2) vs2 = Some m2' ->
     length vs1 = length vs2 ->
     Val.inject f (Vptr b1 ofs1) (Vptr b2 ofs2) ->
-    injp_acci (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. destruct vs1.
   - destruct vs2; inv H1.
@@ -967,17 +998,15 @@ Proof.
     + eauto using Mem.ro_unchanged_storebytes.
     + red. eauto using Mem.perm_storebytes_2.
     + red. eauto using Mem.perm_storebytes_2.
-    + eapply unchanged_on_tl_i.
-      eapply Mem.storebytes_unchanged_on_tl; eauto.
+    + eapply Mem.storebytes_unchanged_on_tl; eauto.
       unfold loc_unmapped. inv H2. congruence.
-    + eapply unchanged_on_tl_i.
-      eapply Mem.storebytes_unchanged_on_tl; eauto.
+    + eapply Mem.storebytes_unchanged_on_tl; eauto.
       simpl. intro. extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
     + red. intros. exfalso. apply H4. eauto with mem.
   - inv H2.
-    eapply injp_acci_storebytes'; eauto.
+    eapply injp_acc_tl_storebytes'; eauto.
     erewrite <- Mem.address_inject; eauto.
     eapply Mem.perm_storebytes_1; eauto.
     apply Mem.storebytes_range_perm in H.
