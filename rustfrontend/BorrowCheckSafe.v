@@ -15,6 +15,49 @@ Require Import InitDomain InitAnalysis.
 Require Import RustIRown.
 
 
+(* Some simple type checking (move to Rusttyping.v) *)
+
+Definition type_deref (ty: type) : res type :=
+  match ty with
+  | Tbox tyelt
+  | Treference _ _ tyelt => OK tyelt
+  | _ => Error (msg "type_deref error")
+  end.
+
+Definition typenv := PTree.t type.
+
+Section TYPING.
+
+Variable te: typenv.
+Variable ce: composite_env.
+
+Inductive wt_place : place -> Prop :=
+| wt_local: forall id ty,
+    te ! id = Some ty ->
+    wt_place (Plocal id ty)
+| wt_deref: forall p ty,
+    wt_place p ->
+    type_deref (typeof_place p) = OK ty ->
+    wt_place (Pderef p ty)
+| wt_field: forall p ty fid co orgs id,
+    wt_place p ->
+    typeof_place p = Tstruct orgs id ->
+    ce ! id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
+    wt_place (Pfield p fid ty)
+| wt_downcast: forall p ty fid co orgs id,
+    wt_place p ->
+    typeof_place p = Tvariant orgs id ->
+    ce ! id = Some co ->
+    field_type fid co.(co_members) = OK ty ->
+    wt_place (Pdowncast p fid ty)
+.
+
+End TYPING.
+
+Definition env_to_tenv (e: env) : typenv :=
+  PTree.map1 snd e.
+
 (* try to define top-most shallow prefix (whose starting offset of its
 address is zero). [p'] is in the offset [ofs] of [p] *)
 (* For subplace ce p1 p2 ofs: it means that p2 is in p1 with the
@@ -41,16 +84,26 @@ Inductive subplace (ce: composite_env) (p: place) : place -> Z -> Prop :=
 (* Properties of subplace *)
 
 (* Maybe we should ensure that ce is consistent *)
-Lemma subplace_align: forall ce p1 p2 ofs,
-  subplace ce p1 p2 ofs ->
+Lemma subplace_align: forall ce tenv p1 p2 ofs
+  (SUBP: subplace ce p1 p2 ofs)
+  (WT: wt_place tenv ce p2),
   (alignof ce (typeof_place p2) | ofs).
 Proof.
-  induction 1.
+  induction 1; intros.
   - apply Z.divide_0_r.
-  - simpl. eapply Z.divide_add_r.
-    + admit.
-    + eapply field_offset_aligned_gen
-      
+  - simpl.
+    inv WT. rewrite TY in H3. inv H3.
+    rewrite CO in H4. inv H4.
+    eapply Z.divide_add_r.
+    (* difficult case *)
+    + eapply Z.divide_trans.      
+      2: { eapply IHSUBP. auto. }
+      rewrite TY. simpl in *. rewrite CO.
+      (** Prove that the align of composite is align of each field *)
+      (* We need to say that ce is consistent *)
+     a 
+    + eapply field_offset_aligned. eauto. eauto.
+  - 
 
 (** Test: try to define semantics well-typedness for a memory location *)
 
@@ -421,49 +474,6 @@ Record wf_abs (e: env) : Prop :=
 
 End MATCH.
 
-
-(* Some simple type checking (move to Rusttyping.v) *)
-
-Definition type_deref (ty: type) : res type :=
-  match ty with
-  | Tbox tyelt
-  | Treference _ _ tyelt => OK tyelt
-  | _ => Error (msg "type_deref error")
-  end.
-
-Definition typenv := PTree.t type.
-
-Section TYPING.
-
-Variable te: typenv.
-Variable ce: composite_env.
-
-Inductive wt_place : place -> Prop :=
-| wt_local: forall id ty,
-    te ! id = Some ty ->
-    wt_place (Plocal id ty)
-| wt_deref: forall p ty,
-    wt_place p ->
-    type_deref (typeof_place p) = OK ty ->
-    wt_place (Pderef p ty)
-| wt_field: forall p ty fid co orgs id,
-    wt_place p ->
-    typeof_place p = Tstruct orgs id ->
-    ce ! id = Some co ->
-    field_type fid co.(co_members) = OK ty ->
-    wt_place (Pfield p fid ty)
-| wt_downcast: forall p ty fid co orgs id,
-    wt_place p ->
-    typeof_place p = Tvariant orgs id ->
-    ce ! id = Some co ->
-    field_type fid co.(co_members) = OK ty ->
-    wt_place (Pdowncast p fid ty)
-.
-
-End TYPING.
-
-Definition env_to_tenv (e: env) : typenv :=
-  PTree.map1 snd e.
 
 (** Some auxilary definitions *)
 

@@ -46,9 +46,9 @@ other word, the variant name is used as the tagged union struct name,
 the constructor name (a,b,c) are used in the generated union *)
 Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) : option (Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
-  | Composite id Struct ms attr _ _ =>
-      Some (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
-  | Composite id TaggedUnion ms attr _ _ =>
+  | Composite id Struct ms _ _ =>
+      Some (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) noattr, None)
+  | Composite id TaggedUnion ms _ _ =>
       (* generate a Struct with two fields, one for the tag field and
       the other for the union *)
       let '(union_id, tag_fid, union_fid) := create_union_idents id in
@@ -61,7 +61,7 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
         (** TODO: specify the attr  *)
         let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
         let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
-        Some (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) attr, Some union)
+        Some (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) noattr, Some union)
   end.
 
 

@@ -175,7 +175,7 @@ Inductive member : Type :=
 Definition members : Type := list member.
 
 Inductive composite_definition : Type :=
-  Composite (id: ident) (su: struct_or_variant) (m: members) (a: attr) (orgs: list origin) (org_rels: list origin_rel).
+  Composite (id: ident) (su: struct_or_variant) (m: members) (orgs: list origin) (org_rels: list origin_rel).
 
 Definition name_member (m: member) : ident :=
   match m with
@@ -193,7 +193,7 @@ Definition member_is_padding (m: member) : bool :=
   end.
 
 Definition name_composite_def (c: composite_definition) : ident :=
-  match c with Composite id su m a _ _ => id end.
+  match c with Composite id su m _ _ => id end.
 
 Definition composite_def_eq (x y: composite_definition): {x=y} + {x<>y}.
 Proof.
@@ -201,7 +201,7 @@ Proof.
   decide equality.
   decide equality.
   decide equality.
-- decide equality. decide equality. apply N.eq_dec. apply bool_dec.
+(* - decide equality. decide equality. apply N.eq_dec. apply bool_dec. *)
 - apply list_eq_dec. decide equality.
   apply type_eq. (* apply ident_eq. *)
 - decide equality.
@@ -220,7 +220,7 @@ Record composite : Type := {
   co_origin_relations: list origin_rel;
   co_sv: struct_or_variant;
   co_members: members;
-  co_attr: attr;
+  (* co_attr: attr; *)
   co_sizeof: Z;
   co_alignof: Z;
   co_rank: nat;
@@ -682,11 +682,11 @@ Qed.
 
 
 Lemma alignof_composite_pos:
-  forall env m a sv, align_attr a (alignof_composite env sv m) > 0.
+  forall env m sv, (alignof_composite env sv m) > 0.
 Proof.
   intros.
-  exploit align_attr_two_p. apply (alignof_composite_two_p env m sv).
-  instantiate (1 := a). intros [n EQ].
+  exploit alignof_composite_two_p.
+  intros [n EQ].
   rewrite EQ; apply two_power_nat_pos.
 Qed.
 
@@ -836,7 +836,7 @@ Definition check_comp_defs_complete (env: composite_env) : res composite_env :=
     end) env (OK env).
 
 Program Definition composite_of_def
-     (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (a: attr) (orgs: list origin) (org_rels: list origin_rel)
+     (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (* (a: attr) *) (orgs: list origin) (org_rels: list origin_rel)
      : res composite :=
   match env!id, complete_members env m return _ with
   | Some _, _ =>
@@ -844,12 +844,12 @@ Program Definition composite_of_def
   | None, false =>
       Error (MSG "Incomplete struct or variant " :: CTX id :: nil)
   | None, true =>
-      let al := align_attr a (alignof_composite env su m) in
+      let al := (alignof_composite env su m) in
       OK {| co_generic_origins := orgs;
             co_origin_relations := org_rels;
             co_sv := su;
             co_members := m;
-            co_attr := a;
+            (* co_attr := a; *)
             co_sizeof := align (sizeof_composite env su m) al;
             co_alignof := al;
             co_rank := rank_members env m;
@@ -862,7 +862,7 @@ Next Obligation.
   apply align_le; apply alignof_composite_pos.
 Defined.
 Next Obligation.
-  apply align_attr_two_p. apply alignof_composite_two_p.
+  apply alignof_composite_two_p.
 Defined.
 Next Obligation.
   apply align_divides. apply alignof_composite_pos.
@@ -877,8 +877,8 @@ Defined.
 Fixpoint add_composite_definitions (env: composite_env) (defs: list composite_definition) : res composite_env :=
   match defs with
   | nil => OK env
-  | Composite id su m a orgs org_rels :: defs =>
-      do co <- composite_of_def env id su m a orgs org_rels;
+  | Composite id su m orgs org_rels :: defs =>
+      do co <- composite_of_def env id su m orgs org_rels;
       add_composite_definitions (PTree.set id co env) defs
       (* check_comp_defs_complete ce *)
   end.
@@ -1255,7 +1255,7 @@ Record composite_consistent (env: composite_env) (co: composite) : Prop := {
   co_consistent_complete:
      complete_members env (co_members co) = true;
   co_consistent_alignof:
-     co_alignof co = align_attr (co_attr co) (alignof_composite env co.(co_sv) (co_members co));
+     co_alignof co = alignof_composite env co.(co_sv) (co_members co);
   co_consistent_sizeof:
      co_sizeof co = align (sizeof_composite env (co_sv co) (co_members co)) (co_alignof co);
   co_consistent_rank:
@@ -1273,14 +1273,14 @@ Lemma composite_consistent_stable:
 Proof.
   intros. destruct H as [A B C D]. constructor. 
   eapply complete_members_stable; eauto.
-  symmetry; rewrite B. f_equal. apply alignof_composite_stable; auto. 
+  symmetry; rewrite B. apply alignof_composite_stable; auto. 
   symmetry; rewrite C. f_equal. apply sizeof_composite_stable; auto.
   symmetry; rewrite D. apply rank_members_stable; auto.
 Qed.
 
 Lemma composite_of_def_consistent:
-  forall env id su m a co orgs rels,
-  composite_of_def env id su m a orgs rels = OK co ->
+  forall env id su m co orgs rels,
+  composite_of_def env id su m orgs rels = OK co ->
   composite_consistent env co.
 Proof.
   unfold composite_of_def; intros. 
@@ -1315,10 +1315,10 @@ Qed.
 (** Moreover, every composite definition is reflected in the composite environment. *)
 
 Theorem build_composite_env_charact:
-  forall id su m a defs env orgs rels,
+  forall id su m defs env orgs rels,
   build_composite_env defs = OK env ->
-  In (Composite id su m a orgs rels) defs ->
-  exists co, env!id = Some co /\ co_members co = m /\ co_attr co = a /\ co_sv co = su /\ co_generic_origins co = orgs /\ co_origin_relations co = rels.
+  In (Composite id su m orgs rels) defs ->
+  exists co, env!id = Some co /\ co_members co = m /\ co_sv co = su /\ co_generic_origins co = orgs /\ co_origin_relations co = rels.
 Proof.
   intros until defs. unfold build_composite_env. generalize (PTree.empty composite) as env0.
   revert defs. induction defs as [|d1 defs]; simpl; intros.
@@ -1337,13 +1337,13 @@ Theorem build_composite_env_domain:
   forall env defs id co,
   build_composite_env defs = OK env ->
   env!id = Some co ->
-  In (Composite id (co_sv co) (co_members co) (co_attr co) (co_generic_origins co) (co_origin_relations co)) defs.
+  In (Composite id (co_sv co) (co_members co) (co_generic_origins co) (co_origin_relations co)) defs.
 Proof.
   intros env0 defs0 id co.
   assert (REC: forall l env env',
     add_composite_definitions env l = OK env' ->
     env'!id = Some co ->
-    env!id = Some co \/ In (Composite id (co_sv co) (co_members co) (co_attr co) (co_generic_origins co) (co_origin_relations co)) l).
+    env!id = Some co \/ In (Composite id (co_sv co) (co_members co) (co_generic_origins co) (co_origin_relations co)) l).
   { induction l; simpl; intros. 
   - inv H; auto.
   - destruct a; monadInv H. exploit IHl; eauto.
@@ -1516,16 +1516,16 @@ Lemma add_composite_definitions_append:
 Proof.
   induction l1; simpl; intros.
 - split; intros. exists env; auto. destruct H as (env' & A & B). congruence.
-- destruct a; simpl. destruct (composite_of_def env id su m a orgs org_rels); simpl.
+- destruct a; simpl. destruct (composite_of_def env id su m orgs org_rels); simpl.
   apply IHl1. 
   split; intros. discriminate. destruct H as (env' & A & B); discriminate.
 Qed.
 
 Lemma composite_eq:
-  forall su1 m1 a1 sz1 al1 r1 pos1 al2p1 szal1
-         su2 m2 a2 sz2 al2 r2 pos2 al2p2 szal2 orgs1 orgs2 rels1 rels2,
-  su1 = su2 -> m1 = m2 -> a1 = a2 -> sz1 = sz2 -> al1 = al2 -> r1 = r2 -> orgs1 = orgs2 -> rels1 = rels2 ->
-  Build_composite orgs1 rels1 su1 m1 a1 sz1 al1 r1 pos1 al2p1 szal1 = Build_composite orgs2 rels2 su2 m2 a2 sz2 al2 r2 pos2 al2p2 szal2.
+  forall su1 m1 sz1 al1 r1 pos1 al2p1 szal1
+         su2 m2 sz2 al2 r2 pos2 al2p2 szal2 orgs1 orgs2 rels1 rels2,
+  su1 = su2 -> m1 = m2 -> sz1 = sz2 -> al1 = al2 -> r1 = r2 -> orgs1 = orgs2 -> rels1 = rels2 ->
+  Build_composite orgs1 rels1 su1 m1 sz1 al1 r1 pos1 al2p1 szal1 = Build_composite orgs2 rels2 su2 m2 sz2 al2 r2 pos2 al2p2 szal2.
 Proof.
   intros. subst.
   assert (pos1 = pos2) by apply proof_irr. 
@@ -1538,7 +1538,7 @@ Lemma composite_of_def_eq:
   forall env id co,
   composite_consistent env co ->
   env!id = None ->
-  composite_of_def env id (co_sv co) (co_members co) (co_attr co) (co_generic_origins co) (co_origin_relations co) = OK co.
+  composite_of_def env id (co_sv co) (co_members co) (co_generic_origins co) (co_origin_relations co) = OK co.
 Proof.
   intros. destruct H as [A B C D]. unfold composite_of_def. rewrite H0, A.
   destruct co; simpl in *. f_equal. apply composite_eq; auto. rewrite C, B; auto. 
@@ -1550,7 +1550,6 @@ Lemma composite_consistent_unique:
   composite_consistent env co2 ->
   co_sv co1 = co_sv co2 ->
   co_members co1 = co_members co2 ->
-  co_attr co1 = co_attr co2 ->
   co_generic_origins co1 = co_generic_origins co2 ->
   co_origin_relations co1 = co_origin_relations co2 ->
   co1 = co2.
@@ -1561,16 +1560,16 @@ Qed.
 Lemma composite_of_def_stable:
   forall (env env': composite_env)
          (EXTENDS: forall id co, env!id = Some co -> env'!id = Some co)
-         id su m a co orgs rels,
+         id su m co orgs rels,
   env'!id = None ->
-  composite_of_def env id su m a orgs rels = OK co ->
-  composite_of_def env' id su m a orgs rels = OK co.
+  composite_of_def env id su m orgs rels = OK co ->
+  composite_of_def env' id su m orgs rels = OK co.
 Proof.
   intros. 
   unfold composite_of_def in H0. 
   destruct (env!id) eqn:E; try discriminate.
   destruct (complete_members env m) eqn:CM; try discriminate.
-  transitivity (composite_of_def env' id (co_sv co) (co_members co) (co_attr co) (co_generic_origins co) (co_origin_relations co)).
+  transitivity (composite_of_def env' id (co_sv co) (co_members co) (co_generic_origins co) (co_origin_relations co)).
   inv H0; auto. 
   apply composite_of_def_eq; auto. 
   apply composite_consistent_stable with env; auto. 
@@ -1593,7 +1592,7 @@ Lemma link_add_composite_definitions:
 Proof.
   induction l; simpl; intros until env2; intros ACD AGREE1 AGREE0 AGREE2 UNIQUE.
 - inv ACD. exists env2; auto.
-- destruct a. destruct (composite_of_def env1 id su m a) as [x|e] eqn:EQ; try discriminate.
+- destruct a. destruct (composite_of_def env1 id su m) as [x|e] eqn:EQ; try discriminate.
   simpl in ACD.
   generalize EQ. unfold composite_of_def at 1. 
   destruct (env1!id) eqn:E1; try congruence.
@@ -1603,11 +1602,11 @@ Proof.
 + eapply IHl; eauto.
 * intros. rewrite PTree.gsspec in H0. destruct (peq id0 id); auto.
   inv H0.
-  exploit list_in_map_inv; eauto. intros ([id' su' m' a' orgs' org_rels'] & P & Q).
-  assert (X: Composite id su m a orgs org_rels = Composite id' su' m' a' orgs' org_rels').
+  exploit list_in_map_inv; eauto. intros ([id' su' m' orgs' org_rels'] & P & Q).
+  assert (X: Composite id su m orgs org_rels = Composite id' su' m' orgs' org_rels').
   { eapply UNIQUE. auto. auto. rewrite <- P; auto. }
   inv X.
-  exploit build_composite_env_charact; eauto. intros (co' & U & V & W & X & Y & Z). 
+  exploit build_composite_env_charact; eauto. intros (co' & U & V & W & X & Y). 
   assert (co' = co).
   { apply composite_consistent_unique with env2.
     apply composite_consistent_stable with env0; auto. 
@@ -1617,14 +1616,13 @@ Proof.
     inversion EQ1; auto.
     inversion EQ1; auto.
     inversion EQ1; auto.
-    inversion EQ1; auto.
     inversion EQ1; auto. }
   subst co'. apply AGREE0; auto. 
 * intros. rewrite AGREE2. destruct (in_dec ident_eq id0 (map name_composite_def l0)); auto. 
   rewrite PTree.gsspec. destruct (peq id0 id); auto. subst id0. contradiction.
 + assert (E2: env2!id = None).
   { rewrite AGREE2. rewrite pred_dec_false by auto. auto. }
-  assert (E3: composite_of_def env2 id su m a orgs org_rels = OK x).
+  assert (E3: composite_of_def env2 id su m orgs org_rels = OK x).
   { eapply composite_of_def_stable. eexact AGREE1. eauto. eauto. }
   rewrite E3. simpl. eapply IHl; eauto. 
 * intros until co; rewrite ! PTree.gsspec. destruct (peq id0 id); auto.

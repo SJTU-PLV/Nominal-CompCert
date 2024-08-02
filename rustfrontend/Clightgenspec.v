@@ -501,7 +501,7 @@ Proof.
   destruct p as (tco, opt_utco).
   inv TRANSL.
 
-  destruct d1 as (id1, sv1, ms1, a1, orgs1, rels1).
+  destruct d1 as (id1, sv1, ms1, orgs1, rels1).
   monadInv CE1.
   simpl in TD1.
   destruct( create_union_idents id1) as ((uid, tfid), ufid).
