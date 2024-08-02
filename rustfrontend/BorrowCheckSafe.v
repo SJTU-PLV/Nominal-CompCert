@@ -44,12 +44,14 @@ Inductive wt_place : place -> Prop :=
     typeof_place p = Tstruct orgs id ->
     ce ! id = Some co ->
     field_type fid co.(co_members) = OK ty ->
+    co.(co_sv) = Struct ->
     wt_place (Pfield p fid ty)
 | wt_downcast: forall p ty fid co orgs id,
     wt_place p ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     field_type fid co.(co_members) = OK ty ->
+    co.(co_sv) = TaggedUnion ->
     wt_place (Pdowncast p fid ty)
 .
 
@@ -57,6 +59,32 @@ End TYPING.
 
 Definition env_to_tenv (e: env) : typenv :=
   PTree.map1 snd e.
+
+
+Lemma sizeof_by_value:
+  forall ce ty chunk,
+  Rusttypes.access_mode ty = Ctypes.By_value chunk -> size_chunk chunk = sizeof ce ty.
+Proof.
+  unfold Rusttypes.access_mode; intros.
+  assert (size_chunk chunk = sizeof ce ty).
+  {
+    destruct ty; try destruct i; try destruct s; try destruct f; inv H; auto;
+    unfold Mptr; simpl; destruct Archi.ptr64; auto.
+  }
+  lia.
+Qed.
+
+Lemma alignof_by_value:
+  forall ce ty chunk,
+  Rusttypes.access_mode ty = Ctypes.By_value chunk -> (align_chunk chunk | alignof ce ty).
+Proof.
+  unfold Rusttypes.access_mode; intros.
+  destruct ty; try destruct i; try destruct s; try destruct f; inv H; auto;
+    unfold Mptr; simpl; destruct Archi.ptr64; try apply Z.divide_refl.
+  exists 2. auto.
+  exists 2. auto.
+Qed.
+
 
 (* try to define top-most shallow prefix (whose starting offset of its
 address is zero). [p'] is in the offset [ofs] of [p] *)
@@ -86,7 +114,8 @@ Inductive subplace (ce: composite_env) (p: place) : place -> Z -> Prop :=
 (* Maybe we should ensure that ce is consistent *)
 Lemma subplace_align: forall ce tenv p1 p2 ofs
   (SUBP: subplace ce p1 p2 ofs)
-  (WT: wt_place tenv ce p2),
+  (WT: wt_place tenv ce p2)
+  (CONS: composite_env_consistent ce),
   (alignof ce (typeof_place p2) | ofs).
 Proof.
   induction 1; intros.
@@ -97,13 +126,119 @@ Proof.
     eapply Z.divide_add_r.
     (* difficult case *)
     + eapply Z.divide_trans.      
-      2: { eapply IHSUBP. auto. }
+      2: { eapply IHSUBP; auto. }
       rewrite TY. simpl in *. rewrite CO.
       (** Prove that the align of composite is align of each field *)
       (* We need to say that ce is consistent *)
-     a 
+      erewrite co_consistent_alignof; eauto.
+      (* show that alignof_composite is align of the alignment of
+      field type. Because alignof_composite = 2^m and alignment of
+      filed type is 2^n where m >= n *)
+      exploit alignof_two_p. intros (n & AL). erewrite AL.      
+      exploit alignof_composite_two_p. intros (m & COMPAL). erewrite COMPAL.
+      do 2 rewrite two_power_nat_equiv in *.
+      set (nz:= Z.of_nat n) in *.
+      set (mz:= Z.of_nat m) in *.
+      assert (LE: nz <= mz).
+      { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+        unfold mz. eapply Nat2Z.is_nonneg.
+        rewrite <- AL. rewrite <- COMPAL.
+        eapply alignof_composite_max. eauto. }
+      exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+      rewrite MZEQ. erewrite Z.pow_add_r; auto.
+      eapply Z.divide_factor_r.
+      unfold nz. eapply Nat2Z.is_nonneg.            
     + eapply field_offset_aligned. eauto. eauto.
-  - 
+  (* Pdowncast: mostly the same as Pfield *)
+  - simpl.
+    inv WT. rewrite TY in H3. inv H3.
+    rewrite CO in H4. inv H4.
+    eapply Z.divide_add_r.
+    (* difficult case *)
+    + eapply Z.divide_trans.      
+      2: { eapply IHSUBP; auto. }
+      rewrite TY. simpl in *. rewrite CO.
+      erewrite co_consistent_alignof; eauto.
+      exploit alignof_two_p. intros (n & AL). erewrite AL.      
+      exploit alignof_composite_two_p. intros (m & COMPAL). erewrite COMPAL.
+      do 2 rewrite two_power_nat_equiv in *.
+      set (nz:= Z.of_nat n) in *.
+      set (mz:= Z.of_nat m) in *.
+      assert (LE: nz <= mz).
+      { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+        unfold mz. eapply Nat2Z.is_nonneg.
+        rewrite <- AL. rewrite <- COMPAL.
+        eapply alignof_composite_max. eauto. }
+      exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+      rewrite MZEQ. erewrite Z.pow_add_r; auto.
+      eapply Z.divide_factor_r.
+      unfold nz. eapply Nat2Z.is_nonneg.
+    (* show that the offset of body field is align with the alignment
+    of field type. It is correct because the alignment is computed
+    from the alignment of the whole enum *)
+    + unfold variant_field_offset in FOFS.
+      destruct existsb in FOFS; try congruence. inv FOFS.
+      unfold align. erewrite Z.mul_assoc.
+      rewrite Z.div_mul.
+      assert (MUL: exists k, alignof_composite' ce (co_members co0) =  k * alignof ce fty).
+      exploit alignof_two_p. intros (n & AL). erewrite AL.      
+      exploit alignof_composite_two_p'. intros (m & COMPAL). erewrite COMPAL.
+      do 2 rewrite two_power_nat_equiv in *.
+      set (nz:= Z.of_nat n) in *.
+      set (mz:= Z.of_nat m) in *.
+      assert (LE: nz <= mz).
+      { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+        unfold mz. eapply Nat2Z.is_nonneg.
+        rewrite <- AL. rewrite <- COMPAL.
+        eapply alignof_composite_max_aux. eauto. }
+      exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+      rewrite MZEQ. erewrite Z.pow_add_r; auto. eauto.
+      unfold nz. eapply Nat2Z.is_nonneg.
+      destruct MUL as (k & MUL).
+      rewrite MUL.
+      rewrite Z.mul_assoc. eapply Z.divide_factor_r.
+      lia.
+Qed.
+
+Lemma subplace_in_range: forall ce tenv p1 p2 fofs
+    (SUBP: subplace ce p1 p2 fofs)
+    (CON: composite_env_consistent ce)
+    (WT: wt_place tenv ce p2),
+    0 <= fofs /\ fofs + sizeof ce (typeof_place p2) <= sizeof ce (typeof_place p1).
+Proof.
+  intros. induction SUBP.
+  - split; lia.
+  - simpl.
+    inv WT. rewrite TY in H3. inv H3. rewrite CO in H4. inv H4.
+    assert (LE: fofs + sizeof ce fty <= sizeof ce (typeof_place p')).
+    { rewrite TY. simpl. rewrite CO.
+      erewrite co_consistent_sizeof; eauto.
+      rewrite H6. simpl.
+      exploit field_offset_in_range;eauto.      
+      assert (ALGE: co_alignof co0 > 0).
+      { exploit co_alignof_two_p. intros (n & COAL).
+        rewrite COAL. apply two_power_nat_pos. }
+      generalize (align_le (sizeof_struct ce (co_members co0)) _ ALGE).
+      lia. }
+    exploit IHSUBP; eauto. intros (A & B). split.
+    exploit field_offset_in_range; eauto. lia.
+    lia.    
+  - simpl.
+    inv WT. rewrite TY in H3. inv H3. rewrite CO in H4. inv H4.
+    assert (LE: fofs + sizeof ce fty <= sizeof ce (typeof_place p')).
+    { rewrite TY. simpl. rewrite CO.
+      erewrite co_consistent_sizeof; eauto.
+      rewrite H6. simpl.
+      exploit variant_field_offset_in_range; eauto.
+      assert (ALGE: co_alignof co0 > 0).
+      { exploit co_alignof_two_p. intros (n & COAL).
+        rewrite COAL. apply two_power_nat_pos. }
+      generalize (align_le (sizeof_variant ce (co_members co0)) _ ALGE).
+      lia. }
+    exploit IHSUBP; eauto. intros (A & B). split.
+    exploit variant_field_offset_in_range; eauto. lia.
+    lia.    
+Qed.
 
 (** Test: try to define semantics well-typedness for a memory location *)
 
@@ -173,10 +308,10 @@ Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> t
     (FPL: footprint_disjoint_list fpl)
     (FPLCON: footprint_equiv fp (merge_footprint_list fpl))
     (* all fields are semantically well typed *)
-    (FWT: forall n fid fty ffp fofs bf,
+    (FWT: forall n fid fty ffp fofs,
         nth_error co.(co_members) n = Some (Member_plain fid fty) ->
         nth_error fpl n = Some ffp ->
-        field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+        field_offset ce fid co.(co_members) = OK fofs ->
         sem_wt_loc ce m ffp b (ofs + fofs) fty),
     sem_wt_loc ce m fp b ofs (Tstruct orgs id)
 | sem_wt_enum: forall fp b ofs orgs id co
@@ -184,10 +319,10 @@ Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> t
     (INFP: in_footprint fp b ofs (co_sizeof co))
     (VALID: Mem.range_perm m b ofs (ofs + co_sizeof co) Cur Freeable)
     (* Interpret the field by the tag and prove that it is well-typed *)
-    (FWT: forall tag fid fty fofs bf,
+    (FWT: forall tag fid fty fofs,
         Mem.load Mint32 m b ofs = Some (Vint tag) ->
         list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
-        variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+        variant_field_offset ce fid (co_members co) = OK fofs ->
         sem_wt_loc ce m (remove_footprint fp b ofs fofs) b (ofs + fofs) fty),
     sem_wt_loc ce m fp b ofs (Tvariant orgs id)
 | sem_wt_scalar: forall ty b ofs
@@ -226,19 +361,19 @@ Inductive sem_wt_val (ce: composite_env) (m: mem) : footprint -> val -> type -> 
     (FPLCON: footprint_equiv fp (merge_footprint_list fpl))
     (* Because struct value is passed by its address, we need to show
     that all the fields in this address is well typed value *)
-    (FWT: forall n fid fty fofs bf v ffp,
+    (FWT: forall n fid fty fofs v ffp,
         nth_error co.(co_members) n = Some (Member_plain fid fty) ->
         nth_error fpl n = Some ffp ->
-        field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+        field_offset ce fid co.(co_members) = OK fofs ->
         deref_loc fty m b (Ptrofs.add ofs (Ptrofs.repr fofs)) v -> 
         sem_wt_val ce m ffp v fty),
     sem_wt_val ce m fp (Vptr b ofs) (Tstruct orgs id)
 | wt_val_enum: forall id orgs b ofs fp co
     (CO: ce ! id = Some co)
-    (FWT: forall tag fid fty fofs bf v,
+    (FWT: forall tag fid fty fofs v,
         Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
         list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
-        variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+        variant_field_offset ce fid (co_members co) = OK fofs ->
         deref_loc fty m b (Ptrofs.add ofs (Ptrofs.repr fofs)) v -> 
         sem_wt_val ce m fp v fty),
     sem_wt_val ce m fp (Vptr b ofs) (Tvariant orgs id)
@@ -384,13 +519,13 @@ Inductive place_footprint : place -> footprint -> Prop :=
     (ABS: abs b = Some p')
     (SUBP: subplace ce p' p ofs),
     place_footprint (Pderef p ty) (remove_footprint fp b ofs (sizeof ce (typeof_place p)))
-| place_footprint_field: forall p p' fp ofs b orgs id fid fty co fofs bf
+| place_footprint_field: forall p p' fp ofs b orgs id fid fty co fofs
     (FP: place_footprint p fp)
     (ABS: abs b = Some p')
     (SUBP: subplace ce p' p ofs)
     (TY: typeof_place p = Tstruct orgs id)
     (CO: ce!id = Some co)
-    (FOFS: field_offset ce id co.(co_members) = OK (fofs, bf)),
+    (FOFS: field_offset ce id co.(co_members) = OK fofs),
     (* fp - [(b,ofs), (b, ofs+sizeof(p))) + [(b,ofs+fofs), (b, ofs+fofs+sizeof(fty))) *)
     place_footprint (Pfield p fid fty)
     (add_footprint (remove_footprint fp b ofs (co_sizeof co)) b (ofs+fofs) (sizeof ce fty))
@@ -429,19 +564,19 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -
     bmatch m b ofs p own (Tbox ty)
 | bm_struct: forall orgs id
     (* all fields in the struct satisfy bmatch *)
-    (FMATCH: forall co fid fty fofs bf,
+    (FMATCH: forall co fid fty fofs,
         ce ! id = Some co ->
         In (Member_plain fid fty) co.(co_members) ->       
-        field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+        field_offset ce fid co.(co_members) = OK fofs ->
         bmatch m b (ofs + fofs) (Pfield p fid fty) own fty),
     bmatch m b ofs p own (Tstruct orgs id)
 | bm_enum: forall orgs id
-    (FMATCH: forall co fid fty fofs bf tag,
+    (FMATCH: forall co fid fty fofs tag,
         ce ! id = Some co ->
         (* load tag *)
         Mem.load Mint32 m b ofs = Some (Vint tag) ->
         list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
-        variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->        
+        variant_field_offset ce fid (co_members co) = OK fofs ->        
         bmatch m b (ofs + fofs) (Pdowncast p fid fty) own fty),
     bmatch m b ofs p own (Tvariant orgs id)
 | bm_scalar: forall ty,
@@ -554,6 +689,8 @@ Let ge := globalenv se prog.
 (* composite environment *)
 Let ce := ge.(genv_cenv).
 
+Hypothesis CONSISTENT: composite_env_consistent ce.
+
 Inductive sound_state: state -> Prop :=
 | sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ abs fpm
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
@@ -603,7 +740,7 @@ Proof.
     rewrite H in H6. inv H6. rewrite H0 in H7. inv H7.
     econstructor. auto. eauto. eauto.
     rewrite Ptrofs.unsigned_repr. eauto.
-    (** dirty work: specify the requirement of not overflow *)
+    (** dirty work: specify the requirement to prevent overflow *)
     admit. admit. 
     unfold is_shallow_prefix. eapply orb_true_intro.
     right. simpl. destruct (place_eq p p). auto. congruence.    
@@ -619,7 +756,7 @@ Proof.
     rewrite H in H8. inv H8. rewrite H0 in H9. inv H9.
     econstructor. auto. eauto. eauto.
     rewrite Ptrofs.unsigned_repr. eauto.
-    (** dirty work: specify the requirement of not overflow *)
+    (** dirty work: specify the requirement to prevent overflow *)
     admit. admit. 
     unfold is_shallow_prefix. eapply orb_true_intro.
     right. simpl. destruct (place_eq p p). auto. congruence.
@@ -676,7 +813,10 @@ Proof.
   (* Pderef *)
   - inv ERR.
     (* eval p error *)
-    + admit.
+    + eapply IHp. 1-4: eauto.
+      inv WT. auto.
+      eapply dominator_of_shallow_owned_place. auto. auto.
+      auto.
     (* deref error *)
     + inv WT.
       exploit eval_place_sound. 1-5: eauto.
@@ -687,17 +827,64 @@ Proof.
       (* The block of p' is valid block *)
       eapply MM in ABS. destruct ABS as (PERM & BM).
       (* inv deref_loc_error *)
-      inv H2. unfold Mem.valid_access in H0.
-      Z.divide
-      
-
-
-
-
-
-
-
-
+      inv H2. eapply H0.
+      (** Show that location of p is valid_access *)
+      red. split.
+      * (* prove the location of p is in the range of p' *)
+        eapply Mem.range_perm_implies with (p1:= Freeable).
+        red. intros. eapply PERM.
+        exploit subplace_in_range; eauto.
+        erewrite <- sizeof_by_value; eauto.
+        lia.
+        constructor.
+      * exploit subplace_align; eauto.
+        intros AL.
+        eapply Z.divide_trans. eapply alignof_by_value. eauto.
+        eauto.
+  (* Pdowncast *)
+  - inv ERR.
+    (* eval_place p error *)
+    + eapply IHp; eauto.
+      inv WT. auto.
+    (* load tag error *)
+    + inv WT.
+      exploit eval_place_sound. 1-5: eauto.
+      eapply place_dominator_shallow_own_shallow_prefix. eauto.
+      unfold is_shallow_prefix. simpl. destruct (place_eq p p); try congruence.
+      simpl. eapply orb_true_r.
+      intros (p' & ABS & SUBP).
+      (* The block of p' is valid block *)
+      eapply MM in ABS. destruct ABS as (PERM & BM).
+      (* show that the location of tag is valid *)
+      eapply H3.
+      red. split.
+      * eapply Mem.range_perm_implies with (p1:= Freeable).
+        red. intros. eapply PERM.
+        exploit subplace_in_range; eauto.
+        assert (SZTAGLE: size_chunk Mint32 <= sizeof ce (typeof_place p)).
+        { rewrite H5. simpl.
+          rewrite H6. erewrite co_consistent_sizeof; eauto.
+          rewrite H8. simpl.
+          generalize (sizeof_variant_ge4 ce (co_members co)). intros A.
+          assert (ALGE: co_alignof co > 0).
+          { exploit co_alignof_two_p. intros (n & COAL).
+            rewrite COAL. apply two_power_nat_pos. }
+          generalize (align_le (sizeof_variant ce (co_members co)) _ ALGE).
+          lia. }
+        lia.
+        constructor.
+      * exploit subplace_align; eauto.
+        assert (AL: (align_chunk Mint32 | alignof ce (typeof_place p))).
+        { rewrite H5. simpl.
+          rewrite H6. erewrite co_consistent_alignof; eauto.
+          rewrite H8. simpl.
+          (* easy but tedious *)
+          (* exploit alignof_composite_two_p'. *)
+          admit. }
+        intros ALTY.
+        eapply Z.divide_trans. eauto.
+        eauto.
+Admitted.
         
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
@@ -776,4 +963,4 @@ End BORCHK.
 (*   intros p BORCHK MSAFE. *)
 (*   red. intros w se VALIDSE SYMBINV. *)
 (* Admitted. *)
-    
+

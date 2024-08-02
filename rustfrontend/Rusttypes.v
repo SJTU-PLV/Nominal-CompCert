@@ -164,7 +164,6 @@ Definition access_mode (ty: type) : mode :=
   | Tvariant _ _ => By_copy
 end.
 
-
 (** Composite  *)
 
 Inductive struct_or_variant : Set :=  Struct : struct_or_variant | TaggedUnion : struct_or_variant.
@@ -185,11 +184,6 @@ Definition name_member (m: member) : ident :=
 Definition type_member (m: member) : type :=
   match m with
   | Member_plain _ t => t
-  end.
-
-Definition member_is_padding (m: member) : bool :=
-  match m with
-  | Member_plain _ _ => false
   end.
 
 Definition name_composite_def (c: composite_definition) : ident :=
@@ -621,9 +615,7 @@ Fixpoint alignof_composite' (env: composite_env) (ms: members) : Z :=
   match ms with
   | nil => 1
   | m :: ms => 
-     if member_is_padding m
-     then alignof_composite' env ms
-     else Z.max (alignof env (type_member m)) (alignof_composite' env ms)
+      Z.max (alignof env (type_member m)) (alignof_composite' env ms)
   end.
 
 Definition alignof_composite (env: composite_env) (sv: struct_or_variant) (ms: members) : Z :=
@@ -667,8 +659,7 @@ Lemma alignof_composite_two_p':
 Proof.
   induction m; simpl.
 - exists 0%nat; auto.
-- destruct (member_is_padding a); auto.
-  apply Z.max_case; auto. apply alignof_two_p.
+- apply Z.max_case; auto. apply alignof_two_p.
 Qed.
 
 Lemma alignof_composite_two_p:
@@ -720,7 +711,24 @@ Proof.
   unfold bytes_of_bits.
   change 0 with (0 / 8) at 1. apply Z.div_le_mono; lia.
 Qed.
-  
+
+Lemma sizeof_variant_ge4:
+  forall env m, 4 <= sizeof_variant env m.
+Proof.
+  intros. unfold sizeof_variant.
+  generalize (sizeof_variant'_pos env m).
+  intros.
+  (* apply Z.le_lteq in H as LELT. destruct LELT. *)
+  (* apply Z.gt_lt_iff in H0. *)
+  generalize (alignof_composite_two_p' env m). intros (n & A).
+  generalize (two_power_nat_pos n). rewrite A. intros B.
+  generalize (align_le 32 (two_power_nat n * 8) B). intros.
+  generalize (align_le (sizeof_variant' env m) (two_power_nat n) B). intros.
+  unfold bytes_of_bits.
+  change 4 with (32 / 8) at 1. apply Z.div_le_mono; lia.
+Qed.
+
+
 (** Type ranks *)
 
 (** The rank of a type is a nonnegative integer that measures the direct nesting
@@ -811,6 +819,7 @@ Proof.
   change 0 with (0 / 8) at 1. apply Z.div_le_mono; lia.
 - apply sizeof_variant_pos.
 Qed.
+
 
 Fixpoint complete_members (env: composite_env) (ms: members) : bool :=
   match ms with
@@ -1070,6 +1079,27 @@ Definition variant_field_offset (env: composite_env) (id: ident) (ms: members) :
     (* align all the members *)
     OK (align 32 (alignof_composite' env ms * 8) / 8)
   else Error (MSG "Unknown field " :: CTX id :: nil).
+
+(* variant_field_offset in range *)
+
+Corollary variant_field_offset_in_range:
+  forall env ms id ofs ty,
+  variant_field_offset env id ms = OK ofs -> field_type id ms = OK ty ->
+  0 <= ofs /\ ofs + sizeof env ty <= sizeof_variant env ms.
+Proof.
+Admitted.
+
+(** Properties used for subplace  *)
+
+Lemma alignof_composite_max_aux: forall ce co fid fty,
+    field_type fid (co_members co) = OK fty ->
+    alignof ce fty <= alignof_composite' ce (co_members co).
+Admitted.
+
+Lemma alignof_composite_max: forall ce co fid fty,
+    field_type fid (co_members co) = OK fty ->
+    alignof ce fty <= alignof_composite ce (co_sv co) (co_members co).
+Admitted.
 
 
 (** Stability properties for alignments, sizes, and ranks.  If the type is
