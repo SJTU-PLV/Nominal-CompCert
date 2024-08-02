@@ -11,6 +11,7 @@ Require Import LanguageInterface Invariant.
 Require Import Rusttypes RustlightBase.
 Require Import RustIR BorrowCheckDomain BorrowCheckPolonius.
 Require Import Errors.
+Require Import InitDomain InitAnalysis.
 Require Import RustIRown.
 
 
@@ -20,22 +21,36 @@ address is zero). [p'] is in the offset [ofs] of [p] *)
 offset [ofs] *)
 Inductive subplace (ce: composite_env) (p: place) : place -> Z -> Prop :=
 | subplace_eq: subplace ce p p 0
-| subplace_field: forall p' ofs orgs id co fofs bf fid fty
+| subplace_field: forall p' ofs orgs id co fofs fid fty
     (* &p‘ = &p + ofs *)
     (SUB: subplace ce p p' ofs)
     (TY: typeof_place p' = Tstruct orgs id)
     (CO: ce ! id = Some co)
-    (FOFS: field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    (FOFS: field_offset ce fid co.(co_members) = OK fofs),
     (* &p'.fid = &p + ofs + fofs *)
     subplace ce p (Pfield p' fid fty) (ofs + fofs)
-| subplace_downcast: forall p' ofs orgs id co fofs bf fid fty
+| subplace_downcast: forall p' ofs orgs id co fofs fid fty
     (* &p‘ = &p + ofs *)
     (SUB: subplace ce p p' ofs)
     (TY: typeof_place p' = Tvariant orgs id)
     (CO: ce ! id = Some co)
-    (FOFS: variant_field_offset ce fid co.(co_members) = OK (fofs, bf)),
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs),
     subplace ce p (Pdowncast p' fid fty) (ofs + fofs)
 .
+
+(* Properties of subplace *)
+
+(* Maybe we should ensure that ce is consistent *)
+Lemma subplace_align: forall ce p1 p2 ofs,
+  subplace ce p1 p2 ofs ->
+  (alignof ce (typeof_place p2) | ofs).
+Proof.
+  induction 1.
+  - apply Z.divide_0_r.
+  - simpl. eapply Z.divide_add_r.
+    + admit.
+    + eapply field_offset_aligned_gen
+      
 
 (** Test: try to define semantics well-typedness for a memory location *)
 
@@ -382,6 +397,16 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -
 (** TODO: bm_reference  *)
 .
 
+(** Some bmatch properties *)
+
+(* bmatch under subplace *)
+
+Lemma bmatch_subplace: forall p p' ofs ofs' own m b,
+    bmatch m b ofs p own (typeof_place p) ->
+    subplace ce p p' ofs' ->
+    bmatch m b (ofs + ofs') p' own (typeof_place p').
+Admitted.
+
 (** TODO: support alias analysis domain *)
 Definition mmatch (m: mem) (own: own_env) : Prop :=
   forall b p,
@@ -440,6 +465,72 @@ End TYPING.
 Definition env_to_tenv (e: env) : typenv :=
   PTree.map1 snd e.
 
+(** Some auxilary definitions *)
+
+(* Well-formed ownership environment *)
+
+Record wf_own_env (own: own_env) : Prop := {
+    (* A place is owned then all its dominators are owned *)
+    wf_own_dominator: forall p,
+      is_owned own p = true ->
+      place_dominator_own own p = true
+  }.
+
+
+(* properties of place_dominator *)
+
+Lemma place_dominator_local: forall p p',
+    place_dominator p = Some p' ->
+    local_of_place p = local_of_place p'.
+Proof.
+  induction p; simpl; auto.
+  congruence.
+  intros. inv H. auto.
+Qed.
+
+Lemma place_dominator_strict_prefix: forall p p',
+    place_dominator p = Some p' ->
+    is_prefix_strict p' p = true.
+Proof.
+  induction p; simpl; auto; try congruence; intros.
+  - exploit IHp. eauto. intros A. eapply is_prefix_strict_trans. eauto.
+    unfold is_prefix_strict. simpl. destruct (place_eq p p). auto. congruence.
+  - inv H.
+    unfold is_prefix_strict. simpl. destruct (place_eq p' p'). auto. congruence.
+  - exploit IHp. eauto. intros A. eapply is_prefix_strict_trans. eauto.
+    unfold is_prefix_strict. simpl. destruct (place_eq p p). auto. congruence.
+Qed.
+
+Lemma dominator_of_shallow_owned_place: forall own p,
+    wf_own_env own ->    
+    is_shallow_owned own p = true ->
+    place_dominator_shallow_own own p = true.
+Proof.
+  intros own p WF SO.
+  unfold place_dominator_shallow_own.
+  unfold is_shallow_owned in *. eapply andb_true_iff in SO.
+  destruct SO as (A & B).
+  exploit wf_own_dominator. eauto. eauto. intros C.
+  unfold place_dominator_own in C. destruct (place_dominator p) eqn: DOM; auto.
+  rewrite C. erewrite andb_true_l.
+  eapply Paths.exists_1. red. Morphisms.solve_proper.
+  eapply Paths.exists_2 in B.
+  unfold Paths.Exists in *. destruct B as (E & F & G).
+  exists E. split. auto.
+  erewrite <- place_dominator_local. eauto.
+  auto.
+  eapply is_prefix_strict_trans.
+  eapply place_dominator_strict_prefix. eauto.
+  auto.
+  red. Morphisms.solve_proper.
+Qed.  
+
+Lemma place_dominator_shallow_own_shallow_prefix: forall own p p',
+    place_dominator_shallow_own own p = true ->
+    is_shallow_prefix p' p = true ->
+    place_dominator_shallow_own own p' = true.
+Admitted.
+
 Section BORCHK.
 
 Variable prog: program.
@@ -468,61 +559,136 @@ Inductive sound_state: state -> Prop :=
 
 (** The address of a place is consistent with the abstracter. For now,
 we do not consider reference *)
-Lemma eval_place_sound: forall e m p b ofs abs own
+Lemma eval_place_sound: forall e m p b ofs abs own fpm
     (EVAL: eval_place ce e m p b ofs)
-    (MM: mmatch ce abs m own)
-    (WF: wf_abs ce abs e)
+    (MM: mmatch ce abs fpm m own)
+    (WFABS: wf_abs abs e)
+    (WFOWN: wf_own_env own)
     (WT: wt_place (env_to_tenv e) ce p)
-    (* evaluating the address of p does not require that p is owned *)
-    (POWN: prefix_is_owned own p = true),
-  exists p' ofs', abs b (Ptrofs.unsigned ofs) = Some (p', ofs')
-             /\ eval_place
-    (* if consider reference, p ∈ Γ(type(p).origins) *)
+    (* evaluating the address of p does not require that p is
+    owned. Shallow own is used in bmatch *)
+    (POWN: place_dominator_shallow_own own p = true),
+  exists p', abs b = Some p'
+        /\ subplace ce p' p (Ptrofs.unsigned ofs)
+    (* if consider reference, we cannot say that p is a subplace of
+    p', instead we need to state that the owner p points to is a
+    subplace of p' *)
 .
 Proof.
   induction 1; intros.
   (* Plocal *)
-  - rewrite Ptrofs.unsigned_zero. eapply wf_local_env; eauto.
-    generalize (sizeof_pos ce ty).
-    lia.
+  - rewrite Ptrofs.unsigned_zero.
+    exists (Plocal id ty). split.
+    eapply wf_local_env; eauto.
+    econstructor.
   (* Pfield *)
-  - 
+  - inv WT.
+    eapply place_dominator_shallow_own_shallow_prefix with (p':= p) in POWN.
+    exploit IHEVAL. 1-5: auto.
+    intros (p' & ABS & SUBP).
+    exists p'. split. auto.
+    rewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr.
+    (* two type facts, reduce one *)
+    rewrite H in H6. inv H6. rewrite H0 in H7. inv H7.
+    econstructor. auto. eauto. eauto.
+    rewrite Ptrofs.unsigned_repr. eauto.
+    (** dirty work: specify the requirement of not overflow *)
+    admit. admit. 
+    unfold is_shallow_prefix. eapply orb_true_intro.
+    right. simpl. destruct (place_eq p p). auto. congruence.    
   (* Pdowncast *)
-  - admit.
+  - inv WT.
+    eapply place_dominator_shallow_own_shallow_prefix with (p':= p) in POWN.
+    exploit IHEVAL. 1-5: auto.
+    intros (p' & ABS & SUBP).
+    exists p'. split. auto.
+    rewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr.
+    (* two type facts, reduce one *)
+    rewrite H in H8. inv H8. rewrite H0 in H9. inv H9.
+    econstructor. auto. eauto. eauto.
+    rewrite Ptrofs.unsigned_repr. eauto.
+    (** dirty work: specify the requirement of not overflow *)
+    admit. admit. 
+    unfold is_shallow_prefix. eapply orb_true_intro.
+    right. simpl. destruct (place_eq p p). auto. congruence.
   (* Pderef *)
   - inv WT.
-    exploit IHEVAL. eauto. eauto. eauto.
-    eapply forallb_forall. intros.
-    eapply forallb_forall in POWN. eauto.
-    simpl. auto.
-    intros ABS.
+    exploit IHEVAL. eauto. eauto. eauto. eauto.
+    (* place dominator is shallow owned *)
+    unfold place_dominator_shallow_own in POWN. simpl in POWN.
+    eapply dominator_of_shallow_owned_place. auto. auto.
+    intros (p' & ABS & SUBP).
     eapply MM in ABS. destruct ABS as (A & B).
+    (* p is a subplace of p' and p' bmatch implies p bmatch *)
+    exploit bmatch_subplace; eauto. rewrite Z.add_0_l. intros BM.
     (* typeof_place p must be box/reference *)
     destruct (typeof_place p) eqn: TYP; simpl in *; try congruence.
     (* Tbox *)
-    + inv B. rewrite Z.sub_0_r in VRES.
+    + inv BM.
       assert (LOAD: Mem.load Mptr m l (Ptrofs.unsigned ofs) = Some (Vptr l' ofs')).
       { inv H. simpl in H0. inv H0.  auto.
         simpl in H1. inv H1.
         simpl in H1. inv H1. }
       inv H3.
-      generalize (VRES _ _ LOAD). intros ABS. apply ABS.
-      eapply prefix_owned_implies. eauto.
-      eapply proj_sumbool_is_true.
-      simpl. auto.
-      simpl in *. congruence.
+      generalize (VRES _ _ LOAD). intros ABS.
+      (* Now we need to say that p is shallow owned *)
+      unfold place_dominator_shallow_own in POWN. simpl in POWN.
+      destruct ABS as (C & D).
+      eapply C in POWN. destruct POWN as (E & F). subst.
+      exists (Pderef p ty). split. auto.
+      rewrite Ptrofs.unsigned_zero. constructor.
+      (* box is not scalar type *)
+      simpl in H0. congruence.
     (* reference *)
     + admit.
 Admitted.
-      
-Lemma eval_place_no_mem_error: forall abs m own e p
-    (MM: mmatch ce abs m own)
-    (WF: wf_abs ce abs e)
-    (POWN: is_owned own p = true),
-    eval_place_mem_error ce e m p ->
-    False.
-Admitted.
 
+
+Lemma eval_place_no_mem_error: forall e m p abs own fpm
+    (MM: mmatch ce abs fpm m own)
+    (WFABS: wf_abs abs e)
+    (WFOWN: wf_own_env own)
+    (WT: wt_place (env_to_tenv e) ce p)
+    (* evaluating the address of p does not require that p is
+    owned. Shallow own is used in bmatch *)
+    (POWN: place_dominator_shallow_own own p = true)
+    (ERR: eval_place_mem_error ce e m p),
+    False.
+Proof.
+  induction p; simpl; intros.
+  (* Plocal *)
+  - inv ERR.
+  (* Pfield *)
+  - inv ERR. eapply IHp; eauto.
+    inv WT. auto.
+  (* Pderef *)
+  - inv ERR.
+    (* eval p error *)
+    + admit.
+    (* deref error *)
+    + inv WT.
+      exploit eval_place_sound. 1-5: eauto.
+      eapply dominator_of_shallow_owned_place. auto.
+      unfold place_dominator_shallow_own in POWN. simpl in POWN.
+      auto.
+      intros (p' & ABS & SUBP).
+      (* The block of p' is valid block *)
+      eapply MM in ABS. destruct ABS as (PERM & BM).
+      (* inv deref_loc_error *)
+      inv H2. unfold Mem.valid_access in H0.
+      Z.divide
+      
+
+
+
+
+
+
+
+
+        
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
 Admitted.

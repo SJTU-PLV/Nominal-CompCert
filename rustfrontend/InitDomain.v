@@ -125,7 +125,9 @@ initialized *)
 Fixpoint place_owns_loc (p: place) : bool :=
   match p with
   | Plocal _ _ => true
-  | Pderef p' (Tbox _) => true
+  (* What about x: &mut Box<i32> ? We must check that p is an owned
+  chain! *)
+  | Pderef p' (Tbox _) => place_owns_loc p'
   | Pfield p' _ _ => place_owns_loc p'
   | Pdowncast p' _ _ => place_owns_loc p'
   | _ => false

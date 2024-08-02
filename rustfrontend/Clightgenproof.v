@@ -352,7 +352,7 @@ Definition enum_consistent (eid fid uid ufid: ident) : Prop :=
     co.(co_sv) = TaggedUnion ->
     exists tco utco, tce ! eid = Some tco
                 /\ tce ! uid = Some utco
-                /\ forall fofs bf, variant_field_offset ce fid co.(co_members) = OK (fofs, bf) ->
+                /\ forall fofs, variant_field_offset ce fid co.(co_members) = OK fofs ->
                   exists cfofs1 cfofs2,
                     Ctypes.field_offset tce ufid tco.(Ctypes.co_members) = OK (cfofs1, Full)
                     /\ Ctypes.union_field_offset tce fid utco.(Ctypes.co_members) = OK (cfofs2, Full)
@@ -2156,7 +2156,7 @@ Proof.
     (* the field offset *)
     generalize (ECONSIST _ CO ENUM).
     intros (tco1 & utco & TCO1 & UTCO & TFOFS).
-    generalize (TFOFS _ _ FOFS).
+    generalize (TFOFS _ FOFS).
     intros (cfofs1 & cfofs2 & TUFOFS & TFFOFS & OFSEQ).
     subst.
     (* evaluate field_param *)
@@ -2449,7 +2449,7 @@ Proof.
     (* the field offset *)
     generalize (ECONSIST _ CO ENUM0).
     intros (tco1 & utco & TCO1 & UTCO & TFOFS).
-    generalize (TFOFS _ _ FOFS).
+    generalize (TFOFS _ FOFS).
     intros (cfofs1 & cfofs2 & TUFOFS & TFFOFS & OFSEQ).
     subst.
     (* evaluate field_param *)
@@ -2682,7 +2682,7 @@ Proof.
     (* the field offset *)
     generalize (ECONSIST _ CO ENUM).
     intros (tco1 & utco & TCO1 & UTCO & TFOFS).
-    generalize (TFOFS _ _ FOFS).
+    generalize (TFOFS _ FOFS).
     intros (cfofs1 & cfofs2 & TUFOFS & TFFOFS & OFSEQ).
     subst.
     (* evaluate field_param *)
@@ -3716,7 +3716,7 @@ Proof.
         { unfold enum_consistent. simpl in SCO. unfold ce. rewrite SCO.
           intros. inv H. exists tco, uco.
           split. unfold tce. auto. split. unfold tce. auto.
-          auto. intros. eapply UFOFS. eauto. }
+          auto. }
      eapply match_dropmemb_stmt_enum_member; eauto.
       (* prove inj_incr *)
       exploit Mem.support_store. eapply STORETM1.

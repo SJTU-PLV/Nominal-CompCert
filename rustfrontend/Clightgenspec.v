@@ -245,13 +245,13 @@ Proof.
 Qed.
 
 
-Lemma field_offset_rec_match: forall ce tce membs fid ofs bf start,
+Lemma field_offset_rec_match: forall ce tce membs fid ofs start,
     tr_composite_env ce tce ->    
     complete_members ce membs = true ->
-    field_offset_rec ce fid membs start = OK (ofs, bf) ->
+    field_offset_rec ce fid membs start = OK ofs ->
     Ctypes.field_offset_rec tce fid (map transl_composite_member membs) start = OK (ofs, Full).
 Proof.
-  induction membs; simpl; intros fid ofs bf start TR FOFS.
+  induction membs; simpl; intros fid ofs start TR FOFS.
   congruence.
   inv FOFS.
   destruct a. simpl in *.
@@ -265,10 +265,10 @@ Proof.
   erewrite alignof_match; eauto. erewrite sizeof_match; eauto.
 Qed.
 
-Lemma field_offset_match: forall ce tce membs fid ofs bf,
+Lemma field_offset_match: forall ce tce membs fid ofs,
     tr_composite_env ce tce ->
     complete_members ce membs = true ->
-    field_offset ce fid membs = OK (ofs, bf) ->
+    field_offset ce fid membs = OK ofs ->
     Ctypes.field_offset tce fid (map transl_composite_member membs) = OK (ofs, Full).
 Proof.
   unfold Ctypes.field_offset, field_offset.
@@ -276,15 +276,15 @@ Proof.
   eapply field_offset_rec_match with (start := 0); eauto.
 Qed.
 
-Lemma struct_field_offset_match: forall ce tce id fid co ofs bf,
+Lemma struct_field_offset_match: forall ce tce id fid co ofs,
     tr_composite_env ce tce ->
     ce ! id = Some co ->
     co.(co_sv) = Struct ->
-    field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+    field_offset ce fid co.(co_members) = OK ofs ->
     exists tco, tce ! id = Some tco /\
            Ctypes.field_offset tce fid tco.(Ctypes.co_members) = OK (ofs, Full).
 Proof.
-  intros until bf.
+  intros until ofs.
   intros TR CO STRUCT FOFS.
   generalize (tr_composite_some _ _ TR id co CO).
   rewrite STRUCT. intros (tco & A & B & C & D).
@@ -323,7 +323,7 @@ Proof.
   eauto.
 Qed.
 
-Lemma variant_field_offset_match: forall ce tce co bf id,
+Lemma variant_field_offset_match: forall ce tce co id,
     tr_composite_env ce tce ->
     ce ! id = Some co ->
     co.(co_sv) = TaggedUnion ->
@@ -333,7 +333,7 @@ Lemma variant_field_offset_match: forall ce tce co bf id,
       tce!id = Some tco /\ tce!union_id = Some union /\
         tco.(Ctypes.co_members) = [tag_member; union_member] /\
         tag_fid <> union_fid /\
-        (forall fid ofs, variant_field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+        (forall fid ofs, variant_field_offset ce fid co.(co_members) = OK ofs ->
                     exists ofs1 ofs2,
                       Ctypes.field_offset tce union_fid tco.(Ctypes.co_members) = OK (ofs1, Full)
                       /\ union_field_offset tce fid union.(Ctypes.co_members) = OK (ofs2, Full)
@@ -952,8 +952,8 @@ Lemma generate_drops_inv: forall ce tce dropm id co f,
         /\ tce ! union_id = Some uco
         (* tag field offset is 0 *)
         /\ Ctypes.field_offset tce tag_fid tco.(Ctypes.co_members) = OK (0, Full)        
-        /\ (forall fid ofs bf,
-              variant_field_offset ce fid co.(co_members) = OK (ofs, bf) ->
+        /\ (forall fid ofs,
+              variant_field_offset ce fid co.(co_members) = OK ofs ->
               exists ofs1 ofs2,
                 Ctypes.field_offset tce union_fid tco.(Ctypes.co_members) = OK (ofs1, Full)
                 /\ Ctypes.union_field_offset tce fid uco.(Ctypes.co_members) = OK (ofs2, Full)

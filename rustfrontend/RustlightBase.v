@@ -353,6 +353,12 @@ Definition is_support_prefix (p1 p2: place) : bool :=
 Definition is_prefix_strict (p1 p2: place) : bool :=
   in_dec place_eq p1 (parent_paths p2).
 
+Lemma is_prefix_strict_trans p1 p2 p3:
+  is_prefix_strict p1 p2 = true ->
+  is_prefix_strict p2 p3 = true ->
+  is_prefix_strict p1 p3 = true.
+Admitted.
+
 
 Fixpoint local_of_place (p: place) :=
   match p with
@@ -432,20 +438,20 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     gloabl environment *)
     e!id = Some (b, ty) ->
     eval_place (Plocal id ty) b Ptrofs.zero
-| eval_Pfield_struct: forall p ty b ofs delta id i co bf orgs,
+| eval_Pfield_struct: forall p ty b ofs delta id i co orgs,
     eval_place p b ofs ->
     typeof_place p = Tstruct orgs id ->
     ce ! id = Some co ->
-    field_offset ce i (co_members co) = OK (delta, bf) ->
+    field_offset ce i (co_members co) = OK delta ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
-| eval_Pdowncast: forall  p ty b ofs fofs id fid fty co bf orgs tag,
+| eval_Pdowncast: forall  p ty b ofs fofs id fid fty co orgs tag,
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     (* check tag and fid *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
-    variant_field_offset ce fid (co_members co) = OK (fofs, bf) ->
+    variant_field_offset ce fid (co_members co) = OK fofs ->
     (* fty and ty must be equal? *)
     eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr fofs))
 | eval_Pderef: forall p ty l ofs l' ofs',
@@ -469,7 +475,7 @@ Inductive eval_place_mem_error : place -> Prop :=
     eval_place_mem_error (Pderef p ty)
 | eval_Pderef_error2: forall p l ofs ty,
     eval_place p l ofs ->
-    deref_loc_mem_error ty m l ofs ->
+    deref_loc_mem_error (typeof_place p) m l ofs ->
     eval_place_mem_error (Pderef p ty)
 .
 
@@ -705,19 +711,19 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
-    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr  ofsbit)) lofsbit ->
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list ce lty m lb lofs m' ->
     drop_in_place ce (Tstruct orgs id) m b ofs m'
-| drop_in_variant: forall m b ofs id co m' tag memb fid ofs' bf orgs,
+| drop_in_variant: forall m b ofs id co m' tag memb fid ofs' orgs,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     (* use tag to choose the member *)
     list_nth_z co.(co_members) (Int.unsigned tag) = Some memb ->
     fid = name_member memb ->
-    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
+    variant_field_offset ce fid co.(co_members) = OK ofs' ->
     (* drop the selected type *)
     drop_in_place ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
     drop_in_place ce (Tvariant orgs id) m b ofs m
@@ -762,7 +768,7 @@ Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> 
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
-    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr ofsbit)) lofsbit ->
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list_mem_error ce lty m lb lofs ->
@@ -771,14 +777,14 @@ Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> 
     ce ! id = Some co ->
     ~Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
     drop_in_place_mem_error ce (Tvariant orgs id ) m b ofs
-| drop_in_variant_error2: forall m b ofs id co tag memb fid ofs' bf orgs,
+| drop_in_variant_error2: forall m b ofs id co tag memb fid ofs' orgs,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     (* use tag to choose the member *)
     list_nth_z co.(co_members) (Int.unsigned tag) = Some memb ->
     fid = name_member memb ->
-    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
+    variant_field_offset ce fid co.(co_members) = OK ofs' ->
     (* drop the selected type *)
     drop_in_place_mem_error ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) ->
     drop_in_place_mem_error ce (Tvariant orgs id ) m b ofs
@@ -813,7 +819,7 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
-    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr ofsbit)) lofsbit ->
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
@@ -1030,7 +1036,7 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid enum_id  orgs,
+| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag co id fid enum_id  orgs,
     typeof_place p = ty ->
     typeof e = ty ->
     ty = Tvariant orgs id  ->
@@ -1053,7 +1059,7 @@ Inductive step : state -> trace -> state -> Prop :=
     field_tag fid co.(co_members) = Some tag ->
     (* set the tag *)
     Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
-    field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    field_offset ge fid co.(co_members) = OK ofs' ->
     (* set the value *)
     assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
     step (State f (Sassign_variant p enum_id fid e) k le own m1) E0 (State f Sskip k le own'' m4)

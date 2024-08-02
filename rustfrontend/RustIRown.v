@@ -33,7 +33,7 @@ every used is initialized. Maybe we should change the name?  *)
             own_uninit: PathsMap.t;
             own_universe: PathsMap.t } .
 
-Definition is_owned (own: own_env) (p: place ): bool :=
+Definition is_owned (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
   let uninit := PathsMap.get id own.(own_uninit) in
@@ -41,17 +41,24 @@ Definition is_owned (own: own_env) (p: place ): bool :=
   Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
   && Paths.exists_ (fun p' => is_prefix p' p) init.
 
+(* A place is deep owned **xor** shallow owned *)
+
 Definition is_deep_owned (own: own_env) (p: place) : bool :=
-  (* p is owned and no p's children in uninit *)
+  (* p is owned and no p's children in the universe *)
   is_owned own p &&
     let id := local_of_place p in
-    let uninit := PathsMap.get id own.(own_uninit) in
-    Paths.for_all (fun p' => negb (is_prefix p p')) uninit.
+    let universe := PathsMap.get id own.(own_universe) in
+    Paths.for_all (fun p' => negb (is_prefix_strict p p')) universe.
 
-(* Is owned but is not deeply owned *)
 Definition is_shallow_owned (own: own_env) (p: place) : bool :=
-  is_owned own p && negb (is_deep_owned own p).
-  
+  is_owned own p &&
+    (* There is some p's children in the universe, which means that
+    p's ownership may be split. So we only consider p as a partial
+    owned place *)
+    let id := local_of_place p in
+    let universe := PathsMap.get id own.(own_universe) in
+    Paths.exists_ (fun p' => is_prefix_strict p p') universe.
+
 (* check that parents of p are not in uninit (slightly different from
    the condition in is_owned) *)
 Definition prefix_is_owned (own: own_env) (p: place) : bool :=
@@ -133,13 +140,40 @@ Fixpoint own_check_exprlist (own: own_env) (l: list expr) : option own_env :=
       end
   end.
 
+(* The dominator of a place [p] *)
+
+Fixpoint place_dominator (p: place) : option place :=
+  match p with
+  | Pderef p' _ => Some p'
+  | Pfield p' _ _ => place_dominator p'
+  | Pdowncast p' _ _ => place_dominator p'
+  | Plocal _ _ => None
+  end.
+
+(* A place's dominator is owned means that this place is the owner of
+the location it resides in *)
+Definition place_dominator_own (own: own_env) (p: place) : bool :=
+  match place_dominator p with
+  | Some p' => is_owned own p'
+  | None => true
+  end.
+
+(* We can use the following function to ensure that the block place
+[p] resides in is in the domain of abstracter *)
+Definition place_dominator_shallow_own (own: own_env) (p: place) : bool :=
+  match place_dominator p with
+  | Some p' => is_shallow_owned own p'
+  | None => true
+  end.
+
+
 (* Update the ownership environment when assigning to p. We must
 ensure that p is not deeply owned because p must be dropped before
 this assignment. *)
 Definition own_check_assign (own: own_env) (p: place) : option own_env :=
-  (* check that parents of p are not in uninit (slightly different
-  from the condition in is_owned) *)
-  if prefix_is_owned own p then
+  (* check that the dominator of p is owned (initialized) because we
+  need to compute the address of [p] *)
+  if place_dominator_own own p then
     Some (mkown (add_place own.(own_universe) p own.(own_init))
             (remove_place p own.(own_uninit))
             own.(own_universe))
@@ -229,14 +263,14 @@ Variable ge: genv.
 Inductive step_drop : state -> trace -> state -> Prop :=
 | step_dropstate_init: forall id b ofs fid fty membs k m,
     step_drop (Dropstate id (Vptr b ofs) None ((Member_plain fid fty) :: membs) k m) E0 (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) membs k m)
-| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs bf orgs
+| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs orgs
     (* step to another struct drop glue *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid co1.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* (cb, cofs is the address of composite id2) *)
     (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
     (CO2: ge.(genv_cenv) ! id2 = Some co2)
@@ -244,14 +278,14 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     step_drop
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty (Tstruct orgs id2) tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid fty tys)) membs k) m)
-| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs bf tag orgs
+| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs tag orgs
     (* step to another enum drop glue: remember to evaluate the switch statements *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid1 co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* (cb, cofs is the address of composite id2) *)
     (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
     (CO2: ge.(genv_cenv) ! id2 = Some co2)
@@ -264,13 +298,13 @@ Inductive step_drop : state -> trace -> state -> Prop :=
     step_drop
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m) E0
       (Dropstate id2 (Vptr cb cofs) (type_to_drop_member_state ge fid2 fty2) nil (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid1 fty1 tys)) membs k) m)
-| step_dropstate_box: forall b ofs id co fid fofs bf m m' tys k membs fty
+| step_dropstate_box: forall b ofs id co fid fofs m m' tys k membs fty
     (CO1: ge.(genv_cenv) ! id = Some co)
     (* evaluate the value of the argument of the drop glue for id2 *)
     (FOFS: match co.(co_sv) with
            | Struct => field_offset ge fid co.(co_members)
            | TaggedUnion => variant_field_offset ge fid co.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (DROPB: drop_box_rec ge b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys m'),
     step_drop
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m) E0
@@ -290,38 +324,38 @@ Inductive step_drop : state -> trace -> state -> Prop :=
 
 
 Inductive step_drop_mem_error : state -> Prop :=
-| step_dropstate_struct_error: forall id1 id2 co1 b1 ofs1 tys m k membs fid fty fofs bf orgs
+| step_dropstate_struct_error: forall id1 id2 co1 b1 ofs1 tys m k membs fid fty fofs orgs
     (* step to another struct drop glue *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid co1.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* error in loading the address of the composite *)
     (DEREF: deref_loc_rec_mem_error m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys),
     step_drop_mem_error
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty (Tstruct orgs id2) tys)) membs k m)
-| step_dropstate_enum_error1: forall id1 id2 co1 b1 ofs1 tys m k membs fid1 fty1 fofs bf orgs
+| step_dropstate_enum_error1: forall id1 id2 co1 b1 ofs1 tys m k membs fid1 fty1 fofs orgs
     (* step to another enum drop glue: remember to evaluate the switch statements *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid1 co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* error in loading the address of the composite *)
     (DEREF: deref_loc_rec_mem_error m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys),
     step_drop_mem_error
     (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m)
-| step_dropstate_enum_error2: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fofs bf orgs
+| step_dropstate_enum_error2: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fofs orgs
     (* step to another enum drop glue: remember to evaluate the switch statements *)
     (CO1: ge.(genv_cenv) ! id1 = Some co1)
     (* evaluate the value of the argument for the drop glue of id2 *)
     (FOFS: match co1.(co_sv) with
            | Struct => field_offset ge fid1 co1.(co_members)
            | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* (cb, cofs is the address of composite id2) *)
     (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
     (CO2: ge.(genv_cenv) ! id2 = Some co2)
@@ -330,13 +364,13 @@ Inductive step_drop_mem_error : state -> Prop :=
     (TAG: ~ Mem.valid_access m Mint32 cb (Ptrofs.unsigned cofs) Readable),
     step_drop_mem_error
       (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m)      
-| step_dropstate_box_error: forall b ofs id co fid fofs bf m tys k membs fty
+| step_dropstate_box_error: forall b ofs id co fid fofs m tys k membs fty
     (CO1: ge.(genv_cenv) ! id = Some co)
     (* evaluate the value of the argument of the drop glue for id2 *)
     (FOFS: match co.(co_sv) with
            | Struct => field_offset ge fid co.(co_members)
            | TaggedUnion => variant_field_offset ge fid co.(co_members)
-           end = OK (fofs, bf))
+           end = OK fofs)
     (* error in dropping the box chain *)
     (DROPB: drop_box_rec_mem_error ge b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys),
     step_drop_mem_error
