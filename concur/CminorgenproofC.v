@@ -2071,8 +2071,8 @@ Proof.
     intros (z1 & z2 & A & B).
     apply in_blocks_of_env_inv in A. destruct A as [id [A C]]. subst z1.
     specialize (me_vars0 id).
-    rewrite A in me_vars0. inv me_vars0. inv H6. rewrite H3 in H10.
-    inv H10. rewrite Ptrofs.add_zero_l in H12.
+    rewrite A in me_vars0. inv me_vars0. inv H7. rewrite H3 in H11.
+    inv H11. rewrite Ptrofs.add_zero_l in H13.
     eapply Mem.perm_free_2; eauto.
 Qed.
 
@@ -2382,7 +2382,7 @@ Proof.
     - split. apply Mem.support_alloc in ALLOC'. rewrite ALLOC'.
       constructor; auto. simpl. rewrite Mem.update_list_length. reflexivity.
       eapply Mem.alloc_unchanged_on; eauto.
-    - red. intros. exfalso. apply H6. eapply A3; eauto with mem.
+    - red. intros. exfalso. apply H7. eapply A3; eauto with mem.
   }
   left; econstructor; split.
   apply plus_one. constructor; simpl; eauto.

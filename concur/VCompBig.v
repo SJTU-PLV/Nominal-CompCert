@@ -442,9 +442,11 @@ Proof.
   - red. intros. unfold compose_meminj in H. rename b2 into b3.
     destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
     destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
-    red in H15. specialize (H15 _ _ _ _ Hj12 H0 H1) as Hp2'.
-    eapply Mem.perm_inject in H0 as Hp2. 3: eauto. 2: eauto.
-    red in H23. specialize (H23 _ _ _ _ Hj23 Hp2 Hp2') as Hp3.
+    red in H15. specialize (H15 _ _ _ _ Hj12 H0 H1 H2) as Hp2'.
+    eapply Mem.perm_inject in H1 as Hp2. 3: eauto. 2: eauto.
+    red in H23. inv Hm12. inv mi_thread. inv Hms. rewrite H3 in H0.
+    red in Hjs. erewrite Hjs in H0; eauto.
+    specialize (H23 _ _ _ _ Hj23 H0 Hp2 Hp2') as Hp3.
     rewrite Z.add_assoc. auto.
 Qed.
 
@@ -463,7 +465,7 @@ Definition match_12_cctrans : injp_world * injp_world -> injp_world -> Prop :=
    
     After internal execution, the [Hconstr2] may be destoryed. Why?
     
-    When the block [b] is transfered to external, and back to internal again.
+    When the block [b] is deliverd to external, and back to internal again.
     It is possible for the internal executions to change the values of [b3] because 
     it is now public in second [w2'] but private in the composed world. 
 
@@ -510,13 +512,18 @@ Proof.
       destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1]|] eqn:FIND12.
       * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
         exists b1, ofs1. split. edestruct Mem.perm_dec; eauto. exfalso.
-        eapply H15; eauto. replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
+        eapply H15; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H19 as [[_ TID]_]. congruence.
+        replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia.
+        auto. auto.
       * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
         exploit Hconstr2; eauto. congruence. inv Z.
         eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
         intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
         edestruct Mem.perm_dec; eauto. exfalso.
-        eapply H15; eauto. replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
+        eapply H15; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H19 as [[_ TID]_]. congruence.
+        replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
     + exploit H22; eauto. intros [A B].
       exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
       erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.

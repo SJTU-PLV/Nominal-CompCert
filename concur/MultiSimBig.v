@@ -1406,7 +1406,7 @@ Qed.
        exploit H14; eauto. intros [X Y]. congruence.
        intros. red in H1.  simpl. split. apply H1. eauto.
      - red. intros. red in H15. intro. exploit H15; eauto.
-       intro. apply H4. eapply Mem.perm_store_1; eauto.
+       intro. apply H5. eapply Mem.perm_store_1; eauto.
        eapply Mem.perm_store_2; eauto.
    Qed.
 

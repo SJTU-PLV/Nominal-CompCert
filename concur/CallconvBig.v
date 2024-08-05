@@ -534,8 +534,6 @@ Next Obligation. destruct t. reflexivity. Qed.
 
 (* injp_acc *)
 
-(*injp_acc*)
-
 (** injp_acci: the internal transition: thread id remains the same, also no new threads introduced
                the private(unmapped or outofreach) memory of other threads are unchanged *)
 
@@ -664,8 +662,8 @@ Proof.
         intuition eauto using Mem.valid_block_unchanged_on.
     + red. intros. red in H0. red in H.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty).
-      * eapply H0; eauto.
-      * red in Hp2'. intro. apply Hp2' in H6.
+      * eapply H0; eauto. inv S1. congruence.
+      * red in Hp2'. intro. apply Hp2' in H7.
         eapply H; eauto. inv H2. apply unchanged_on_support.
         eapply Mem.valid_block_inject_2; eauto.
 Qed.
@@ -864,7 +862,7 @@ Proof.
     assert (b' = b2) by congruence.
     subst.
     split; eauto using Mem.fresh_block_alloc.
-  - red. intros. exfalso. apply H6. eauto with mem.
+  - red. intros. exfalso. apply H7. eauto with mem.
 Qed.
 
 
@@ -897,7 +895,7 @@ Proof.
   - apply inject_separated_refl.
   - red. intros. 
     eapply Mem.perm_free_inv in H as Hd; eauto. destruct Hd.
-    + destruct H5. subst. rewrite H1 in H2. inv H2.
+    + destruct H6. subst. rewrite H1 in H2. inv H2.
       eapply Mem.perm_free_2; eauto. lia.
     + congruence.
 Qed.
@@ -944,7 +942,7 @@ Proof.
     extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
-  - red. intros. exfalso. apply H5. eauto with mem.
+  - red. intros. exfalso. apply H6. eauto with mem.
 Qed.
 
 Lemma injp_acc_tl_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
@@ -990,7 +988,7 @@ Proof.
     extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
-  - red. intros. exfalso. apply H5. eauto with mem.
+  - red. intros. exfalso. apply H6. eauto with mem.
 Qed.
 
 Lemma injp_acc_tl_storebytes : forall f b1 b2 ofs1 ofs2 vs1 vs2 m1 m2 m1' m2' Hm Hm',
@@ -1017,7 +1015,7 @@ Proof.
       simpl. intro. extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
-    + red. intros. exfalso. apply H4. eauto with mem.
+    + red. intros. exfalso. apply H5. eauto with mem.
   - inv H2.
     eapply injp_acc_tl_storebytes'; eauto.
     erewrite <- Mem.address_inject; eauto.

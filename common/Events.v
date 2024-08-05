@@ -623,7 +623,7 @@ Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
 
 Definition free_preserved j m1 m1' m2' :=
   forall b1 ofs1 b2 delta,
-    j b1 = Some (b2, delta) ->
+    j b1 = Some (b2, delta) -> fst b1 <> Mem.tid (Mem.support m1) ->
     Mem.perm m1 b1 ofs1 Max Nonempty -> ~ Mem.perm m1' b1 ofs1 Max Nonempty ->
     ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
 
@@ -950,7 +950,7 @@ Proof.
   exfalso. apply H0. unfold Mem.valid_block. setoid_rewrite <- Mem.support_store; eauto.
   red. intros. inv A. congruence. exfalso. apply H0.
   unfold Mem.valid_block. setoid_rewrite <- Mem.support_store; eauto.
-  red. intros. inv H3. congruence. exfalso. apply H7.
+  red. intros. inv H3. congruence. exfalso. apply H8.
   eauto with mem.
 (* trace length *)
 - inv H; inv H0; simpl; lia.
@@ -1052,7 +1052,7 @@ Proof.
   eapply Mem.store_valid_block_2 in E; eauto.
   eapply Mem.valid_block_alloc_inv in E; eauto. destruct E.
   subst. apply Mem.alloc_result in ALLOC. subst. reflexivity. congruence.
-  red. intros. exfalso. apply H5. eauto with mem.
+  red. intros. exfalso. apply H7. eauto with mem.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1154,7 +1154,7 @@ Proof.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
   red. intros.
-  eapply Mem.perm_free_inv in H2; eauto. destruct H2 as [[X Y]|X]; try congruence.
+  eapply Mem.perm_free_inv in H7; eauto. destruct H7 as [[X Y]|X]; try congruence.
   subst b1. rewrite H6 in H0. inv H0.
   eapply Mem.perm_free_2; eauto. lia.
 + inv H2. inv H6. replace v' with Vnullptr.
@@ -1259,7 +1259,7 @@ Proof.
   split. red; intros; congruence.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
-  red. intros. exfalso. apply H12. eauto with mem.
+  red. intros. exfalso. apply H14. eauto with mem.
   
 + (* general case sz > 0 *)
   exploit Mem.loadbytes_length; eauto. intros LEN.
@@ -1300,7 +1300,7 @@ Proof.
   split. red; intros; congruence.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
-  red. intros. elim H12. eauto with mem.
+  red. intros. elim H14. eauto with mem.
 - (* trace length *)
   intros; inv H. simpl; lia.
 - (* receptive *)

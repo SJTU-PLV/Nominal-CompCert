@@ -2634,7 +2634,7 @@ Proof.
     eapply free_list_unchanged_on_local_2; eauto.
     intros. red. apply H3.
   - red. intros. congruence.
-  - red. intros. eapply Mem.perm_inject in H4 as Hp2; eauto.
+  - red. intros. eapply Mem.perm_inject in H5 as Hp2; eauto.
     exploit free_list_in. apply H1. eauto. eauto. intros (lo1 & hi1 & IN1 & OFS).
     exploit match_envs_blocks_in; eauto. intros [X Y]. subst. rewrite Z.add_0_r.
     apply list_in_map_inv in X.
@@ -2731,7 +2731,7 @@ Proof.
     inv MENV. exploit me_tid0; eauto. intro. apply H. auto.
     split; eauto. eapply Mem.unchanged_on_refl.
     red. intros. congruence.
-    red. intros. exfalso. apply H4.
+    red. intros. exfalso. apply H5.
     erewrite <- assign_loc_perm; eauto.
   }
   eauto with compat.
@@ -3152,7 +3152,7 @@ Proof.
     - split. eapply alloc_variables_support1; eauto. eapply alloc_variables_unchanged_on; eauto.
     - red. intros. split; intro. exploit E; eauto. intro. congruence.
       exploit F; eauto. intro. congruence.
-    - red. intros. elim H5. eapply alloc_variables_perm; eauto.
+    - red. intros. elim H6. eapply alloc_variables_perm; eauto.
   }
   (*use alloc_variables_acci or added in [match_alloc_variables]*)
   { (*bind_parameters*)
@@ -3167,7 +3167,7 @@ Proof.
     - destruct W'. split; auto. eapply Mem.unchanged_on_implies; eauto.
       intros. red. split; auto. apply H3.
     - red. intros. congruence.
-    - red. intros. elim H5. erewrite <- bind_parameters_perm; eauto.
+    - red. intros. elim H6. erewrite <- bind_parameters_perm; eauto.
   }
   apply compat_cenv_for.
   rewrite (bind_parameters_support _ _ _ _ _ _ H2). eauto.
