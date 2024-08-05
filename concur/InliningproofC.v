@@ -1570,3 +1570,23 @@ Proof.
     + apply step_simulation; eauto.
   - auto using well_founded_ltof.
 Qed.
+
+(** Note: It seems that this pass can introduce some behavior which violates the
+    [free_preserved] rule *)
+
+
+(** f(){g();}    g(){h();} g is a tailcall function which is inlined into f, h is an external function.
+
+The internal execution from f() to h() (I ---> X)
+
+In source program, when f calls g, the stackframe of f is freed, stackframe of g is created, then calls h()
+
+In target program, when f calls g, it is a goto function, when h() is called, the related stackspace of
+f is still valid.
+
+If this happens for as a callee (guarantee condition) with respect to the injp composition theme.
+
+
+The [free_preserved] condition should be weaken into for only external blocks!
+
+*)
