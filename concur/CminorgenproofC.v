@@ -1974,7 +1974,7 @@ Lemma injp_acc_small_free : forall j m tm Hm m' tm' Hm' cenv sz tfn es bes cs sp
        transl_funbody cenv sz f = OK tfn ->
        injp_acc_small w (injpw j m tm Hm) (injpw j m' tm' Hm').
 Proof.
-  intros. destruct w.
+  intros. remember w. destruct w0.
   econstructor; eauto; try (red; intros; congruence).
   - red. intros. unfold Mem.valid_block in *. exfalso.
     apply H3. erewrite <- free_list_support; eauto.
@@ -1984,11 +1984,28 @@ Proof.
   - eapply Mem.ro_unchanged_free; eauto.
   - eapply free_list_max_perm; eauto.
   - red. intros. eauto with mem.
-  - admit.
+  - split.
+    erewrite <- support_freelist; eauto.
+    eapply Mem.unchanged_on_implies.
+    instantiate (1:= fun b _ => j b = None /\  (fst b <> Mem.tid (Mem.support m) \/ Mem.valid_block m1 b) ).
+    eapply free_list_unchanged_on; eauto.
+    intros. intros [X Y]. clear X. inv H1.
+    apply list_in_map_inv in H3.
+    destruct H3 as [[id [b' ty]] [A B]].
+    simpl in A. inv A.
+    apply PTree.elements_complete in B.
+    admit. (*The [match_env] should ensure b' is local and not in initial *)
+    eauto.
   - split. erewrite <- Mem.support_free; eauto.
     eapply Mem.free_unchanged_on; eauto.
-    admit.
-  - red. intros. admit.
+    intros. intros [X Y]. inv H1. clear X.
+    admit. (*Similarly the newblock in target level and a *local new block* *)
+  - red. intros. inv H1. red in PERM. inv MENV.
+    assert (exists id ty, e ! id = Some (b1, ty)). admit.
+    destruct H1 as (id & ty & A). specialize (me_vars0 id).
+    rewrite A in me_vars0. inv me_vars0. inv H6. rewrite H3 in H10.
+    inv H10.
+    admit. (*To show that ofs1 + delta0 is in the range [0 <= ofs1 + delta0 < fn_stackspace tfn]*)
     (** The match_callstack should show that freed space are all related or not in the initial world [w]*)
 Admitted.
 
