@@ -353,7 +353,7 @@ Definition list_node_second_ty := box_list.
 Definition list_node_second := Member_plain second_id list_node_second_ty.
 
 Definition list_node_codef : composite_definition :=
-  Composite list_node_id Struct (list_node_first :: list_node_second :: nil) noattr nil nil.
+  Composite list_node_id Struct (list_node_first :: list_node_second :: nil) nil nil.
 
 Definition nil_id := 100%positive.
 
@@ -366,7 +366,7 @@ Definition rcons (ty: type) := Member_plain cons_id ty.
 Definition list_node_ty := (Tstruct nil list_node_id ).
 
 Definition list_codef : composite_definition :=
-  Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr nil nil.
+  Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) nil nil.
 
 Definition list_comp_env : res composite_env :=
   build_composite_env (list_node_codef :: list_codef :: nil).
@@ -377,8 +377,7 @@ Program Definition list_node_composite : composite :=
   {|co_generic_origins := nil;
     co_origin_relations := nil;
     co_sv := Struct;
-    co_members := (list_node_first :: list_node_second :: nil);
-    co_attr := noattr;
+    co_members := (list_node_first :: list_node_second :: nil);    
     co_sizeof := 16;
     co_alignof := 8;
     co_rank := 0 |}.
@@ -394,8 +393,7 @@ Program Definition list_composite : composite :=
   {|co_generic_origins := nil;
     co_origin_relations := nil;
     co_sv := TaggedUnion;
-    co_members := (rnil :: rcons list_node_ty :: nil);
-    co_attr := noattr;
+    co_members := (rnil :: rcons list_node_ty :: nil);    
     co_sizeof := 24;
     co_alignof := 8;
     co_rank := 1 |}.

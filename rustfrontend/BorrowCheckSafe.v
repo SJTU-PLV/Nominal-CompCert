@@ -200,6 +200,7 @@ Proof.
       lia.
 Qed.
 
+
 Lemma subplace_in_range: forall ce tenv p1 p2 fofs
     (SUBP: subplace ce p1 p2 fofs)
     (CON: composite_env_consistent ce)
@@ -240,6 +241,18 @@ Proof.
     lia.    
 Qed.
 
+Lemma subplace_upper_bound: forall ce tenv p1 p2 fofs
+    (SUBP: subplace ce p1 p2 fofs)
+    (CON: composite_env_consistent ce)
+    (WT: wt_place tenv ce p2)
+    (PSIZE: sizeof ce (typeof_place p1) <= Ptrofs.max_unsigned),
+    fofs + sizeof ce (typeof_place p2) <= Ptrofs.max_unsigned.
+Proof.
+  intros.
+  exploit subplace_in_range; eauto.
+  lia.
+Qed.
+
 (** Test: try to define semantics well-typedness for a memory location *)
 
 Definition footprint := block -> Z -> Prop. 
@@ -251,6 +264,8 @@ Definition footprint_equiv (fp1 fp2: footprint) :=
 
 Definition footprint_incr (fp1 fp2: footprint) :=
   forall b ofs, fp1 b ofs -> fp2 b ofs.
+
+(** TODO: add some useful notations for footprint *)
 
 Definition remove_footprint (fp: footprint) b ofs sz :=
   fun b1 ofs1 =>
@@ -290,16 +305,17 @@ Definition scalar_type (ty: type) : bool :=
   | _ => false
   end.
 
+(* Semantics well typed location is mutually defined with semantics
+well typed value *)
 Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> type -> Prop :=
 | sem_wt_box: forall ty b ofs fp
     (INFP: in_footprint fp b ofs (size_chunk Mptr))
-    (VALID: Mem.valid_access m Mptr b ofs Freeable)
-    (WT: forall b' ofs',
-        (* We do not restrict the value in this location *)
-        Mem.load Mptr m b ofs = Some (Vptr b' ofs') ->
+    (* valid_access or range_perm ? *)
+    (VALID: Mem.range_perm m b ofs (ofs + size_chunk Mptr) Cur Freeable)
+    (WT: forall v,
+        Mem.load Mptr m b ofs = Some v ->
         (* Box pointer must points to the start of a block *)
-        (ofs' = Ptrofs.zero
-         /\ sem_wt_loc ce m (remove_footprint fp b ofs (size_chunk Mptr)) b' 0 ty)),
+        sem_wt_val ce m (remove_footprint fp b ofs (size_chunk Mptr)) v (Tbox ty)),
     sem_wt_loc ce m fp b ofs (Tbox ty)
 | sem_wt_struct: forall fp b ofs co fpl orgs id
     (CO: ce ! id = Some co)
@@ -325,18 +341,17 @@ Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> t
         variant_field_offset ce fid (co_members co) = OK fofs ->
         sem_wt_loc ce m (remove_footprint fp b ofs fofs) b (ofs + fofs) fty),
     sem_wt_loc ce m fp b ofs (Tvariant orgs id)
-| sem_wt_scalar: forall ty b ofs
-    (TY: scalar_type ty = true)
-    (VALID: Mem.range_perm m b ofs (ofs + sizeof ce ty) Cur Freeable)
-    (* To make sure that well-typed footprint is closed? *)
-    (WT: forall v chunk b' ofs',
-        Mem.load chunk m b ofs = Some v ->
-        v <> Vptr b' ofs'),
-    sem_wt_loc ce m (add_footprint empty_footprint b ofs (sizeof ce ty)) b ofs ty
-.
+(* | sem_wt_scalar: forall ty b ofs *)
+(*     (TY: scalar_type ty = true) *)
+(*     (VALID: Mem.range_perm m b ofs (ofs + sizeof ce ty) Cur Freeable) *)
+(*     (* To make sure that well-typed footprint is closed? *) *)
+(*     (WT: forall v chunk b' ofs', *)
+(*         Mem.load chunk m b ofs = Some v -> *)
+(*         v <> Vptr b' ofs'), *)
+(*     sem_wt_loc ce m (add_footprint empty_footprint b ofs (sizeof ce ty)) b ofs ty *)
 
-(* similar to val_casted ? *)
-Inductive sem_wt_val (ce: composite_env) (m: mem) : footprint -> val -> type -> Prop :=
+
+with sem_wt_val (ce: composite_env) (m: mem) : footprint -> val -> type -> Prop :=
 | wt_val_unit:
   sem_wt_val ce m empty_footprint (Vint Int.zero) Tunit
 | wt_val_int: forall sz si n,
@@ -504,8 +519,31 @@ Definition fp_map := PTree.t footprint.
 (i.e. the owner of this block) *)
 
 (* Definition mem_abstracter : Type := block -> Z -> option (place * Z). *)
+(* Why don't we use PTree? *)
 Definition mem_abstracter : Type := block -> option place.
-  
+
+(** Extract footprint from abstracter *)
+
+Definition abs_footprint (abs: mem_abstracter) : footprint :=
+  fun b _ => match abs b with
+          | Some _ => True
+          | None => False
+          end.
+
+(* Two abstracters are disjoint if their footprints are disjoint *)
+Definition abs_disjoint (abs1 abs2: mem_abstracter) : Prop :=
+  footprint_disjoint (abs_footprint abs1) (abs_footprint abs2).
+
+Definition merge_abstracter (abs1 abs2: mem_abstracter) : mem_abstracter :=
+  fun b => match abs1 b, abs2 b with
+        | Some p, _ => Some p
+        | _, Some p => Some p
+        | None, None => None
+        end.
+
+Definition abs_equiv (abs1 abs2: mem_abstracter) : Prop :=
+  forall b, abs1 b = abs2 b.
+
 Section MATCH.
 
 Variable ce: composite_env.
@@ -541,7 +579,7 @@ Inductive place_footprint : place -> footprint -> Prop :=
 
 (* The value stored in m[b, ofs] is consistent with the type of p *)
 Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -> Prop :=
-| bm_box: forall ty
+| bm_box: forall ty b1 ofs1
     (* valid resource. If the loaded value is not a pointer, it is a
     type error instead of a memory error *)
     (* N.B. A compilcated situation is that [p] may fully own the
@@ -550,8 +588,8 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : type -
     should show that the ownership chain is semantics well typed. But
     if [p] just partially own the resoruce, we need to explicitly show
     that the owner of the block it points to is [*p]. *)
-    (VRES: forall b1 ofs1,
-        Mem.load Mptr m b ofs = Some (Vptr b1 ofs1) ->
+    (LOAD: Mem.load Mptr m b ofs = Some (Vptr b1 ofs1))
+    (VRES: 
         (** Case1: p is partially owned *)
         (* p owns the location it points to. Box pointer must points
         to the start of a block and *p is the owner of this block *)
@@ -605,7 +643,13 @@ Definition mmatch (m: mem) (own: own_env) : Prop :=
 Record wf_abs (e: env) : Prop :=
   { wf_local_env: forall id b ty,
       e ! id = Some (b, ty) ->
-      abs b = Some (Plocal id ty) }.
+      abs b = Some (Plocal id ty);
+
+    (* all mapped places are in the range of Ptrofs.max_unsigned *)
+    wf_place_size: forall b p,
+      abs b = Some p ->
+      sizeof ce (typeof_place p) < Ptrofs.max_unsigned
+  }.
 
 End MATCH.
 
@@ -699,7 +743,7 @@ Inductive sound_state: state -> Prop :=
     (CHK: borrow_check ce f = OK ae)
     (AS: ae ! pc = Some (AE.State Σ Γ Δ))
     (MM: mmatch ce abs fpm m own)
-    (WF: wf_abs abs e),
+    (WF: wf_abs ce abs e),
     sound_state (State f s k e own m)
 .
 
@@ -709,7 +753,7 @@ we do not consider reference *)
 Lemma eval_place_sound: forall e m p b ofs abs own fpm
     (EVAL: eval_place ce e m p b ofs)
     (MM: mmatch ce abs fpm m own)
-    (WFABS: wf_abs abs e)
+    (WFABS: wf_abs ce abs e)
     (WFOWN: wf_own_env own)
     (WT: wt_place (env_to_tenv e) ce p)
     (* evaluating the address of p does not require that p is
@@ -734,14 +778,33 @@ Proof.
     exploit IHEVAL. 1-5: auto.
     intros (p' & ABS & SUBP).
     exists p'. split. auto.
-    rewrite Ptrofs.add_unsigned.
-    rewrite Ptrofs.unsigned_repr.
     (* two type facts, reduce one *)
     rewrite H in H6. inv H6. rewrite H0 in H7. inv H7.
+    (* *** Begin range proof *** *)
+    (* Can we require that the size of p' is in the range of
+    Ptrofs.max_unsigned, so that any subplace is in this range
+    (including its successor) *)
+    exploit wf_place_size; eauto. intros PSIZE.
+    generalize (subplace_upper_bound _ _ _ _ _ SUBP CONSISTENT H5 (Z.lt_le_incl _ _ PSIZE)).    rewrite H. simpl. rewrite H0.
+    erewrite co_consistent_sizeof; eauto. rewrite H9. simpl.
+    assert (ALPOS: co_alignof co0 > 0).
+    { exploit co_alignof_two_p. intros (n & ALPOW).
+      rewrite ALPOW. rewrite two_power_nat_equiv.
+      generalize (Nat2Z.is_nonneg n). intros A.
+      exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia.
+      eauto. lia. }
+    generalize (align_le (sizeof_struct ce (co_members co0)) _ ALPOS).
+    intros STRUCTSZ BOUND.
+    exploit field_offset_in_range; eauto. intros (RANGE1 & RANGE2).
+    generalize (Ptrofs.unsigned_range ofs). intros OFSRANGE.
+    generalize (sizeof_pos ce ty). intros TYSZPOS.
+    (* *** End range proof *** *)
+    rewrite Ptrofs.add_unsigned.
+    do 2 rewrite Ptrofs.unsigned_repr.
     econstructor. auto. eauto. eauto.
-    rewrite Ptrofs.unsigned_repr. eauto.
+    eauto.
     (** dirty work: specify the requirement to prevent overflow *)
-    admit. admit. 
+    lia. lia. lia.
     unfold is_shallow_prefix. eapply orb_true_intro.
     right. simpl. destruct (place_eq p p). auto. congruence.    
   (* Pdowncast *)
@@ -750,14 +813,31 @@ Proof.
     exploit IHEVAL. 1-5: auto.
     intros (p' & ABS & SUBP).
     exists p'. split. auto.
-    rewrite Ptrofs.add_unsigned.
-    rewrite Ptrofs.unsigned_repr.
     (* two type facts, reduce one *)
     rewrite H in H8. inv H8. rewrite H0 in H9. inv H9.
+    (* *** Begin range proof *** *)
+    exploit wf_place_size; eauto. intros PSIZE.
+    generalize (subplace_upper_bound _ _ _ _ _ SUBP CONSISTENT H7 (Z.lt_le_incl _ _ PSIZE)).    rewrite H. simpl. rewrite H0.
+    erewrite co_consistent_sizeof; eauto. rewrite H11. simpl.
+    assert (ALPOS: co_alignof co0 > 0).
+    { exploit co_alignof_two_p. intros (n & ALPOW).
+      rewrite ALPOW. rewrite two_power_nat_equiv.
+      generalize (Nat2Z.is_nonneg n). intros A.
+      exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia.
+      eauto. lia. }
+    generalize (align_le (sizeof_variant ce (co_members co0)) _ ALPOS).
+    intros ENUMSZ BOUND.
+    exploit variant_field_offset_in_range; eauto. intros (RANGE1 & RANGE2).
+    generalize (Ptrofs.unsigned_range ofs). intros OFSRANGE.
+    generalize (sizeof_pos ce ty). intros TYSZPOS.
+    (* *** End range proof *** *)
+    rewrite Ptrofs.add_unsigned.
+    do 2 rewrite Ptrofs.unsigned_repr.
     econstructor. auto. eauto. eauto.
-    rewrite Ptrofs.unsigned_repr. eauto.
+    eauto.
     (** dirty work: specify the requirement to prevent overflow *)
-    admit. admit. 
+    lia. lia. lia.
+    (* shallow prefix *)
     unfold is_shallow_prefix. eapply orb_true_intro.
     right. simpl. destruct (place_eq p p). auto. congruence.
   (* Pderef *)
@@ -774,15 +854,12 @@ Proof.
     destruct (typeof_place p) eqn: TYP; simpl in *; try congruence.
     (* Tbox *)
     + inv BM.
-      assert (LOAD: Mem.load Mptr m l (Ptrofs.unsigned ofs) = Some (Vptr l' ofs')).
-      { inv H. simpl in H0. inv H0.  auto.
-        simpl in H1. inv H1.
-        simpl in H1. inv H1. }
+      (* deref_loc and LOAD in sem_wt_loc say the same thing *)
+      inv H; simpl in *; try congruence. inv H0. rewrite LOAD in H1. inv H1.
       inv H3.
-      generalize (VRES _ _ LOAD). intros ABS.
       (* Now we need to say that p is shallow owned *)
       unfold place_dominator_shallow_own in POWN. simpl in POWN.
-      destruct ABS as (C & D).
+      destruct VRES as (C & D).
       eapply C in POWN. destruct POWN as (E & F). subst.
       exists (Pderef p ty). split. auto.
       rewrite Ptrofs.unsigned_zero. constructor.
@@ -795,7 +872,7 @@ Admitted.
 
 Lemma eval_place_no_mem_error: forall e m p abs own fpm
     (MM: mmatch ce abs fpm m own)
-    (WFABS: wf_abs abs e)
+    (WFABS: wf_abs ce abs e)
     (WFOWN: wf_own_env own)
     (WT: wt_place (env_to_tenv e) ce p)
     (* evaluating the address of p does not require that p is
@@ -879,13 +956,63 @@ Proof.
           rewrite H6. erewrite co_consistent_alignof; eauto.
           rewrite H8. simpl.
           (* easy but tedious *)
-          (* exploit alignof_composite_two_p'. *)
-          admit. }
+          exploit alignof_composite_two_p'.
+          intros (n & AL). erewrite AL.
+          rewrite two_power_nat_equiv.
+          replace 4 with (2 ^ 2) by lia.
+          unfold Z.max.
+          destruct (2 ^ 2 ?= (2 ^ Z.of_nat n)) eqn:  LE.
+          eapply Z.divide_refl.
+          (* case 2^2 < 2 ^ n *)
+          eapply Z.pow_lt_mono_r_iff in LE.
+          exploit Z.le_exists_sub. eapply Z.lt_le_incl.
+          eauto. intros (p0 & PEQ & PLE). rewrite PEQ.
+          rewrite Z.pow_add_r. eapply Z.divide_factor_r.
+          auto. lia. lia.
+          eapply Nat2Z.is_nonneg.
+          eapply Z.divide_refl. }
         intros ALTY.
         eapply Z.divide_trans. eauto.
         eauto.
+Qed.
+
+
+
+Lemma owned_place_mem_separate: forall
+    (MM: mmatch ce abs fpm m own1)
+    (* p owns the ownership chain *)
+    (POWN: check_movable own1 p = true)
+    (* get the location of p (b, ofs) by the abstracter *)
+    (ABS: abs b = Some p')
+    (SUBP: subplace p' p ofs)
+    (* move out the place p and update the own env *)
+    (MP: move_place own1 p = own2)
+    (* Now the onwership chain is broken in p, how do we establish the
+    semantics well typedness? *)
+    exists abs1 abs2,
+      (* construct abs1 and abs2 based on the mapped place is one of
+      the children of [p] or not *)
+      mmatch ce abs1 fpm m own2
+      /\ abs_disjoint abs1 abs2
+      /\ abs_equiv abs (merge_abstracter abs1 abs2)
+      /\ sem_wt_loc ce m (abs_footprint abs2) b ofs (typeof_place p)
+
+    
+(* assign_loc remains sound. We need a more general one *)
+
+Lemma assign_loc_sound: forall abs1 fpm1 m1 m2 own1 own2 b ofs v p p1 fp1
+    (MM: mmatch ce abs1 fpm1 m1 own1)
+    (AS: assign_loc ce (typeof_place p1) m1 b ofs v m2)
+    (ABS: abs1 b = Some p)
+    (SUBP: subplace ce p p1 (Ptrofs.unsigned ofs))
+    (* p1 is movable then the value stored in p1 is semantically well
+    typed *)
+    (WT: sem_wt_val ce m1 fp1 v (typeof_place p1))
+    (CKAS: own_check_assign own1 p1 = Some own2),
+  (* require some relation between abstracter and footprint_map *)
+  exists abs2 fpm2, mmatch ce abs2 fpm2 m2 own2.
 Admitted.
-        
+
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
 Admitted.

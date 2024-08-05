@@ -41,7 +41,7 @@ Definition is_owned (own: own_env) (p: place): bool :=
   Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
   && Paths.exists_ (fun p' => is_prefix p' p) init.
 
-(* A place is deep owned **xor** shallow owned *)
+(* A owned place is deep owned **xor** shallow owned *)
 
 Definition is_deep_owned (own: own_env) (p: place) : bool :=
   (* p is owned and no p's children in the universe *)
@@ -86,6 +86,12 @@ Fixpoint valid_owner (p: place) :=
   | _ => p
   end.
 
+Definition check_movable (own: own_env) (p: place) : bool :=
+  (* the place itself and its children are all owned *)
+  let id := local_of_place p in
+  let universe := PathsMap.get id (own_universe own) in  
+  Paths.for_all (is_owned own) (Paths.filter (is_prefix p) universe).
+
 
 Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
   match pe with
@@ -94,9 +100,13 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
   | Eref _ _ p _ =>
       (* we only check p which represents/owns a memory location *)
       if place_owns_loc p then
-        is_owned own p
+        (* copy/reference a place also requires that the place is
+        movable (all its children are owned, otherwise it is not
+        memory safe because the unowned block may be deallocated *)
+        check_movable own p
       else
-        false
+        (* This checking is left for borrow checker *)
+        true
   | Eunop _ pe _ =>
       own_check_pexpr own pe
   | Ebinop _ pe1 pe2 _ =>
@@ -109,19 +119,20 @@ Definition move_place (own: own_env) (p: place) : own_env :=
      (add_place own.(own_universe) p own.(own_uninit))
      own.(own_universe)).
 
+
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
   match e with
   | Emoveplace p ty =>
       (** FIXME: when to use valid_owner? *)
       let p := valid_owner p in
-      if is_deep_owned own p then
+      if check_movable own p then
         (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
         partial owned *)
         (* remove p from init and add p and its children to uninit *)
         Some (move_place own p)
       else
-        (* Error! We must move a deeply owned place! *)
+        (* Error! We must move a movable place! *)
         None
   | Epure pe =>
       if own_check_pexpr own pe then
