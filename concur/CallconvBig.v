@@ -826,9 +826,9 @@ Proof.
   intros. inv H. constructor; eauto using unchanged_on_tl_e.
 Qed.
 
-Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo hi m1' m2' Hm Hm',
-    Mem.alloc m1 lo hi = (m1',b1) ->
-    Mem.alloc m2 lo hi = (m2',b2) ->
+Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm',
+    Mem.alloc m1 lo1 hi1 = (m1',b1) ->
+    Mem.alloc m2 lo2 hi2 = (m2',b2) ->
     inject_incr f f' ->
     f' b1 = Some (b2, 0) ->
     (forall b, b<> b1 -> f' b = f b) ->
@@ -902,6 +902,18 @@ Proof.
     + congruence.
 Qed.
 
+Lemma injp_acc_tl_free_0: forall f m1 m2 b1 b2 delta sz m1' m2' Hm Hm' sz',
+    Mem.free m1 b1 0 sz = Some m1' ->
+    Mem.free m2 b2 delta sz' = Some m2' ->
+    f b1 = Some (b2, delta) ->
+    sz' = sz + delta ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_free.
+  replace sz with (0 + sz) in H by lia. eauto.
+  rewrite !Z.add_0_l. subst sz'. eauto. eauto.
+  intro. apply H3.
+Qed.
 
 Lemma injp_acc_tl_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
     Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
