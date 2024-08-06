@@ -14,6 +14,7 @@ Require Import Errors.
 Require Import InitDomain InitAnalysis.
 Require Import RustIRown.
 
+Import ListNotations.
 
 (* Some simple type checking (move to Rusttyping.v) *)
 
@@ -294,6 +295,93 @@ Inductive footprint_disjoint_list : list footprint -> Prop :=
 
 Definition in_footprint (b: block) (fp: footprint) : Prop :=
   In b (footprint_flat fp).
+  
+
+(* Similar to ProjectElem in rustc *)
+Variant path : Type :=
+  | ph_deref
+  | ph_field (idx: Z)
+  | ph_downcast (idx: Z).
+
+(* relate place and path *)
+Inductive path_of_place (ce: composite_env) : place -> ident -> list path -> Prop :=
+| path_local: forall id ty,
+    path_of_place ce (Plocal id ty) id nil
+| path_deref: forall p ty l id
+    (PH: path_of_place ce p id l),
+    path_of_place ce (Pderef p ty) id (l ++ [ph_deref])
+| path_field: forall p orgs id sid co idx fid fty l
+    (TY: typeof_place p = Tstruct orgs sid)
+    (CO: ce ! sid = Some co)
+    (FID: list_nth_z co.(co_members) idx = Some (Member_plain fid fty))
+    (PH: path_of_place ce p id l),
+    path_of_place ce (Pfield p fid fty) id (l ++ [ph_field idx])
+| path_downcast: forall p orgs id sid co idx fid fty l
+    (TY: typeof_place p = Tvariant orgs sid)
+    (CO: ce ! sid = Some co)
+    (FID: list_nth_z co.(co_members) idx = Some (Member_plain fid fty))
+    (PH: path_of_place ce p id l),
+    path_of_place ce (Pdowncast p fid fty) id (l ++ [ph_downcast idx]).
+
+(* Use path to set/remove a footprint *)
+
+Definition set_footprint_path (ph: path) (v: footprint) (fp: footprint) : option footprint :=
+  match ph, fp with
+  | ph_deref, fp_box b fp' =>
+      Some fp'
+  | ph_field idx, fp_struct fpl =>
+      list_nth_z fpl idx
+  | ph_downcast idx1, fp_enum idx2 fp' =>
+      if Z.eq_dec idx1 idx2 then
+        Some fp'
+      else
+        None
+  | _, _ => None
+  end.
+
+(** Prove some properties w.r.t list_nth_z  *)
+Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
+  match l with
+  | nil => nil
+  | hd :: tl => if zeq n 0 then (v :: tl) else hd :: (list_set_nth_z tl (Z.pred n) v)
+  end.
+
+(* set footprint [v] in the path [ph] of footprint [fp] *)
+Fixpoint set_footprint (phl: list path) (v: footprint) (fp: footprint) : option footprint :=
+  match phl with
+  | [] => Some v
+  | ph :: l =>
+        match ph, fp with
+        | ph_deref, fp_box b fp1 =>
+            match set_footprint l v fp1 with
+            | Some fp2 =>
+                Some (fp_box b fp2)
+            | None => None
+            end                
+        | ph_field idx, fp_struct fpl =>
+            match list_nth_z fpl idx with
+            | Some fp1 =>
+                match set_footprint l v fp1 with
+                | Some fp2 =>
+                    Some (fp_struct (list_set_nth_z fpl idx fp2))
+                | None => None
+                end
+            | None => None
+            end
+        | ph_downcast idx1, fp_enum idx2 fp1 =>
+            if Z.eq_dec idx1 idx2 then
+              match set_footprint l v fp1 with
+              | Some fp2 =>
+                  Some (fp_enum idx2 fp2)
+              | None => None
+              end
+            else None
+        | _, _ => None
+        end
+  end.
+
+Definition clear_footprint (phl: list path) (fp: footprint) : option footprint :=
+  set_footprint phl fp_emp fp.
 
 (* Inductive footprint_path : Type := *)
 (* | fpp_leaf *)
@@ -534,6 +622,22 @@ blocks (denoted by variable names). It represents the ownership chain
 from a stack block. *)
 
 Definition fp_map := PTree.t footprint.
+
+Definition set_footprint_map (id: ident) (phl: list path) (v: footprint) (fpm: fp_map) : option fp_map :=
+  match fpm!id with
+  | Some fp1 =>
+      match set_footprint phl v fp1 with
+      | Some fp2 =>
+          Some (PTree.set id fp2 fpm)
+      | None =>
+          None
+      end
+  | None => None
+  end.
+
+Definition clear_footprint_map (id: ident) (phl: list path) (fpm: fp_map) : option fp_map :=
+  set_footprint_map id phl fp_emp fpm.
+
 
 Section MATCH.
 
@@ -980,41 +1084,39 @@ Proof.
       (*   eauto. *)
 Admitted.
 
-
-
-Lemma owned_place_mem_separate: forall
-    (MM: mmatch ce abs fpm m own1)
+(* This lemma proves two properties (should be separated): one is the
+updated footprint map still satisfies mmatch and the other is the
+sem_wt_loc in the moved place *)
+Lemma move_place_mmatch: forall fpm1 m e own1 own2 p id phl
+    (MM: mmatch ce fpm1 m e own1)
     (* p owns the ownership chain *)
-    (POWN: check_movable own1 p = true)
-    (* get the location of p (b, ofs) by the abstracter *)
-    (ABS: abs b = Some p')
-    (SUBP: subplace p' p ofs)
-    (* move out the place p and update the own env *)
     (MP: move_place own1 p = own2)
-    (* Now the onwership chain is broken in p, how do we establish the
-    semantics well typedness? *)
-    exists abs1 abs2,
-      (* construct abs1 and abs2 based on the mapped place is one of
-      the children of [p] or not *)
-      mmatch ce abs1 fpm m own2
-      /\ abs_disjoint abs1 abs2
-      /\ abs_equiv abs (merge_abstracter abs1 abs2)
-      /\ sem_wt_loc ce m (abs_footprint abs2) b ofs (typeof_place p)
+    (PH: path_of_place ce p id phl),
+    exists fpm2, clear_footprint_map id phl fpm1 = Some fpm2
+            /\ mmatch ce fpm2 m e own2.
+Admitted.
 
-    
+Lemma movable_place_sem_wt: forall fpm m e own p b ofs fp
+    (MM: mmatch ce fpm m e own)
+    (* p owns the ownership chain *)
+    (POWN: check_movable own p = true)
+    (PFP: place_footprint ce fpm e p b ofs fp),
+    sem_wt_loc ce m fp b ofs (typeof_place p).
+Admitted.
+
+
 (* assign_loc remains sound. We need a more general one *)
 
-Lemma assign_loc_sound: forall abs1 fpm1 m1 m2 own1 own2 b ofs v p p1 fp1
-    (MM: mmatch ce abs1 fpm1 m1 own1)
-    (AS: assign_loc ce (typeof_place p1) m1 b ofs v m2)
-    (ABS: abs1 b = Some p)
-    (SUBP: subplace ce p p1 (Ptrofs.unsigned ofs))
-    (* p1 is movable then the value stored in p1 is semantically well
-    typed *)
-    (WT: sem_wt_val ce m1 fp1 v (typeof_place p1))
-    (CKAS: own_check_assign own1 p1 = Some own2),
+Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p fp e ty phl id
+    (MM: mmatch ce fpm1 m1 e own1)
+    (AS: assign_loc ce ty m1 b ofs v m2)
+    (WT: sem_wt_val ce m1 fp v ty)
+    (EP: eval_place ce e m1 p b ofs)
+    (CKAS: own_check_assign own1 p = Some own2)
+    (PH: path_of_place ce p id phl),
   (* require some relation between abstracter and footprint_map *)
-  exists abs2 fpm2, mmatch ce abs2 fpm2 m2 own2.
+  exists fpm2, set_footprint_map id phl fp fpm1 = Some fpm2
+          /\ mmatch ce fpm2 m2 e own2.
 Admitted.
 
 Lemma sound_state_no_mem_error: forall s,
