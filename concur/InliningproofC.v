@@ -955,6 +955,8 @@ Qed.
 
 (** ** Relating states *)
 
+Definition injp_tm (w: injp_world) := match w with injpw _ _ tm _ => tm end.
+
 Inductive match_states: injp_world -> RTL.state -> RTL.state -> Prop :=
   | match_regular_states: forall stk f sp pc rs m stk' f' sps' sp' rs' m' F fenv ctx Hm wp
         (SPS: sp' = fresh_block sps')
@@ -969,6 +971,7 @@ Inductive match_states: injp_world -> RTL.state -> RTL.state -> Prop :=
         (ACCI: injp_acci wp (injpw F m m' Hm))
         (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
         (THREAD_SPS: Mem.tid sps' = Mem.tid (Mem.support m'))
+        (NEWSP: ~ Mem.valid_block (injp_tm wp) sp')
         (PRIV: range_private F m m' sp' (ctx.(dstk) + ctx.(mstk)) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize)),
@@ -998,6 +1001,7 @@ Inductive match_states: injp_world -> RTL.state -> RTL.state -> Prop :=
         (MINJ: Mem.inject F m m')
         (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
         (THREAD_SPS: Mem.tid sps' = Mem.tid (Mem.support m'))
+        (NEWSP: ~ Mem.valid_block (injp_tm wp) sp')
         (PRIV: range_private F m m' sp' ctx.(dstk) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize)),
@@ -1299,7 +1303,7 @@ Proof.
   auto.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
   etransitivity. eauto. eapply injp_acc_tl_i; eauto.
-  auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support. apply E. destruct E as [[X Y] _]. congruence.
+  auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support. apply E. destruct E as [[X Y] _]. congruence. auto.
   eapply range_private_extcall; eauto.
     intros; eapply external_call_max_perm; eauto. eapply unchanged_on_tl_e; eauto.
   auto. apply VB. auto. auto.
@@ -1469,7 +1473,8 @@ Proof.
   etransitivity. eauto. eapply injp_acc_tl_i. eauto.
   rewrite Mem.support_alloc with m'0 0 (fn_stacksize f') m1' sp'.
   apply Mem.sup_include_refl. auto.
-  inv A. reflexivity.
+  inv A. reflexivity. intro. eapply Mem.fresh_block_alloc; eauto.
+  destruct Wp. simpl in H8. inv ACCI. destruct H20 as [_ [XX _]]. apply XX. auto.
   red; intros. split.
   eapply Mem.perm_alloc_2; eauto. inv H1; extlia.
   intros; red; intros. exploit Mem.perm_alloc_inv. eexact H. eauto.
@@ -1506,21 +1511,41 @@ Proof.
     apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
   intros [F' [A [B [C D]]]].
   exploit tr_moves_init_regs; eauto. intros [rs'' [P [Q R]]].
-  assert (injp_acc_tl (injpw F m m'0 Hm) (injpw F' m' m'0 A)).
+  assert (ACCI' : injp_acci Wp (injpw F' m' m'0 A)).
   {
-    econstructor; eauto.
-    red. intros. eapply Mem.valid_block_alloc_inv in H7; eauto. destruct H7. subst.
-    apply Mem.alloc_result in H. rewrite H. reflexivity. congruence.
-    red. intros. congruence.
-    eapply Mem.ro_unchanged_alloc; eauto. red. eauto.
-    red. intros. eauto with mem.
-    split. apply Mem.support_alloc in H. rewrite H. split; auto.
-    simpl. rewrite Mem.update_list_length. reflexivity.
-    eapply Mem.alloc_unchanged_on; eauto.
-    split. eauto. eauto with mem.
-    red. intros.
-    admit. (** wrong here?, this smallstep fails for [inject_seperated..]*)
-    red. intros. exfalso. apply H9. eauto with mem.
+    clear - ACCI A B C D H VB NEWSP.
+    inv ACCI. destruct H7 as [S7 H7]. destruct H8 as [S8 H8]. econstructor; eauto.
+    - red. intros. eapply Mem.valid_block_alloc_inv in H1; eauto. destruct H1; try congruence.
+      apply Mem.alloc_result in H. subst.  destruct S7. rewrite H1. reflexivity.
+      eapply Hnb1; eauto.
+    - eapply Mem.ro_unchanged_trans. eauto. eapply Mem.ro_unchanged_alloc; eauto.
+      destruct H7. auto. red. intros. eapply H5; eauto. 
+    - red. intros. exploit H5; eauto. eapply Mem.perm_alloc_4; eauto.
+      intro. subst. apply Mem.alloc_result in H. subst. eapply freshness.
+      inv H7. apply unchanged_on_support; eauto.
+    - split. erewrite (Mem.support_alloc _ _ _ _ _ H); eauto. simpl.
+      inv S7. split; eauto. simpl. rewrite Mem.update_list_length. congruence.
+      eapply Mem.unchanged_on_trans. eauto. eapply Mem.alloc_unchanged_on; eauto.
+    - constructor; eauto.
+    - red. intros. exploit H10; eauto.
+    - red. intros. destruct (eq_block b1 stk). subst b1.
+      rewrite C in H1. inv H1.
+      split. intro. eapply Mem.fresh_block_alloc; eauto. destruct H7. apply unchanged_on_support. auto.
+      auto.
+      rewrite D in H1. eauto. auto.
+    - red. intros. intro.
+      eapply H12; eauto.
+      intro. apply H9. eauto with mem.
+  }
+  assert (ACCE': injp_acce w (injpw F' m' m'0 A)).
+  {
+    clear - ACCE A B C D H VB NEWSP ACCI'.
+    inv ACCI'. destruct w. inv ACCE. econstructor; eauto.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
   }
   left; econstructor; split.
   eapply plus_left. eapply exec_Inop; eauto. eexact P. traceEq.
@@ -1533,10 +1558,8 @@ Proof.
   rewrite H. reflexivity.
   edestruct match_stacks_inside_support as [SUP1 [SUP2 SUP3]]. eauto.
   split. intro. eapply Mem.fresh_block_alloc. apply H. apply SUP1. auto.
-  intro. eapply freshness. apply SUP3. auto.
-  auto. etransitivity. eauto. eapply injp_acc_tl_e; eauto.
-  etransitivity. eauto. eapply injp_acc_tl_i; eauto.
-  auto. auto.
+  intro. eapply freshness. apply SUP3. auto. eauto. eauto.
+  auto. auto. eauto.
   rewrite H2. eapply range_private_alloc_left; eauto.
   auto. auto.
 
@@ -1573,7 +1596,7 @@ Proof.
   eapply plus_one. eapply exec_return.
   econstructor; eauto.
   apply match_stacks_inside_set_reg; auto.
-  apply agree_set_reg; auto. 
+  apply agree_set_reg; auto. admit.
 + (* untailcall case *)
   inv MS; try congruence.
   rewrite RET in RET0; inv RET0.
@@ -1583,7 +1606,7 @@ Proof.
   eapply match_stacks_inside_set_reg; eauto.
   eauto. auto.
   apply agree_set_reg; auto.
-  auto. eauto. eauto. eauto. eauto. eauto. eauto.
+  auto. eauto. eauto. eauto. eauto. eauto. eauto. admit.
   red; intros. destruct (zlt ofs (dstk ctx)). apply PAD; lia. apply PRIV; lia.
   auto. auto.
 
@@ -1596,11 +1619,11 @@ Proof.
 + (* with a result *)
   left; econstructor; split.
   eapply plus_one. eapply exec_Iop; eauto. simpl. reflexivity.
-  econstructor; eauto. apply match_stacks_inside_set_reg; auto. apply agree_set_reg; auto.
+  econstructor; eauto. apply match_stacks_inside_set_reg; auto. apply agree_set_reg; auto. admit.
 + (* without a result *)
   left; econstructor; split.
   eapply plus_one. eapply exec_Inop; eauto.
-  econstructor; eauto. subst vres. apply agree_set_reg_undef'; auto.
+  econstructor; eauto. subst vres. apply agree_set_reg_undef'; auto. admit.
 Admitted.
 
 Lemma transf_initial_states:
