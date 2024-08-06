@@ -151,13 +151,14 @@ Fixpoint own_check_exprlist (own: own_env) (l: list expr) : option own_env :=
       end
   end.
 
-(* The dominator of a place [p] *)
+(* The dominator of a place [p]: the place's demonator decide the
+location of this place *)
 
 Fixpoint place_dominator (p: place) : option place :=
   match p with
   | Pderef p' _ => Some p'
   | Pfield p' _ _ => place_dominator p'
-  | Pdowncast p' _ _ => place_dominator p'
+  | Pdowncast p' _ _ => Some p'
   | Plocal _ _ => None
   end.
 
