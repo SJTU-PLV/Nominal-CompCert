@@ -779,15 +779,16 @@ Qed.
             by (eapply H13 in Hb; split; congruence); subst.
         specialize (Hb2 b1 delta Hb). intro. apply Hb2.
         eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
-        * edestruct H14; eauto.
+        * edestruct H14; eauto. erewrite inject_tid; eauto.
+          erewrite inject_block_tid. eauto. 2: eauto. eauto.
         * congruence.
       - eapply inject_incr_trans; eauto.
-      - intros b1 b2 delta Hb Hb''.
+      - intros b1 b2 delta Hb Hb'' Ht.
       destruct (j2 b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply H20 in Hb'; split; congruence); subst.
         eapply H14; eauto.
-      * edestruct H21; eauto.
+      * edestruct H21; eauto. congruence.
         intuition eauto using Mem.valid_block_unchanged_on.
     Qed.
 
@@ -867,6 +868,7 @@ Qed.
           red. split. auto. simpl. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
+      - red. intros. eapply H12; eauto. simpl. congruence.
     Qed.
     
     Lemma injp_yield_acci_accg' : forall w1 w2 w3,
@@ -892,6 +894,7 @@ Qed.
           red. split. auto. simpl in B. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
+      - red. intros. exploit H12; eauto. simpl in H2. congruence.
     Qed.
 
     Lemma thread_create_inject' : forall j m1 m2,
@@ -1315,45 +1318,7 @@ Qed.
        injp_acce w1 (injpw j' m1'' m2'' Hm'').
    Proof.
      intros.
-     inv H. 
-     unfold Mem.storev in *. inv H1; try congruence.
-     destruct H10 as [S10 H10]. destruct H12 as [S12 H12].
-     apply Mem.unchanged_on_support in H10 as SUP1.
-     apply Mem.unchanged_on_support in H12 as SUP2.
-     constructor; eauto.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - red. intros. eapply H8; eauto. eapply Mem.perm_store_2; eauto.
-     - red. intros. eapply H9; eauto. eapply Mem.perm_store_2; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       inv H10. constructor; eauto. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       intros. etransitivity. eauto. split; eauto with mem.
-       intros. erewrite Mem.store_mem_contents; eauto.
-       destruct (eq_block b b1). subst. exfalso.
-       destruct H1 as [X Y]. red in X. exploit H14; eauto. intros [Z Z']. eauto with mem.
-       setoid_rewrite NMap.gso; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H2).  eauto.
-       eapply mem_unchanged_on_trans_implies_valid. eauto.
-       instantiate (1:= fun b ofs => (loc_out_of_reach f m1 b ofs) /\ Mem.valid_block m2 b).
-       eapply Mem.store_unchanged_on. eauto.
-       intros. intros [A B]. red in A.
-       destruct (f b1) as [[b2' d]|] eqn:Hfb1. erewrite H13 in H; eauto. inv H.
-       exploit Mem.valid_block_inject_1; eauto. intro HV1.
-       apply Mem.store_valid_access_3 in H0. destruct H0 as [C D].
-       red in C.
-       exploit (C (Ptrofs.unsigned ofs1)). lia. intro Hpm1'. exploit H9; eauto. eauto with mem.
-       intro Hpm1.
-       assert (Hr1: 0 <= delta <= Ptrofs.max_unsigned).
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. split. lia. generalize (Ptrofs.unsigned_range ofs1). lia.
-       exploit (C (i - delta)).
-       rewrite Ptrofs.add_unsigned in H1.
-       rewrite !Ptrofs.unsigned_repr in H1. lia. eauto.
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. rewrite Ptrofs.unsigned_repr. eauto. eauto.
-       intro. exploit H8; eauto. eauto with mem. intro. eapply A. eauto. eauto with mem.
-       exploit H14; eauto. intros [X Y]. congruence.
-       intros. red in H1.  simpl. split. apply H1. eauto.
+     etransitivity. eauto. eapply injp_acc_tl_e. eapply injp_acc_tl_storev; eauto.
    Qed.
 
    Lemma injp_acci_storev : forall w1 j' m1' m2' Hm' m1'' m2'' Hm'' v tv r tr,
@@ -1364,50 +1329,7 @@ Qed.
        injp_acci w1 (injpw j' m1'' m2'' Hm'').
    Proof.
      intros.
-     inv H. 
-     unfold Mem.storev in *. inv H1; try congruence.
-     destruct H10 as [S10 H10]. destruct H11 as [S12 H12].
-     apply Mem.unchanged_on_support in H10 as SUP1.
-     apply Mem.unchanged_on_support in H12 as SUP2.
-     constructor; eauto.
-     - red. intros. eapply Hnb1; eauto with mem.
-     - red. intros. eapply Hnb2; eauto with mem.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - red. intros. eapply H8; eauto. eapply Mem.perm_store_2; eauto.
-     - red. intros. eapply H9; eauto. eapply Mem.perm_store_2; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       inv H10. constructor; eauto. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       intros. etransitivity. eauto. split; eauto with mem.
-       intros. erewrite Mem.store_mem_contents; eauto.
-       destruct (eq_block b b1). subst. exfalso.
-       destruct H1 as [X Y]. red in X. exploit H14; eauto. intros [Z Z']. eauto with mem.
-       setoid_rewrite NMap.gso; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H2).  eauto.
-       eapply mem_unchanged_on_trans_implies_valid. eauto.
-       instantiate (1:= fun b ofs => (loc_out_of_reach f m1 b ofs) /\ Mem.valid_block m2 b).
-       eapply Mem.store_unchanged_on. eauto.
-       intros. intros [A B]. red in A.
-       destruct (f b1) as [[b2' d]|] eqn:Hfb1. erewrite H13 in H; eauto. inv H.
-       exploit Mem.valid_block_inject_1; eauto. intro HV1.
-       apply Mem.store_valid_access_3 in H0. destruct H0 as [C D].
-       red in C.
-       exploit (C (Ptrofs.unsigned ofs1)). lia. intro Hpm1'. exploit H9; eauto. eauto with mem.
-       intro Hpm1.
-       assert (Hr1: 0 <= delta <= Ptrofs.max_unsigned).
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. split. lia. generalize (Ptrofs.unsigned_range ofs1). lia.
-       exploit (C (i - delta)).
-       rewrite Ptrofs.add_unsigned in H1.
-       rewrite !Ptrofs.unsigned_repr in H1. lia. eauto.
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. rewrite Ptrofs.unsigned_repr. eauto. eauto.
-       intro. exploit H8; eauto. eauto with mem. intro. eapply A. eauto. eauto with mem.
-       exploit H14; eauto. intros [X Y]. congruence.
-       intros. red in H1.  simpl. split. apply H1. eauto.
-     - red. intros. red in H15. intro. exploit H15; eauto.
-       intro. apply H5. eapply Mem.perm_store_1; eauto.
-       eapply Mem.perm_store_2; eauto.
+     etransitivity. eauto. eapply injp_acc_tl_i. eapply injp_acc_tl_storev; eauto.
    Qed.
 
    Lemma injp_accg_storev : forall w1 j' m1' m2' Hm' m1'' m2'' Hm'' v tv r tr,
@@ -1417,46 +1339,8 @@ Qed.
        Mem.storev Many64 m2' tv tr = Some m2'' ->
        injp_accg w1 (injpw j' m1'' m2'' Hm'').
    Proof.
-     intros.
-     inv H. 
-     unfold Mem.storev in *. inv H1; try congruence.
-     destruct H10 as [S10 H10]. destruct H12 as [S12 H12].
-     apply Mem.unchanged_on_support in H10 as SUP1.
-     apply Mem.unchanged_on_support in H12 as SUP2.
-     constructor; eauto.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - eapply Mem.ro_unchanged_trans; eauto. eapply Mem.ro_unchanged_store; eauto.
-     - red. intros. eapply H8; eauto. eapply Mem.perm_store_2; eauto.
-     - red. intros. eapply H9; eauto. eapply Mem.perm_store_2; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       inv H10. constructor; eauto. erewrite (Mem.support_store _ _ _ _ _ _ H0).  eauto.
-       intros. etransitivity. eauto. split; eauto with mem.
-       intros. erewrite Mem.store_mem_contents; eauto.
-       destruct (eq_block b b1). subst. exfalso.
-       destruct H1 as [X Y]. red in X. exploit H14; eauto. intros [Z Z']. eauto with mem.
-       setoid_rewrite NMap.gso; eauto.
-     - split. erewrite (Mem.support_store _ _ _ _ _ _ H2).  eauto.
-       eapply mem_unchanged_on_trans_implies_valid. eauto.
-       instantiate (1:= fun b ofs => (loc_out_of_reach f m1 b ofs) /\ Mem.valid_block m2 b).
-       eapply Mem.store_unchanged_on. eauto.
-       intros. intros [A B]. red in A.
-       destruct (f b1) as [[b2' d]|] eqn:Hfb1. erewrite H13 in H; eauto. inv H.
-       exploit Mem.valid_block_inject_1; eauto. intro HV1.
-       apply Mem.store_valid_access_3 in H0. destruct H0 as [C D].
-       red in C.
-       exploit (C (Ptrofs.unsigned ofs1)). lia. intro Hpm1'. exploit H9; eauto. eauto with mem.
-       intro Hpm1.
-       assert (Hr1: 0 <= delta <= Ptrofs.max_unsigned).
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. split. lia. generalize (Ptrofs.unsigned_range ofs1). lia.
-       exploit (C (i - delta)).
-       rewrite Ptrofs.add_unsigned in H1.
-       rewrite !Ptrofs.unsigned_repr in H1. lia. eauto.
-       inv Hm. exploit mi_representable. eauto. left. eauto with mem.
-       intros [E F]. rewrite Ptrofs.unsigned_repr. eauto. eauto.
-       intro. exploit H8; eauto. eauto with mem. intro. eapply A. eauto. eauto with mem.
-       exploit H14; eauto. intros [X Y]. congruence.
-       intros. red in H1.  simpl. split. apply H1. eauto.
+     intros. eapply injp_accg_acci_accg; eauto. eapply injp_acc_tl_i.
+     eapply injp_acc_tl_storev; eauto.
    Qed.
    
    Lemma substep_switch_in : forall i s1' s2' s1'' target m' tm' f Hm' worldsP wpc,
@@ -1572,7 +1456,7 @@ Qed.
          {
            simpl in VPTR. destruct wA. simpl in *.
            destruct cajw_injp. unfold wp'. simpl in *.
-           eapply injp_acce_storev; eauto. inv ACCE1. eauto.
+           eapply injp_acce_storev; eauto.  inv ACCE1. eauto.
          }
          exploit M_REPLIES; eauto. instantiate (1:= r_a). unfold r_a.
          destruct wA. simpl in *.
@@ -1725,6 +1609,7 @@ Qed.
          set (wp' := injpw f m'' tm'' Hm'').
          assert (ACCE: injp_acce (get_injp wA) wp').
          eapply injp_acce_storev; eauto. destruct wA. simpl in *. inv ACCE1. eauto.
+         
          exploit M_REPLIES; eauto. instantiate (1:= r_a). unfold r_a.
          destruct wA. simpl in *.
          econstructor; eauto. rewrite WA_SIG. unfold Conventions1.loc_result.
@@ -1809,7 +1694,10 @@ Qed.
            
            unfold wB'. destruct wB. simpl in *. inv ACCG1.
            inv MSEw. constructor. eapply Genv.match_stbls_incr; eauto.
-           intros. exploit H11; eauto. intros [X Y]. split.
+           intros. exploit H11; eauto. admit.
+           (*TODO: added external requirement about
+                   no more global blocks  *)
+           intros [X Y]. split.
            intro. apply X. apply H14. eauto.
            intro. apply Y. apply H15. eauto.
            destruct H7 as [P [Q R]]. eauto.
@@ -1858,7 +1746,7 @@ Qed.
          eapply injp_accg_yield_accg. eauto. eauto. simpl.
          apply FIND_TID in I. destruct I as [X Y]. rewrite X.
          lia.
-   Qed.
+   Admitted.
    
    Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
     Proof.

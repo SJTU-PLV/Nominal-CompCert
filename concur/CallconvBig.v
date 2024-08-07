@@ -542,7 +542,35 @@ Next Obligation. destruct t. reflexivity. Qed.
 (** Issue: the passes using [Mem.free_left_inject] *may* break this relation, we need to check them
     They are: Inliningproof, Separation, Serverproof (*should be ok*) *)
 
+(** Note : the injp_acce as rely condition is used to protect [local] (i.e. blocks of this thread) and [private] (i.e. unmapped or outofreach) memory
 
+    The [injp_acci] is introduced as an guarantee condition for *switch* provided by big_step internal accessibility. Therefore, it can protect only [external] memory. Such restriction applies to not only [Mem.unchanged_on], but also other properties.
+
+
+ *)
+
+Definition inject_separated_external (f f' : meminj) (m1 m2: mem) :=
+  forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> fst b1 <> Mem.tid (Mem.support m1) ->
+                 ~ Mem.valid_block m1 b1 /\ ~ Mem.valid_block m2 b2.
+
+Definition inject_separated_internal (f f' : meminj) (m1 m2: mem) :=
+  forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> fst b1 = Mem.tid (Mem.support m1) ->
+                 ~ Mem.valid_block m1 b1 /\ ~ Mem.valid_block m2 b2.
+
+Lemma inject_separated_imply_e: forall f f' m1 m2,
+    inject_separated f f' m1 m2 -> inject_separated_external f f' m1 m2.
+Proof.
+  intros. red. intros. eapply H; eauto.
+Qed.
+
+Lemma inject_separated_imply_i: forall f f' m1 m2,
+    inject_separated f f' m1 m2 -> inject_separated_internal f f' m1 m2.
+Proof.
+  intros. red. intros. eapply H; eauto.
+Qed.
+
+Hint Resolve inject_separated_imply_e : core.
+Hint Resolve inject_separated_imply_i : core.
 
 Inductive injp_acci : relation injp_world :=
     injp_acci_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
@@ -556,7 +584,7 @@ Inductive injp_acci : relation injp_world :=
                      Mem.unchanged_on_i (loc_unmapped f) m1 m1' ->
                      Mem.unchanged_on_i (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
-                     inject_separated f f' m1 m2 ->
+                     inject_separated_external f f' m1 m2 ->
                      free_preserved f m1 m1' m2' ->
                      injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
@@ -572,7 +600,7 @@ Inductive injp_acce :  relation injp_world :=
                      Mem.unchanged_on_e (loc_unmapped f) m1 m1' ->
                      Mem.unchanged_on_e (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
-                     inject_separated f f' m1 m2 ->
+                     inject_separated_internal f f' m1 m2 ->
                      injp_acce (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 Record unchanged_on_g (P : block -> Z -> Prop) (m_before m_after : mem) : Prop :=
@@ -594,7 +622,7 @@ Inductive injp_accg : relation injp_world :=
                      unchanged_on_g (loc_unmapped f) m1 m1' ->
                      unchanged_on_g (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
-                     inject_separated f f' m1 m2 ->
+                     inject_separated_internal f f' m1 m2 ->
                      injp_accg (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 
@@ -651,14 +679,16 @@ Proof.
         specialize (Hbb2 b1 delta Hb). intro. apply Hbb2.
         eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
       * edestruct Hs; eauto.
+        inv Hm. inv mi_thread. inv Hms. rewrite H4.
+        inversion Hm'. inv mi_thread. erewrite Hjs0; eauto.
       * inv S2. congruence.
     + eapply inject_incr_trans; eauto.
-    + intros b1 b2 delta Hb Hb''.
+    + intros b1 b2 delta Hb Hb'' Htid.
       destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply Hf' in Hb'; split; congruence); subst.
         eapply Hs; eauto.
-      * edestruct Hs'; eauto.
+      * edestruct Hs'; eauto. inv S1. congruence.
         intuition eauto using Mem.valid_block_unchanged_on.
     + red. intros. red in H0. red in H.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty).
@@ -712,14 +742,16 @@ Proof.
         specialize (Hbb2 b1 delta Hb). intro. apply Hbb2.
         eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
       * edestruct Hs; eauto.
+        inv Hm. inv mi_thread. inv Hms. rewrite H0.
+        inversion Hm'. inv mi_thread. erewrite Hjs0; eauto.
       * inv S2. congruence.
     + eapply inject_incr_trans; eauto.
-    + intros b1 b2 delta Hb Hb''.
+    + intros b1 b2 delta Hb Hb'' HT.
       destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply Hf' in Hb'; split; congruence); subst.
         eapply Hs; eauto.
-      * edestruct Hs'; eauto.
+      * edestruct Hs'; eauto. inv S1. congruence.
         intuition eauto using Mem.valid_block_unchanged_on.
 Qed.
 
@@ -916,15 +948,15 @@ Qed.
 Lemma injp_acc_tl_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
     Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
     Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
-    Val.inject f v1 v2 ->
+    (* Val.inject f v1 v2 -> *)
     f b1 = Some (b2,delta) ->
     injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
-    erewrite Mem.support_store in H4; eauto. congruence.
+    erewrite Mem.support_store in H3; eauto. congruence.
   - red. intros. unfold Mem.valid_block in *.
-    erewrite Mem.support_store in H4; eauto. congruence.
+    erewrite Mem.support_store in H3; eauto. congruence.
   - eauto using Mem.ro_unchanged_store.
   - eauto using Mem.ro_unchanged_store.
   - red. eauto using Mem.perm_store_2.
@@ -938,17 +970,17 @@ Proof.
     edestruct (Mem.store_valid_access_3 chunk m1); eauto.
     eapply Mem.perm_cur_max.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
-    eapply H3; eauto.
+    eapply H2; eauto.
     extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
-  - red. intros. exfalso. apply H6. eauto with mem.
+  - red. intros. exfalso. apply H5. eauto with mem.
 Qed.
 
 Lemma injp_acc_tl_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
     Mem.storev chunk m1 a1 v1 = Some m1' ->
     Mem.storev chunk m2 a2 v2 = Some m2' ->
-    Val.inject f a1 a2 -> Val.inject f v1 v2 ->
+    Val.inject f a1 a2 -> (* Val.inject f v1 v2 -> *)
     injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
 Proof.
   intros. unfold Mem.storev in *. destruct a1; try congruence.
@@ -1050,7 +1082,8 @@ Inductive injp_acc_small (w0: injp_world) : relation injp_world :=
                      Mem.unchanged_on_tl (fun b ofs => loc_out_of_reach f m1 b ofs /\
                                         (fst b <> Mem.tid (Mem.support m1) \/ Mem.valid_block m20 b)) m2 m2' ->
                      inject_incr f f' ->
-                     inject_separated f f' m1 m2 ->
+                     inject_separated_external f f' m1 m2 ->
+                     inject_separated f f' m10 m20 ->
                      free_preserved f m1 m1' m2' ->
                      injp_acc_small w0 (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
@@ -1082,15 +1115,17 @@ Proof.
     red. intros. destruct (j b0) as [[b' d']|] eqn:Hj.
     apply H7 in Hj as Heq. rewrite H10 in Heq. inv Heq.
     intro. eapply H; eauto. eapply H3; eauto using Mem.valid_block_inject_1.
-    exploit H8; eauto. intros [X Y]. congruence.
+    exploit H8; eauto. inv Hm. inv mi_thread. inv Hms.
+    rewrite H20. inversion Hm'. inv mi_thread.
+    erewrite Hjs0; eauto.
+    intros [X Y]. congruence.
   - eapply inject_incr_trans; eauto.
-  - intros b1 b2 delta Hb Hb''.
+  - intros b1 b2 delta Hb Hb'' Ht.
       destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply H18 in Hb'; split; congruence); subst.
         eapply H8; eauto.
-      * edestruct H20; eauto.
-        intuition eauto using Mem.valid_block_unchanged_on.
+      * eauto. 
 Qed.
 
 Lemma injp_acc_small_acci : forall w0 w1 w2,
@@ -1106,4 +1141,17 @@ Proof.
     intros. destruct H. split. auto. left. inv Hm.
     inv mi_thread. inv Hms. congruence.
 Qed.
-    
+
+Lemma inject_tid: forall j m1 m2,
+    Mem.inject j m1 m2 -> Mem.tid (Mem.support m1) = Mem.tid (Mem.support m2).
+Proof.
+  intros. inv H. inv mi_thread. inv Hms. auto.
+Qed.
+
+Lemma inject_block_tid : forall j m1 m2 b1 b2 d,
+    Mem.inject j m1 m2 ->
+    j b1 = Some (b2, d) ->
+    fst b1 = fst b2.
+Proof.
+  intros. inv H. inv mi_thread. eapply Hjs; eauto.
+Qed.
