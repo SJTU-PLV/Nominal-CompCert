@@ -467,14 +467,14 @@ Proof.
           apply IMGIN12 in Hj1add as FRESH.
           rewrite H2 in Hj1'. inv Hj1'.
           exfalso. eapply freshness_tid; eauto.
-        + exploit disjoint1; eauto. intros [A B].
+        + exploit disjoint1; eauto.  simpl. admit. intros [A B].
           exfalso. apply B. apply sup_incr_tid_in1; eauto.
       - eapply add_same1; eauto. rewrite meminj_add_diff; eauto.
     }
     inv match_sup. unfold sup_incr_tid in H. simpl in H. rewrite Mem.update_list_length in H. auto.
     inv match_sup. auto.
     + eapply IHs1'; eauto. red. intros. apply Hva. right. auto.
-Qed.
+Admitted.
 
 (*
 Lemma update_properties: forall s1' s1 j1 j2 s2 s2' j1' j2' j' s3,

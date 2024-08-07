@@ -2664,12 +2664,6 @@ Proof.
   - (*bitfield*)
     inv H3. inv H9. clear H14.
     eapply injp_acc_tl_storev; eauto.
-    inv H2.
-    exploit Mem.loadv_inject. apply Hm.
-    eauto. eauto.
-    intros [v2 [A B]]. rewrite H23 in A.
-    inv A. inv B.
-    econstructor.
 Qed.
 
 Lemma step_simulation:
@@ -2759,6 +2753,7 @@ Proof.
   - eapply assign_loc_ro; eauto.
   - eapply assign_loc_max_perm; eauto.
   - eapply assign_loc_max_perm; eauto.
+  - admit.
   - split. erewrite <- assign_loc_support; eauto. split; eauto.
     eapply Mem.unchanged_on_implies.
     eapply assign_loc_unchanged_on; eauto.

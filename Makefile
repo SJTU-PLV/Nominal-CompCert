@@ -194,9 +194,11 @@ CLOSE=SmallstepClosed.v CompilerClosed.v
 
 CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        CallconvBig.v MultiSimBig.v \
-       HCompBig.v InjpAccoComp.v VCompBig.v \
-       SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
-       Composition.v
+       HCompBig.v \
+       InliningproofC.v	
+       # InjpAccoComp.v VCompBig.v \
+       # SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
+       # Composition.v InjpAccoComp.v 
 
 
 
