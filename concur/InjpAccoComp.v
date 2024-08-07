@@ -266,7 +266,7 @@ Definition inject_dom_in_bl (f:meminj) (bl: list block) :=
   forall b b' o, f b = Some (b', o) -> In b bl.
 
 Definition inject_incr_disjoint_bl1 (j j':meminj) (bl1: list block) (s2: sup) :=
-  forall b b' o, j b = None -> j' b = Some (b',o) ->
+  forall b b' o, j b = None -> j' b = Some (b',o) ->  fst b = Mem.tid s2->
             ~ In b bl1 /\ ~ sup_In b' s2.
 
 Lemma inject_dom_in_eqv: forall f s,
@@ -277,13 +277,15 @@ Proof.
   erewrite <- Mem.sup_list_in; eauto.
 Qed.
 
+Definition inject_incr_disjoint_internal (j j': meminj) (s1 s2: sup) : Prop := forall b b' delta, j b = None -> j' b = Some (b', delta) -> fst b = Mem.tid s2 -> ~ sup_In b s1 /\ ~ sup_In b' s2.
+
 Lemma inject_incr_disjoint_eqv : forall j j' s1 s2,
-    inject_incr_disjoint_bl1 j j' (Mem.sup_list s1) s2 <-> inject_incr_disjoint j j' s1 s2.
+    inject_incr_disjoint_bl1 j j' (Mem.sup_list s1) s2 <-> inject_incr_disjoint_internal j j' s1 s2.
 Proof.
   intros. split; intro; red; intros.
-  exploit H. eauto. eauto. intros [A B].
+  exploit H; eauto. intros [A B].
   erewrite <- Mem.sup_list_in in A. auto.
-  exploit H. eauto. eauto. intros [A B].
+  exploit H; eauto. intros [A B].
   erewrite Mem.sup_list_in in A. auto.
 Qed.
 
@@ -293,6 +295,8 @@ Definition valid_t_blocks  (s1 : list block) (s2: sup) :=
 Lemma update_properties':
   forall s1' bl1 j1 j2 s2 s2' j1' j2' j' s3,
     update_meminj12 s1' j1 j2 j' s2 = (j1',j2',s2') ->
+     (forall b1 b2 d, fst b2 <> Mem.tid s2 ->
+                 j1 b1 = Some (b2, d) -> j2 b2 <> None) ->
     valid_t_blocks s1' s2 ->
     Mem.meminj_thread_local j1 ->
     Mem.meminj_thread_local j2 ->
@@ -308,7 +312,7 @@ Lemma update_properties':
     /\ inject_image_in j1' s2'
     /\ inject_dom_in j2' s2'
     /\ inject_incr_disjoint_bl1 j1 j1' bl1 s2
-    /\ inject_incr_disjoint j2 j2' s2 s3
+    /\ inject_incr_disjoint_internal j2 j2' s2 s3
     /\ inject_incr_no_overlap' j1 j1'
     /\ update_add_exists j1 j1' j'
     /\ update_add_zero j1 j1'
@@ -322,17 +326,31 @@ Proof.
   - (*base*)
     intros; inv H. repeat apply conj; try congruence; eauto.
   - (*induction*)
-    intros until s3. intros UPDATE Hva Htl1 Htl2 Htl' DOMIN12 IMGIN12 DOMIN23
+    intros until s3. intros UPDATE Hhidden Hva Htl1 Htl2 Htl' DOMIN12 IMGIN12 DOMIN23
            INCR13 INCRDISJ13. inv UPDATE.
     destruct (compose_meminj j1 j2 a) eqn: Hja. eapply IHs1'; eauto.
     red. intros. apply Hva. right. auto.
     destruct (j' a) as [[b z]|] eqn:Hj'a; eauto.
-    exploit INCRDISJ13; eauto. intros [a_notin_sd1 b_notin_si2].
+    (*external_mid_hidden*)
+    (* destruct (Nat.eq_dec (fst a) (Mem.tid s3)).
+    admit.
+    
+    exploit INCRDISJ13; eauto. intros [a_notin_sd1 b_notin_si2]. *)
+    assert (TID23: Mem.tid s3 = Mem.tid s2).
+      admit.
     (* facts *)
     assert (MIDINCR1: inject_incr j1 (meminj_add j1 a (fresh_block_tid s2 (fst a),0))).
     {
+      destruct (Nat.eq_dec (fst a) (Mem.tid s3)).
+      exploit INCRDISJ13; eauto. intros [X Y].
       unfold meminj_add. red. intros. destruct eq_block; eauto.
-      apply DOMIN12 in H. congruence.
+      apply DOMIN12 in H. subst b0. congruence.
+      unfold meminj_add. red. intros. destruct eq_block; eauto.
+      subst.
+      exfalso. unfold compose_meminj in Hja. rewrite H in Hja.
+      erewrite Htl1 in n; eauto.
+      rewrite TID23 in n.
+      specialize (Hhidden a b' delta n H). destruct (j2 b') as [[? ?]|]; congruence.
     }
     assert (MIDINCR2: inject_incr j2 (meminj_add j2 (fresh_block_tid s2 (fst a)) (b,z))).
     {
@@ -349,6 +367,8 @@ Proof.
     }
     exploit IHs1'. eauto.
     (* rebuild preconditions for induction step *)
+    + simpl. intros. unfold meminj_add. unfold meminj_add in H1. destruct eq_block in H1. subst. simpl in H1. inv H1.
+      rewrite pred_dec_true. congruence. eauto. destruct eq_block. congruence. eapply Hhidden; eauto.
     + red. intros. red. simpl. rewrite Mem.update_list_length. eapply Hva. right. auto.
     + red. intros. unfold meminj_add in H. destruct eq_block in H. subst. simpl in H. inv H.
       reflexivity. eapply Htl1; eauto.
@@ -366,8 +386,9 @@ Proof.
     + rewrite meminj_add_compose; eauto.
       intros. intro. apply IMGIN12 in H. eapply freshness_tid; eauto.
     + instantiate (1:= s3). rewrite meminj_add_compose.
-      red. intros b0 b' o INJ1 INJ2. unfold meminj_add in INJ1. destruct (eq_block b0 a).
-      congruence. exploit INCRDISJ13; eauto. intros [A B]. split.
+      red. intros b0 b' o INJ1 INJ2 Ht. unfold meminj_add in INJ1. destruct (eq_block b0 a).
+      congruence. exploit INCRDISJ13; eauto.
+      intros [A B]. split.
       intros [H|H]; congruence.
       auto.
       intros. intro. apply IMGIN12 in H. eapply freshness_tid; eauto.
@@ -376,7 +397,7 @@ Proof.
               disjoint1 & disjoint2 & no_overlap & add_exists & add_zero & add_same1
                    & thread_local1 & thread_local2 & match_sup).
     repeat apply conj; eauto.
-    (*incr1*)
+     (*incr1*)
     eapply inject_incr_trans; eauto.
     (*incr2*)
     eapply inject_incr_trans; eauto.
@@ -384,20 +405,25 @@ Proof.
     red. intros. apply sinc. eapply sup_incr_tid_in2; eauto.
     (*disjoint1*)
     {
-    red. red in disjoint1. intros b0 b' delta INJ1 INJ2.
+    red. red in disjoint1. intros b0 b' delta INJ1 INJ2 Ht.
     destruct (eq_block b0 a).
     + subst. generalize (meminj_add_new j1 a (fresh_block_tid s2 (fst a),0)). intro INJadd.
-      apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd. split. auto. apply freshness_tid.
-    + exploit disjoint1. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
+      apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd.
+      exploit INCRDISJ13; eauto. congruence. intros [X Y].
+      split. auto. apply freshness_tid.
+    + exploit disjoint1. unfold meminj_add. rewrite pred_dec_false; eauto. eauto. simpl. congruence.
       intros [A B]. split. intro. apply A. right. auto. intro. apply B. apply sup_incr_tid_in2; auto.
     }
     (*disjoint2*)
     {
-    red. red in disjoint2. intros b0 b' delta INJ1 INJ2. set (nb := fresh_block_tid s2 (fst a)).
+    red. red in disjoint2. intros b0 b' delta INJ1 INJ2 Ht. set (nb := fresh_block_tid s2 (fst a)).
     destruct (eq_block b0 nb).
     + subst. generalize (meminj_add_new j2 nb (b,z)). intro INJadd. apply incr2 in INJadd.
-      rewrite INJ2 in INJadd. inv INJadd. split. apply freshness_tid. auto.
-    + exploit disjoint2. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
+      rewrite INJ2 in INJadd. inv INJadd.
+      exploit INCRDISJ13; eauto. intros [X Y].
+      split. apply freshness_tid.
+      auto.
+    + exploit disjoint2. unfold meminj_add. rewrite pred_dec_false; eauto. eauto. auto.
       intros [A B]. split. intro. apply A. apply sup_incr_tid_in2; auto. intro. apply B. auto.
     }
     (*new_no_overlap*)
@@ -406,13 +432,13 @@ Proof.
     destruct (eq_block b1 a); destruct (eq_block b2 a).
     + congruence.
     + subst. generalize (meminj_add_new j1 a (fresh_block_tid s2 (fst a),0)). intros INJadd.
-      apply incr1 in INJadd. rewrite INJ1 in INJadd. inv INJadd.
-      exploit disjoint1. rewrite meminj_add_diff; eauto. eauto. intros [A B].
-      intro. subst. apply B. apply sup_incr_tid_in1; auto.
+      apply incr1 in INJadd. rewrite INJ1 in INJadd. inv INJadd. admit.
+      (* exploit disjoint1. rewrite meminj_add_diff; eauto. eauto. simpl.  intros [A B].
+      intro. subst. apply B. apply sup_incr_tid_in1; auto. *)
     + subst. generalize (meminj_add_new j1 a (fresh_block_tid s2 (fst a),0)). intros INJadd.
-      apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd.
-      exploit disjoint1. rewrite meminj_add_diff. apply NONE1. eauto. eauto. intros [A B].
-      intro. subst. apply B. apply sup_incr_tid_in1; auto.
+      apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd. admit.
+      (* exploit disjoint1. rewrite meminj_add_diff. apply NONE1. eauto. eauto. intros [A B].
+      intro. subst. apply B. apply sup_incr_tid_in1; auto. *)
     + eapply no_overlap. apply Hneq. rewrite meminj_add_diff; eauto.
       rewrite meminj_add_diff; eauto. eauto. eauto.
     }
@@ -2477,6 +2503,9 @@ Proof.
     assert (Hmtl3 : Mem.meminj_thread_local j13'). inversion INJ13'. inv mi_thread. auto.
     assert (NTID : (Mem.next_tid (Mem.support m1') >= Mem.next_tid (Mem.support m2))%nat).
     inversion INJ12. inv mi_thread. inv Hms. destruct S1. unfold Mem.next_tid. lia.
+    rename DISJ13 into DISJ13'.
+    assert (DISJ13 : inject_incr_disjoint (compose_meminj j12 j23) j13' (Mem.support m1) (Mem.support m3)).
+    admit.
      generalize (inject_incr_inv _ _ _ _ _ _ _ Hmtl1 Hmtl2 Hmtl3 NTID DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & Hmtl1' & Hmtl2' & HTID & HNTID).
     subst.
