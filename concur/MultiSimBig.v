@@ -1694,6 +1694,7 @@ Qed.
            
            unfold wB'. destruct wB. simpl in *. inv ACCG1.
            inv MSEw. constructor. eapply Genv.match_stbls_incr; eauto.
+           intros.
            intros. exploit H11; eauto. admit.
            (*TODO: added external requirement about
                    no more global blocks  *)

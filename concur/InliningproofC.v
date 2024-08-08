@@ -995,7 +995,8 @@ Inductive match_states: injp_world -> RTL.state -> RTL.state -> Prop :=
         (MOVES: tr_moves f'.(fn_code) pc1' (sregs ctx' rargs) (sregs ctx f.(fn_params)) (spc ctx f.(fn_entrypoint)))
         (VFIND: Genv.find_funct ge vf = Some (Internal f))
         (VINJ: list_forall2 (val_reg_charact F ctx' rs') vargs rargs)
-         (ACCE: injp_acce w (injpw F m m' Hm))
+        (NEWB: ~ Mem.valid_block init_tm sp')
+        (ACCE: injp_acce w (injpw F m m' Hm))
         (ACCI: injp_acci wp (injpw F m m' Hm))
         (MINJ: Mem.inject F m m')
         (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
@@ -1018,6 +1019,7 @@ Inductive match_states: injp_world -> RTL.state -> RTL.state -> Prop :=
         (RET: ctx.(retinfo) = Some rinfo)
         (AT: f'.(fn_code)!pc' = Some(inline_return ctx or rinfo))
         (VINJ: match or with None => v = Vundef | Some r => Val.inject F v rs'#(sreg ctx r) end)
+        (NEWB: ~ Mem.valid_block init_tm sp')
         (ACCE: injp_acce w (injpw F m m' Hm))
         (ACCI: injp_acci wp (injpw F m m' Hm))
         (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
@@ -1137,7 +1139,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_inlined; eauto.
   red; intros. apply PRIV. inv H13. destruct H16. extlia.
-  apply agree_val_regs_gen; auto.
+  apply agree_val_regs_gen; auto. apply NEWB.
   red; intros; apply PRIV. destruct H16. lia.
 
 - (* tailcall *)
@@ -1268,7 +1270,7 @@ Proof.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
     (* red. intros. eapply Mem.perm_free_3; eauto. *)
   intros. eapply Mem.perm_free_3; eauto.
-  apply agree_val_regs_gen; auto.
+  apply agree_val_regs_gen; auto. apply NEWB.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
   etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   red; intros; apply PRIV'.
@@ -1417,7 +1419,7 @@ Proof.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
 (*    red. intros. eapply Mem.perm_free_3; eauto. *)
   intros. eapply Mem.perm_free_3; eauto.
-  destruct or; simpl. apply agree_val_reg; auto. auto.
+  destruct or; simpl. apply agree_val_reg; auto. auto. apply NEWB.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
   etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   inv FB. rewrite H6 in PRIV. eapply range_private_free_left; eauto.
@@ -1510,42 +1512,30 @@ Proof.
     apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
   intros [F' [A [B [C D]]]].
   exploit tr_moves_init_regs; eauto. intros [rs'' [P [Q R]]].
-  assert (ACCI' : injp_acci Wp (injpw F' m' m'0 A)).
+  assert (ACCS : injp_acc_small w (injpw F m m'0 Hm) (injpw F' m' m'0 A)).
   {
-    clear - ACCI A B C D H VB.
-    inv ACCI. destruct H7 as [S7 H7]. destruct H8 as [S8 H8]. econstructor; eauto.
-    - red. intros. eapply Mem.valid_block_alloc_inv in H1; eauto. destruct H1; try congruence.
-      apply Mem.alloc_result in H. subst.  destruct S7. rewrite H1. reflexivity.
-      eapply Hnb1; eauto.
-    - eapply Mem.ro_unchanged_trans. eauto. eapply Mem.ro_unchanged_alloc; eauto.
-      destruct H7. auto. red. intros. eapply H5; eauto. 
-    - red. intros. exploit H5; eauto. eapply Mem.perm_alloc_4; eauto.
-      intro. subst. apply Mem.alloc_result in H. subst. eapply freshness.
-      inv H7. apply unchanged_on_support; eauto.
-    - split. erewrite (Mem.support_alloc _ _ _ _ _ H); eauto. simpl.
-      inv S7. split; eauto. simpl. rewrite Mem.update_list_length. congruence.
-      eapply Mem.unchanged_on_trans. eauto. eapply Mem.alloc_unchanged_on; eauto.
-    - constructor; eauto.
-    - red. intros. exploit H10; eauto.
-    - red. intros. destruct (eq_block b1 stk).
-      + subst b1.
-      rewrite C in H1. inv H1.
-      split. intro. eapply Mem.fresh_block_alloc; eauto. destruct H7. apply unchanged_on_support. auto.
-      auto. exfalso. admit.
-      + rewrite D in H1. eauto. auto.
-    - red. intros. intro.
-      eapply H12; eauto.
-      intro. apply H9. eauto with mem.
-  }
-  assert (ACCE': injp_acce w (injpw F' m' m'0 A)).
-  {
-    clear - ACCE A B C D H VB ACCI'.
-    inv ACCI'. destruct w. inv ACCE. econstructor; eauto.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
-    - admit.
+    unfold init_tm in NEWB. destruct w. simpl in NEWB.
+    econstructor; eauto.
+    - red. intros. 
+      eapply Mem.valid_block_alloc_inv in H7; eauto. destruct H7.
+      subst. eapply Mem.alloc_result in H. rewrite H. reflexivity. congruence.
+    - red. intros. congruence.
+    - eapply Mem.ro_unchanged_alloc; eauto.
+    - red. intros. eauto.
+    - red. intros. eauto with mem.
+    - split. erewrite (Mem.support_alloc _ _ _ _ _ H); eauto. simpl. split; eauto.
+      simpl. rewrite Mem.update_list_length. eauto.
+      eapply Mem.alloc_unchanged_on; eauto.
+    - split. eauto. eauto with mem.
+    - red. intros. destruct (eq_block b1 stk). subst. exfalso. apply H8.
+      apply Mem.alloc_result in H. rewrite H. reflexivity. erewrite D in H7; eauto.
+      congruence.
+    - red. intros.  destruct (eq_block b1 stk). subst. split.
+      intro. eapply Mem.fresh_block_alloc; eauto.
+      inv ACCE. destruct H19. inv unchanged_on_e'. apply unchanged_on_support. auto.
+      rewrite C in H7. inv H7. apply NEWB.
+      erewrite D in H7; eauto. congruence.
+    - red. intros. eauto with mem.
   }
   left; econstructor; split.
   eapply plus_left. eapply exec_Inop; eauto. eexact P. traceEq.
@@ -1558,8 +1548,9 @@ Proof.
   rewrite H. reflexivity.
   edestruct match_stacks_inside_support as [SUP1 [SUP2 SUP3]]. eauto.
   split. intro. eapply Mem.fresh_block_alloc. apply H. apply SUP1. auto.
-  intro. eapply freshness. apply SUP3. auto. eauto. eauto.
-  auto. auto. eauto.
+  intro. eapply freshness. apply SUP3. auto.
+  eapply injp_acce_small; eauto. etransitivity. eauto. eapply injp_acc_small_acci; eauto.
+  auto. auto.
   rewrite H2. eapply range_private_alloc_left; eauto.
   auto. auto.
 
@@ -1624,7 +1615,7 @@ Proof.
   left; econstructor; split.
   eapply plus_one. eapply exec_Inop; eauto.
   econstructor; eauto. subst vres. apply agree_set_reg_undef'; auto.
-Admitted.
+Qed.
 
 Lemma transf_initial_states:
   forall q1 q2, GS.match_query (c_injp) w q1 q2 ->
