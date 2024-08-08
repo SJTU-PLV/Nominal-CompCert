@@ -445,11 +445,10 @@ Definition scalar_type (ty: type) : bool :=
 (* Semantics well typed location is mutually defined with semantics
 well typed value *)
 Inductive sem_wt_loc (ce: composite_env) (m: mem) : footprint -> block -> Z -> type -> Prop :=
-| sem_wt_base: forall ty b ofs fp chunk
+| sem_wt_base: forall ty b ofs fp chunk v
     (MODE: Rusttypes.access_mode ty = Ctypes.By_value chunk)
-    (WT: forall v,
-        Mem.load chunk m b ofs = Some v ->
-        sem_wt_val ce m fp v ty),
+    (LOAD: Mem.load chunk m b ofs = Some v)
+    (WT: sem_wt_val ce m fp v ty),
     sem_wt_loc ce m fp b ofs ty
 | sem_wt_struct: forall b ofs co fpl orgs id
     (CO: ce ! id = Some co)   
@@ -508,7 +507,13 @@ Inductive sem_wt_val_list (ce: composite_env) (m: mem) : list footprint -> list 
     sem_wt_val ce m fp v ty ->
     sem_wt_val_list ce m (fp::fpl) (v::vl) (ty::tyl)
 .
-  
+
+Lemma sem_wt_val_in_wt_loc: forall ce m fp b ofs ty v
+    (WT: sem_wt_loc ce m fp b ofs ty)
+    (LOAD: deref_loc ty m b (Ptrofs.repr ofs) v),
+    sem_wt_val ce m fp v ty.
+Admitted.
+
 (** Semantics Interface *)
 
 (** ** Rust Interface *)
@@ -722,8 +727,11 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : footpr
         variant_field_offset ce fid (co_members co) = OK fofs ->
         bmatch m b (ofs + fofs) (Pdowncast p fid fty) own fp fty),
     bmatch m b ofs p own (fp_enum tagz fp) (Tvariant orgs id)
-| bm_scalar: forall ty,
-    scalar_type ty = true ->
+| bm_scalar: forall ty chunk v
+    (TY: scalar_type ty = true)
+    (MODE: Rusttypes.access_mode ty = Ctypes.By_value chunk)
+    (LOAD: Mem.load chunk m b ofs = Some v)
+    (WT: sem_wt_val ce m fp_emp v ty),
     bmatch m b ofs p own fp_emp ty
 (** TODO: bm_reference  *)
 .
@@ -854,7 +862,12 @@ Inductive sound_state: state -> Prop :=
     sound_state (State f s k e own m)
 .
 
+Lemma path_of_eval_place: forall e m p b ofs
+    (EVAL: eval_place ce e m p b ofs),
+  exists phl, path_of_place ce p (local_of_place p) phl.
+Admitted.
 
+    
 (** The address of a place is consistent with the abstracter. For now,
 we do not consider reference *)
 Lemma eval_place_sound: forall e m p b ofs own fpm
@@ -1013,7 +1026,7 @@ Proof.
       (* Box type *)
       * simpl in H. inv H. inv BM.
         eapply Mem.load_valid_access; eauto.
-        simpl in H. congruence.
+        simpl in TY. congruence.
       (* reference type *)
       * admit.
   (* Pdowncast *)
@@ -1032,7 +1045,7 @@ Proof.
       exploit MM; eauto. rewrite H5. intros BM.
       inv BM.
       eapply H3. eapply Mem.load_valid_access; eauto.
-      simpl in H. congruence.
+      simpl in TY. congruence.
       (* auto. *)
       (* eapply place_dominator_shallow_own_shallow_prefix. eauto. *)
       (* unfold is_shallow_prefix. simpl. destruct (place_eq p p); try congruence. *)
@@ -1096,15 +1109,106 @@ Lemma move_place_mmatch: forall fpm1 m e own1 own2 p id phl
             /\ mmatch ce fpm2 m e own2.
 Admitted.
 
-Lemma movable_place_sem_wt: forall fpm m e own p b ofs fp
+Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs
     (MM: mmatch ce fpm m e own)
     (* p owns the ownership chain *)
     (POWN: check_movable own p = true)
     (PFP: place_footprint ce fpm e p b ofs fp),
-    sem_wt_loc ce m fp b ofs (typeof_place p).
+    sem_wt_loc ce m fp b ofs (typeof_place p)
+
+with movable_struct_field_sem_wt: forall fpm m e own p orgs id ofs fpl fid fty co n ffp fofs b
+        (MM: mmatch ce fpm m e own)
+        (PTY: typeof_place p = Tstruct orgs id)
+        (PFP: place_footprint ce fpm e p b ofs (fp_struct fpl))
+        (POWN: check_movable own (Pfield p fid fty) = true)
+        (CO: ce ! id = Some co)
+        (MEMB: nth_error co.(co_members) n = Some (Member_plain fid fty))
+        (FFP: nth_error fpl n = Some ffp)
+        (FOFS: field_offset ce fid co.(co_members) = OK fofs),
+    sem_wt_loc ce m ffp b (ofs + fofs) fty.
+               
+Proof.
+  (* prove the first lemma *)
+  { 
+  clear movable_place_sem_wt.
+  induction fp; intros.
+  (* empty footprint *)
+  - assert (OWN: is_owned own p = true). admit.
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    eapply sem_wt_base; eauto.
+  (* fp_box *)
+  - assert (OWN: is_owned own p = true). admit.
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    econstructor. simpl. eauto.
+    eauto.
+    econstructor; auto.
+    (* To prove the heap block is semantically well typed, use I.H. *)
+    replace ty with (typeof_place (Pderef p ty)) by auto.
+    eapply IHfp. eauto.
+    (* prove *p is movable *)
+    admit.
+    econstructor. eauto.
+  (* fp_struct *)
+  - assert (OWN: is_owned own p = true). admit.
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    eapply sem_wt_struct. eauto.
+    intros. exploit FMATCH. 1-3: eauto.
+    intros BM.
+    (* apply the second lemma *)
+    eapply movable_struct_field_sem_wt. 1-3: eauto.
+    (* check movable of this field *)
+    instantiate (1:= fid).  admit.
+    1-4: eauto.
+  (* fp_enum *)
+  - assert (OWN: is_owned own p = true). admit.
+    exploit MM. eauto. auto.
+    intros BM. inv BM.    
+    eapply sem_wt_enum. 1-2: eauto.
+    intros. replace fty with (typeof_place (Pdowncast p fid fty)) by auto.
+    eapply IHfp. eauto.
+    (* Pdowncast is movable *)
+    admit.
+    econstructor; eauto.
+    
+  }
+
+  (* prove the second lemma *)
+  { clear movable_struct_field_sem_wt.
+    intros. replace fty with (typeof_place (Pfield p fid fty)) by auto.
+    eapply movable_place_sem_wt; eauto.
+    econstructor. 1-4 : eauto.
+    (* some inversion properties of nth_error *)
+    instantiate (1 := (Z.of_nat n)). admit.
+    admit.
 Admitted.
 
+(* The result of eval_expr is semantically well typed *)
 
+Lemma eval_pexpr_sem_wt: forall fpm m le own pe v
+    (MM: mmatch ce fpm m le own)
+    (EVAL: eval_pexpr ce le m pe v)
+    (OWN: own_check_pexpr own pe = true),
+    exists fp, sem_wt_val ce m fp v (typeof_pexpr pe).
+Admitted.
+
+Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v
+    (MM: mmatch ce fpm1 m le own1)
+    (EVAL: eval_expr ce le m e v)
+    (OWN: own_check_expr own1 e = Some own2),
+  (* how to relate fp and fpm2 ? *)
+  exists fp fpm2, sem_wt_val ce m fp v (typeof e)
+        /\ mmatch ce fpm2 m le own2.
+Admitted.
+
+Lemma sem_cast_sem_wt: forall v1 v2 ty1 ty2 m fp
+    (CAST: RustOp.sem_cast v1 ty1 ty2 = Some v2)
+    (WT: sem_wt_val ce m fp v1 ty1),
+    sem_wt_val ce m fp v2 ty2.
+Admitted.
+  
 (* assign_loc remains sound. We need a more general one *)
 
 Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p fp e ty phl id
@@ -1123,17 +1227,33 @@ Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
 Admitted.
 
-Lemma initial_state_sound: forall q s,
-    wt_rs_query w q ->
-    Smallstep.initial_state L q s ->
-    sound_state s.
-Admitted.
+(* Lemma initial_state_sound: forall q s, *)
+(*     query_inv wt_rs w q -> *)
+(*     Smallstep.initial_state L q s -> *)
+(*     sound_state s. *)
+(* Admitted. *)
+
 
 Lemma step_sound: forall s1 t s2,
     sound_state s1 ->
     Step L s1 t s2 ->
     (* how to prove sound_state in dropstate? *)
     sound_state s2.
+Proof.
+  intros s1 t s2 SOUND STEP. simpl in STEP.
+  inv STEP.
+  (* assign sound *)
+  - inv SOUND.
+    exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WT1 & MM1).
+    exploit sem_cast_sem_wt; eauto.
+    intros WT2.
+    exploit path_of_eval_place; eauto. intros (phl & PATH).
+    exploit assign_loc_sound; eauto.
+    intros (fpm3 & FPM3 & MM3).
+    econstructor; eauto.
+    admit.
+    
 Admitted.
 
 
