@@ -761,10 +761,22 @@ Variable tce: Ctypes.composite_env.
 Variable dropm: PTree.t ident.
 Variable glues: PTree.t Clight.function.
 
+Definition tr_trivial_meet_spec (s : statement) : Prop :=
+    match s with 
+    | Sbox _ _ 
+    | Scall _ _ _
+    | Sdrop _ 
+    | Ssequence _ _
+    | Sifthenelse _ _ _
+    | Sloop _ => False
+    | _ => True
+    end.
+    
 Inductive tr_stmt : statement -> Clight.statement -> Prop :=
 (* We only require there **exists** a [tce] which satisfies the
 tr_composite relation *)
 | tr_trivial: forall s ts g,
+    tr_trivial_meet_spec s ->
     transl_stmt ce tce dropm s g = Res ts g ->
     tr_stmt s ts
 | tr_box: forall p e stmt lhs e' temp temp_ty deref_ty,
@@ -834,27 +846,25 @@ Lemma transl_stmt_meet_spec: forall s ts g g',
     tr_stmt s ts.
 Proof.
   induction s; simpl; intros until g'; intros TRANSL;
-    try (monadInv_sym TRANSL); simpl; try (econstructor; instantiate (1:= g'); eauto; fail).
-  - econstructor. instantiate (1:= g'). monadInv_comb TRANSL. simpl.
-    rewrite EQ. rewrite EQ1. eauto.
-  - monadInv_comb TRANSL. econstructor. instantiate (1:= g'). simpl.
-    rewrite EQ. rewrite EQ1. simpl. rewrite EQ0. eauto.
+    try (monadInv_sym TRANSL); simpl; try (try (eapply tr_trivial); try(instantiate (1 := g')); simpl; auto; fail).
+  - econstructor. simpl. eauto. instantiate (1:= g'). monadInv_comb TRANSL. simpl.
+    rewrite EQ. rewrite EQ1. eauto.  
+  - monadInv_comb TRANSL. econstructor. simpl. eauto. instantiate (1:= g'). simpl.
+    rewrite EQ. rewrite EQ1. simpl. rewrite EQ0. eauto. 
   - monadInv_comb EQ0. eapply tr_box; eauto.
   - monadInv_comb EQ0. destruct expand_drop eqn: EXP in EQ2.
     monadInv_sym EQ2. eapply tr_drop; eauto. monadInv_sym EQ2.
   - monadInv_comb TRANSL. monadInv_sym EQ3.
-    eapply tr_call; eauto.
-  - eapply tr_seq; eauto.
+    eapply tr_call; eauto. 
+  - eapply tr_seq; eauto. 
   - monadInv_comb TRANSL. monadInv_sym EQ0.
-    eapply tr_ifthenelse; eauto.
-  - eapply tr_loop. eauto.
+    eapply tr_ifthenelse; eauto. 
+  - eapply tr_loop. eauto. 
   - destruct o.
-    monadInv_comb TRANSL. econstructor. instantiate (1:= g'). simpl.
-    rewrite EQ. auto.
-    monadInv_sym TRANSL. econstructor. instantiate (1:= g'). simpl.
-    auto.
+    monadInv_comb TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl.
+    rewrite EQ. auto.  
+    monadInv_sym TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl. auto. 
 Qed.
-
 
 Lemma transl_function_meet_spec: forall f tf,
     transl_function ce tce dropm glues f = OK tf ->
@@ -911,10 +921,115 @@ Proof.
 Qed.
 
 
+
+Lemma H2: forall p id gid ,
+  (generate_dropm p) ! id = Some gid ->
+  exists g, (prog_defmap p) ! gid = Some (g).
+Proof. 
+  intros. 
+  unfold prog_defmap. 
+  apply PTree_Properties.in_of_list in H. 
+  eapply prog_defmap_dom. unfold 
+  unfold prog_defs_names. simpl. 
+  induction (prog_defs p). inv H. 
+  destruct a. 
+  simpl in H. destruct g eqn: G.
+  destruct f eqn: F. 
+  destruct (fn_drop_glue f0) eqn: DROP. 
+  rewrite map_cons in H. inv H. 
+  inv H0. rewrite DROP in H1. inv H1. simpl. left. auto. 
+  right. auto. 
+  right. auto. 
+  right. auto. 
+  right. auto. 
+Qed. 
+
+Let f := fun (m : PTree.t ident) (k_v : PTree.elt * ident) => PTree.set (fst k_v) (snd k_v) m. 
+
+
+
+Lemma of_list_dom_v2:
+  forall (l:list (ident * globdef (Rusttypes.fundef function) type))  k, In k (map fst l) -> exists v, (PTree_Properties.of_list l) ! k = Some v.
+Proof.
+  assert (REC: forall k l m,
+            In k (map fst l) \/ (exists v, m ! k = Some v) ->
+            exists v, (fold_left f l m) ! k = Some v).
+  { induction l as [ | [k1 v1] l]; simpl; intros.
+  - tauto.
+  - apply IHl. unfold f; rewrite PTree.gsspec. simpl. destruct (PTree.elt_eq k k1).
+    right. rewrite e. eexists v1. rewrite peq_true. auto. 
+    erewrite peq_false.  destruct H. destruct H. rewrite H in n. destruct n. auto.  
+    left. auto. 
+    right. auto. auto. 
+  }
+  intros. apply REC. auto.
+
+Admitted. 
+
+Lemma of_list_dom_v3:
+  forall (l:list (ident * globdef (Rusttypes.fundef function) type))  k, In k (map fst l) -> exists f0, (PTree_Properties.of_list l) ! k = Some (Gfun (Internal f0)).
+Proof.
+  assert (REC: forall k l m,
+            In k (map fst l) \/ (exists v, m ! k = Some v) ->
+            exists v, (fold_left f l m) ! k = Some v).
+  { induction l as [ | [k1 v1] l]; simpl; intros.
+  - tauto.
+  - apply IHl. unfold f; rewrite PTree.gsspec. simpl. destruct (PTree.elt_eq k k1).
+    right. rewrite e. eexists v1. rewrite peq_true. auto. 
+    erewrite peq_false.  destruct H. destruct H. rewrite H in n. destruct n. auto.  
+    left. auto. 
+    right. auto. auto. 
+  }
+  intros. apply REC. auto.
+
+Admitted. 
+
+
+
+
+Lemma H3: forall (id:ident) (gid:ident) (p:program),
+(generate_dropm p) ! id = Some gid ->
+(* (prog_defmap p) ! gid = Some (Gfun (Internal f)) ->  *)
+exists f, (prog_defmap p) ! gid = Some (Gfun (Internal f)). 
+Proof. 
+  intros. 
+  unfold generate_dropm in H.  
+  unfold PTree_Properties.of_list in H. 
+  unfold prog_defmap. simpl. 
+  eapply PTree_Properties.in_of_list in H. 
+  induction (prog_defs p). inv H. 
+  destruct a. simpl in H. destruct g eqn: G.
+  destruct f eqn: F. destruct (fn_drop_glue f0) eqn: DROP. 
+  inv H. inv H0. rewrite DROP in H1. inv H1. 
+  eauto. eapply IHl.  auto. exploit IHl; eauto.  
+  exploit IHl; eauto. 
+  exploit IHl; eauto. Qed. 
+
 Lemma generate_dropm_inv: forall p id gid,
     (generate_dropm p) ! id = Some gid ->
     exists f, (prog_defmap p) ! gid = Some (Gfun (Internal f)) /\ f.(fn_drop_glue) = Some id.
-Admitted.
+Proof. 
+  intros. 
+  eapply PTree_Properties.in_of_list in H. 
+  unfold prog_defmap. simpl. 
+  induction (prog_defs p). inv H.
+  destruct a. 
+  simpl in H. destruct g eqn: G.
+  destruct f eqn: F. 
+  destruct (fn_drop_glue f0) eqn: DROP.
+  rewrite map_cons in H. 
+  apply in_inv in H. inv H.   
+  exploit IHl; eauto. intros (f' & A & B). 
+  eexists f0.   
+  split; auto. eapply PTree.elements_complete. 
+  
+  unfold PTree_Properties.of_list. simpl.  
+  eapply PTree.elements_complete.  unfold fold_left. admit. 
+  exploit IHl; eauto. intros (f' & A & B). admit. 
+  exploit IHl; eauto. admit. 
+  exploit IHl; eauto. admit. 
+  exploit IHl; eauto. admit. 
+Admitted. 
 
 (* Is it enough? *)
 Lemma generate_drops_inv: forall ce tce dropm id co f,

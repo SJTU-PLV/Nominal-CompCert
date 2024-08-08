@@ -636,7 +636,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       ret (Clight.Ssequence stmt (Clight.Sassign pe e'))
   | Sstoragelive _
   | Sstoragedead _ =>
-      ret Clight.Sskip
+      ret (Clight.Ssequence Clight.Sskip Clight.Sskip)
   | Scall p e el =>
       docomb el' <- expr_to_cexpr_list el;
       docomb e' <- expr_to_cexpr e;

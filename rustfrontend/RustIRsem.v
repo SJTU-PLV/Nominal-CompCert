@@ -306,7 +306,6 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
 | step_storagedead: forall f k le m id,
     step (State f (Sstoragedead id) k le m) E0 (State f Sskip k le m)
-         
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
@@ -336,8 +335,9 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.free_list m1 lb = Some m2 ->
     (* return unit or Vundef? *)
     step (State f (Sreturn None) k e m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v v1 lb m1 m2 f k ,
+| step_return_1: forall le a v v1 lb m1 m2 f k,
     eval_expr ge le m1 a v ->
+    (forall id b t, le ! id = Some (b, t) -> complete_type ge t = true) ->
     (* sem_cast to the return type *)
     sem_cast v (typeof a) f.(fn_return) = Some v1 ->
     (* drop the stack blocks *)
@@ -347,13 +347,15 @@ Inductive step : state -> trace -> state -> Prop :=
 (* no return statement but reach the end of the function *)
 | step_skip_call: forall e lb m1 m2 f k,
     is_call_cont k ->
+    (forall id b t, e ! id = Some (b, t) -> complete_type ge t = true) ->
     blocks_of_env ge e = lb ->
     Mem.free_list m1 lb = Some m2 ->
     step (State f Sskip k e m1) E0 (Returnstate Vundef (call_cont k) m2)
          
-| step_returnstate: forall p v b ofs ty m1 m2 e f k,
+| step_returnstate: forall p v b ofs m1 m2 e f k,
     eval_place ge e m1 p b ofs ->
-    assign_loc ge ty m1 b ofs v m2 ->    
+    val_casted v (typeof_place p)->
+    assign_loc ge (typeof_place p) m1 b ofs v m2 ->     
     step (Returnstate v (Kcall (Some p) f e k) m1) E0 (State f Sskip k e m2)
 
 (* Control flow statements *)
