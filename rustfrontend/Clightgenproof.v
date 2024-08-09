@@ -45,7 +45,9 @@ Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     match_prog_free:
     exists orgs rels tyl rety cc, (prog_defmap p) ! free_id = Some (Gfun (Rusttypes.External orgs rels EF_free tyl rety cc));
     match_prog_wf_param_id:
-    list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements (clgen_dropm (build_clgen_env p tp)))))
+    list_disjoint [param_id] (malloc_id :: free_id :: (map snd (PTree.elements (clgen_dropm (build_clgen_env p tp)))));
+    norepet_defs_names:
+    list_norepet (prog_defs_names p)
   }.
 
 Lemma match_globdef: forall l tl ctx id,
@@ -91,25 +93,26 @@ Lemma match_transf_program: forall p tp,
     match_prog p tp.
 Proof.
   unfold transl_program. intros p tp.
-  destruct list_disjoint_dec; try congruence.
+  destruct list_disjoint_dec; try congruence. 
   destruct check_malloc_free_existence eqn: EXT; try congruence.
+  destruct (list_norepet_dec ident_eq (prog_defs_names p)) eqn : FUNC_NAME_REP; try congruence. 
   destruct transl_composites as [tdefs| ]eqn: TRCOMP; try congruence.
   (** solution comes from https://coq.discourse.group/t/destructing-term-when-match-generates-equality-involving-that-term/2209/3 *)
   generalize (eq_refl (Ctypes.build_composite_env tdefs)).
   generalize (Ctypes.build_composite_env tdefs) at 2 3.
   intros [tce|] E; try congruence.
-  intros TR. monadInv TR.
+  intros EQ. 
   unfold transform_partial_program2 in EQ.
   monadInv EQ.
-  simpl.
-  constructor;auto.
-  - simpl. eapply transl_composites_meet_spec; eauto.
+  monadInv EQ0.  
+  constructor; auto. 
+  - simpl. eapply transl_composites_meet_spec; eauto. 
     eapply prog_comp_env_eq.
   - intros. eapply match_globdef. simpl. auto.
   (* erase_program *)
   - unfold erase_program.
     simpl in *. f_equal.
-    erewrite match_erase_globdef. eauto. eauto.
+    erewrite match_erase_globdef. eauto. eauto.   
   - unfold check_malloc_free_existence in EXT.
     destruct ((prog_defmap p) ! malloc_id); try congruence.
     destruct g; try destruct f; try congruence; try destruct e; try congruence; eauto.
@@ -120,7 +123,9 @@ Proof.
     destruct ((prog_defmap p) ! free_id) eqn: FREE; try congruence.
     destruct g; try destruct f; try congruence; try destruct e; try congruence; eauto.
     repeat eexists.
-Qed.
+Qed. 
+
+
 
 (* Prove match_genv for this specific match_prog *)
 
@@ -1727,6 +1732,7 @@ Proof.
   (* Four steps to get the target drop glue for composite id *)
   (* 1. use generate_dropm_inv to get the source empty drop glue *)
   exploit generate_dropm_inv;eauto.
+  inv TRANSL. auto. 
   intros (src_drop & PROGM & GLUEID).
   (* 2. use Genv.find_def_symbol to get the block of this drop glue
     and prove that target can also find an injected block *)
@@ -3193,7 +3199,7 @@ Proof.
     (* variant_field_offset *)
     exploit variant_field_offset_match.
     eapply match_prog_comp_env; eauto.   
-    eauto. auto. instantiate (1 := Full). 
+    eauto. auto. 
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E). 
     clear E.
     (* rewrite to_cstmt *)
@@ -3996,4 +4002,5 @@ Proof.
   - eapply external_states_simulation; eauto.
   (* step *)
   - eapply step_simulation;eauto.
+
 Qed.

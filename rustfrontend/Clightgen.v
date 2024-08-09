@@ -773,28 +773,30 @@ Definition transl_program (p: program) : res Clight.program :=
   let dropm := generate_dropm p in
   if list_disjoint_dec ident_eq [param_id] (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
     if check_malloc_free_existence p then
+      if list_norepet_dec ident_eq (prog_defs_names p) then
       (* step 1: rust composite to c composite: generate union for each variant *)
-      match transl_composites p.(prog_types) with
-      | Some co_defs =>
-          let tce := Ctypes.build_composite_env co_defs in
-          (match tce as m return (tce = m) -> res Clight.program with
-           | OK tce =>
-               fun Hyp =>
-                 let ce := p.(prog_comp_env) in
-                 (* step 2: generate drop glue *)
-                 let globs := generate_drops ce tce dropm in
-                 (* step 3: translate the statement and convert drop glue *)
-                 do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
-                 OK {| Ctypes.prog_defs := AST.prog_defs p1;
-                      Ctypes.prog_public := AST.prog_public p1;
-                      Ctypes.prog_main := AST.prog_main p1;
-                      Ctypes.prog_types := co_defs;
-                      Ctypes.prog_comp_env := tce;
-                      Ctypes.prog_comp_env_eq := Hyp |}
-           | Error msg => fun _ => Error msg
-           end) (eq_refl tce)
-      | _ => Error (msg "error in transl_composites (Clightgen)")
-      end
+        match transl_composites p.(prog_types) with
+        | Some co_defs =>
+            let tce := Ctypes.build_composite_env co_defs in
+            (match tce as m return (tce = m) -> res Clight.program with
+            | OK tce =>
+                fun Hyp =>
+                  let ce := p.(prog_comp_env) in
+                  (* step 2: generate drop glue *)
+                  let globs := generate_drops ce tce dropm in
+                  (* step 3: translate the statement and convert drop glue *)
+                  do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs) transl_globvar p;
+                  OK {| Ctypes.prog_defs := AST.prog_defs p1;
+                        Ctypes.prog_public := AST.prog_public p1;
+                        Ctypes.prog_main := AST.prog_main p1;
+                        Ctypes.prog_types := co_defs;
+                        Ctypes.prog_comp_env := tce;
+                        Ctypes.prog_comp_env_eq := Hyp |}
+            | Error msg => fun _ => Error msg
+            end) (eq_refl tce)
+        | _ => Error (msg "error in transl_composites (Clightgen)")
+        end
+      else Error (msg "repeated function names (Clightgen)")
     else Error (msg "malloc/free does not exists (Clightgen)")
   else Error (msg "repeated drop glue paramter id (Clightgen)")
 .

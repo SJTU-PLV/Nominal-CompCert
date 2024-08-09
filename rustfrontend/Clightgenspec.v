@@ -920,116 +920,33 @@ Proof.
   destruct e; inv H; try econstructor; auto; try (split; congruence).
 Qed.
 
-
-
-Lemma H2: forall p id gid ,
-  (generate_dropm p) ! id = Some gid ->
-  exists g, (prog_defmap p) ! gid = Some (g).
-Proof. 
-  intros. 
-  unfold prog_defmap. 
-  apply PTree_Properties.in_of_list in H. 
-  eapply prog_defmap_dom. unfold 
-  unfold prog_defs_names. simpl. 
-  induction (prog_defs p). inv H. 
-  destruct a. 
-  simpl in H. destruct g eqn: G.
-  destruct f eqn: F. 
-  destruct (fn_drop_glue f0) eqn: DROP. 
-  rewrite map_cons in H. inv H. 
-  inv H0. rewrite DROP in H1. inv H1. simpl. left. auto. 
-  right. auto. 
-  right. auto. 
-  right. auto. 
-  right. auto. 
-Qed. 
-
-Let f := fun (m : PTree.t ident) (k_v : PTree.elt * ident) => PTree.set (fst k_v) (snd k_v) m. 
-
-
-
-Lemma of_list_dom_v2:
-  forall (l:list (ident * globdef (Rusttypes.fundef function) type))  k, In k (map fst l) -> exists v, (PTree_Properties.of_list l) ! k = Some v.
+Lemma generate_dropm_inv_list_helper: forall (p:program) id gid,
+  list_norepet (prog_defs_names p)->
+  (generate_dropm p) ! id = Some gid 
+  -> exists f, In (gid , (Gfun (Internal f))) (prog_defs p) /\ f.(fn_drop_glue)= Some id. 
 Proof.
-  assert (REC: forall k l m,
-            In k (map fst l) \/ (exists v, m ! k = Some v) ->
-            exists v, (fold_left f l m) ! k = Some v).
-  { induction l as [ | [k1 v1] l]; simpl; intros.
-  - tauto.
-  - apply IHl. unfold f; rewrite PTree.gsspec. simpl. destruct (PTree.elt_eq k k1).
-    right. rewrite e. eexists v1. rewrite peq_true. auto. 
-    erewrite peq_false.  destruct H. destruct H. rewrite H in n. destruct n. auto.  
-    left. auto. 
-    right. auto. auto. 
-  }
-  intros. apply REC. auto.
-
-Admitted. 
-
-Lemma of_list_dom_v3:
-  forall (l:list (ident * globdef (Rusttypes.fundef function) type))  k, In k (map fst l) -> exists f0, (PTree_Properties.of_list l) ! k = Some (Gfun (Internal f0)).
-Proof.
-  assert (REC: forall k l m,
-            In k (map fst l) \/ (exists v, m ! k = Some v) ->
-            exists v, (fold_left f l m) ! k = Some v).
-  { induction l as [ | [k1 v1] l]; simpl; intros.
-  - tauto.
-  - apply IHl. unfold f; rewrite PTree.gsspec. simpl. destruct (PTree.elt_eq k k1).
-    right. rewrite e. eexists v1. rewrite peq_true. auto. 
-    erewrite peq_false.  destruct H. destruct H. rewrite H in n. destruct n. auto.  
-    left. auto. 
-    right. auto. auto. 
-  }
-  intros. apply REC. auto.
-
-Admitted. 
-
-
-
-
-Lemma H3: forall (id:ident) (gid:ident) (p:program),
-(generate_dropm p) ! id = Some gid ->
-(* (prog_defmap p) ! gid = Some (Gfun (Internal f)) ->  *)
-exists f, (prog_defmap p) ! gid = Some (Gfun (Internal f)). 
-Proof. 
-  intros. 
-  unfold generate_dropm in H.  
-  unfold PTree_Properties.of_list in H. 
-  unfold prog_defmap. simpl. 
-  eapply PTree_Properties.in_of_list in H. 
-  induction (prog_defs p). inv H. 
-  destruct a. simpl in H. destruct g eqn: G.
-  destruct f eqn: F. destruct (fn_drop_glue f0) eqn: DROP. 
-  inv H. inv H0. rewrite DROP in H1. inv H1. 
-  eauto. eapply IHl.  auto. exploit IHl; eauto.  
-  exploit IHl; eauto. 
-  exploit IHl; eauto. Qed. 
+    intros.
+    apply PTree_Properties.in_of_list in H0. 
+    induction (prog_defs p). inv H0.
+    destruct a. simpl in H0. destruct g eqn: G. destruct f eqn: F.
+    destruct (fn_drop_glue f0) eqn: DROP. 
+    simpl in *. rewrite DROP in H0. inv H0. inv H1. 
+    exists f0. split; auto. 
+    apply IHl in H1. destruct H1 as [f1 [A B]]. exists f1; auto. 
+    apply IHl in H0. destruct H0 as [f1 [A B]]. exists f1. split; auto. simpl. tauto. 
+    apply IHl in H0. destruct H0 as [f1 [A B]]. exists f1. split; auto. simpl. tauto.
+    apply IHl in H0. destruct H0 as [f1 [A B]]. exists f1. split; auto. simpl. tauto.
+  Qed. 
 
 Lemma generate_dropm_inv: forall p id gid,
     (generate_dropm p) ! id = Some gid ->
+    list_norepet (prog_defs_names p) ->
     exists f, (prog_defmap p) ! gid = Some (Gfun (Internal f)) /\ f.(fn_drop_glue) = Some id.
 Proof. 
   intros. 
-  eapply PTree_Properties.in_of_list in H. 
-  unfold prog_defmap. simpl. 
-  induction (prog_defs p). inv H.
-  destruct a. 
-  simpl in H. destruct g eqn: G.
-  destruct f eqn: F. 
-  destruct (fn_drop_glue f0) eqn: DROP.
-  rewrite map_cons in H. 
-  apply in_inv in H. inv H.   
-  exploit IHl; eauto. intros (f' & A & B). 
-  eexists f0.   
-  split; auto. eapply PTree.elements_complete. 
-  
-  unfold PTree_Properties.of_list. simpl.  
-  eapply PTree.elements_complete.  unfold fold_left. admit. 
-  exploit IHl; eauto. intros (f' & A & B). admit. 
-  exploit IHl; eauto. admit. 
-  exploit IHl; eauto. admit. 
-  exploit IHl; eauto. admit. 
-Admitted. 
+  exploit generate_dropm_inv_list_helper; eauto. intros (f & A & B). 
+  exists f. split; auto. apply PTree_Properties.of_list_norepet; auto. 
+Qed. 
 
 (* Is it enough? *)
 Lemma generate_drops_inv: forall ce tce dropm id co f,
