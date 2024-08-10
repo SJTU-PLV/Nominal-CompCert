@@ -851,6 +851,50 @@ Let ce := ge.(genv_cenv).
 
 Hypothesis CONSISTENT: composite_env_consistent ce.
 
+Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
+| member_footprint_struct: forall fofs fid fty
+    (STRUCT: co.(co_sv) = Struct)
+    (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+    (WT: sem_wt_loc ce m fp b (ofs + fofs) fty),
+    member_footprint m co b ofs fp (Member_plain fid fty)
+| member_footprint_enum: forall fofs fid fty
+    (STRUCT: co.(co_sv) = TaggedUnion)
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
+    (WT: sem_wt_loc ce m fp b (ofs + fofs) fty),
+    member_footprint m co b ofs fp (Member_plain fid fty)
+.
+
+(* hacking: simulate the deref_loc_rec to get the footprint and location of the
+value. fp is the start of the footprint *)
+Inductive deref_loc_rec_footprint (m: mem) (b: block) (ofs: Z) (fp: footprint) : list type -> block -> Z -> footprint -> Prop :=
+| deref_loc_rec_footprint_nil:
+  deref_loc_rec_footprint m b ofs fp [] b ofs fp
+| deref_loc_rec_footprint_cons: forall ty tys fp2 b1 ofs1 b2
+    (* The location (b1, ofs1) has footprint (fp_box b2 fp2) and the
+    location of (b2,0) has footprint fp2 *)
+    (FP: deref_loc_rec_footprint m b ofs fp tys b1 ofs1 (fp_box b2 fp2))
+    (LOAD: Mem.load Mptr m b1 ofs1 = Some (Vptr b2 (Ptrofs.zero)))
+    (* block b2 is freeable *)
+    (FREE: Mem.range_perm m b2 0 (sizeof ce ty) Cur Freeable),
+    (* how to relate ty and b *)
+    deref_loc_rec_footprint m b ofs fp (ty :: tys) b2 0 fp2.
+
+
+Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) : option drop_member_state -> footprint -> Prop :=
+| drop_member_fp_none:
+    drop_member_footprint m co b ofs None fp_emp
+| drop_member_fp_comp: forall fid fofs fty fp tyl b1 ofs1 fp1 compty
+    (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 fp1)
+    (* (b1, ofs1) is sem_wt_loc *)
+    (WT: sem_wt_loc ce m fp1 b1 ofs1 compty),
+    drop_member_footprint m co b ofs (Some (drop_member_comp fid fty compty tyl)) fp
+| drop_member_fp_box: forall fid fofs fty fp tyl b1 ofs1
+    (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 fp_emp),
+    drop_member_footprint m co b ofs (Some (drop_member_box fid fty tyl)) fp
+.
+
 Inductive sound_state: state -> Prop :=
 | sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ fpm
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
@@ -860,6 +904,20 @@ Inductive sound_state: state -> Prop :=
     (AS: ae ! pc = Some (AE.State Σ Γ Δ))
     (MM: mmatch ce fpm m e own),
     sound_state (State f s k e own m)
+| sound_dropplace: forall f st drops k e own m fpm
+    (MM: mmatch ce fpm m e own),
+    (* no need to maintain borrow check domain in dropplace? But how
+    to record the pc and next statement? *)
+    sound_state (Dropplace f st drops k e own m)
+| sound_dropstate_struct: forall id co fp fpl b ofs st m membs k
+    (CO: ce ! id = Some co)
+    (STRUCT: co.(co_sv) = Struct)
+    (* The key is how to prove semantics well typed can derive the
+    following two properties *)
+    (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) st fp)
+    (* all the remaining members are semantically well typed *)
+    (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs),
+    sound_state (Dropstate id (Vptr b ofs) st membs k m)
 .
 
 Lemma path_of_eval_place: forall e m p b ofs

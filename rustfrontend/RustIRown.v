@@ -197,7 +197,6 @@ Definition own_check_assign (own: own_env) (p: place) : option own_env :=
 
 Inductive drop_place_state : Type :=
 | drop_fully_owned
-    (p: place)
     (l: list place) : drop_place_state
 .
   
@@ -400,10 +399,10 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ((p, full) :: ps) k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_owned own p = true)
-    (DPLACE: st = drop_fully_owned p (if full then split_fully_own_place p (typeof_place p) else [p])),
+    (DPLACE: st = drop_fully_owned (if full then split_fully_own_place p (typeof_place p) else [p])),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le own m)
-| step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l fp
+| step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)
     (PTY: typeof_place p = Tbox ty)
@@ -411,17 +410,18 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (* Simulate free semantics *)
     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
     (* We are dropping p. fp is the fully owned place which is split into p::l *)
-    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
-      (Dropplace f (Some (drop_fully_owned fp l)) ps k le own m')
-| step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l fp
+    step_dropplace (Dropplace f (Some (drop_fully_owned (p :: l))) ps k le own m) E0
+      (Dropplace f (Some (drop_fully_owned l)) ps k le (move_place own p) m')
+| step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l
     (* It corresponds to the call step to the drop glue of this struct *)
     (PTY: typeof_place p = Tstruct orgs id)
     (SCO: ge.(genv_cenv) ! id = Some co)
     (COSTRUCT: co.(co_sv) = Struct)
     (PADDR: eval_place ge le m p b ofs),
-    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned fp l)) ps le own k) m)
-| step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l fp
+    (* update the ownership environment in continuation *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned (p :: l))) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned l)) ps le (move_place own p) k) m)
+| step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l
     (PTY: typeof_place p = Tvariant orgs id)
     (SCO: ge.(genv_cenv) ! id = Some co)
     (COENUM: co.(co_sv) = TaggedUnion)
@@ -431,11 +431,12 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
     (* use tag to choose the member *)
     (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
-    step_dropplace (Dropplace f (Some (drop_fully_owned fp (p :: l))) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned fp l)) ps le own k) m)
-| step_dropplace_next: forall f ps k le own m fp,
-    step_dropplace (Dropplace f (Some (drop_fully_owned fp nil)) ps k le own m) E0
-      (Dropplace f None ps k le (move_place own fp) m)
+    (* update the ownership environment in continuation *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned (p :: l))) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned l)) ps le (move_place own p) k) m)
+| step_dropplace_next: forall f ps k le own m,
+    step_dropplace (Dropplace f (Some (drop_fully_owned nil)) ps k le own m) E0
+      (Dropplace f None ps k le own m)
 | step_dropplace_return: forall f k le own m,
     step_dropplace (Dropplace f None nil k le own m) E0
       (State f Sskip k le own m)
