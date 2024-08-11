@@ -794,7 +794,6 @@ Lemma inject_incr_inv: forall j1 j2 j' s1 s2 s3 s1',
     (forall b1 b2 d, fst b2 <> Mem.tid s2 ->
                 j1 b1 = Some (b2, d) -> j2 b2 <> None) ->
      Mem.tid s2 = Mem.tid s3 ->
-    valid_t_blocks (Mem.sup_list s1') s2 ->
     Mem.meminj_thread_local j1 ->
     Mem.meminj_thread_local j2 ->
     Mem.meminj_thread_local j' ->
@@ -826,7 +825,7 @@ Lemma inject_incr_inv: forall j1 j2 j' s1 s2 s3 s1',
                Mem.next_tid s2' = Mem.next_tid s1'.
 
 Proof.
-  intros until s1'. intros Hconstr1 Htid Hvt Htl1 Htl2 Htl' Hntid. intros.
+  intros until s1'. intros Hconstr1 Htid Htl1 Htl2 Htl' Hntid. intros.
   destruct (update_meminj_sup s1' j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE.
   unfold update_meminj_sup in UPDATE.
   (* destruct (update_meminj12 (Mem.sup_list s1') j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE. *)
@@ -1862,7 +1861,12 @@ Qed.
     congruence.
   Qed.
       
-                        
+
+  (** TODO: problem here, the step2 may map some old blocks which were unmapped in m1 into
+      new blocks in m2', while these blocks are external blocks only
+
+      It looks possible that we can keep these lemmas below as they are by modifing [map_block]
+     *)
   Lemma step2_perm: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Max Nonempty ->
@@ -1877,7 +1881,7 @@ Qed.
       assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
       eapply supext_empty. eauto.
       exploit map_sup_1. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))).
-      reflexivity. eauto. eauto.
+      reflexivity. eauto. eauto. admit.
       unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence.
       eauto. eauto. eauto.
     - unfold m2'.
@@ -1885,7 +1889,7 @@ Qed.
       instantiate (1:= m2'). reflexivity.
       intro. inversion H2. eapply unchanged_on_perm; eauto.
       unfold Mem.valid_block. rewrite m2'1_support. eauto.
-  Qed.
+  Admitted.
 
   Lemma step2_perm2: forall b1 o1 b2 o2 k p,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
@@ -1893,7 +1897,7 @@ Qed.
       Mem.perm m1' b1 o1 k p.
   Proof.
     intros.
-    exploit INCRDISJ1; eauto. intros [NOTIN1 NOTIN2].
+    specialize (INCRNEWB _ _ _ H H0) as NOTIN2.
     assert (IN: sup_In b2 s2').
     { eapply IMGIN1'; eauto. }
     assert (Mem.perm m2'1 b2 o2 k p).
@@ -1906,10 +1910,10 @@ Qed.
       assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
       eapply supext_empty. eauto.
       exploit map_sup_1. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))).
-      reflexivity. eauto. eauto.
+      reflexivity. eauto. eauto. admit.
       unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
       intro. unfold m2'1 in H2. apply H3. eauto.
-  Qed.
+  Admitted.
 
   Lemma step2_content: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
@@ -1917,7 +1921,7 @@ Qed.
       (mem_memval m2' b2 o2) = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
     intros.
-    exploit INCRDISJ1; eauto. intros [NOTIN1 NOTIN2].
+    specialize (INCRNEWB _ _ _ H H0) as NOTIN2.
     assert (IN: sup_In b2 s2').
     { eapply IMGIN1'; eauto. }
     exploit unchanged_on_copy_sup_old. instantiate (1:= m2'). reflexivity.
@@ -1935,9 +1939,9 @@ Qed.
       assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
       eapply supext_empty. eauto.
       exploit map_sup_2. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))). unfold Mem.map_sup.
-      reflexivity. rewrite <- Mem.sup_list_in. eauto. eauto. eauto.
+      reflexivity. rewrite <- Mem.sup_list_in. eauto. admit. eauto. eauto.
       unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto. eauto.
-  Qed.
+  Admitted.
 
   Lemma step2_content_inject: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
@@ -2160,9 +2164,9 @@ Qed.
   Proof.
     intros. exploit step2_perm2; eauto.
     destruct (subinj_dec _ _ _ _ _ INCR1 H); auto.
-    exploit INCRDISJ2; eauto. intros [A B].
+    assert (~ Mem.valid_block m2 b2). admit. (*We need a INCRNEWB2*)
     inversion INJ12. exploit mi_mappedblocks; eauto.
-  Qed.
+  Admitted.
 
   (** Lemma C.14 *)
   Theorem INJ23' : Mem.inject j2' m2' m3'.
@@ -2185,7 +2189,7 @@ Qed.
         destruct (Mem.sup_dec b2 (Mem.support m2)).
         * assert (MAP2: j2 b2 = Some (b3,d2)).
           destruct (subinj_dec _ _ _ _ _ INCR2 MAP2'); auto.
-          exploit INCRDISJ2; eauto. intros [A B]. congruence.
+          assert (~ sup_In b2 (Mem.support m2)). admit. congruence.
           destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
           --
             eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
@@ -2249,7 +2253,7 @@ Qed.
         destruct (Mem.sup_dec b2 (Mem.support m2)).
         * assert (MAP2: j2 b2 = Some (b3,d2)).
           destruct (subinj_dec _ _ _ _ _ INCR2 MAP2'); auto.
-          exploit INCRDISJ2; eauto. intros [A B]. congruence.
+          admit.
           destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
           --
             eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
@@ -2336,7 +2340,8 @@ Qed.
       + exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
         inversion INJ13'. eapply mi_mappedblocks; eauto.
         unfold compose_meminj. rewrite MAP1',H. reflexivity.
-    - red. intros b2 b3 d2 b2' b3' d2' o2 o2' NEQ MAP2 MAP2' PERM2 PERM2'.
+    - admit. (** TODO3 *)
+      (* red. intros b2 b3 d2 b2' b3' d2' o2 o2' NEQ MAP2 MAP2' PERM2 PERM2'.
       destruct (subinj_dec _ _ _ _ _ INCR2 MAP2); destruct (subinj_dec _ _ _ _ _ INCR2 MAP2').
       + inversion INJ23. eapply mi_no_overlap; eauto.
         generalize MAXPERM2. intro MAXPERM2.
@@ -2358,7 +2363,7 @@ Qed.
         eapply step2_perm2'. instantiate (1:= o2).
         replace (o2 - o2) with 0 by lia. eauto. eauto. eauto. eauto.
         eapply step2_perm2'. instantiate (1:= o2').
-        replace (o2' - o2') with 0 by lia. eauto. eauto. eauto. eauto.
+        replace (o2' - o2') with 0 by lia. eauto. eauto. eauto. eauto. *)
     - intros.
       destruct (subinj_dec _ _ _ _ _ INCR2 H).
       + inversion INJ23. eapply mi_representable; eauto.
@@ -2407,7 +2412,7 @@ Qed.
           inversion INJ23. exploit mi_perm_inv. eauto. apply PERM3.
           intros [A|B]; try congruence.
           inversion UNC2. eapply unchanged_on_perm; eauto. eapply DOMIN2; eauto.
-      + exploit INCRDISJ2; eauto. intros [A B].
+      + assert (B: ~ Mem.valid_block m2 b2). admit.
         exploit ADDSAME; eauto. intros [b1 [MAP1' SAME]].
         inversion INJ13'. exploit mi_perm_inv.
         unfold compose_meminj. rewrite MAP1', MAP2'. replace (0 + d2) with d2 by lia.
@@ -2418,12 +2423,12 @@ Qed.
         left. eapply step2_perm1; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
         right. intro. apply P1. eapply step2_perm2; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
-  Qed.
+  Admitted.
 
   Lemma EXT_HIDDEN' : forall Hp1 Hp2,
     external_mid_hidden (injpw j1' m1' m2' Hp1) (injpw j2' m2' m3' Hp2).
   Proof.
-    inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
+    inversion EXT_HIDDEN. subst. clear Hm0 Hm1 Hm2 Hm3 Hm4.
     constructor.
     - intros.
       rewrite m2'_support in H. rewrite <- TID2 in H.
@@ -2521,14 +2526,18 @@ Proof.
     assert (Hmtl3 : Mem.meminj_thread_local j13'). inversion INJ13'. inv mi_thread. auto.
     assert (NTID : (Mem.next_tid (Mem.support m1') >= Mem.next_tid (Mem.support m2))%nat).
     inversion INJ12. inv mi_thread. inv Hms. destruct S1. unfold Mem.next_tid. lia.
-    rename DISJ13 into DISJ13'.
-    assert (DISJ13 : inject_incr_disjoint (compose_meminj j12 j23) j13' (Mem.support m1) (Mem.support m3)).
-    admit.
-     generalize (inject_incr_inv _ _ _ _ _ _ _ Hmtl1 Hmtl2 Hmtl3 NTID DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
-    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & Hmtl1' & Hmtl2' & HTID & HNTID).
+    assert (Hconstr1:  forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) -> j12 b1 = Some (b2, d) -> j23 b2 <> None).
+    unfold w1, w2 in H0. inv H0. auto.
+    assert (Ht23 : Mem.tid (Mem.support m2) = Mem.tid (Mem.support m3)).
+    inversion INJ23. inv mi_thread. inv Hms. auto.
+    assert (DISJ13' : inject_incr_disjoint_internal (compose_meminj j12 j23) j13' (Mem.support m1) (Mem.support m3)).
+    clear - DISJ13 INJ12 INJ23. red. intros. exploit DISJ13; eauto.
+    erewrite inject_tid. 2: eauto. erewrite inject_tid; eauto.
+     generalize (inject_incr_inv j12 j23 j13' (Mem.support m1) (Mem.support m2) (Mem.support m3) (Mem.support m1') Hconstr1 Ht23 Hmtl1 Hmtl2 Hmtl3 NTID DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13').
+    intros (j12' & j23' & m2'_sup & JEQ & INCRn1 & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & Hmtl1' & Hmtl2' & HTID & HNTID).
     subst.
     set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
-    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto. split; auto.
+    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto. split; auto. split; auto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto. split; auto. split; auto.
     assert (SUP2' : Mem.support m2' = m2'_sup).
     unfold m2'. rewrite m2'_support. reflexivity. auto.
@@ -2539,11 +2548,19 @@ Proof.
     intros. destruct H1. split; auto. red. unfold compose_meminj. rewrite H1. auto.
     split. split; rewrite SUP2'. setoid_rewrite HNTID. auto. auto.
     eapply Mem.unchanged_on_implies.
-    eapply UNCHANGE21; eauto. intros. apply H1.
+    eapply UNCHANGE21; eauto. intros. destruct H1. apply H1.
+    red. intros. eapply INCRDISJ12; eauto. erewrite <- inject_tid; eauto.
   - constructor; eauto. eapply ROUNC2; eauto. eapply MAXPERM2; eauto.
     split. split; rewrite SUP2'. setoid_rewrite HNTID. auto. auto.
     eapply Mem.unchanged_on_implies. eapply UNCHANGE22; eauto. intros. apply H1.
     eapply out_of_reach_trans; eauto. split; auto.
-  - eapply EXT_HIDDEN'; eauto.
+    red. intros. eapply INCRDISJ23; eauto. erewrite <- inject_tid; eauto.
+  - eapply EXT_HIDDEN'; eauto. split; auto. split; auto.
 Qed.
 
+(** Leaving 3 todos : 
+    1. Add another INCRNEWB stating that j2 b2 =  None -> j2' b2  <> None -> b2 ∉ s2
+    2. Fix the non-overlap of j23'
+    3. Fix the map_block construction to copy the unmapped -> mapped blocks in m1 to m2
+
+ *)
