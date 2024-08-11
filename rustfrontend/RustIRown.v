@@ -569,7 +569,7 @@ Inductive step : state -> trace -> state -> Prop :=
     blocks_of_env ge e = lb ->
     Mem.free_list m1 lb = Some m2 ->
     step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
-         
+
 | step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
     (CHKASSIGN: own_check_assign own1 p = Some own2),
     eval_place ge e m1 p b ofs ->

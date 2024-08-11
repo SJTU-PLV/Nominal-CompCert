@@ -266,8 +266,16 @@ Inductive footprint : Type :=
 | fp_enum (tag: Z) (fp: footprint)
 .
 
+(* Footprint used in interface *)
+Definition flat_footprint : Type := list block.
 
-Fixpoint footprint_flat (fp: footprint) : list block :=
+(* Similar to inject_separated *)
+Definition flat_footprint_separated (fp1 fp2: flat_footprint) (m : mem) : Prop :=
+  forall b, ~ In b fp1 ->
+       In b fp2 ->
+       ~ Mem.valid_block m b.
+
+Fixpoint footprint_flat (fp: footprint) : flat_footprint :=
   match fp with
   | fp_emp => nil
   | fp_box b fp' =>
@@ -549,31 +557,33 @@ Canonical Structure li_rs :=
   |}.
 
 Inductive wt_rs_world :=
-  rsw (sg: rust_signature) (fpl: list footprint) (m: mem).
+  rsw (sg: rust_signature) (fp: flat_footprint) (m: mem).
+
 
 Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
-| wt_rs_query_intro: forall sg m vf args fpl
+| wt_rs_query_intro: forall sg m vf args fpl fp
     (DIS: footprint_disjoint_list fpl)
-    (WT: sem_wt_val_list (sig_comp_env sg) m fpl args (sig_args sg)),
-    wt_rs_query (rsw sg fpl m) (rsq vf sg args m)
+    (WT: sem_wt_val_list (sig_comp_env sg) m fpl args (sig_args sg))
+    (* structured footprint is equivalent with the flat footprint in the interface *)
+    (EQ: list_equiv fp (concat (map footprint_flat fpl))),
+    wt_rs_query (rsw sg fp m) (rsq vf sg args m)
 .
 
 (* Only consider ownership transfer for now. The footprints of generic
 origins are more complicated *)
 Inductive rsw_acc : wt_rs_world -> wt_rs_world -> Prop :=
-| rsw_acc_intro: forall sg fpl fpl' m m'
-    (UNC: Mem.unchanged_on (fun b ofs => Forall (fun fp => (~ in_footprint b fp)) fpl) m m'),
-    (** TODO: add footprint_list increase and some footprint separation properties  *)
-    (* (FPINCR: footprint_incr fp fp'), *)
-    rsw_acc (rsw sg fpl m) (rsw sg fpl' m').
+| rsw_acc_intro: forall sg fp fp' m m'
+    (UNC: Mem.unchanged_on (fun b ofs => ~ In b fp) m m')
+    (* new footprint is separated *)
+    (SEP: flat_footprint_separated fp fp' m),
+    rsw_acc (rsw sg fp m) (rsw sg fp' m').
 
 Inductive wt_rs_reply : wt_rs_world -> rust_reply -> Prop :=
-| wt_rs_reply_intro: forall rfp m rv sg fpl
-    (WT: sem_wt_val (sig_comp_env sg) m rfp rv (sig_res sg)),
-    (** TODO: say that rfp is obtained from some footprint in the list
-    [fpl] *)
-    (* (FPINCR: footprint_incr rfp fp), *)
-    wt_rs_reply (rsw sg fpl m) (rsr rv m)
+| wt_rs_reply_intro: forall rfp m rv sg fp
+    (WT: sem_wt_val (sig_comp_env sg) m rfp rv (sig_res sg))
+    (* rfp is separated from fpl *)
+    (SEP: list_disjoint (footprint_flat rfp) fp),
+    wt_rs_reply (rsw sg fp m) (rsr rv m)
 .
 
 Definition wt_rs : invariant li_rs :=
@@ -626,7 +636,30 @@ Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont 
 blocks (denoted by variable names). It represents the ownership chain
 from a stack block. *)
 
+(* A footprint in a function frame *)
 Definition fp_map := PTree.t footprint.
+
+Definition flat_fp_map (fpm: fp_map) : flat_footprint :=
+  concat (map (fun elt => footprint_flat (snd elt)) (PTree.elements fpm)).
+
+(* The footprint in a module (similar to continuation) *)
+
+Inductive fp_frame : Type :=
+| fpf_emp
+| fpf_func (fpm: fp_map) (fpf: fp_frame)
+(* record the footprint in a drop glue: fp is the footprint being
+dropped and fpl is the footprint of the members to be dropped *)
+| fpf_drop (fp: footprint) (fpl: list footprint) (fpf: fp_frame)
+.
+
+Fixpoint flat_fp_frame (fpf: fp_frame) : flat_footprint :=
+  match fpf with
+  | fpf_emp => nil
+  | fpf_func fpm fpf =>
+      flat_fp_map fpm ++ flat_fp_frame fpf
+  | fpf_drop fp fpl fpf =>
+      footprint_flat fp ++ concat (map footprint_flat fpl) ++ flat_fp_frame fpf
+  end.
 
 Definition set_footprint_map (id: ident) (phl: list path) (v: footprint) (fpm: fp_map) : option fp_map :=
   match fpm!id with
@@ -895,30 +928,98 @@ Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) : o
     drop_member_footprint m co b ofs (Some (drop_member_box fid fty tyl)) fp
 .
 
+(* Soundness of continuation: the execution of current function cannot
+modify the footprint maintained by the continuation *)
+
+Inductive sound_cont (m: mem) : fp_frame -> cont -> Prop :=
+| sound_Kstop:
+  sound_cont m fpf_emp Kstop
+| sound_Kseq: forall s k fpf
+    (SOUND: sound_cont m fpf k),
+    sound_cont m fpf (Kseq s k)
+| sound_Kloop: forall s k fpf
+    (SOUND: sound_cont m fpf k),
+    sound_cont m fpf (Kloop s k)
+| sound_Kcall: forall p f e own k fpm fpf
+    (MM: mmatch ce fpm m e own)
+    (SOUND: sound_cont m fpf k),
+    sound_cont m (fpf_func fpm fpf) (Kcall p f e own k)
+| sound_Kdropplace: forall f e own k fpm fpf ps st
+    (MM: mmatch ce fpm m e own)
+    (SOUND: sound_cont m fpf k),
+    sound_cont m (fpf_func fpm fpf) (Kdropplace f st ps e own k)
+| sound_Kdropstate: forall k fpf st co fp ofs b membs fpl id
+    (CO: ce ! id = Some co)
+    (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) st fp)
+    (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
+    (SOUND: sound_cont m fpf k),
+    sound_cont m (fpf_drop fp fpl fpf) (Kdropcall id (Vptr b ofs) st membs k)
+.
+
+Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
+  match k with
+  | Kcall (Some p) _ _ _ _ =>
+      Some (typeof_place p)
+  | Kcall None _ _ _ _ =>
+      None
+  | Kstop => Some ttop
+  | Kseq _ k
+  | Kloop _ k
+  (* impossible? *)
+  | Kdropplace _ _ _ _ _ k
+  | Kdropcall _ _ _ _ k => typeof_cont_call ttop k
+  end.
+
+
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f s k e own m entry cfg pc instr ae Σ Γ Δ fpm
+| sound_regular_state: forall f s k e own m entry cfg pc instr (* ae Σ Γ Δ *) fpm fpf flat_fp sg
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (INSTR: cfg ! pc = Some instr)
     (MSTMT: match_instr_stmt f.(fn_body) instr s k)
-    (CHK: borrow_check ce f = OK ae)
-    (AS: ae ! pc = Some (AE.State Σ Γ Δ))
-    (MM: mmatch ce fpm m e own),
+    (* (CHK: borrow_check ce f = OK ae) *)
+    (* (AS: ae ! pc = Some (AE.State Σ Γ Δ)) *)
+    (MM: mmatch ce fpm m e own)
+    (CONT: sound_cont m fpf k)
+    (FLAT: flat_fp = flat_fp_frame (fpf_func fpm fpf))
+    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
     sound_state (State f s k e own m)
-| sound_dropplace: forall f st drops k e own m fpm
-    (MM: mmatch ce fpm m e own),
+| sound_dropplace: forall f st drops k e own m fpm fpf flat_fp sg
+    (MM: mmatch ce fpm m e own)
+    (CONT: sound_cont m fpf k)
+    (FLAT: flat_fp = flat_fp_frame (fpf_func fpm fpf))
+    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
     (* no need to maintain borrow check domain in dropplace? But how
     to record the pc and next statement? *)
     sound_state (Dropplace f st drops k e own m)
-| sound_dropstate_struct: forall id co fp fpl b ofs st m membs k
+| sound_dropstate: forall id co fp fpl b ofs st m membs k fpf flat_fp sg
     (CO: ce ! id = Some co)
-    (STRUCT: co.(co_sv) = Struct)
     (* The key is how to prove semantics well typed can derive the
     following two properties *)
     (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) st fp)
     (* all the remaining members are semantically well typed *)
-    (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs),
+    (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
+    (CONT: sound_cont m fpf k)
+    (FLAT: flat_fp = flat_fp_frame (fpf_drop fp fpl fpf))
+    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
+| sound_callstate: forall vf fd orgs org_rels tyargs tyres cconv m fpl args fpf k flat_fp sg
+    (FUNC: Genv.find_funct ge vf = Some fd)
+    (FUNTY: type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv)
+    (* arguments are semantics well typed *)
+    (WT: sem_wt_val_list ce m fpl args (type_list_of_typelist tyargs))
+    (CONT: sound_cont m fpf k)
+    (FLAT: flat_fp = flat_fp_frame fpf)
+    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
+    sound_state (Callstate vf args k m)
+| sound_returnstate: forall sg flat_fp m k retty rfp v
+    (ACC: rsw_acc (snd w) (rsw sg flat_fp m))
+    (* For now, all function must have return type *)
+    (RETY: typeof_cont_call (sig_res sg) k = Some retty)
+    (WT: sem_wt_val ce m rfp v retty)
+    (SEP: list_disjoint flat_fp (footprint_flat rfp)),
+    sound_state (Returnstate v k m)
 .
+
 
 Lemma path_of_eval_place: forall e m p b ofs
     (EVAL: eval_place ce e m p b ofs),
