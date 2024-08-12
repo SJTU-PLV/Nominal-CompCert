@@ -333,7 +333,7 @@ Proof.
     rewrite meminj_dom_compose. reflexivity.
     rewrite H. rauto.
   - red.
-    intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+    intros b1 b2 delta Hb Hb' Ht. unfold compose_meminj in Hb'.
     destruct (j12 b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
     destruct (j23 bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
     inv Hb'.
@@ -343,7 +343,8 @@ Proof.
     {
       eapply Mem.valid_block_inject_1 in Hfbi; eauto.
     }
-    edestruct H21; eauto.
+    edestruct H21; eauto. erewrite <- inject_tid; eauto.
+    inv Hm0. inv mi_thread. erewrite <- Hjs; eauto.
 Qed.
 
 
@@ -393,7 +394,16 @@ Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
     Therefore, we can prove the following lemma, which states that the internal accessbility of
     [w11, w12] to [w11',w12'] can indicate the same accessbility of [w2] which hides the mid-level
     memory
-*)
+ *)
+
+Lemma inject_val_tid : forall j m1 m2 b1 b2 d,
+    Mem.inject j m1 m2 ->
+    j b1 = Some (b2, d) ->
+    fst b1 = fst b2.
+Proof.
+  intros. inv H. inv mi_thread. erewrite Hjs; eauto.
+Qed.
+
 Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
     match_injp_comp_world (w11, w12)  w1 ->
     external_mid_hidden w11 w12 ->
@@ -425,7 +435,7 @@ Proof.
     auto.
   - rauto.
   - red.
-    intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+    intros b1 b2 delta Hb Hb' Ht. unfold compose_meminj in Hb'.
         destruct (j12' b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
         destruct (j23' bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
         inv Hb'.
@@ -433,12 +443,17 @@ Proof.
         + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
           destruct (j23 b) as [[? ?] |] eqn: Hb2.
           unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
-          exfalso. exploit H22; eauto. intros [X Y].
+          exfalso. exploit H22; eauto.
+          erewrite <- inject_tid; eauto.
+          erewrite <- inject_val_tid. 3: eauto. auto. eauto.
+          intros [X Y].
           eapply Mem.valid_block_inject_2 in Hb1; eauto.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H22; eauto. intros [X1 Y1]. intuition auto.
+          exploit H22; eauto. erewrite <- inject_tid; eauto.
+          erewrite <- inject_val_tid. 3: eauto. auto. eauto.
+          intros [X1 Y1]. intuition auto.
   - red. intros. unfold compose_meminj in H. rename b2 into b3.
     destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
     destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
@@ -504,7 +519,9 @@ Proof.
       destruct (j23 b2') as [[b3 d'']|] eqn:Hj23.
       * apply H21 in Hj23. congruence.
       * exploit Hconstr1; eauto. inv H12. destruct unchanged_on_thread_i. congruence.
-    + exploit H14; eauto. intros [A B].
+    + exploit H14; eauto. erewrite inject_val_tid. 3: eauto. 2: eauto.
+      erewrite inject_tid. 2: eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+      intros [A B].
       exfalso. exploit Hnb0; eauto. eapply Mem.valid_block_inject_2; eauto.
       intro. apply H. destruct H19 as [[_ Z] _]. congruence.
   - intros. red in Hnb3. destruct (j23 b2) as [[b3' d']|] eqn:Hj23.
@@ -524,7 +541,8 @@ Proof.
         eapply H15; eauto.
         erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H19 as [[_ TID]_]. congruence.
         replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
-    + exploit H22; eauto. intros [A B].
+    + exploit H22; eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+      intros [A B].
       exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
       erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
       apply H.

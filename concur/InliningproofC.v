@@ -15,7 +15,7 @@
 Require Import Coqlib Wfsimpl Maps Errors Integers.
 Require Import AST Linking Values Memory Globalenvs Events Smallstep.
 Require Import CallconvBig.
-(* Require Import VCompBig. *)
+Require Import VCompBig.
 
 Require Import Op Registers RTL.
 Require Import Inlining Inliningspec.
@@ -470,7 +470,7 @@ Notation init_tsup := (Mem.support init_tm).
 Inductive inj_incr' : injp_world -> inj_world -> Prop :=
   injp_inj_incr_intro : forall f f' m1 m2 s1' s2' Hm,
       inject_incr f f' ->
-      inject_separated f f' m1 m2 ->
+      inject_separated_internal f f' m1 m2 ->
       Mem.sup_include (Mem.support m1) s1' ->
       Mem.sup_include (Mem.support m2) s2' ->
       inj_incr' (injpw f m1 m2 Hm) (injw f' s1' s2').
@@ -1675,6 +1675,7 @@ Proof.
     eexists; split; econstructor; eauto.
     eapply match_stacks_sup_include with (Mem.support m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f) (m1 := m) (m1' := m'); eauto.
+    admit.
     eapply Mem.unchanged_on_support; eauto. apply H12. destruct H12 as [[_ X]]. auto.
     eapply Mem.unchanged_on_support; eauto. apply H13. destruct H13 as [[_ X]]. auto.
     etransitivity; eauto. econstructor; eauto.

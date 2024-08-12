@@ -1866,8 +1866,8 @@ Lemma match_cont_invariant:
     f b = None -> fst b = Mem.tid (Mem.support m) -> sup_In b bound -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
   inject_incr f f' ->
   Mem.tid (Mem.support m) = Mem.tid (Mem.support m') ->
-  (forall b, sup_In b bound -> f' b = f b) ->
-  (forall b b' delta, f' b = Some(b', delta) -> sup_In b' tbound -> f' b = f b) ->
+  (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> f' b = f b) ->
+  (forall b b' delta, f' b = Some(b', delta) -> sup_In b' tbound -> fst b = Mem.tid (Mem.support m) -> f' b = f b) ->
   match_cont f' cenv k tk m' bound tbound.
 Proof.
   induction 1; intros LOAD INCR TIDEQ INJ1 INJ2; econstructor; eauto.
@@ -1914,7 +1914,7 @@ Lemma match_cont_extcall:
   match_cont f cenv k tk m bound tbound ->
   Mem.unchanged_on_e (loc_unmapped f) m m' ->
   inject_incr f f' ->
-  inject_separated f f' m tm ->
+  inject_separated_internal f f' m tm ->
   Mem.sup_include bound (Mem.support m) -> Mem.sup_include tbound (Mem.support tm) ->
   match_cont f' cenv k tk m' bound tbound.
 Proof.
@@ -2401,7 +2401,7 @@ Lemma injp_acce_local :
     injp_max_perm_decrease m1 m2 ->
     injp_max_perm_decrease tm1 tm2 ->
     inject_incr j1 j2 ->
-    inject_separated f0 j2 wm wtm ->
+    inject_separated_internal f0 j2 wm wtm ->
     Mem.unchanged_on_e (fun b ofs => Mem.valid_block wm b /\ loc_unmapped f0 b ofs) m1 m2 ->
     Mem.unchanged_on_e (fun b ofs => Mem.valid_block wtm b /\ loc_out_of_reach f0 wm b ofs) tm1 tm2 ->
     injp_acce (injpw f0 wm wtm Htm) (injpw j2 m2 tm2 Hm2).
@@ -2746,21 +2746,21 @@ Proof.
   eapply match_cont_invariant; eauto. erewrite <- assign_loc_support; eauto.
   instantiate (1:= Y).
   {
-  destruct w eqn : Hw.
+  
+    destruct w eqn : Hw.
   inversion ACCE. subst f1 m0 m3 f' m1' m2'.
   eapply injp_acce_local; eauto.
   - eapply assign_loc_ro; eauto.
   - eapply assign_loc_ro; eauto.
   - eapply assign_loc_max_perm; eauto.
   - eapply assign_loc_max_perm; eauto.
-  - admit.
   - split. erewrite <- assign_loc_support; eauto. split; eauto.
     eapply Mem.unchanged_on_implies.
     eapply assign_loc_unchanged_on; eauto.
     intros. simpl.  destruct (eq_block b loc); auto.
     subst b. exfalso. destruct H3. destruct H3. red in H6.
     inversion F. subst b1 b2 ofs1 ofs2.
-    exploit H16; eauto. intros [Z1 Z2].
+    exploit H16; eauto. inversion H13. inversion unchanged_on_thread_e. congruence. intros [Z1 Z2].
     congruence.
   - inversion X; inversion H2; try congruence.
     + subst bf v0 v1 m'0 m'1.
@@ -2793,7 +2793,9 @@ Proof.
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-         ++  exploit H16; eauto. intros [Z3 Z4].
+         ++  exploit H16; eauto. erewrite inject_block_tid; eauto.
+             erewrite inject_tid. 2: eauto. inversion H14. inv unchanged_on_thread_e. congruence.
+             intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
     + rewrite <- Hw in *. subst.
@@ -2836,7 +2838,9 @@ Proof.
            rewrite H24,H7. congruence.
            clear - RANGE1 Z2 SIZE1. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-           ++ exploit H16; eauto. intros [ ]. congruence.
+         ++ exploit H16; eauto.  erewrite inject_block_tid; eauto.
+             erewrite inject_tid. 2: eauto. inversion H14. inv unchanged_on_thread_e. congruence.
+            intros [ ]. congruence.
       -- intros [ ]. congruence.
       -- generalize (sizeof_pos (prog_comp_env prog) (typeof a1)). intro.
          rewrite <- SIZE in H17. extlia.
@@ -2869,7 +2873,9 @@ Proof.
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-         ++  exploit H16; eauto. intros [Z3 Z4].
+         ++  exploit H16; eauto.  erewrite inject_block_tid; eauto.
+             erewrite inject_tid. 2: eauto. inversion H14. inv unchanged_on_thread_e. congruence.
+             intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
   }
