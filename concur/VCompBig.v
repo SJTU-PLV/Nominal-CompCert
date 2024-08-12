@@ -343,8 +343,14 @@ Proof.
     {
       eapply Mem.valid_block_inject_1 in Hfbi; eauto.
     }
-    edestruct H21; eauto. erewrite <- inject_tid; eauto.
+    edestruct H22; eauto. erewrite <- inject_tid; eauto.
     inv Hm0. inv mi_thread. erewrite <- Hjs; eauto.
+  - red. intros. unfold compose_meminj in H0.
+    destruct (j12 b1) as [[bi d]|] eqn: Hj1; inv H0.
+    destruct (j23 bi) as [[b2' d']|] eqn: Hj2; inv H2.
+    exploit H15; eauto. unfold meminj_dom. rewrite H. reflexivity.
+    intros [A B]. split; auto.
+    intro. apply B. red. erewrite inject_block_tid; eauto.
 Qed.
 
 
