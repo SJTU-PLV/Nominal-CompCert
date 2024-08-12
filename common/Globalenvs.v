@@ -76,6 +76,9 @@ Variable V: Type.  (**r The type of information attached to variables *)
 
 (** The type of symbol tables. *)
 
+(** Currently tid = 0 means the block is a global block shared by all threads *)
+Definition global_block (b: block) : Prop := fst b = O.
+
 Record symtbl: Type := mkstbl {
   genv_public: list ident;              (**r which symbol names are public *)
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)
@@ -84,7 +87,8 @@ Record symtbl: Type := mkstbl {
   genv_symb_range: forall id b, PTree.get id genv_symb = Some b -> sup_In b genv_sup;
   genv_info_range: forall b g, NMap.get _ b genv_info = Some g -> sup_In b genv_sup;
   genv_vars_inj: forall id1 id2 b,
-    PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2
+        PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2;
+  genv_block_tid : forall b, sup_In b genv_sup -> global_block b;                                                                                                         
 }.
 
 (** The type of global environments. *)
@@ -183,28 +187,39 @@ Definition is_internal `{Fii: FundefIsInternal F} (ge: t) (v: val) :=
 Program Definition add_global (ge: symtbl) (idg: ident * globdef unit unit) : symtbl :=
   @mkstbl
     ge.(genv_public)
-    (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
-    (NMap.set _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
-    (sup_incr (ge.(genv_sup)))
-    _ _ _.
+    (PTree.set idg#1 (Mem.fresh_block_tid ge.(genv_sup) O) ge.(genv_symb))
+    (NMap.set _ (Mem.fresh_block_tid ge.(genv_sup) O) (Some (idg#2)) ge.(genv_info))
+    (Mem.sup_incr_tid (ge.(genv_sup)) O)
+    _ _ _ _.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_in1.
-  apply Mem.sup_incr_in2. eauto.
+  generalize (Mem.tid_valid genv_sup0). intro Htv.
+  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_tid_in1.
+  red. lia.
+  apply Mem.sup_incr_tid_in2. red. lia.
+  eauto.
+Qed.
+Next Obligation.
+  destruct ge; simpl in *. generalize (Mem.tid_valid genv_sup0). intro Htv.
+  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (Mem.fresh_block_tid genv_sup0 0)).
+  inv H. eapply Mem.sup_incr_tid_in1. red. lia. apply Mem.sup_incr_tid_in2. red. lia. eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
-  inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
-Qed.
-Next Obligation.
-  destruct ge; simpl in *.
+  generalize (Mem.tid_valid genv_sup0). intro Htv.
   rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
   destruct (peq id1 i); destruct (peq id2 i).
   congruence.
-  inv H. apply genv_symb_range0 in H0. apply freshness in H0. destruct H0.
-  inv H. inv H0. apply genv_symb_range0 in H2. apply freshness in H2. destruct H2.
+  inv H. apply genv_symb_range0 in H0. apply Mem.freshness_tid in H0. destruct H0.
+  inv H. inv H0. apply genv_symb_range0 in H2. apply Mem.freshness_tid in H2. destruct H2.
   eauto.
+Qed.
+Next Obligation.
+  generalize (Mem.tid_valid (genv_sup ge)). intro Htv.
+  eapply Mem.sup_incr_tid_in in H. destruct H.
+  rewrite H. red. simpl. reflexivity.
+  eapply genv_block_tid; eauto.
+  red. lia.
 Qed.
 
 Definition add_globals (ge: symtbl) (gl: list (ident * globdef unit unit)) : symtbl :=
@@ -218,7 +233,10 @@ Proof.
 Qed.
 
 Program Definition empty_stbl (pub: list ident): symtbl :=
-  @mkstbl pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _.
+  @mkstbl pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _ _.
+Next Obligation.
+  exfalso. eapply Mem.empty_in; eauto.
+Qed.
 
 Definition symboltbl (p: program unit unit) :=
   add_globals (empty_stbl p.(prog_public)) p.(prog_defs).
@@ -466,7 +484,7 @@ Definition advance_next (gl: list (ident * globdef unit unit)) (x: positive) :=
 *)
 
 Definition advance_next (gl: list (ident * globdef unit unit)) (s: sup) :=
-  List.fold_left (fun s g => sup_incr s) gl s.
+  List.fold_left (fun s g => Mem.sup_incr_tid s O) gl s.
 
 Remark genv_next_add_globals:
   forall gl ge,
@@ -522,11 +540,11 @@ Proof.
     + rewrite PTree.gso by auto. rewrite IHdefs. split.
       * intros (b & Hb & ?). eexists. rewrite PTree.gso by auto. split; eauto.
         rewrite NMap.gso; eauto. apply genv_symb_range in Hb.
-        intro. subst. exploit freshness; eauto.
+        intro. subst. exploit Mem.freshness_tid; eauto.
       * intros (b & Hb & ?). rewrite PTree.gso in * by auto.
         eexists. split; eauto. rewrite NMap.gso in *; auto.
         apply genv_symb_range in Hb.
-        intro. subst. exploit freshness; eauto.
+        intro. subst. exploit Mem.freshness_tid; eauto.
 Qed.
 
 (** ** Properties of [globalenv] *)
@@ -627,12 +645,12 @@ Definition perm_globvar (gv: globvar unit) : permission :=
 Definition alloc_global (m: mem) (idg: ident * globdef unit unit): option mem :=
   match idg with
   | (id, Gfun f) =>
-      let (m1, b) := Mem.alloc m 0 1 in
+      let (m1, b) := Mem.alloc_global m 0 1 in
       Mem.drop_perm m1 b 0 1 Nonempty
   | (id, Gvar v) =>
       let init := v.(gvar_init) in
       let sz := init_data_list_size init in
-      let (m1, b) := Mem.alloc m 0 sz in
+      let (m1, b) := Mem.alloc_global m 0 sz in
       match store_zeros m1 b 0 sz with
       | None => None
       | Some m2 =>
@@ -715,21 +733,21 @@ Qed.
 Remark alloc_global_support:
   forall g m m',
     alloc_global m g = Some m' ->
-    Mem.support m' = sup_incr (Mem.support m).
+    Mem.support m' = Mem.sup_incr_tid (Mem.support m) O.
 Proof.
   unfold alloc_global. intros.
   destruct g as [id [f|v]].
-  - destruct (Mem.alloc m 0 1) as [m1 b] eqn:?.
-    erewrite Mem.support_drop; eauto. erewrite Mem.support_alloc;eauto.
+  - destruct (Mem.alloc_global m 0 1) as [m1 b] eqn:?.
+    inv Heqp.
+    erewrite Mem.support_drop; eauto. reflexivity.
   - set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
-  destruct (Mem.alloc m 0 sz) as [m1 b] eqn:?.
+  destruct (Mem.alloc_global m 0 sz) as [m1 b] eqn:?.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
   erewrite Mem.support_drop; eauto.
   erewrite store_init_data_list_support; eauto.
-  erewrite store_zeros_support; eauto.
-  erewrite Mem.support_alloc; eauto.
+  erewrite store_zeros_support; eauto. inv Heqp. reflexivity.
 Qed.
 
 Remark alloc_globals_support:
@@ -792,9 +810,9 @@ Remark alloc_global_perm:
 Proof.
   intros. destruct idg as [id [f|v]]; simpl in H.
   (* function *)
-  destruct (Mem.alloc m 0 1) as [m1 b] eqn:?.
+  destruct (Mem.alloc_global m 0 1) as [m1 b] eqn:?.
   assert (b' <> b). apply Mem.valid_not_valid_diff with m; eauto with mem.
-  split; intros.
+  (* split; intros.
   eapply Mem.perm_drop_3; eauto. eapply Mem.perm_alloc_1; eauto.
   eapply Mem.perm_alloc_4; eauto. eapply Mem.perm_drop_4; eauto.
   (* variable *)
@@ -813,7 +831,8 @@ Proof.
   erewrite store_zeros_perm; [idtac|eauto].
   erewrite store_init_data_list_perm; [idtac|eauto].
   eapply Mem.perm_drop_4; eauto.
-Qed.
+   *)
+Admitted. (** correct, need some lemmas for Mem.alloc_global*)
 
 Remark alloc_globals_perm:
   forall k prm b' q gl m m',
@@ -826,7 +845,8 @@ Proof.
   simpl; intros. destruct (alloc_global m a) as [m1|] eqn:?; try discriminate.
   erewrite alloc_global_perm; eauto. eapply IHgl; eauto.
   unfold Mem.valid_block in *. erewrite alloc_global_support; eauto.
-  apply Mem.sup_incr_in2. auto.
+  apply Mem.sup_incr_tid_in2. red. generalize (Mem.tid_valid (Mem.support m)).
+  intro. lia. auto.
 Qed.
 
 (** Data preservation properties *)

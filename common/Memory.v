@@ -254,6 +254,20 @@ Next Obligation.
   rewrite update_list_length. destruct s. auto.
 Qed.
 
+(** increase for different threads *)
+
+Definition fresh_block_tid (s : sup) (tid : nat) :=
+  let pl := nth tid (stacks s) nil in (tid, fresh_pos pl).
+
+Program Definition sup_incr_tid (s: sup) (t : nat) :=
+  let pl := nth t (stacks s) nil in
+  mksup (update_list t (stacks s) (fresh_pos pl :: pl)) (tid s) _.
+Next Obligation.
+  rewrite update_list_length. destruct s. auto.
+Qed.
+
+Definition valid_t_sup (s: sup) (tid : nat) := (0 <= tid < length (stacks s))%nat.
+
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
 (** proof of sup_include_dec *)
@@ -414,6 +428,53 @@ Proof. intros. apply sup_incr_in. left. auto. Qed.
 Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
 Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
+Theorem sup_incr_tid_in : forall b s t,
+    valid_t_sup s t ->
+    sup_In b (sup_incr_tid s t) <-> b = (fresh_block_tid s t) \/ sup_In b s.
+Proof.
+  intros b s t Hv. red in Hv. split.
+  - destruct s. unfold sup_In, sup_incr_tid. simpl.
+  intros. inv H. simpl in *. unfold fresh_block_tid.
+  simpl.
+  destruct (Nat.eq_dec t tid1).
+    + subst.
+      rewrite nth_error_update_list_same in H0; eauto. inv H0. destruct H1.
+      left. subst. reflexivity.
+      right. econstructor; eauto. simpl.
+      erewrite nth_error_nth'; eauto.
+      lia.
+      lia.
+    + right. econstructor. simpl.
+      erewrite <- nth_error_update_list_diff; eauto. lia. auto.
+  - intros. destruct H.
+    destruct s. simpl in *. unfold sup_incr_tid. simpl.
+    unfold fresh_block_tid in H. simpl in *. subst.
+    econstructor; simpl; eauto.
+    apply nth_error_update_list_same; eauto. lia.
+    left. auto.
+    destruct s. unfold sup_incr_tid. inv H. simpl.
+    destruct (Nat.eq_dec t tid1).
+    subst.
+    econstructor; simpl.
+    rewrite nth_error_update_list_same; eauto. simpl in Hv. lia. simpl in H0.
+    erewrite nth_error_nth; eauto.
+    right. auto.
+    econstructor; simpl in *; eauto.
+    erewrite nth_error_update_list_diff; eauto. lia.
+Qed.
+
+Theorem sup_incr_tid_in1 : forall s t, valid_t_sup s t -> sup_In (fresh_block_tid s t) (sup_incr_tid s t).
+Proof. intros. apply sup_incr_tid_in; auto. Qed.
+Theorem sup_incr_tid_in2 : forall s t, valid_t_sup s t -> sup_include s (sup_incr_tid s t).
+Proof. intros. intro. intro. apply sup_incr_tid_in; auto. Qed.
+
+Theorem freshness_tid : forall s t, ~sup_In (fresh_block_tid s t) s.
+Proof.
+  intros. destruct s as [stacks tid].
+  intro. inv H. simpl in H2.
+  erewrite nth_error_nth in H4; eauto.
+  apply freshness_pos in H4. eauto.
+Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -1019,6 +1080,40 @@ Next Obligation.
 Qed.
 Next Obligation.
   apply access_default.
+Qed.
+
+Definition nextblock_global (m : mem) := fresh_block_tid (Mem.support m) O.
+
+Program Definition alloc_global (m: mem) (lo hi: Z) :=
+  (mkmem (NMap.set _ (nextblock_global m)
+                   (ZMap.init Undef)
+                   m.(mem_contents))
+         (NMap.set _ (nextblock_global m)
+                   (setpermN lo hi (Some Freeable) (ZMap.init (fun k => None)))
+                   m.(mem_access))
+         (sup_incr_tid (m.(support)) O)
+         _ _ _ _,
+   (nextblock_global m)).
+Next Obligation.
+  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock_global m)).
+  subst b. rewrite setpermN_inv.
+  destruct (zle lo ofs && zlt ofs hi). constructor.
+  simpl. auto.
+  apply access_max.
+Qed.
+Next Obligation.
+  generalize (tid_valid (Mem.support m)). intro Htv.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock_global m)).
+  subst b. elim H. apply sup_incr_tid_in1. red. lia.
+  apply nextblock_noaccess. red; intros; elim H.
+  apply sup_incr_tid_in2. red. lia. auto.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock_global m)). auto. apply contents_default.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock_global m)). auto.
+  rewrite setpermN_default. auto. apply access_default.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
@@ -7468,6 +7563,8 @@ Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes
 Global Hint Resolve
   Mem.sup_incr_in1
   Mem.sup_incr_in2
+  Mem.sup_incr_tid_in1
+  Mem.sup_incr_tid_in2
   Mem.sup_list_in
   Mem.sup_include_refl
   Mem.sup_include_trans
