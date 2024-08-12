@@ -2519,10 +2519,19 @@ Theorem support_alloc:
 Proof.
   injection ALLOC; intros. rewrite <- H0; auto.
 Qed.
+
 Theorem alloc_result:
   b = nextblock m1.
 Proof.
   injection ALLOC; auto.
+Qed.
+
+Theorem alloc_block_noglobal:
+  fst b <> O.
+Proof.
+  rewrite alloc_result. simpl. intro.
+  generalize (tid_valid (support m1)).
+  intro. extlia.
 Qed.
 
 Theorem valid_block_alloc:
@@ -2724,7 +2733,231 @@ End ALLOC.
 Local Hint Resolve valid_block_alloc fresh_block_alloc valid_new_block: mem.
 Local Hint Resolve valid_access_alloc_other valid_access_alloc_same: mem.
 Local Hint Resolve support_alloc : mem.
+
+(** ** Properties related to [alloc]. *)
+
+Section ALLOCGLOBAL.
+
+Variable m1: mem.
+Variables lo hi: Z.
+Variable m2: mem.
+Variable b: block.
+Hypothesis ALLOC: alloc_global m1 lo hi = (m2, b).
+
+Theorem support_alloc_global:
+  support m2 = sup_incr_tid (support m1) O.
+Proof.
+  injection ALLOC; intros. rewrite <- H0; auto.
+Qed.
+
+Theorem alloc_global_result:
+  b = nextblock_global m1.
+Proof.
+  injection ALLOC; auto.
+Qed.
+
+Theorem valid_block_alloc_global:
+  forall b', valid_block m1 b' -> valid_block m2 b'.
+Proof.
+  unfold valid_block; intros. rewrite support_alloc_global.
+  apply sup_incr_tid_in2. red. generalize (tid_valid (support m1)). lia. auto.
+Qed.
+
+Theorem fresh_block_alloc_global:
+  ~(valid_block m1 b).
+Proof.
+  unfold valid_block. rewrite alloc_global_result. apply freshness_tid.
+Qed.
+
+Theorem valid_new_global_block:
+  valid_block m2 b.
+Proof.
+  unfold valid_block. rewrite alloc_global_result. rewrite support_alloc_global.
+  apply sup_incr_tid_in1. red. generalize (tid_valid (support m1)). lia.
+Qed.
+
+Local Hint Resolve valid_block_alloc_global fresh_block_alloc_global
+  valid_new_global_block: mem.
+
+Theorem valid_block_alloc_global_inv:
+  forall b', valid_block m2 b' -> b' = b \/ valid_block m1 b'.
+Proof.
+  unfold valid_block; intros.
+  rewrite support_alloc_global in H. rewrite alloc_global_result.
+  apply sup_incr_tid_in. red.  generalize (tid_valid (support m1)). lia. auto.
+Qed.
+
+Theorem perm_alloc_global_1:
+  forall b' ofs k p, perm m1 b' ofs k p -> perm m2 b' ofs k p.
+Proof.
+  unfold perm; intros. injection ALLOC; intros. rewrite <- H1; simpl.
+  subst b. rewrite NMap.gsspec. destruct (NMap.elt_eq b' (nextblock_global m1)); auto.
+  rewrite nextblock_noaccess in H. contradiction. subst b'. apply freshness_tid.
+Qed.
+
+Theorem perm_alloc_global_2:
+  forall ofs k, lo <= ofs < hi -> perm m2 b ofs k Freeable.
+Proof.
+  unfold perm; intros. injection ALLOC; intros. rewrite <- H1; simpl.
+  subst b. unfold NMap.get. rewrite NMap.gss.
+  rewrite setpermN_inside. simpl. auto with mem. lia.
+Qed.
+
+Theorem perm_alloc_global_inv:
+  forall b' ofs k p,
+  perm m2 b' ofs k p ->
+  if eq_block b' b then lo <= ofs < hi else perm m1 b' ofs k p.
+Proof.
+  intros until p; unfold perm. inv ALLOC. simpl.
+  rewrite NMap.gsspec.  destruct (NMap.elt_eq b' (nextblock_global m1)); intros.
+  assert (zle lo ofs && zlt ofs hi = true).
+    rewrite setpermN_inv in H.
+    destruct(zle lo ofs && zlt ofs hi). reflexivity. contradiction.
+  - destruct(eq_block b' (nextblock_global m1)).
+    rewrite setpermN_inv in H.
+    + split. destruct (zle lo ofs); try auto. try contradiction.
+    destruct (zlt ofs hi). try auto. simpl in H.
+    destruct (zle lo ofs); simpl in H; contradiction.
+    + congruence.
+  - destruct (eq_block b' (nextblock_global m1)).
+    + congruence.
+    + auto.
+Qed.
+
+Theorem perm_alloc_global_3:
+  forall ofs k p, perm m2 b ofs k p -> lo <= ofs < hi.
+Proof.
+  intros. exploit perm_alloc_global_inv; eauto. rewrite dec_eq_true; auto.
+Qed.
+
+Theorem perm_alloc_global_4:
+  forall b' ofs k p, perm m2 b' ofs k p -> b' <> b -> perm m1 b' ofs k p.
+Proof.
+  intros. exploit perm_alloc_global_inv; eauto. rewrite dec_eq_false; auto.
+Qed.
+
+Local Hint Resolve perm_alloc_global_1 perm_alloc_global_2
+  perm_alloc_global_3 perm_alloc_global_4: mem.
+
+Theorem valid_access_alloc_global_other:
+  forall chunk b' ofs p,
+  valid_access m1 chunk b' ofs p ->
+  valid_access m2 chunk b' ofs p.
+Proof.
+  intros. inv H. constructor; auto with mem.
+  red; auto with mem.
+Qed.
+
+Theorem valid_access_alloc_global_same:
+  forall chunk ofs,
+  lo <= ofs -> ofs + size_chunk chunk <= hi -> (align_chunk chunk | ofs) ->
+  valid_access m2 chunk b ofs Freeable.
+Proof.
+  intros. constructor; auto with mem.
+  red; intros. apply perm_alloc_global_2. lia.
+Qed.
+
+Local Hint Resolve valid_access_alloc_global_other valid_access_alloc_global_same: mem.
+
+Theorem valid_access_alloc_global_inv:
+  forall chunk b' ofs p,
+  valid_access m2 chunk b' ofs p ->
+  if eq_block b' b
+  then lo <= ofs /\ ofs + size_chunk chunk <= hi /\ (align_chunk chunk | ofs)
+  else valid_access m1 chunk b' ofs p.
+Proof.
+  intros. inv H.
+  generalize (size_chunk_pos chunk); intro.
+  destruct (eq_block b' b). subst b'.
+  assert (perm m2 b ofs Cur p). apply H0. lia.
+  assert (perm m2 b (ofs + size_chunk chunk - 1) Cur p). apply H0. lia.
+  exploit perm_alloc_global_inv. eexact H2. rewrite dec_eq_true. intro.
+  exploit perm_alloc_global_inv. eexact H3. rewrite dec_eq_true. intro.
+  intuition lia.
+  split; auto. red; intros.
+  exploit perm_alloc_global_inv. apply H0. eauto. rewrite dec_eq_false; auto.
+Qed.
+
+Theorem load_alloc_global_unchanged:
+  forall chunk b' ofs,
+  valid_block m1 b' ->
+  load chunk m2 b' ofs = load chunk m1 b' ofs.
+Proof.
+  intros. unfold load.
+  destruct (valid_access_dec m2 chunk b' ofs Readable).
+  exploit valid_access_alloc_global_inv; eauto. destruct (eq_block b' b); intros.
+  subst b'. exfalso. eauto with mem.
+  rewrite pred_dec_true; auto.
+  injection ALLOC; intros. rewrite <- H2; simpl.
+  setoid_rewrite NMap.gso. auto. rewrite H1. apply not_eq_sym; eauto with mem.
+  rewrite pred_dec_false. auto.
+  eauto with mem.
+Qed.
+
+Theorem load_alloc_global_other:
+  forall chunk b' ofs v,
+  load chunk m1 b' ofs = Some v ->
+  load chunk m2 b' ofs = Some v.
+Proof.
+  intros. rewrite <- H. apply load_alloc_global_unchanged. eauto with mem.
+Qed.
+
+Theorem load_alloc_global_same:
+  forall chunk ofs v,
+  load chunk m2 b ofs = Some v ->
+  v = Vundef.
+Proof.
+  intros. exploit load_result; eauto. intro. rewrite H0.
+  injection ALLOC; intros. rewrite <- H2; simpl. rewrite <- H1.
+  setoid_rewrite NMap.gss. destruct (size_chunk_nat_pos chunk) as [n E]. rewrite E. simpl.
+  rewrite ZMap.gi. apply decode_val_undef.
+Qed.
+
+Theorem load_alloc_global_same':
+  forall chunk ofs,
+  lo <= ofs -> ofs + size_chunk chunk <= hi -> (align_chunk chunk | ofs) ->
+  load chunk m2 b ofs = Some Vundef.
+Proof.
+  intros. assert (exists v, load chunk m2 b ofs = Some v).
+    apply valid_access_load. constructor; auto.
+    red; intros. eapply perm_implies. apply perm_alloc_global_2. lia. auto with mem.
+  destruct H2 as [v LOAD]. rewrite LOAD. decEq.
+  eapply load_alloc_global_same; eauto.
+Qed.
+
+Theorem loadbytes_alloc_global_unchanged:
+  forall b' ofs n,
+  valid_block m1 b' ->
+  loadbytes m2 b' ofs n = loadbytes m1 b' ofs n.
+Proof.
+  intros. unfold loadbytes.
+  destruct (range_perm_dec m1 b' ofs (ofs + n) Cur Readable).
+  rewrite pred_dec_true.
+  injection ALLOC; intros A B. rewrite <- B; simpl.
+  setoid_rewrite NMap.gso. auto. rewrite A. eauto with mem.
+  red; intros. eapply perm_alloc_global_1; eauto.
+  rewrite pred_dec_false; auto.
+  red; intros; elim n0. red; intros. eapply perm_alloc_global_4; eauto. eauto with mem.
+Qed.
+
+Theorem loadbytes_alloc_global_same:
+  forall n ofs bytes byte,
+  loadbytes m2 b ofs n = Some bytes ->
+  In byte bytes -> byte = Undef.
+Proof.
+  unfold loadbytes; intros. destruct (range_perm_dec m2 b ofs (ofs + n) Cur Readable); inv H.
+  revert H0.
+  injection ALLOC; intros A B. rewrite <- A; rewrite <- B; simpl. setoid_rewrite NMap.gss.
+  generalize (Z.to_nat n) ofs. induction n0; simpl; intros.
+  contradiction.
+  rewrite ZMap.gi in H. destruct H; eauto.
+Qed.
+
+End ALLOCGLOBAL.
+
+
 (** ** Properties related to [free]. *)
+
 
 Theorem range_perm_free:
   forall m1 b lo hi,
@@ -5232,6 +5465,81 @@ Proof.
   apply sup_incr_in1.
 Qed.
 
+Lemma alloc_global_right_inj:
+  forall f m1 m2 lo hi b2 m2',
+  mem_inj f m1 m2 ->
+  alloc_global m2 lo hi = (m2', b2) ->
+  mem_inj f m1 m2'.
+Proof.
+  intros. injection H0. intros NEXT MEM.
+  inversion H. constructor.
+(* perm *)
+  intros. eapply perm_alloc_global_1; eauto.
+(* align *)
+  eauto.
+(* mem_contents *)
+  intros.
+  assert (perm m2 b0 (ofs + delta) Cur Readable).
+    eapply mi_perm0; eauto.
+  assert (valid_block m2 b0) by eauto with mem.
+  rewrite <- MEM; simpl. setoid_rewrite NMap.gso. eauto with mem.
+  rewrite NEXT. eapply valid_not_valid_diff; eauto with mem. eapply fresh_block_alloc_global; eauto.
+Qed.
+
+Lemma alloc_global_left_mapped_inj:
+  forall f m1 m2 lo hi m1' b1 b2 delta,
+  mem_inj f m1 m2 ->
+  alloc_global m1 lo hi = (m1', b1) ->
+  valid_block m2 b2 ->
+  inj_offset_aligned delta (hi-lo) ->
+  (forall ofs k p, lo <= ofs < hi -> perm m2 b2 (ofs + delta) k p) ->
+  f b1 = Some(b2, delta) ->
+  mem_inj f m1' m2.
+Proof.
+  intros. inversion H. constructor.
+(* perm *)
+  intros.
+  exploit perm_alloc_global_inv; eauto. intros. destruct (eq_block b0 b1). subst b0.
+  rewrite H4 in H5; inv H5. eauto. eauto.
+(* align *)
+  intros. destruct (eq_block b0 b1).
+  subst b0. assert (delta0 = delta) by congruence. subst delta0.
+  assert (lo <= ofs < hi).
+  { eapply perm_alloc_global_3; eauto. apply H6. generalize (size_chunk_pos chunk); lia. }
+  assert (lo <= ofs + size_chunk chunk - 1 < hi).
+  { eapply perm_alloc_global_3; eauto. apply H6. generalize (size_chunk_pos chunk); lia. }
+  apply H2. lia.
+  eapply mi_align0 with (ofs := ofs) (p := p); eauto.
+  red; intros. eapply perm_alloc_global_4; eauto.
+(* mem_contents *)
+  injection H0; intros NEXT MEM.
+  intros. rewrite <- MEM; simpl. rewrite NEXT.
+  exploit perm_alloc_global_inv; eauto. intros.
+  rewrite NMap.gsspec.
+  destruct (NMap.elt_eq b0 b1). rewrite ZMap.gi. constructor.
+  apply mi_memval. auto. auto. eapply perm_alloc_global_4 in H0. eauto. auto. auto.
+Qed.
+
+Theorem alloc_global_inject_neutral:
+  forall s m lo hi b m',
+  alloc_global m lo hi = (m', b) ->
+  inject_neutral s m ->
+  sup_include (sup_incr_tid (support m) 0) s ->
+  inject_neutral s m'.
+Proof.
+  intros; red.
+  eapply alloc_global_left_mapped_inj with (m1 := m) (b2 := b) (delta := 0).
+  eapply alloc_global_right_inj; eauto. eauto.
+  eapply valid_new_global_block; eauto.
+  red. intros. apply Z.divide_0_r.
+  intros.
+  apply perm_implies with Freeable; auto with mem.
+  eapply perm_alloc_global_2; eauto. lia.
+  unfold flat_inj. apply pred_dec_true.
+  apply H1. apply alloc_global_result in H. subst.
+  apply sup_incr_tid_in1. red. generalize (tid_valid (support m)). lia.
+Qed.
+
 Theorem store_inject_neutral:
   forall chunk m b ofs v m' s,
   store chunk m b ofs v = Some m' ->
@@ -5413,6 +5721,7 @@ Proof.
   elim (H0 ofs0). lia. auto.
 Qed.
 
+
 Lemma alloc_unchanged_on:
   forall m lo hi m' b,
   alloc m lo hi = (m', b) ->
@@ -5426,6 +5735,23 @@ Proof.
   eapply valid_not_valid_diff; eauto with mem.
 - injection H; intros A B. rewrite <- B; simpl.
   setoid_rewrite NMap.gso; auto. rewrite A.  eapply valid_not_valid_diff; eauto with mem.
+Qed.
+
+Lemma alloc_global_unchanged_on:
+  forall m lo hi m' b,
+  alloc_global m lo hi = (m', b) ->
+  unchanged_on m m'.
+Proof.
+  intros; constructor; intros.
+- rewrite (support_alloc_global _ _ _ _ _ H). intro. intro. apply sup_incr_tid_in2.
+  red. generalize (tid_valid (support m)). lia. auto.
+- split; intros.
+  eapply perm_alloc_global_1; eauto.
+  eapply perm_alloc_global_4; eauto.
+  eapply valid_not_valid_diff. eauto. eapply fresh_block_alloc_global; eauto.
+- injection H; intros A B. rewrite <- B; simpl.
+  setoid_rewrite NMap.gso; auto. rewrite A.  eapply valid_not_valid_diff. eauto with mem.
+  eapply fresh_block_alloc_global; eauto.
 Qed.
 
 Lemma free_unchanged_on:
@@ -7557,7 +7883,7 @@ Notation sup_incr := Mem.sup_incr.
 Notation sup_empty := Mem.sup_empty.
 Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
-Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
+Global Opaque Mem.alloc Mem.alloc_global Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
 
 
 Global Hint Resolve

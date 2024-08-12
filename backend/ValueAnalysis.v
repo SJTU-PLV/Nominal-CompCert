@@ -2464,7 +2464,7 @@ Lemma alloc_global_match:
   initial_mem_match bc m' (Genv.add_global g idg).
 Proof.
   intros; red; intros. destruct idg as [id1 [fd | gv]]; simpl in *.
-- destruct (Mem.alloc m 0 1) as [m1 b1] eqn:ALLOC.
+- destruct (Mem.alloc_global m 0 1) as [m1 b1] eqn:ALLOC.
   unfold Genv.find_symbol in H2; simpl in H2.
   unfold Genv.find_var_info, Genv.find_info in H3; simpl in H3.
   rewrite PTree.gsspec in H2. destruct (peq id id1).
@@ -2472,15 +2472,15 @@ Proof.
   assert (sup_In b (Genv.genv_sup g)) by (eapply Genv.genv_symb_range; eauto).
   setoid_rewrite NMap.gso in H3.
   assert (Mem.valid_block m b) by (red; rewrite <- H; auto).
-  assert (b <> b1) by (apply Mem.valid_not_valid_diff with m; eauto with mem).
+  assert (b <> b1). { apply Mem.valid_not_valid_diff with m; eauto with mem. eapply Mem.fresh_block_alloc_global; eauto. }
   apply bmatch_inv with m.
   eapply H0; eauto.
   intros. transitivity (Mem.loadbytes m1 b ofs n0).
   eapply Mem.loadbytes_drop; eauto.
-  eapply Mem.loadbytes_alloc_unchanged; eauto.
-  intro. rewrite H7 in H6. eapply freshness; eauto.
+  eapply Mem.loadbytes_alloc_global_unchanged; eauto.
+  intro. rewrite H7 in H6. eapply Mem.freshness_tid; eauto.
 - set (sz := init_data_list_size (gvar_init gv)) in *.
-  destruct (Mem.alloc m 0 sz) as [m1 b1] eqn:ALLOC.
+  destruct (Mem.alloc_global m 0 sz) as [m1 b1] eqn:ALLOC.
   destruct (store_zeros m1 b1 0 sz) as [m2 | ] eqn:STZ; try discriminate.
   destruct (Genv.store_init_data_list _ m2 b1 0 (gvar_init gv)) as [m3 | ] eqn:SIDL; try discriminate.
   unfold Genv.find_symbol in H2; simpl in H2.
@@ -2489,7 +2489,7 @@ Proof.
 + injection H2; clear H2; intro EQ.
   rewrite EQ in H3. setoid_rewrite NMap.gss in H3. injection H3; clear H3; intros EQ'; subst gv.
   assert (b = b1).
-  { erewrite Mem.alloc_result by eauto.
+  { erewrite Mem.alloc_global_result by eauto.
     rewrite H in EQ. auto. }
   clear EQ. subst b.
   apply bmatch_inv with m3.
@@ -2497,22 +2497,24 @@ Proof.
   apply ablock_init_sound.
   eapply store_zeros_same; eauto.
   split; intros.
-  exploit Mem.load_alloc_same; eauto. intros EQ; subst v0; constructor.
-  exploit Mem.loadbytes_alloc_same; eauto with coqlib. congruence.
+  exploit Mem.load_alloc_global_same; eauto. intros EQ; subst v0; constructor.
+  exploit Mem.loadbytes_alloc_global_same; eauto with coqlib. congruence.
   intros. eapply Mem.loadbytes_drop; eauto.
   right; right; right. unfold Genv.perm_globvar. simpl. rewrite H4, H5. constructor.
 + assert (sup_In b (Genv.genv_sup g)) by (eapply Genv.genv_symb_range; eauto).
   setoid_rewrite NMap.gso in H3.
   assert (Mem.valid_block m b) by (red; rewrite <- H; auto).
-  assert (b <> b1) by (apply Mem.valid_not_valid_diff with m; eauto with mem).
+  assert (b <> b1). { apply Mem.valid_not_valid_diff with m; eauto with mem.
+  eapply Mem.fresh_block_alloc_global; eauto. }
   apply bmatch_inv with m3.
   eapply store_init_data_list_other; eauto.
   eapply store_zeros_other; eauto.
   apply bmatch_inv with m.
   eapply H0; eauto.
-  intros. eapply Mem.loadbytes_alloc_unchanged; eauto.
+  intros.
+  intros. eapply Mem.loadbytes_alloc_global_unchanged; eauto.
   intros. eapply Mem.loadbytes_drop; eauto.
-  intro. rewrite H7 in H6. eapply freshness; eauto.
+  intro. rewrite H7 in H6. eapply Mem.freshness_tid; eauto.
 Qed.
 
 Lemma alloc_globals_match:

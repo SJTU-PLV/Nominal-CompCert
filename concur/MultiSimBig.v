@@ -385,7 +385,15 @@ Section ConcurSim.
       inv H. simpl. reflexivity.
       intros. simpl in H. apply IHgl in H. simpl in H. congruence.
     Qed.
-      
+
+
+    Lemma sup_incr_tid_ntid : forall s t, Mem.next_tid s = Mem.next_tid (Mem.sup_incr_tid s t).
+    Proof.
+      intros. unfold Mem.sup_incr_tid. destruct s. simpl. unfold Mem.next_tid. simpl.
+      destruct stacks; simpl. rewrite Mem.update_list_length. reflexivity.
+      rewrite Mem.update_list_length. reflexivity.
+    Qed.
+
     Lemma advance_next_nexttid : forall gl s s',
         Genv.advance_next gl s = s' ->
         Mem.next_tid s' = Mem.next_tid s.
@@ -393,8 +401,7 @@ Section ConcurSim.
       induction gl. intros.
       inv H. simpl. reflexivity.
       intros. simpl in H. apply IHgl in H. simpl in H.
-      unfold Mem.next_tid in *. simpl in H. rewrite Mem.update_list_length in H.
-      congruence.
+      rewrite <- sup_incr_tid_ntid in H. auto.
     Qed.
                                
     Lemma init_mem_tid : forall sk m, Genv.init_mem sk = Some m ->
@@ -756,14 +763,14 @@ Qed.
       intros. destruct w1 as [j1 m1 tm1 Htm1]. destruct w2 as [j2 m2 tm2 Htm2].
       destruct w3 as [j3 m3 tm3 Htm3].
       inv H. inv H0. destruct H11 as [[S11 S11'] H11]. destruct H12 as [[S12 S12'] H12].
-      destruct H18 as [[A B] H18]. destruct H19 as [[C D] H19].
+      destruct H19 as [[A B] H19]. destruct H20 as [[C D] H20].
       constructor; eauto.
       - eapply Mem.ro_unchanged_trans; eauto. inversion H11. eauto.
       - eapply Mem.ro_unchanged_trans; eauto. inversion H12. eauto.
       -  intros b ofs p Hb ?.
-         eapply H9, H16; eauto using Mem.valid_block_unchanged_on.
+         eapply H9, H17; eauto using Mem.valid_block_unchanged_on.
       - intros b ofs p Hb ?.
-        eapply H10, H17; eauto using Mem.valid_block_unchanged_on.
+        eapply H10, H18; eauto using Mem.valid_block_unchanged_on.
       - split. split. setoid_rewrite <- A.  auto. congruence.
         eapply mem_unchanged_on_trans_implies_valid; eauto.
         unfold loc_unmapped, Mem.thread_external_P. simpl.
@@ -786,10 +793,16 @@ Qed.
       - intros b1 b2 delta Hb Hb'' Ht.
       destruct (j2 b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
-          by (eapply H20 in Hb'; split; congruence); subst.
+          by (eapply H21 in Hb'; split; congruence); subst.
         eapply H14; eauto.
-      * edestruct H21; eauto. congruence.
+      * edestruct H22; eauto. congruence.
         intuition eauto using Mem.valid_block_unchanged_on.
+      - intros b1 b2 delta Hb Hb''.
+      destruct (j2 b1) as [[xb2 xdelta] | ] eqn:Hb'.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply H21 in Hb'; split; congruence); subst.
+        eapply H15; eauto.
+      * edestruct H23; eauto.
     Qed.
 
     Lemma injp_acc_yield_accg : forall w1 w2,
@@ -804,7 +817,7 @@ Qed.
       split. split; simpl. unfold Mem.next_tid. simpl. lia. simpl in H0.  inv Hm.
       inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
-      congruence.
+      congruence. congruence.
     Qed.
 
     Lemma injp_acc_yield_acce : forall w1 w2,
@@ -819,7 +832,7 @@ Qed.
       split. constructor; simpl. lia. simpl in H0.  inv Hm.
       inv mi_thread. inv Hms. congruence.
       constructor; try red; intros; eauto.
-      congruence.
+      congruence. congruence.
     Qed.
 
     Lemma injp_acc_yield_acci : forall w1 w2,
@@ -838,7 +851,7 @@ Qed.
       inv mi_thread. inv Hms. constructor.
       reflexivity. simpl. eauto.
       constructor; try red; intros; eauto.
-      congruence.
+      congruence. congruence.
     Qed.
 
 
@@ -868,7 +881,7 @@ Qed.
           red. split. auto. simpl. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
-      - red. intros. eapply H12; eauto. simpl. congruence.
+      - red. intros. eapply H11; eauto. simpl. congruence.
     Qed.
     
     Lemma injp_yield_acci_accg' : forall w1 w2 w3,
@@ -894,7 +907,7 @@ Qed.
           red. split. auto. simpl in B. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
-      - red. intros. exploit H12; eauto. simpl in H2. congruence.
+      - red. intros. exploit H11; eauto. simpl in H2. congruence.
     Qed.
 
     Lemma thread_create_inject' : forall j m1 m2,
@@ -936,9 +949,9 @@ Qed.
          red. split; auto. simpl. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-      - destruct H9 as [[S9 S9'] H9]. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+      - destruct H8 as [[S8 S8'] H8]. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
         split. split; simpl. unfold Mem.next_tid in *. simpl. rewrite app_length. simpl. lia. congruence.
-        inv H9. constructor.
+        inv H8. constructor.
         + red. intros. eauto. apply VALID2. apply unchanged_on_support. auto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
           eapply unchanged_on_perm; eauto.
@@ -998,10 +1011,10 @@ Qed.
          red. split; auto. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-     - destruct H9 as [S9 H9]. split.
+     - destruct H8 as [S8 H8]. split.
        apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
        simpl in *. split; simpl. unfold Mem.next_tid in *. simpl. lia. congruence.
-       inv H9. constructor.
+       inv H8. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
          eapply unchanged_on_perm; eauto.
@@ -1030,10 +1043,10 @@ Qed.
          red. split; auto. reflexivity.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
-     - destruct H9 as [[S9 S9'] H9]. split.
+     - destruct H8 as [[S8 S8'] H8]. split.
        apply Mem.mi_thread in Hm0 as Hs. inv Hs. destruct Hms as [Z Z'].
        simpl in *. split; auto.
-       inv H9. constructor.
+       inv H8. constructor.
        + red. intros. apply VALID2. apply unchanged_on_support. auto.
        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
          eapply unchanged_on_perm; eauto.
@@ -1693,16 +1706,9 @@ Qed.
          {
            
            unfold wB'. destruct wB. simpl in *. inv ACCG1.
-           inv MSEw. constructor. eapply Genv.match_stbls_incr; eauto.
-           intros.
-           intros. exploit H11; eauto. admit.
-           (*TODO: added external requirement about
-                   no more global blocks  *)
-           intros [X Y]. split.
-           intro. apply X. apply H14. eauto.
-           intro. apply Y. apply H15. eauto.
+           inv MSEw. constructor. eapply Genv.match_stbls_incr_noglobal; eauto.
            destruct H7 as [P [Q R]]. eauto.
-           destruct H9 as [P [Q R]]. eauto.
+           destruct H8 as [P [Q R]]. eauto.
          }
          specialize (fsim_lts se tse wB' MSEw' valid_se) as FSIM.
          inversion FSIM.
@@ -1747,7 +1753,7 @@ Qed.
          eapply injp_accg_yield_accg. eauto. eauto. simpl.
          apply FIND_TID in I. destruct I as [X Y]. rewrite X.
          lia.
-   Admitted.
+   Qed.
    
    Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
     Proof.
@@ -1851,6 +1857,7 @@ Qed.
             - split. split;  simpl. rewrite app_length. simpl. lia. eauto.
               constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
               intros. simpl. reflexivity. intros. reflexivity.
+            - congruence.
             - congruence.
           }
           destruct qa_str as [rs_qastr m_qastr].
