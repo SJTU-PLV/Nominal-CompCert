@@ -79,6 +79,12 @@ Variable V: Type.  (**r The type of information attached to variables *)
 (** Currently tid = 0 means the block is a global block shared by all threads *)
 Definition global_block (b: block) : Prop := fst b = O.
 
+Lemma thread_noglobal : forall (b: block) s, fst b = Mem.tid s -> ~ global_block b.
+Proof.
+  intros. generalize (Mem.tid_valid s). intro. red.
+  intro. red in H1. extlia.
+Qed.
+  
 Record symtbl: Type := mkstbl {
   genv_public: list ident;              (**r which symbol names are public *)
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)

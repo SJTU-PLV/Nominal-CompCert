@@ -923,6 +923,7 @@ Lemma external_call_parallel_rule:
   /\ thread_same j' m1' m2'
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2
+  /\ inject_separated_noglobal j j'
   /\ new_block_local m1 m1'
   /\ new_block_local m2 m2'
   /\ free_preserved j m1 m1' m2'.
@@ -944,7 +945,7 @@ Proof.
   eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
-- red; intros. destruct H as (b0 & delta & J' & E).
+- red; intros. destruct H1 as (b0 & delta & J' & E).
   destruct (j b0) as [[b' delta'] | ] eqn:J.
 + erewrite INCR in J' by eauto. inv J'.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.

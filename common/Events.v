@@ -621,6 +621,9 @@ Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   f b1 = None -> f' b1 = Some(b2, delta) ->
   ~Mem.valid_block m1 b1 /\ ~Mem.valid_block m2 b2.
 
+Definition inject_separated_noglobal (f f' : meminj) :=
+  forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> ~ Genv.global_block b1 /\ ~ Genv.global_block b2.
+
 Definition free_preserved j m1 m1' m2' :=
   forall b1 ofs1 b2 delta,
     j b1 = Some (b2, delta) -> fst b1 <> Mem.tid (Mem.support m1) ->
@@ -694,6 +697,7 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'
+    /\ inject_separated_noglobal f f'
     /\ new_block_local m1 m2
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2';
@@ -794,6 +798,7 @@ Proof.
   exploit volatile_load_inject; eauto. intros [v' [A B]].
   exists f; exists v'; exists m1'; intuition. constructor; auto.
   red; intros. congruence.
+  red. intros. congruence.
   red. intros. congruence.
   red. intros. congruence.
   red. intros. congruence.
@@ -946,6 +951,7 @@ Proof.
   exploit volatile_store_inject; eauto. intros [m2' [A [B [C D]]]].
   exists f; exists Vundef; exists m2'; intuition. constructor; auto.
   red; intros; congruence.
+  red; intros; congruence.
   red. intros. inv H3. congruence.
   exfalso. apply H0. unfold Mem.valid_block. setoid_rewrite <- Mem.support_store; eauto.
   red. intros. inv A. congruence. exfalso. apply H0.
@@ -1043,6 +1049,10 @@ Proof.
   eapply UNCHANGED; eauto.
   red; intros. destruct (eq_block b1 b).
   subst b1. rewrite C in H2. inv H2. eauto with mem.
+  rewrite D in H2 by auto. congruence.
+  red; intros. destruct (eq_block b1 b).
+  subst b1. rewrite C in H2. inv H2.
+  split; eapply Mem.alloc_block_noglobal; eauto.
   rewrite D in H2 by auto. congruence.
   red. intros. 
   eapply Mem.store_valid_block_2 in H2; eauto.
@@ -1151,6 +1161,7 @@ Proof.
     apply P. lia.
   split. auto.
   split. red; intros. congruence.
+  split. red. intros. congruence.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
   red. intros.
@@ -1160,6 +1171,7 @@ Proof.
 + inv H2. inv H6. replace v' with Vnullptr.
   exists f, Vundef, m1'; intuition auto using Mem.unchanged_on_refl_tl.
   constructor.
+  red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
@@ -1257,6 +1269,7 @@ Proof.
   simpl; intros; extlia.
   split. apply inject_incr_refl.
   split. red; intros; congruence.
+  split. red; intros; congruence.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
   red. intros. exfalso. apply H14. eauto with mem.
@@ -1297,6 +1310,7 @@ Proof.
   erewrite list_forall2_length; eauto.
   lia.
   split. apply inject_incr_refl.
+  split. red; intros; congruence.
   split. red; intros; congruence.
   split. red. intros. exfalso. apply H0. eauto with mem.
   split. red. intros. exfalso. apply H0. eauto with mem.
@@ -1347,6 +1361,7 @@ Proof.
   red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
+  red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1392,6 +1407,7 @@ Proof.
   red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
+  red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)
@@ -1430,6 +1446,7 @@ Proof.
 - inv H0.
   exists f; exists Vundef; exists m1'; intuition.
   econstructor; eauto.
+  red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
@@ -1485,6 +1502,7 @@ Proof.
   destruct (bsem vargs') as [vres'|] eqn:?; try contradiction.
   exists f, vres', m1'; intuition auto using Mem.extends_refl, Mem.unchanged_on_refl_tl.
   constructor; auto.
+  red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
   red; intros; congruence.
@@ -1627,6 +1645,7 @@ Lemma external_call_mem_inject:
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'
+    /\ inject_separated_noglobal f f'
     /\ new_block_local m1 m2
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2'.

@@ -1111,6 +1111,7 @@ Lemma external_call_inject:
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'
+    /\ inject_separated_noglobal f f'
     /\ new_block_local m1 m2
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2'.                
