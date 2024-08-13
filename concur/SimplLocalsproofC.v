@@ -1813,6 +1813,7 @@ Definition injp_inj_world : inj_world :=
     | injpw f m1 m2 Hm => injw f (Mem.support m1) (Mem.support m2)
   end.
 
+Definition inj_incr' (w: injp_world)
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
   | match_Kstop: forall cenv m bound tbound,
       inj_incr (injp_inj_world) (injw f bound tbound) ->

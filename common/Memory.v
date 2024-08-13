@@ -7238,7 +7238,7 @@ Hypothesis SUPINCR2 : sup_include (support m2) s2'.
  Program Definition map_block (b1:block) (m:mem) :=
   match j12' b1 with
   |Some (b2,delta) =>
-     if (sup_dec b1 (Mem.support m1)) then m else
+     if j12 b1 then m else
        if (sup_dec b2 (Mem.support m)) then (* well-typeness constrain *)
      {|
        mem_contents :=
@@ -7254,7 +7254,7 @@ Next Obligation.
     unfold pmap_update. destruct (eq_block b b2); subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
     generalize (update_mem_access_result delta ).
-    intros. erewrite H1; eauto.
+    intros. erewrite H0; eauto.
     erewrite update_mem_access_result; eauto.
     destruct perm_check_any;
     apply Mem.access_max; eauto.
@@ -7305,8 +7305,8 @@ Proof.
   intros. unfold map_block.
   destruct (j12' b); auto.
   destruct p.
-  destruct (sup_dec); auto.
-  destruct (sup_dec); auto.
+  destruct (sup_dec); auto;
+  destruct (j12 b); auto.
 Qed.
 
 Lemma map_sup_support' : forall bl m,

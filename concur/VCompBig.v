@@ -430,7 +430,7 @@ Proof.
     destruct (j23 b2) as [[b3 d2]|] eqn:Hj23; try congruence.
     eapply Hconstr1 in Hj12; eauto. congruence.
     erewrite <- inject_other_thread; eauto.
-  - destruct H20 as [S20 H20]. split. auto.
+  - destruct H21 as [S21 H21]. split. auto.
     eapply Mem.unchanged_on_implies; eauto.
     intros. destruct H as [X Y]. split; auto.
     red. intros. red in X. intro.
@@ -449,7 +449,7 @@ Proof.
         + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
           destruct (j23 b) as [[? ?] |] eqn: Hb2.
           unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
-          exfalso. exploit H22; eauto.
+          exfalso. exploit H23; eauto.
           erewrite <- inject_tid; eauto.
           erewrite <- inject_val_tid. 3: eauto. auto. eauto.
           intros [X Y].
@@ -457,17 +457,29 @@ Proof.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H22; eauto. erewrite <- inject_tid; eauto.
+          exploit H23; eauto. erewrite <- inject_tid; eauto.
           erewrite <- inject_val_tid. 3: eauto. auto. eauto.
           intros [X1 Y1]. intuition auto.
+  - red. intros. unfold compose_meminj in H, H0.
+    destruct (j12 b1) as [[bi d]|] eqn: Hj1; inv H.
+    + 
+      destruct (j23 bi) as [[b2' d']|] eqn: Hj2; inv H2.
+      apply H13 in Hj1 as Hj1'. rewrite Hj1' in H0.
+      destruct (j23' bi) as [[b2'' d'']|] eqn: Hj2'; inv H0.
+      exploit H24; eauto. intros [A B]. split; auto.
+      intro. apply A. red. erewrite <- inject_block_tid. 3: eauto. eauto. eauto.
+    + destruct (j12' b1) as [[bi d]|] eqn: Hj1'; inv H0.
+      destruct (j23' bi) as [[b2' d'']|] eqn: Hj2'; inv H1.
+      exploit H15; eauto. intros [A B]. split; auto.
+      intro. apply B. red. erewrite inject_block_tid; eauto.
   - red. intros. unfold compose_meminj in H. rename b2 into b3.
     destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
     destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
-    red in H15. specialize (H15 _ _ _ _ Hj12 H0 H1 H2) as Hp2'.
+    red in H16. specialize (H16 _ _ _ _ Hj12 H0 H1 H2) as Hp2'.
     eapply Mem.perm_inject in H1 as Hp2. 3: eauto. 2: eauto.
-    red in H23. inv Hm12. inv mi_thread. inv Hms. rewrite H3 in H0.
+    red in H25. inv Hm12. inv mi_thread. inv Hms. rewrite H3 in H0.
     red in Hjs. erewrite Hjs in H0; eauto.
-    specialize (H23 _ _ _ _ Hj23 H0 Hp2 Hp2') as Hp3.
+    specialize (H25 _ _ _ _ Hj23 H0 Hp2 Hp2') as Hp3.
     rewrite Z.add_assoc. auto.
 Qed.
 
@@ -523,20 +535,20 @@ Proof.
   - intros. red in Hnb0. destruct (j12 b1) as [[b2' d']|] eqn:Hj12.
     + apply H13 in Hj12 as Heq. rewrite H0 in Heq. inv Heq.
       destruct (j23 b2') as [[b3 d'']|] eqn:Hj23.
-      * apply H21 in Hj23. congruence.
+      * apply H22 in Hj23. congruence.
       * exploit Hconstr1; eauto. inv H12. destruct unchanged_on_thread_i. congruence.
     + exploit H14; eauto. erewrite inject_val_tid. 3: eauto. 2: eauto.
       erewrite inject_tid. 2: eauto. inversion H12. inv unchanged_on_thread_i. congruence.
       intros [A B].
       exfalso. exploit Hnb0; eauto. eapply Mem.valid_block_inject_2; eauto.
-      intro. apply H. destruct H19 as [[_ Z] _]. congruence.
+      intro. apply H. destruct H20 as [[_ Z] _]. congruence.
   - intros. red in Hnb3. destruct (j23 b2) as [[b3' d']|] eqn:Hj23.
-    + apply H21 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
+    + apply H22 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
       destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1]|] eqn:FIND12.
       * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
         exists b1, ofs1. split. edestruct Mem.perm_dec; eauto. exfalso.
-        eapply H15; eauto.
-        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H19 as [[_ TID]_]. congruence.
+        eapply H16; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_]. congruence.
         replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia.
         auto. auto.
       * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
@@ -544,15 +556,15 @@ Proof.
         eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
         intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
         edestruct Mem.perm_dec; eauto. exfalso.
-        eapply H15; eauto.
-        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H19 as [[_ TID]_]. congruence.
+        eapply H16; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_]. congruence.
         replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
-    + exploit H22; eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+    + exploit H23; eauto. inversion H12. inv unchanged_on_thread_i. congruence.
       intros [A B].
       exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
       erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
       apply H.
-      destruct H20 as [[_ Z]_]. congruence.
+      destruct H21 as [[_ Z]_]. congruence.
 Qed.
 
 (*
