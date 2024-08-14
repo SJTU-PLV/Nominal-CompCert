@@ -932,17 +932,38 @@ Lemma deref_loc_rec_footprint_inv: forall m b1 b2 ofs1 ofs2 fp1 fp2 tyl phl,
 .
 Admitted.
 
+(* the location computed by deref_loc_rec_footprint is the same as that computed by deref_loc_rec *)
+Lemma deref_loc_rec_footprint_eq: forall m b ofs tys b1 ofs1 b2 ofs2 fp1 fp2 phl,
+          deref_loc_rec m b (Ptrofs.repr ofs) tys (Vptr b1 ofs1) ->
+          deref_loc_rec_footprint m b ofs fp1 tys b2 ofs2 phl fp2 ->
+          b1 = b2 /\ ofs1 = Ptrofs.repr ofs2.
+Admitted.
+
 Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) : option drop_member_state -> footprint -> Prop :=
 | drop_member_fp_none:
     drop_member_footprint m co b ofs None fp_emp
-| drop_member_fp_comp: forall fid fofs fty fp tyl b1 ofs1 fp1 compty phl
+| drop_member_fp_comp_struct: forall fid fofs fty fp tyl b1 ofs1 fp1 compty phl
+    (STRUCT: co.(co_sv) = Struct)
     (FOFS: field_offset ce fid co.(co_members) = OK fofs)
     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 phl fp1)
     (* (b1, ofs1) is sem_wt_loc *)
     (WT: sem_wt_loc ce m fp1 b1 ofs1 compty),
     drop_member_footprint m co b ofs (Some (drop_member_comp fid fty compty tyl)) fp
-| drop_member_fp_box: forall fid fofs fty fp tyl b1 ofs1 phl
+| drop_member_fp_comp_enum: forall fid fofs fty fp tyl b1 ofs1 fp1 compty phl
+    (ENUM: co.(co_sv) = TaggedUnion)
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
+    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 phl fp1)
+    (* (b1, ofs1) is sem_wt_loc *)
+    (WT: sem_wt_loc ce m fp1 b1 ofs1 compty),
+    drop_member_footprint m co b ofs (Some (drop_member_comp fid fty compty tyl)) fp
+| drop_member_fp_box_struct: forall fid fofs fty fp tyl b1 ofs1 phl
+    (STRUCT: co.(co_sv) = Struct)
     (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 phl fp_emp),
+    drop_member_footprint m co b ofs (Some (drop_member_box fid fty tyl)) fp
+| drop_member_fp_box_enum: forall fid fofs fty fp tyl b1 ofs1 phl
+    (ENUM: co.(co_sv) = TaggedUnion)
+    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fp tyl b1 ofs1 phl fp_emp),
     drop_member_footprint m co b ofs (Some (drop_member_box fid fty tyl)) fp
 .
@@ -1027,7 +1048,7 @@ Inductive sound_drop_place (own: own_env) (ps: list (place * bool)) : option dro
     (SEP: Forall (fun p' => Forall (fun elt => is_prefix p' (fst elt) = false) ps) l),
     sound_drop_place own ps (Some (drop_fully_owned_box l))
 .
-  
+
 (* Soundness of continuation: the execution of current function cannot
 modify the footprint maintained by the continuation *)
 
@@ -1504,14 +1525,116 @@ Lemma sound_cont_unchanged: forall m1 m2 fpf k
   sound_cont m2 fpf k.
 Admitted.
 
+Lemma deref_loc_rec_no_mem_error: forall m b ofs tys fp b1 ofs1 phl fp1,
+    deref_loc_rec_mem_error m b (Ptrofs.repr ofs) tys ->
+    deref_loc_rec_footprint m b ofs fp tys b1 ofs1 phl fp1 ->
+    False.
+Admitted.
+
+(** TODO: Maybe we should require that fp is disjoint because the memory is
+changed during the drop *)
+Lemma drop_box_rec_no_mem_error: forall m b ofs tys fp b1 ofs1 phl fp1,
+    list_norepet (footprint_flat fp) ->
+    drop_box_rec_mem_error ge b (Ptrofs.repr ofs) m tys ->
+    deref_loc_rec_footprint m b ofs fp tys b1 ofs1 phl fp1 ->
+    False.
+Admitted.
+
+
 Lemma sound_dropstate_no_mem_error: forall s,
     step_drop_mem_error ge s -> sound_state s -> False.
 Proof.
   intros s ERR SOUND.
   inv ERR.
-  - 
+  (* step_dropstate_struct_error1 *)
+  - inv SOUND.
+    unfold ce in CO. rewrite CO in CO1. inv CO1.    
+    (* GOAL: To show that deref_loc_rec_mem_error is impossible if
+    (b1,ofs1) has footprint fp *)
+    inv DROPMEMB.
+    (* co1.(co_sv) = Struct *)
+    + rewrite STRUCT in FOFS.
+      unfold ce in FOFS0.
+      rewrite FOFS in FOFS0. inv FOFS0.
+      rewrite Ptrofs.add_unsigned in DEREF.
+      (* some overflow constrain *)
+      assert (FOFSRANGE: 0 <= fofs0 <= Ptrofs.max_unsigned) by admit.
+      rewrite Ptrofs.unsigned_repr in DEREF; eauto.
+      eapply deref_loc_rec_no_mem_error; eauto.
+    (* co1.(co_sv) = TaggedUnion *)
+    + admit.
+  (* step_dropstate_enum_error1 *)
+  - inv SOUND.
+    unfold ce in CO. rewrite CO in CO1. inv CO1.
+    inv DROPMEMB.
+    (* co1.(co_sv) = Struct *)
+    + rewrite STRUCT in FOFS.
+      unfold ce in FOFS0.
+      rewrite FOFS in FOFS0. inv FOFS0.
+      rewrite Ptrofs.add_unsigned in DEREF.
+      (* some overflow constrain *)
+      assert (FOFSRANGE: 0 <= fofs0 <= Ptrofs.max_unsigned) by admit.
+      rewrite Ptrofs.unsigned_repr in DEREF; eauto.
+      eapply deref_loc_rec_no_mem_error; eauto.
+    (* co1.(co_sv) = TaggedUnion *)
+    + admit.
+  (* step_dropstate_enum_error2: load tag error *)
+  - inv SOUND.
+    unfold ce in CO. rewrite CO in CO1. inv CO1.
+    inv DROPMEMB.
+    (* co1.(co_sv) = Struct *)
+    + rewrite STRUCT in FOFS.
+      unfold ce in FOFS0.
+      rewrite FOFS in FOFS0. inv FOFS0.
+      rewrite Ptrofs.add_unsigned in DEREF.
+      (* some overflow constrain *)
+      assert (FOFSRANGE: 0 <= fofs0 <= Ptrofs.max_unsigned) by admit.
+      rewrite Ptrofs.unsigned_repr in DEREF; eauto.
+      (** Prove that deref_loc_rec and deref_loc_rec_footprint get the same address *)
+      exploit deref_loc_rec_footprint_eq; eauto.
+      intros (A & B). subst.
+      (* (b0,ofs0) is semantically well typed location, so load tag
+      error is impossible *)
+      inv WT.
+      simpl in MODE. congruence.
+      eapply TAG.
+      eapply Mem.load_valid_access.
+      (* some overflow constrain *)
+      assert (OFSRANGE: 0 <= ofs0 <= Ptrofs.max_unsigned) by admit.
+      rewrite Ptrofs.unsigned_repr; eauto.
+    (* co1.(co_sv) = TaggedUnion *)
+    + admit.
+  (* step_dropstate_box_error *)
+  - inv SOUND.
+    unfold ce in CO. rewrite CO in CO1. inv CO1.
+    inv DROPMEMB.
+    (* co1.(co_sv) = Struct *)
+    + rewrite STRUCT in FOFS.
+      unfold ce in FOFS0.
+      rewrite FOFS in FOFS0. inv FOFS0.
+      rewrite Ptrofs.add_unsigned in DROPB.
+      (* some overflow constrain *)
+      assert (FOFSRANGE: 0 <= fofs0 <= Ptrofs.max_unsigned) by admit.
+      rewrite Ptrofs.unsigned_repr in DROPB; eauto.
+      (** show that drop_box_rec_mem_error is impossible if there is
+      deref_loc_rec_footprint *)
+      eapply drop_box_rec_no_mem_error; eauto.
+      (* norepet proof *)
+      admit.
+    (* co1.(co_sv) = TaggedUnion *)
+    + admit.
+Admitted.
 
+Lemma sound_dropplace_no_mem_error: forall s,
+    step_dropplace_mem_error ge s -> sound_state s -> False.
+Proof.
+  intros s ERR SOUND.
+  inv ERR.
+  (* step_dropplace_box_error1 *)
+  - inv SOUND. inv DP.
+Admitted.
 
+        
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
 Admitted.

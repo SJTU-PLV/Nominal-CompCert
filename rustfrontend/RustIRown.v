@@ -459,6 +459,30 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
 .
 
 
+Inductive step_dropplace_mem_error: state -> Prop :=
+| step_dropplace_box_error1: forall le m k f p own ps l
+    (* eval_place error *)
+    (PADDR: eval_place_mem_error ge le m p),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_box_error2: forall le m k f p own ps l b ofs ty
+    (* deref_loc error *)
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc_mem_error (Tbox ty) m b ofs),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_box_error3: forall le m k f p own ps l b ofs ty b' ofs'
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (* free error *)
+    (FREE: extcall_free_sem_mem_error (Vptr b' ofs') m),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_comp_error: forall m k p f le own ps l
+    (* p is struct or enum *)
+    (PADDR: eval_place_mem_error ge le m p),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) 
+.
+
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
@@ -798,6 +822,9 @@ Inductive step_mem_error : state -> Prop :=
 | step_dropstate_error: forall id v s membs k m,
     step_drop_mem_error (Dropstate id v s membs k m) ->
     step_mem_error (Dropstate id v s membs k m)
+| step_dropplace_error: forall f st ps k le own m,
+    step_dropplace_mem_error (Dropplace f st ps k le own m) ->
+    step_mem_error (Dropplace f st ps k le own m)
                    
 | step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels own,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->

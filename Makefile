@@ -165,7 +165,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 
 # Rust front-end
 
-RUSTFRONTENT=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
+RUSTFRONTEND=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
   RustIRsem.v RustIRown.v\
   Rustlightgen.v\
   RustIRgen.v \
@@ -215,7 +215,7 @@ EXPORTLIB= Ctypesdefs.v Clightdefs.v Csyntaxdefs.v
 # All source files
 
 FILES=$(VLIB) $(COMMON) $(CKLR) $(BACKEND) $(CFRONTEND) $(DRIVER) $(DEMO) $(FLOCQ) \
-  $(MENHIRLIB) $(PARSER) $(EXPORTLIB) $(RUSTFRONTENT)
+  $(MENHIRLIB) $(PARSER) $(EXPORTLIB) $(RUSTFRONTEND)
 
 # Generated source files
 
