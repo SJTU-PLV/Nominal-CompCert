@@ -338,7 +338,7 @@ Lemma range_private_extcall:
   Mem.unchanged_on_e (loc_out_of_reach F m1) m1' m2' ->
   Mem.inject F m1 m1' ->
   inject_incr F F' ->
-  inject_separated F F' m1 m1' ->
+  inject_separated_internal F F' m1 m1' ->
   Mem.valid_block m1' sp ->
   fst sp = Mem.tid (Mem.support m1') ->
   range_private F' m2 m2' sp base hi.
@@ -352,7 +352,7 @@ Proof.
   red; intros; eelim B; eauto. eapply PERM; eauto.
   red. destruct (Mem.sup_dec b (Mem.support m1)); auto.
   exploit Mem.mi_freeblocks; eauto. congruence.
-  exploit SEP; eauto. tauto.
+  exploit SEP; eauto. congruence. tauto.
 Qed.
 
 (** ** Relating global environments *)
@@ -471,14 +471,21 @@ Inductive inj_incr' : injp_world -> inj_world -> Prop :=
   injp_inj_incr_intro : forall f f' m1 m2 s1' s2' Hm,
       inject_incr f f' ->
       inject_separated_internal f f' m1 m2 ->
+      inject_separated_noglobal f f' ->
       Mem.sup_include (Mem.support m1) s1' ->
       Mem.sup_include (Mem.support m2) s2' ->
       inj_incr' (injpw f m1 m2 Hm) (injw f' s1' s2').
+
+Definition local_t : nat := Mem.tid (Mem.support init_m).
 
 Inductive match_stacks (F: meminj) (m m': mem):
              list stackframe -> list stackframe -> sup -> Prop :=
   | match_stacks_nil: forall support
         (MG: inj_incr' w (injw F (Mem.support m) (Mem.support m')))
+        (TID1 : Mem.tid (Mem.support m) = local_t)
+        (TID2 : Mem.tid (Mem.support m') = local_t)
+        (TID3 : Mem.tid support = local_t)                
+        (TL: Mem.meminj_thread_local F)                
         (BELOW: Mem.sup_include (Mem.support init_tm) support),
       match_stacks F m m' nil nil support
   | match_stacks_cons: forall res f sp pc rs stk f' sp' sps' rs' stk' support fenv ctx
@@ -495,7 +502,8 @@ Inductive match_stacks (F: meminj) (m m': mem):
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize))
         (RES: Ple res ctx.(mreg))
         (BELOW: Mem.sup_include (sup_incr sps') support)
-        (THREAD_SPS: Mem.tid sps' = Mem.tid support),
+        (THREAD_SPS: Mem.tid sps' = local_t)
+        (THREAD_SPS': Mem.tid support = local_t),
       match_stacks F m m'
                    (Stackframe res f (Vptr sp Ptrofs.zero) pc rs :: stk)
                    (Stackframe (sreg ctx res) f' (Vptr sp' Ptrofs.zero) (spc ctx pc) rs' :: stk')
@@ -508,7 +516,8 @@ Inductive match_stacks (F: meminj) (m m': mem):
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize))
         (RET: ctx.(retinfo) = Some (rpc, res))
         (BELOW: Mem.sup_include (sup_incr sps') support)
-        (THREAD_SPS: Mem.tid sps' = Mem.tid support),
+        (THREAD_SPS: Mem.tid sps' = local_t)
+        (THREAD_SPS': Mem.tid support = local_t),
       match_stacks F m m'
                    stk
                    (Stackframe res f' (Vptr sp' Ptrofs.zero) rpc rs' :: stk')
@@ -552,10 +561,42 @@ with match_stacks_inside_globalenvs:
   forall stk stk' f ctx sp rs',
   match_stacks_inside F m m' stk stk' f ctx sp rs' -> Genv.match_stbls F se tse.
 Proof.
-  induction 1; eauto. inv GE. inv MG. rewrite <- H2 in H7. inv H7.
-  eapply Genv.match_stbls_incr; eauto.
-  intros. exploit H8; eauto. intros [X Y].
-  split. intro. apply X, H0. auto. intro. apply Y, H1. auto.
+  induction 1; eauto. inv GE. inv MG. rewrite <- H2 in H8. inv H8.
+  eapply Genv.match_stbls_incr_noglobal; eauto.
+  induction 1; eauto.
+Qed.
+
+Lemma match_stacks_tid1:
+  forall stk stk' bound,
+  match_stacks F m m' stk stk' bound -> Mem.tid (Mem.support m) = local_t
+with match_stacks_inside_tid1:
+  forall stk stk' f ctx sp rs',
+  match_stacks_inside F m m' stk stk' f ctx sp rs' -> Mem.tid (Mem.support m) = local_t.
+Proof.
+  induction 1; eauto. 
+  induction 1; eauto.
+Qed.
+
+Lemma match_stacks_tid2:
+  forall stk stk' bound,
+  match_stacks F m m' stk stk' bound -> Mem.tid (Mem.support m') = local_t
+with match_stacks_inside_tid2:
+  forall stk stk' f ctx sp rs',
+  match_stacks_inside F m m' stk stk' f ctx sp rs' -> Mem.tid (Mem.support m') = local_t.
+Proof.
+  induction 1; eauto. 
+  induction 1; eauto.
+Qed.
+
+  
+Lemma match_stacks_tid3:
+  forall stk stk' bound,
+    match_stacks F m m' stk stk' bound -> Mem.tid (bound) = local_t
+with match_stacks_inside_tid3:
+  forall stk stk' f ctx sp rs',
+  match_stacks_inside F m m' stk stk' f ctx sp rs' -> Mem.tid (sp) = local_t.
+Proof.
+  induction 1; eauto.
   induction 1; eauto.
 Qed.
 
@@ -567,7 +608,7 @@ Lemma match_stacks_sup_include:
   match_stacks F m m' stk stk' support1.
 Proof.
   intros. inv H.
-  apply match_stacks_nil; eauto.
+  apply match_stacks_nil; eauto. congruence.
   eapply match_stacks_cons; eauto. congruence.
   eapply match_stacks_untailcall; eauto.
   congruence.
@@ -579,28 +620,48 @@ Hypothesis INCR: inject_incr F F1.
 
 Lemma mit_incr_invariant bound s1 s2 s1' s2':
   (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (Mem.support init_m) \/ sup_In b2 bound ->
-                       F b1 = Some(b2, delta)) ->
+                  F b1 = Some(b2, delta)) ->
+  inject_separated_noglobal F F1 ->
   Mem.sup_include (Mem.support init_tm) bound ->
   inj_incr' w (injw F s1 s2) ->
   Mem.sup_include s1 s1' ->
   Mem.sup_include s2 s2' ->
   inj_incr' w (injw F1 s1' s2').
 Proof.
-  intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
+  intros INJ NOG BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
   intros b1 b2 delta Hb1 Hb1'.
   destruct (F b1) as [[xb1' xdelta]|] eqn:Hb1''.
   - rewrite (INCR _ _ _ Hb1'') in Hb1'. inv Hb1'. eauto.
-  - unfold init_m, init_tm in *. rewrite <- H4 in *.
+  - unfold init_m, init_tm in *. rewrite <- H5 in *.
     destruct (Mem.sup_dec b1 (Mem.support m0)); try (erewrite INJ in Hb1''; eauto; discriminate).
-    destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
+    destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate). intro.
     split; eauto.
+  - red. intros. destruct (F b1) as [[? ?]|] eqn:Hfb1. apply INCR in Hfb1 as Heq. rewrite H0 in Heq.
+    inv Heq. eapply H6; eauto. eapply NOG; eauto.
+Qed.
+
+Definition inject_separated_tl (f f': meminj) := forall b1 b2 d,
+    f b1 = None -> f' b1 = Some (b2, d) -> fst b1 = fst b2.
+
+Lemma inject_incr_thread_local : forall f f',
+    inject_incr f f' ->
+    Mem.meminj_thread_local f ->
+    inject_separated_tl f f' ->
+    Mem.meminj_thread_local f'.
+Proof.
+  intros. red. intros. red in H0.
+  destruct (f b) as [[b'' d'']|] eqn:fb.
+  apply H in fb as Heq. rewrite H2 in Heq. inv Heq. eauto.
+  exploit H1; eauto.
 Qed.
 
 Lemma match_stacks_invariant:
   forall stk stk' support, match_stacks F m m' stk stk' support ->
-  forall (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
-               sup_In b1 (Mem.support init_m) \/ sup_In b2 support -> F b1 = Some(b2, delta))
+        forall (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
+                               sup_In b1 (Mem.support init_m) \/ sup_In b2 support -> F b1 = Some(b2, delta))
+          (NOG: inject_separated_noglobal F F1)
+          (TL: inject_separated_tl F F1)
          (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
          (THE_NB: Mem.tid (Mem.support m) = Mem.tid (Mem.support m1))
          (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
@@ -627,6 +688,8 @@ with match_stacks_inside_invariant:
          (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) ->
                sup_In b1 (Mem.support init_m) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))
+         (NOG: inject_separated_noglobal F F1)
+         (TL: inject_separated_tl F F1)
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> sup_In b2 (sup_incr sps') ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
@@ -639,7 +702,8 @@ Proof.
   induction 1; intros; subst.
   (* nil *)
   apply match_stacks_nil; auto.
-  eapply mit_incr_invariant; eauto.
+  eapply mit_incr_invariant; eauto. congruence. congruence.
+  eapply inject_incr_thread_local; eauto.
   (* cons *)
   apply match_stacks_cons with (fenv := fenv) (ctx := ctx) (sps' := sps'); auto.
   eapply match_stacks_inside_invariant; eauto.
@@ -713,7 +777,7 @@ with match_stacks_inside_support:
   Mem.sup_include (Mem.support init_tm) sps'.
 Proof.
   induction 1; eauto.
-  clear - MG BELOW. inv MG. unfold init_m, init_tm in *. rewrite <- H3 in *. auto.
+  clear - MG BELOW. inv MG. unfold init_m, init_tm in *. rewrite <- H4 in *. auto.
   exploit match_stacks_inside_support; eauto. intros (A & B &C).
   intuition auto. red. intros. apply BELOW. eapply Mem.sup_incr_in2. eauto.
   exploit match_stacks_inside_support; eauto. intros (A & B &C).
@@ -730,7 +794,7 @@ Lemma match_stacks_inside_set_reg:
   match_stacks_inside F m m' stk stk' f' ctx sp' rs' ->
   match_stacks_inside F m m' stk stk' f' ctx sp' (rs'#(sreg ctx r) <- v).
 Proof.
-  intros. eapply match_stacks_inside_invariant; eauto.
+  intros. eapply match_stacks_inside_invariant; eauto; try (red; intros; congruence).
   intros. apply Regmap.gso. zify. unfold sreg; rewrite shiftpos_eq. extlia.
 Qed.
 
@@ -758,10 +822,7 @@ Proof.
   rewrite (Mem.support_store _ _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_store _ _ _ _ _ _ H1). eauto.
   rewrite (Mem.support_store _ _ _ _ _ _ H1). eauto.
-(*
-  TODO: legacy proof of MAXPERMDECREASE in internel steps: REMOVE OR USE THEM
-  red. intros. eapply Mem.perm_store_2; eauto.
-  red. intros. eapply Mem.perm_store_2; eauto. *)
+  red. intros. congruence.  red. intros. congruence.
 Qed.
 
 (** Preservation by an allocation *)
@@ -790,7 +851,14 @@ Proof.
     apply match_stacks_support in MS. eauto.
     destruct MS.
     destruct H6; eapply freshness; eauto.
-  rewrite H3 in H5; auto.
+    rewrite H3 in H5; auto.
+    red. intros. destruct (eq_block b1 b). subst.
+    split. eapply Mem.alloc_block_noglobal; eauto. rewrite H2 in H6.
+    inv H6. eapply Genv.thread_noglobal; eauto. simpl. reflexivity. erewrite H3 in H6. congruence. eauto.
+    red. intros. destruct (eq_block b1 b). subst.
+    rewrite H2 in H6. inv H6. apply Mem.alloc_result in H0. rewrite H0. simpl.
+    erewrite match_stacks_tid1; eauto. erewrite match_stacks_tid3; eauto.
+    erewrite H3 in H6; eauto. congruence.
   rewrite (Mem.support_alloc _ _ _ _ _ H0). eauto. inv H0. reflexivity.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b1 b); intros; auto.
   subst b1. rewrite H2 in H5. inv H5. eelim freshness; eauto.
@@ -813,7 +881,8 @@ Lemma match_stacks_free_left:
   Mem.free m b lo hi = Some m1 ->
   match_stacks F m1 m' stk stk' sp.
 Proof.
-  intros. eapply match_stacks_invariant; eauto.
+  intros. eapply match_stacks_invariant; eauto; try (
+  red; intros; congruence). 
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   red. intros. eapply Mem.perm_free_3; eauto.
@@ -827,7 +896,8 @@ Lemma match_stacks_free_right:
   Mem.free m' sp lo hi = Some m1' ->
   match_stacks F m m1' stk stk' sps.
 Proof.
-  intros. eapply match_stacks_invariant; eauto.
+  intros. eapply match_stacks_invariant; eauto; try (
+  red; intros; congruence).
   rewrite (Mem.support_free _ _ _ _ _ H1). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H1). eauto.
 (*  red. intros. eapply Mem.perm_free_3; eauto. *)
@@ -873,7 +943,9 @@ Hypothesis MAXPERM': forall b ofs p, Mem.valid_block m1' b -> Mem.perm m2' b ofs
 Hypothesis UNCHANGED: Mem.unchanged_on_e (loc_out_of_reach F1 m1) m1' m2'.
 Hypothesis INJ: Mem.inject F1 m1 m1'.
 Hypothesis INCR: inject_incr F1 F2.
-Hypothesis SEP: inject_separated F1 F2 m1 m1'.
+Hypothesis SEP: inject_separated_internal F1 F2 m1 m1'.
+Hypothesis NOG: inject_separated_noglobal F1 F2.
+Hypothesis TL: Mem.meminj_thread_local F2.
 
 Lemma match_stacks_extcall:
   forall stk stk' support,
@@ -897,11 +969,14 @@ Proof.
   apply match_stacks_nil; auto.
     eapply mit_incr_invariant; eauto. intros.
     destruct (F1 b1) as [[xb2 xdelta]|] eqn:HF1. apply INCR in HF1. congruence.
-    exploit SEP; eauto. unfold Mem.valid_block. inv MG.
-    unfold init_m, init_tm in *. rewrite <- H9 in *. cbn in *. intros [A B]. exfalso. destruct H4; eauto.
-    eapply Mem.unchanged_on_support. eapply UNCHANGED.
+    exploit SEP; eauto. 
+    inv MG. admit.
+    unfold Mem.valid_block. inv MG.
+    unfold init_m, init_tm in *. rewrite <- H10 in *. cbn in *. intros [A B]. exfalso. destruct H4; eauto.
+    
+    eapply Mem.unchanged_on_support. eapply UNCHANGED. congruence. destruct UNCHANGED as [[_ X]_]. congruence.
   eapply match_stacks_cons; eauto.
-    eapply match_stacks_inside_extcall; eauto. rewrite <- H2, <- THREAD_SPS. reflexivity.
+  eapply match_stacks_inside_extcall; eauto. congruence. 
     eapply agree_regs_incr; eauto.  congruence.
     eapply range_private_extcall; eauto. red. apply H1. subst. auto. subst sp'. rewrite <- H2, <- THREAD_SPS. reflexivity.
     intros. apply SSZ2; auto. apply MAXPERM'; auto. red. apply H1. subst. auto.
@@ -1183,6 +1258,7 @@ Proof.
       rewrite <- Heqw0. auto.
       eauto. red. intros. congruence.
       red. intros. congruence.
+      red. intros. congruence.
       red. intros. exfalso. apply H5.
       eapply Mem.perm_free_1; eauto. left. intro. subst.
       apply H3. eauto.
@@ -1193,6 +1269,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
+  red. intros. congruence.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
   rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
@@ -1228,6 +1305,7 @@ Proof.
     intros. intro. congruence.
     split; eauto. eauto with mem.
     red. intros. congruence.
+    red. intros. congruence.
     red. intros. exfalso. eapply H5.
     eapply Mem.perm_free_1; eauto. left. intro. subst.
     apply H3. eauto.
@@ -1237,8 +1315,8 @@ Proof.
   eapply match_stacks_inside_invariant; eauto.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
-    (* red. intros. eapply Mem.perm_free_3; eauto. *)
-    intros. eapply Mem.perm_free_3; eauto.
+  red. intros.  congruence.
+  intros. eapply Mem.perm_free_3; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
@@ -1260,6 +1338,7 @@ Proof.
     intros. intro. congruence.
     split; eauto with mem.
     red. intros. congruence.
+    red. intros. congruence.
     red. intros. exfalso. eapply H9. eapply Mem.perm_free_1; eauto.
     left. intro. subst. apply H3. auto.
   }
@@ -1268,7 +1347,7 @@ Proof.
   eapply match_stacks_inside_invariant; eauto.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
-    (* red. intros. eapply Mem.perm_free_3; eauto. *)
+  red. intros. congruence.
   intros. eapply Mem.perm_free_3; eauto.
   apply agree_val_regs_gen; auto. apply NEWB.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
@@ -1282,7 +1361,7 @@ Proof.
   exploit match_stacks_inside_globalenvs; eauto. intros SEINJ.
   exploit tr_builtin_args; eauto. intros (vargs' & P & Q).
   exploit external_call_mem_inject; eauto.
-  intros [F1 [v1 [m1' [A [B [C [D [E [J [K [L [M N]]]]]]]]]]]].
+  intros [F1 [v1 [m1' [A [B [C [D [E [J [K [L [M [N O]]]]]]]]]]]]].
   assert (ACCS: injp_acc_tl (injpw F m m'0 Hm) (injpw F1 m' m1' C)).
   econstructor; eauto.
   red. intro. eauto using external_call_readonly; eauto.
@@ -1368,6 +1447,7 @@ Proof.
       rewrite <- Heqw0. auto.
       eauto. red. intros. congruence.
       red. intros. congruence.
+      red. intros. congruence.
       red. intros. exfalso. apply H6.
       eapply Mem.perm_free_1; eauto. left. intro. subst.
       apply H3. eauto.
@@ -1377,6 +1457,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
+  red. intros. congruence.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
@@ -1409,6 +1490,7 @@ Proof.
     intros. intro. congruence.
     split; eauto. eauto with mem.
     red. intros. congruence.
+    red. intros. congruence.
     red. intros. exfalso. eapply H6.
     eapply Mem.perm_free_1; eauto. left. intro. subst.
     apply H3. eauto.
@@ -1417,7 +1499,7 @@ Proof.
   eapply match_stacks_inside_invariant; eauto.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
-(*    red. intros. eapply Mem.perm_free_3; eauto. *)
+  red. intros. congruence.
   intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto. apply NEWB.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
@@ -1448,11 +1530,14 @@ Proof.
   eapply match_stacks_invariant; eauto.
     intros. destruct (eq_block b1 stk).
     subst b1. rewrite D in H8; inv H8.
-      apply Mem.alloc_result in H. subst.
-      apply match_stacks_support in MS0.
-      exfalso. destruct MS0.
-      destruct H9; eapply freshness; eauto.
+    apply Mem.alloc_result in H. subst.
+    apply match_stacks_support in MS0.
+    exfalso. destruct MS0.
+    destruct H9; eapply freshness; eauto.
     rewrite E in H8; auto.
+    red. intros. destruct (eq_block b1 stk). subst. split.
+    eapply Mem.alloc_block_noglobal; eauto. rewrite D in H9. inv H9.
+    eapply Genv.thread_noglobal; eauto. simpl. reflexivity. erewrite E in H9. congruence. eauto.
     rewrite (Mem.support_alloc _ _ _ _ _ H). eauto.
     rewrite (Mem.support_alloc _ _ _ _ _ H). eauto.
     rewrite (Mem.support_alloc _ _ _ _ _ A). eauto.
@@ -1530,6 +1615,9 @@ Proof.
     - red. intros. destruct (eq_block b1 stk). subst. exfalso. apply H8.
       apply Mem.alloc_result in H. rewrite H. reflexivity. erewrite D in H7; eauto.
       congruence.
+    - red. intros. destruct (eq_block b1 stk). subst. split.
+    eapply Mem.alloc_block_noglobal; eauto. rewrite C in H7. inv H7.
+    eapply Genv.thread_noglobal; eauto. erewrite D in H7. congruence. eauto.
     - red. intros.  destruct (eq_block b1 stk). subst. split.
       intro. eapply Mem.fresh_block_alloc; eauto.
       inv ACCE. destruct H19. inv unchanged_on_e'. apply unchanged_on_support. auto.
@@ -1542,6 +1630,7 @@ Proof.
   econstructor. auto.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  red. intros. congruence.
   lia. eauto. eauto.
   apply agree_regs_incr with F; auto. auto.
   erewrite Mem.support_alloc; eauto. eapply Mem.alloc_result in H.
@@ -1557,7 +1646,7 @@ Proof.
 - (* external function *)
   exploit match_stacks_globalenvs; eauto. intros SEINJ.
   exploit external_call_mem_inject; eauto.
-  intros [F1 [v1 [m1' [A [B [C [D [E [J [K [L [M N]]]]]]]]]]]].
+  intros [F1 [v1 [m1' [A [B [C [D [E [J [K [L [M [N O]]]]]]]]]]]]].
   edestruct functions_translated as (cu & fd' & Hfd' & FD & Hcu); eauto.
   simpl in FD. inv FD.
   assert (ACCS: injp_acc_tl (injpw F m m'0 Hm) (injpw F1 m' m1' C)).
@@ -1635,6 +1724,7 @@ Proof.
   apply match_stacks_nil; auto.
   - rewrite Hw. constructor; eauto.
     simpl. red. intros. congruence.
+    red. intros. congruence.
   - unfold init_tm. rewrite Hw. cbn. eauto.
   - rewrite Hw. reflexivity.
   - reflexivity.
