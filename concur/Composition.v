@@ -60,7 +60,143 @@ Next Obligation.
 Qed.
 
 
+Section RESTRICT.
+  Context {li} (L: semantics li li).
+  Context (I: invariant li).
+  Context (IS: inv_world I -> state L -> Prop).
+
+  Definition restrict_lts se :=
+    {|
+      step ge s t s' :=
+        step (L se) ge s t s' /\
+        exists w,
+          symtbl_inv I w se /\
+          IS w s /\
+          IS w s';
+      valid_query q :=
+        valid_query (L se) q;
+      initial_state q s :=
+        initial_state (L se) q s /\
+        exists w,
+          symtbl_inv I w se /\
+          query_inv I w q /\
+          IS w s;
+      final_state s r :=
+        final_state (L se) s r /\
+        exists w,
+          symtbl_inv I w se /\
+          IS w s /\
+          reply_inv I w r;
+      at_external s q :=
+        at_external (L se) s q /\
+        exists w wA,
+          symtbl_inv I w se /\
+          IS w s /\
+          query_inv I wA q;
+      after_external s r s' :=
+        after_external (L se) s r s' /\
+        exists w wA q,
+          symtbl_inv I w se /\
+          at_external (L se) s q /\
+          IS w s /\
+          query_inv I wA q /\
+          reply_inv I wA r /\
+          IS w s';
+    globalenv :=
+      globalenv (L se);
+  |}.
+
+  Definition restrict :=
+    {|
+      skel := skel L;
+      state := state L;
+      (* memory_of_state := memory_of_state L; *)
+      activate se := restrict_lts se;
+    |}.
+
+  Lemma restrict_fsim:
+    preserves L I IS ->
+    GS.forward_simulation (cc_inv I) L restrict.
+  Proof.
+    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
+          destruct Hse; subst); cbn; auto.
+    - destruct 1. reflexivity.
+    - intros q _ s [Hq] Hs. exists s.
+      assert (IS w s) by (eapply preserves_initial_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ r [Hs] Hr. exists r.
+      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ q [Hs] Hx.
+      edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
+      eexists wA, q. intuition eauto 10 using rel_inv_intro.
+      destruct H0. exists s1'. intuition eauto 20 using rel_inv_intro.
+    - intros s t s' STEP _ [Hs].
+      assert (IS w s') by (eapply preserves_step; eauto).
+      exists s'. eauto 10 using rel_inv_intro.
+  Qed.
+
+  Lemma restrict_determinate:
+    determinate L ->
+    determinate restrict.
+  Proof.
+    intros HL se. specialize (HL se) as [ ].
+    split; unfold nostep, not, single_events in *; cbn; intros;
+    repeat (lazymatch goal with H : _ /\ _ |- _ => destruct H as [H _] end);
+    eauto.
+  Qed.
+End RESTRICT.
+
+Lemma restrict_fsim:
+    preserves L IA IA IS ->
+    GS.forward_simulation (cc_inv IA) L restrict.
+  Proof.
+    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
+          destruct Hse; subst); cbn; auto.
+    - destruct 1. reflexivity.
+    - intros q _ s [Hq] Hs. exists s.
+      assert (IS w s) by (eapply preserves_initial_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ r [Hs] Hr. exists r.
+      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ q [Hs] Hx.
+      edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
+      eexists wA, q. intuition eauto 10 using rel_inv_intro.
+      destruct H0. exists s1'. intuition eauto 20 using rel_inv_intro.
+    - intros s t s' STEP _ [Hs].
+      assert (IS w s') by (eapply preserves_step; eauto).
+      exists s'. eauto 10 using rel_inv_intro.
+  Qed.
+  
 Infix "@" := GS.cc_compose (at level 30, right associativity).
+
+
+Section METHODS.
+  Context {li1 li2} {cc: GS.callconv li1 li2}.
+  Context (L1: semantics li1 li1) (L2: semantics li2 li2).
+
+  Lemma source_invariant_fsim I IS:
+    preserves L1 I I IS ->
+    GS.forward_simulation cc (restrict L1 I I IS) L2 ->
+    GS.forward_simulation (I @ cc) L1 L2.
+  Proof.
+    intros HL1 HL.
+    eapply st_fsim_vcomp; eauto.
+    apply restrict_fsim; auto.
+  Qed.
+
+  Lemma target_invariant_fsim IA IB IS:
+    preserves L2 IA IB IS ->
+    forward_simulation ccA ccB L1 (expand L2 IA IB IS) ->
+    forward_simulation (ccA @ IA) (ccB @ IB) L1 L2.
+  Proof.
+    intros HL2 HL.
+    eapply compose_forward_simulations; eauto.
+    apply expand_fsim; auto.
+  Qed.
+End METHODS.
+
 
 
 Inductive match_wt_1 : (injp_world * (unit * injp_world)) -> (unit * (injp_world * injp_world)) -> Prop :=
