@@ -49,5 +49,18 @@ interpreter) as follows:
     % cd test
 	% make 
 	% make test
-	
+
+## Running the Compiler
+The generated binary executable compiler is named ccomp. The compiler ccomp generates two things:
+
+1. The transition languages from Rust syntax to Clight, printed to the terminal.
+2. The binary executable of the Rust program, named test_rust.
+
+For example:
+```
+./ccomp rustexamples/test/borrow_test/17.rs > test_rust.txt
+```
+The most recent successful build is at commit 255d29e.
+
+---
 The generated [documentation](doc/index.html) is provided by CompCertO.
