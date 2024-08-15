@@ -548,7 +548,7 @@ Next Obligation. destruct t. reflexivity. Qed.
 
 
  *)
-
+(*
 Definition inject_separated_external (f f' : meminj) (m1 m2: mem) :=
   forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> fst b1 <> Mem.tid (Mem.support m1) ->
                  ~ Mem.valid_block m1 b1 /\ ~ Mem.valid_block m2 b2.
@@ -556,7 +556,7 @@ Definition inject_separated_external (f f' : meminj) (m1 m2: mem) :=
 Definition inject_separated_internal (f f' : meminj) (m1 m2: mem) :=
   forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> fst b1 = Mem.tid (Mem.support m1) ->
                  ~ Mem.valid_block m1 b1 /\ ~ Mem.valid_block m2 b2.
-
+*)
 
 Lemma inject_separated_imply_e: forall f f' m1 m2,
     inject_separated f f' m1 m2 -> inject_separated_external f f' m1 m2.

@@ -650,35 +650,40 @@ Qed.
 
 Lemma minjection_incr j m1 m2 j' m1' m2' P:
   m2 |= minjection j m1 ** P ->
+  Mem.mem_inj_thread j m1 m2 ->
+  (forall b ofs, (m_footprint P b ofs -> fst b = Mem.tid (Mem.support m2))) ->
   Mem.inject j' m1' m2' ->
-  Mem.unchanged_on_big (loc_unmapped j) m1 m1' ->
-  Mem.unchanged_on_big (loc_out_of_reach j m1) m2 m2' ->
+  Mem.unchanged_on_e (loc_unmapped j) m1 m1' ->
+  Mem.unchanged_on_e (loc_out_of_reach j m1) m2 m2' ->
   inject_incr j j' ->
-  inject_separated j j' m1 m2 ->
+  inject_separated_internal j j' m1 m2 ->
   (forall b ofs p,
       Mem.valid_block m1 b ->
       Mem.perm m1' b ofs Max p ->
       Mem.perm m1 b ofs Max p) ->
   m2' |= minjection j' m1' ** P.
 Proof.
-  intros SEP INJ' UNCH1 UNCH2 INCR ISEP MAXPERMS.
+  intros SEP THE LOCALP INJ' UNCH1 UNCH2 INCR ISEP MAXPERMS.
   destruct SEP as (A & B & C). simpl in A.
   split; [|split].
   - red. simpl. inv INJ'. constructor; eauto.
   - apply m_invar with (m0 := m2).
     + assumption.
-    + 
-      destruct UNCH2. constructor.  auto.
+    + destruct UNCH2. constructor. inversion unchanged_on_thread_e. congruence.
       eapply Mem.unchanged_on_implies; eauto.
-      intros; red; intros; red; intros.
+      intros; red. split. intros; red; intros. intro.
       eelim C; eauto. simpl. exists b0, delta; auto.
+      eapply LOCALP. eauto.
   - red; intros. destruct H as (b0 & delta & J' & E).
     destruct (j b0) as [[b' delta'] | ] eqn:J.
     + erewrite INCR in J' by eauto. inv J'.
       eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
       inv A. destruct (Mem.sup_dec b0 (Mem.support m1)). auto. exploit mi_freeblocks_nt; eauto.
       intro. congruence.
-    + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
+    + exploit ISEP; eauto. exploit LOCALP; eauto. intro.
+      inversion INJ'. inv mi_thread. erewrite Hjs; eauto.
+      inv THE. inv Hms0. congruence.
+      intros (X & Y). elim Y. eapply m_valid; eauto.
 Qed.
 
 Lemma loadv_parallel_rule:
@@ -879,7 +884,7 @@ Next Obligation.
   intuition auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support; eauto.
 Qed.
 Next Obligation.
-  tauto.
+  contradiction.
 Qed.
 
 Lemma globalenv_support:
@@ -894,17 +899,14 @@ Qed.
 Lemma globalenv_inject_incr:
   forall j m1 m2 ge1 ge2 j' m1' P,
   inject_incr j j' ->
-  inject_separated j j' m1 m2 ->
+  inject_separated_noglobal j j'->
   m2 |= globalenv_inject ge1 ge2 j m1 ** P ->
   Mem.sup_include (Mem.support m1) (Mem.support m1') ->
   m2 |= globalenv_inject ge1 ge2 j' m1' ** P.
 Proof.
   intros. destruct H1 as ((D & E) & B & C).
   simpl. intuition auto.
-  - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb Hb'.
-    specialize (H0 b1 b2 delta Hb Hb') as [Hb1' Hb2'].
-    unfold Mem.valid_block in *. split; eauto.
+  - eapply Genv.match_stbls_incr_noglobal; eauto.
   - eauto.
 Qed.
 
@@ -1000,4 +1002,6 @@ Proof.
     rewrite D in H10. inversion H10. subst delta0 b3.
     eauto with mem.
   + rewrite E in H10; congruence.
+- red. intros. unfold j1 in H10. destruct (eq_block b0 b1). subst. inv H10.
+  split; eapply Mem.alloc_block_noglobal; eauto.  congruence.
 Qed.
