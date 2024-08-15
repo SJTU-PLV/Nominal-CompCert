@@ -270,7 +270,7 @@ module To_syntax = struct
       symmap
 
   let pp_print_composite (symmap: id IdentMap.t) pp (c: Rusttypes.composite_definition) =
-    let Rusttypes.Composite (i, s_or_v, members, _, orgs, rels) = c in
+    let Rusttypes.Composite (i, s_or_v, members,orgs, rels) = c in
     let s_or_v =  match s_or_v with
       | Rusttypes.Struct -> "struct"
       | Rusttypes.TaggedUnion -> "enum"
@@ -641,7 +641,7 @@ module To_syntax = struct
       transl_ty t >>= fun t' ->
       return (T.Tbox (t'))
     | Tadt (x, attr, org_ids) ->
-      get_composite x >>= fun (i, T.Composite (_, sv, _, _, orgs, rels)) ->
+      get_composite x >>= fun (i, T.Composite (_, sv, _, orgs, rels)) ->
        (* Use org_ids as the origins notation for this type or
        generate list of dummy origins *)
       let org_ids = if List.length org_ids = 0 then 
@@ -659,8 +659,8 @@ module To_syntax = struct
 
   let composite_of_decl i s_or_e a orgs rels =
     match s_or_e with
-    | Struct -> Rusttypes.Composite (i, Rusttypes.Struct, [], noattr, orgs, rels)
-    | Enum -> Rusttypes.Composite (i, Rusttypes.TaggedUnion, [], noattr, orgs, rels)
+    | Struct -> Rusttypes.Composite (i, Rusttypes.Struct, [], orgs, rels)
+    | Enum -> Rusttypes.Composite (i, Rusttypes.TaggedUnion, [], orgs, rels)
 
   (* add composite declaration *)
   let add_composite_decl (x: id) (s_or_e: struct_or_enum) (orgs: id list) (rels: (id * id) list) : unit monad =
@@ -683,7 +683,7 @@ module To_syntax = struct
     convert_origin_relations rels >>= fun rels ->
     (* FIXME: if this composite has been declared, we just override
     its origins and relations *)
-    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr, orgs, rels) in
+    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', orgs, rels) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos' }
@@ -751,7 +751,7 @@ module To_syntax = struct
     lower_comp_enum c >>= fun ce' ->
     convert_origins orgs >>= fun orgs ->
     convert_origin_relations rels >>= fun rels ->
-    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', noattr, orgs, rels) in
+    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', orgs, rels) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos'
@@ -962,7 +962,7 @@ module To_syntax = struct
           get_st >>= fun st ->
           match IdentMap.find_opt vsn st.composites with
           | None -> failwith "no struct generated for this enum constructor"
-          | Some(Rusttypes.Composite(struct_id, _, _, a, orgs, _)) ->
+          | Some(Rusttypes.Composite(struct_id, _, _, orgs, _)) ->
             (* generate dummy origins *)
             dummy_origins (List.length orgs) >>= fun dummy_origins ->
             return (Rusttypes.Tstruct (dummy_origins, struct_id))
@@ -1158,7 +1158,7 @@ module To_syntax = struct
       (match te with
       | Rusttypes.Tstruct (_, ist) ->
         get_st >>= fun st ->
-        let Rusttypes.Composite (_, _, members, _, _, _) =
+        let Rusttypes.Composite (_, _, members, _, _) =
           IdentMap.find ist st.composites
         in
         get_or_new_ident x >>= fun ix ->
@@ -1173,7 +1173,7 @@ module To_syntax = struct
       (* TODO: why? *)
       | Rusttypes.Treference (org, _, (Rusttypes.Tstruct (_, ist) as ts)) ->
         get_st >>= fun st ->
-        let Rusttypes.Composite (_, _, members, _, _, _) =
+        let Rusttypes.Composite (_, _, members, _, _) =
           IdentMap.find ist st.composites
         in
         get_or_new_ident x >>= fun ix ->
@@ -1215,7 +1215,7 @@ module To_syntax = struct
       map_m xfl get_or_new_ident >>= fun ifl ->
       map_m es transl_expr >>= fun es' ->
       get_composite xstruct >>=
-      fun (istruct, Rusttypes.Composite (_, _, _, attr, orgs, rels)) ->
+      fun (istruct, Rusttypes.Composite (_, _, _, orgs, rels)) ->
       (* FIXME: we should generate list of dummy origins with the same length as orgs *)
       dummy_origins (List.length orgs) >>= fun dummy_orgs ->
       let t = Rusttypes.Tstruct (dummy_orgs, istruct) in
@@ -1239,7 +1239,7 @@ module To_syntax = struct
         let fid = Rustsyntax.Evar(i,fty) in
         return (Rustsyntax.Ecall(fid, exprlist_of args', tres))
       | Eaccess (xenum, xvar) ->
-        get_composite xenum >>= fun (ienum, Rusttypes.Composite (_, s_or_v, _, _, orgs, rels)) ->
+        get_composite xenum >>= fun (ienum, Rusttypes.Composite (_, s_or_v, _, orgs, rels)) ->
         get_or_new_ident xvar >>= fun ivar ->
         (match s_or_v with
         | Rusttypes.Struct -> failwith "unreachable (Eaccess in transl_expr)"
@@ -1419,7 +1419,7 @@ module To_syntax = struct
     get_st >>= fun st ->
     let comp_defs = IdentMap.fold (fun _ c cs -> c::cs) st.composites [] in
     map_m comp_defs 
-      (fun (Rusttypes.Composite(id,_,_,_,_,_)) -> 
+      (fun (Rusttypes.Composite(id,_,_,_,_)) -> 
         create_dropglue_ident id >>= fun drop_id ->
         return ((drop_id, Rustsyntax.empty_drop_globdef id))
       ) >>= fun drops ->

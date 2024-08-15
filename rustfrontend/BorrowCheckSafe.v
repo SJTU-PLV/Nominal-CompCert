@@ -1084,10 +1084,10 @@ Inductive sound_cont (m: mem) : fp_frame -> cont -> Prop :=
 (** TODO: add syntactic well typedness in the sound_state and
 sound_cont *)
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f s k e own m entry cfg pc instr (* ae Σ Γ Δ *) fpm fpf flat_fp sg
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (INSTR: cfg ! pc = Some instr)
-    (MSTMT: match_instr_stmt f.(fn_body) instr s k)
+| sound_regular_state: forall f s k e own m (* entry cfg pc instr *) (* ae Σ Γ Δ *) fpm fpf flat_fp sg
+    (* (CFG: generate_cfg f.(fn_body) = OK (entry, cfg)) *)
+    (* (INSTR: cfg ! pc = Some instr) *)
+    (* (MSTMT: match_instr_stmt f.(fn_body) instr s k) *)
     (* (CHK: borrow_check ce f = OK ae) *)
     (* (AS: ae ! pc = Some (AE.State Σ Γ Δ)) *)
     (MM: mmatch ce fpm m e own)
@@ -1632,9 +1632,65 @@ Proof.
   inv ERR.
   (* step_dropplace_box_error1 *)
   - inv SOUND. inv DP.
+    (* p is owned so that eval_place p must not be error *)
+    eapply eval_place_no_mem_error. eauto. eauto.
+    (* syntactic well typedness *)
+    instantiate (1 := p).
+    admit.
+    simpl in OWN. eapply andb_true_iff in OWN.
+    destruct OWN as (POWN & LOWN).
+    eapply wf_own_dominator; eauto.
+    auto.
+  (* step_dropplace_box_error2 *)
+  - inv SOUND. inv DP.
+    simpl in OWN. eapply andb_true_iff in OWN.
+    destruct OWN as (POWN & LOWN).
+    exploit eval_place_sound. 1-3: eauto.
+    (* syntactic well typedness *)
+    admit.
+    eapply wf_own_dominator; auto.
+    intros (pfp & PFP).
+    exploit MM. eauto. eauto.
+    intros BM.
+    rewrite PTY in BM. inv BM.
+    inv PVAL.
+    eapply H0.
+    simpl in H. inv H.
+    eapply Mem.load_valid_access. eauto.
+    simpl in TY. congruence.
+  (* step_dropplace_box_error3 *)
+  - inv SOUND. inv DP.
+    simpl in OWN. eapply andb_true_iff in OWN.
+    destruct OWN as (POWN & LOWN).
+    exploit eval_place_sound. 1-3: eauto.
+    (* syntactic well typedness *)
+    admit.
+    eapply wf_own_dominator; auto.
+    intros (pfp & PFP).
+    exploit MM. eauto. eauto.
+    intros BM.
+    rewrite PTY in BM. inv BM.
+    + inv PVAL.
+      simpl in H. inv H. simpl in H0. rewrite H0 in LOAD.
+      inv LOAD.
+      (** TODO: show contradiction between extcall_free_sem_mem_error
+      and Mem.range_perm Freeable *)
+      admit.
+      simpl in H0. congruence.
+      simpl in H0. congruence.
+    + simpl in TY. congruence.
+  (* step_dropplace_comp_error *)
+  - inv SOUND. inv DP.
+    (* movable place is owned *)
+    assert (POWN: is_owned own p = true) by admit.
+    (* eval_place error is impossible *)
+    eapply eval_place_no_mem_error. eauto. eauto.
+    (* syntactic well typedness *)
+    instantiate (1 := p). admit.
+    eapply wf_own_dominator; auto.
+    auto.
 Admitted.
 
-        
 Lemma sound_state_no_mem_error: forall s,
     step_mem_error ge s -> sound_state s -> False .
 Admitted.
@@ -1667,49 +1723,97 @@ Proof.
     instantiate (1 := sg). admit.
   (* step_dropstate_struct *)
   - inv SOUND.
+    (* rewrite ce!id1 *)
+    unfold ce in CO. rewrite CO in CO1. inv CO1.
     inv DROPMEMB.
-    (* clear fp1 from fp *)
-    exploit deref_loc_rec_footprint_inv; eauto.
-    intros (fp3 & CLEAR & SET & FPREC).
-    econstructor. eauto.
-    econstructor.
-    (** TODO: show the footprint of the members in co2 using (b0,ofs0)
+    (* co_sv co1 is struct *)
+    + rewrite STRUCT0 in FOFS.
+      (* clear fp1 from fp *)
+      exploit deref_loc_rec_footprint_inv; eauto.
+      intros (fp3 & CLEAR & SET & FPREC).
+      econstructor. eauto.
+      econstructor.
+      (** TODO: show the footprint of the members in co2 using (b0,ofs0)
     is sem_wt_loc *)
-    admit.
-    (* sound_cont *)
-    instantiate (1 := (fpf_drop fp3 fpl fpf)).
-    econstructor; eauto.
-    econstructor; eauto.
-    (* end of sound_cont *)
-    (* construct the flat footprint *)
-    eauto.
-    (* easy: norepet *)
-    admit.
-    (* easy: accessibility *)
-    admit.
-  (* step_dropstate_enum *)
+      admit.
+      (* sound_cont *)
+      instantiate (1 := (fpf_drop fp3 fpl fpf)).
+      econstructor; eauto.
+      eapply drop_member_fp_box_struct; eauto.
+      (* end of sound_cont *)
+      (* construct the flat footprint *)
+      eauto.
+      (* easy: norepet *)
+      admit.
+      (* easy: accessibility *)
+      admit.
+    (* co_sv co1 is enum *)
+    + rewrite ENUM in FOFS.
+      (* clear fp1 from fp *)
+      exploit deref_loc_rec_footprint_inv; eauto.
+      intros (fp3 & CLEAR & SET & FPREC).
+      econstructor. eauto.
+      econstructor.
+      (** TODO: show the footprint of the members in co2 using (b0,ofs0)
+    is sem_wt_loc *)
+      admit.
+      (* sound_cont *)
+      instantiate (1 := (fpf_drop fp3 fpl fpf)).
+      econstructor; eauto.
+      eapply drop_member_fp_box_enum; eauto.
+      (* end of sound_cont *)
+      (* construct the flat footprint *)
+      eauto.
+      (* easy: norepet *)
+      admit.
+      (* easy: accessibility *)
+      admit.
+  (* step_dropstate_enum (similar to step_dropstate_struct case) *)
   - admit.
   (* step_dropstate_box (memory is updated) *)
   - inv SOUND.
+    (* rewrite ce!id *)
+    unfold ce in CO. rewrite CO in CO1. inv CO1.
     inv DROPMEMB.
-    (** TODO: prove that drop_box_rec unchanged_on (In b fp) *)
-    assert (UNC: Mem.unchanged_on (fun b _ => ~ In b (footprint_flat fp)) m m').
-    admit.
-    econstructor. eauto.
-    econstructor.
-    (* prove the soundness of the remaining fields members *)
-    instantiate (1 := fpl). admit.
-    (* sound_cont: use unchanged property *)
-    eapply sound_cont_unchanged; eauto.
-    eapply Mem.unchanged_on_implies; eauto.
-    (* easy: prove the disjointness between fpf and fp *)
-    admit.
-    eauto.
-    (* easy: norepet *)
-    admit.
-    (* easy: accessibility *)
-    instantiate (1 := sg).
-    admit.
+    (* co_sv co = Struct *)
+    + (** TODO: prove that drop_box_rec unchanged_on (In b fp) *)
+      assert (UNC: Mem.unchanged_on (fun b _ => ~ In b (footprint_flat fp)) m m').
+      admit.
+      econstructor. eauto.
+      econstructor.
+      (* prove the soundness of the remaining fields members *)
+      instantiate (1 := fpl). admit.
+      (* sound_cont: use unchanged property *)
+      eapply sound_cont_unchanged; eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      (* easy: prove the disjointness between fpf and fp *)
+      admit.
+      eauto.
+      (* easy: norepet *)
+      admit.
+      (* easy: accessibility *)
+      instantiate (1 := sg).
+      admit.
+    (* co_sv co = TaggedUnion *)
+    + (** TODO: prove that drop_box_rec unchanged_on (In b fp) *)
+      assert (UNC: Mem.unchanged_on (fun b _ => ~ In b (footprint_flat fp)) m m').
+      admit.
+      econstructor. eauto.
+      econstructor.
+      (* prove the soundness of the remaining fields members *)
+      instantiate (1 := fpl). admit.
+      (* sound_cont: use unchanged property *)
+      eapply sound_cont_unchanged; eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      (* easy: prove the disjointness between fpf and fp *)
+      admit.
+      eauto.
+      (* easy: norepet *)
+      admit.
+      (* easy: accessibility *)
+      instantiate (1 := sg).
+      admit.
+
   (* step_dropstate_return1 *)
   - inv SOUND.
     inv CONT.
@@ -1828,14 +1932,12 @@ Proof.
   (* step_dropplace_return *)
   - inv SOUND.
     econstructor; eauto.
-    (* some TBD *)
-    admit. admit. admit.
 Admitted.
-    
+
+
 Lemma step_sound: forall s1 t s2,
     sound_state s1 ->
     Step L s1 t s2 ->
-    (* how to prove sound_state in dropstate? *)
     sound_state s2.
 Proof.
   intros s1 t s2 SOUND STEP. simpl in STEP.
@@ -1848,9 +1950,9 @@ Proof.
     intros WT2.
     exploit path_of_eval_place; eauto. intros (phl & PATH).
     exploit assign_loc_sound; eauto.
-    intros (fpm3 & FPM3 & MM3).
+    intros (fpm3 & MM3).
     econstructor; eauto.
-    admit.
+    
     
 Admitted.
 

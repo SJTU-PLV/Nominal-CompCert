@@ -139,7 +139,7 @@ let print_cfg pp id f =
  
 (* Print CFG with MaybeInit and MaybeUninit *)
 
-let print_paths_map pp (name, (pathmap: InitAnalysis.PathsMap.t)) =
+let print_paths_map pp (name, (pathmap: InitDomain.PathsMap.t)) =
   let (_, l') = List.split (PTree.elements pathmap) in
   let l = List.concat l' in
   fprintf pp "%s: {@[<hov>%a@]}@ "

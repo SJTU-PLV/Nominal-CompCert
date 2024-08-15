@@ -164,14 +164,14 @@ let print_globdecl p (id,gd) =
 
 let struct_or_variant = function Struct -> "struct" | TaggedUnion -> "variant"
 
-let declare_composite p (Composite(id, su, m, a, orgs, rels)) =
+let declare_composite p (Composite(id, su, m, orgs, rels)) =
   fprintf p "%s %s%s %s;@ " (struct_or_variant su) (extern_atom id) (print_origins orgs) (origin_relations_string rels)
 
 let print_member p = function
   | Member_plain(id, ty) ->
       fprintf p "@ %s;" (name_rust_decl (extern_atom id) ty)
 
-let define_composite p (Composite(id, su, m, a, orgs, rels)) =
+let define_composite p (Composite(id, su, m, orgs, rels)) =
   fprintf p "@[<v 2>%s %s%s %s{"
           (struct_or_variant su) (extern_atom id) (print_origins orgs) (origin_relations_string rels);
   List.iter (print_member p) m;
