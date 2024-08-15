@@ -173,7 +173,7 @@ RUSTFRONTEND=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
   BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v\
   BorrowCheckSafe.v\
   Clightgen.v Clightgenspec.v Clightgenproof.v\
-  RustOp.v
+  RustOp.v ElaborateDropProof.v
 
 # Parser
 
