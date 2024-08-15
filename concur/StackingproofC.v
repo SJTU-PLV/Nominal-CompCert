@@ -2682,28 +2682,27 @@ Theorem transf_program_correct rao prog tprog:
                      (Linear.semantics prog) (Mach.semantics rao tprog).
 Proof.
   intros Hrao MATCH.
-  eapply source_invariant_fsim.
-  exploit linear_wt; eauto.
-  Search preserves. Search wt_loc.
-  Search linear_wt. wt_prog.
+  eapply source_invariant_fsim; eauto using linear_wt, wt_prog.
   revert MATCH.
-  fsim eapply forward_simulation_plus with (match_states:= match_states rao prog tprog se1 se2 w).
+  constructor. econstructor. try fsim_skel MATCH.
+  intros se1 se2 w Hse Hse1;
+    eapply GS.forward_simulation_plus with (match_states:= match_states rao prog tprog se1 se2 w).
   - intros q1 q2 Hq. destruct Hq. inv Hse. cbn in *.
     eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
     intros [|] ? Hfd; monadInv Hfd; auto.
   - cbn. intuition eauto using transf_initial_states.
-  - intros s1 s2 r1 Hs  (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
+  - intros gw s1 s2 r1 Hs  (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.
-  - intros s1 s2 q1 Hs (Hq1 & [? ?] & ? & Hx & WTS & WTQ). cbn in Hx. subst.
+  - intros gw s1 s2 q1 Hs (Hq1 & [? ?] & ? & Hx & WTS & WTQ). cbn in Hx. subst.
     edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
-    exists wx, qx2. intuition auto. destruct H4 as (Hs1' & _).
-    edestruct H2 as (st2' & ? & ?); eauto.
+    exists wx, qx2. intuition auto. destruct H5 as (Hs1' & _).
+    edestruct H4 as (st2' & ? & ?); eauto.
   - intros s1 t s1' (Hs1' & [xse ?] & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
     eapply transf_step_correct; eauto.
+  - auto using well_founded_ltof.
 Qed.
- *)
+
 
 (** TODO:
-1. define source_invariant_fsim for new fsim
 2. change the lemmas in Separation about inject_separated and Mem.unchanged_on_big
 3. fix the local accessibilities *)   

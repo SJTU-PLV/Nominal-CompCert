@@ -10,41 +10,6 @@ Require Import Smallstep.
 Require Import Invariant.
 Require Import CallconvBig VCompBig.
                
-(** ** Preservation *)
-
-(** A small step semantics preserves an externally observable
-  invariant if the following properties hold. In addition to the
-  invariant interfaces for the incoming function call ([IB]) and any
-  outgoing external calls ([IA]), we specify a "state invariant" [IS]
-  which will be estblished by the initial query and external call
-  returns, preserved by internal steps, and ensure the invariant
-  interface is respected at external calls and final states. *)
-
-Record lts_preserves {li S} se (L: lts li li S) I (IS: _ -> S -> Prop) w :=
-  {
-    preserves_step s t s':
-      IS w s ->
-      Step L s t s' ->
-      IS w s';
-    preserves_initial_state q s:
-      query_inv I w q ->
-      initial_state L q s ->
-      IS w s;
-    preserves_external s q:
-      IS w s -> at_external L s q ->
-      exists wA, symtbl_inv I wA se /\ query_inv I wA q /\
-      forall r s', reply_inv I wA r -> after_external L s r s' -> IS w s';
-    preserves_final_state s r:
-      IS w s ->
-      final_state L s r ->
-      reply_inv I w r;
-  }.
-
-Definition preserves {li} (L: semantics li li) (I: invariant _) IS :=
-  forall w se,
-    Genv.valid_for (skel L) se ->
-    symtbl_inv I w se ->
-    lts_preserves se (L se) I IS w.
 
 (** ** As calling conventions *)
 
@@ -73,7 +38,7 @@ Qed.
   into a self-simulation by the invariant calling conventions. *)
 
 Lemma preserves_fsim {li} (L: semantics li li) I IS:
-  preserves L I IS ->
+  preserves L I I IS ->
   GS.forward_simulation (cc_inv I) L L.
 Proof.
   intros MATCH. constructor.
@@ -162,65 +127,11 @@ Qed.
 
 (** ** Strengthening the source semantics *)
 
-
-Section RESTRICT.
-  Context {li} (L: semantics li li).
-  Context (I: invariant li).
-  Context (IS: inv_world I -> state L -> Prop).
-
-  Definition restrict_lts se :=
-    {|
-      step ge s t s' :=
-        step (L se) ge s t s' /\
-        exists w,
-          symtbl_inv I w se /\
-          IS w s /\
-          IS w s';
-      valid_query q :=
-        valid_query (L se) q;
-      initial_state q s :=
-        initial_state (L se) q s /\
-        exists w,
-          symtbl_inv I w se /\
-          query_inv I w q /\
-          IS w s;
-      final_state s r :=
-        final_state (L se) s r /\
-        exists w,
-          symtbl_inv I w se /\
-          IS w s /\
-          reply_inv I w r;
-      at_external s q :=
-        at_external (L se) s q /\
-        exists w wA,
-          symtbl_inv I w se /\
-          IS w s /\
-          query_inv I wA q;
-      after_external s r s' :=
-        after_external (L se) s r s' /\
-        exists w wA q,
-          symtbl_inv I w se /\
-          at_external (L se) s q /\
-          IS w s /\
-          query_inv I wA q /\
-          reply_inv I wA r /\
-          IS w s';
-    globalenv :=
-      globalenv (L se);
-  |}.
-
-  Definition restrict :=
-    {|
-      skel := skel L;
-      state := state L;
-      (* memory_of_state := memory_of_state L; *)
-      activate se := restrict_lts se;
-    |}.
-
-  Lemma restrict_fsim:
-    preserves L I IS ->
-    GS.forward_simulation (cc_inv I) L restrict.
-  Proof.
+Lemma restrict_fsim :
+  forall {li: language_interface} (L : semantics li li) (I: invariant li)
+    (IS : inv_world I -> state L -> Prop),
+    preserves L I I IS -> GS.forward_simulation I L (restrict L I I IS).
+Proof.
     intro MATCH. econstructor.
     econstructor. reflexivity.
     intros se1 sae2 w Hse Hse1. eapply GS.forward_simulation_step with (match_states := fun _ =>rel_inv (IS w));(destruct Hse; subst); cbn; auto.
@@ -234,23 +145,13 @@ Section RESTRICT.
     - intros tt s _ q [Hs] Hx.
       edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
       eexists wA, q. intuition eauto 10 using rel_inv_intro.
-      destruct H3. exists s1'. intuition eauto 20 using rel_inv_intro.
+      destruct H4. exists s1'. intuition eauto 20 using rel_inv_intro.
     - intros s t s' STEP a b [Hs].
       assert (IS w s') by (eapply preserves_step; eauto).
       exists s'. eauto 10 using rel_inv_intro.
     - auto using well_founded_ltof.
-  Qed.
+Qed.
 
-  Lemma restrict_determinate:
-    determinate L ->
-    determinate restrict.
-  Proof.
-    intros HL se. specialize (HL se) as [ ].
-    split; unfold nostep, not, single_events in *; cbn; intros;
-    repeat (lazymatch goal with H : _ /\ _ |- _ => destruct H as [H _] end);
-    eauto.
-  Qed.
-End RESTRICT.
   
 Infix "@" := GS.cc_compose (at level 30, right associativity).
 
@@ -259,8 +160,8 @@ Section METHODS.
   Context (L1: semantics li1 li1) (L2: semantics li2 li2).
 
   Lemma source_invariant_fsim I IS:
-    preserves L1 I IS ->
-    GS.forward_simulation cc (restrict L1 I IS) L2 ->
+    preserves L1 I I IS ->
+    GS.forward_simulation cc (restrict L1 I I IS) L2 ->
     GS.forward_simulation (I @ cc) L1 L2.
   Proof.
     intros HL1 HL.
