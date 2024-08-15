@@ -1496,6 +1496,8 @@ Admitted.
   
 (* assign_loc remains sound. We need a more general one *)
 
+(** Important Lemma  *)
+(* Consider assign to a variant? *)
 Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p fp e ty
     (MM: mmatch ce fpm1 m1 e own1)
     (AS: assign_loc ce ty m1 b ofs v m2)
@@ -1507,6 +1509,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p fp e ty
    (* set_footprint_map id phl fp fpm1 = Some fpm2 *)
    exists fpm2, mmatch ce fpm2 m2 e own2.
 Admitted.
+
 
 (** Similar to Frame Rule in separation logic?  *)
 (* mmatch is preserved if its footprint is unchanged *)
@@ -1965,7 +1968,7 @@ Proof.
     admit.
   (* assign_variant sound *)
   - inv SOUND.
-    
+    assign_loc_sound
     
 
 

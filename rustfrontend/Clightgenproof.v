@@ -3189,10 +3189,10 @@ Proof.
       eauto. eauto.
       eapply match_env_incr;eauto. 
   (* assign_variant *)
-  - inv MSTMT. simpl in H9.
-    monadInv_comb H9.
+  - inv MSTMT. simpl in H0.
+    monadInv_comb H0.
     unfold transl_assign_variant in EQ0.
-    rename H into SENUM.
+    rename CO into SENUM.
     unfold ge in SENUM. simpl in SENUM. fold ce in SENUM.
     rewrite SENUM in EQ0.
     destruct (co_sv co) eqn: SCV; [inv EQ0|].
@@ -3201,21 +3201,33 @@ Proof.
     eapply match_prog_comp_env; eauto.
     eauto. auto. 
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E). 
-    clear E.
     (* rewrite to_cstmt *)
-    rename H5 into TAG. rewrite TAG in EQ0.
+    rewrite TAG in EQ0.
     unfold tce in EQ0. rewrite A in EQ0. rewrite C in EQ0.
-    rewrite H0 in EQ0.
+    rewrite FTY in EQ0.
     inv EQ0.
     (* eval_lvalue (Efield (Efield x0 union_fid (Tunion union_id noattr)) fid
-       (to_ctype (typeof e))) in tm2 *)    
-    exploit eval_place_inject. 2: eapply H2. simpl.
-    rewrite TYP. rewrite SENUM.
-    unfold tce. rewrite A.  rewrite SCV. rewrite C.
-    unfold tce in EQ1. rewrite EQ1. simpl. eauto.
-    eauto. eauto.
+       (to_ctype (typeof e))) in tm2 *)
+    exploit eval_place_inject. 2: eapply PADDR1. eauto. eauto. eauto.
     instantiate (1 := le0).
     intros (tb1 & tofs1 & TEVALP1 & VINJ3).
+    assert (TYTP: Clight.typeof x0 = Ctypes.Tstruct enum_id noattr).
+    { exploit place_to_cexpr_type; eauto. intros CTYP.
+      rewrite <- CTYP. rewrite TYP. simpl. auto.  }
+
+    exploit E; eauto.
+    intros (ofs2 & ofs3 & FOFS1 & FOFS2 & OFSEQ).
+    assert (TEVALP1': eval_lvalue tge te le0 tm (Efield (Efield x0 union_fid (Tunion union_id noattr)) fid (to_ctype ty)) tb1 (Ptrofs.add tofs1 (Ptrofs.repr fofs)) Full).
+    { rewrite OFSEQ. rewrite add_repr.
+       rewrite <- Ptrofs.add_assoc.          
+      eapply eval_Efield_union. eapply eval_Elvalue.
+      eapply eval_Efield_struct. eapply eval_Elvalue.
+      eauto. rewrite TYTP.
+      eapply Clight.deref_loc_copy. auto. eauto.
+      eauto.
+      eauto. 
+      simpl. eapply Clight.deref_loc_copy. auto. simpl. eauto.
+      eauto. eauto. }
     (* eval_expr_inject  *)
     exploit eval_expr_inject; eauto. instantiate (1 := le0).
     intros (tv & TEVAL & VINJ4).
@@ -3223,14 +3235,12 @@ Proof.
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
     intros (tv1 & SEMCAST & VINJ5).
     (* assign_loc inject *)
-    exploit assign_loc_inject; eauto.
+    inv VINJ3.
+    exploit assign_loc_inject; eauto.   
     intros (tm3 & TASSLOC & MINJ3 & INCR3).    
     (* eval_lvalue (Efield x0 tag_fid Ctypes.type_int32s) *)
     exploit eval_place_inject; eauto. instantiate (1 := le0).
-    intros (tb & tofs & TEVALP & VINJ1).
-    assert (TYTP: Clight.typeof x0 = Ctypes.Tstruct enum_id noattr).
-    exploit place_to_cexpr_type; eauto. intros CTYP.
-    rewrite <- CTYP. rewrite TYP. simpl. auto.    
+    intros (tb & tofs & TEVALP & VINJ1).    
     assert (EVALTAG: eval_lvalue tge te le0 tm3 (Efield x0 tag_fid Ctypes.type_int32s) tb (Ptrofs.add tofs (Ptrofs.zero)) Full).
     { eapply eval_Efield_struct. eapply eval_Elvalue; eauto.
       rewrite TYTP. eapply Clight.deref_loc_copy; eauto.
@@ -3248,13 +3258,14 @@ Proof.
     + eapply plus_left.
       eapply Clight.step_seq.
       (* assign body *)
-      eapply star_step. econstructor.
-      instantiate (1 := Full). instantiate (1 := tofs1).
-      instantiate (1 := tb1).
-      inv TEVALP1. simpl in H12.  inv H12.
-      eapply eval_Efield_union; eauto.
-      eauto. simpl. erewrite expr_to_cexpr_type in *; eauto.
-      simpl. eauto.
+      eapply star_step. econstructor. eauto.
+      eauto. simpl.
+      erewrite expr_to_cexpr_type in *; eauto.
+      simpl.
+      replace ((Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr delta)) (Ptrofs.repr (ofs2 + ofs3)))) with ((Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr (ofs2 + ofs3))) (Ptrofs.repr delta))).
+      eauto.
+      repeat rewrite Ptrofs.add_assoc. f_equal.      
+      eapply Ptrofs.add_commut.            
       (* assign tag *)
       eapply star_step. econstructor.
       eapply star_step.
@@ -3266,7 +3277,7 @@ Proof.
       rewrite Ptrofs.add_zero. simpl.
       erewrite Mem.address_inject. eauto.
       eapply MINJ3.
-      exploit Mem.store_valid_access_3. eapply H7.
+      exploit Mem.store_valid_access_3. eapply STAG.
       intros. eapply Mem.valid_access_perm. eauto.
       eauto.
       econstructor.

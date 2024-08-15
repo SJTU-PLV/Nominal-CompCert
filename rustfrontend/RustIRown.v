@@ -497,31 +497,32 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign to p *)
     assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
     step (State f (Sassign p e) k le own1 m1) E0 (State f Sskip k le own3 m2)
-| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3
+| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = Some own2)
     (CHKASSIGN: own_check_assign own2 p = Some own3)
     (* necessary for clightgen simulation *)
-    (TYP: typeof_place p = Tvariant orgs enum_id),
-ge.(genv_cenv) ! enum_id = Some co ->
-    field_type fid co.(co_members) = OK ty ->
+    (TYP: typeof_place p = Tvariant orgs enum_id)
+    (CO: ge.(genv_cenv) ! enum_id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
     (* evaluate the expr, return the value *)
-    eval_expr ge le m1 e v ->
+    (EXPR: eval_expr ge le m1 e v)
     (* evaluate the location of the variant in p (in memory m1) *)
-    eval_place ge le m1 (Pdowncast p fid ty) b ofs ->
+    (PADDR1: eval_place ge le m1 p b ofs)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
     (* sem_cast to simulate Clight *)
-    sem_cast v (typeof e) ty = Some v1 ->
+    (CAST: sem_cast v (typeof e) ty = Some v1)
     (* set the value *)
-    assign_loc ge ty m1 b ofs v1 m2 ->
+    (AS: assign_loc ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1 m2)
     (** different from normal assignment: update the tag and assign value *)
-    field_tag fid co.(co_members) = Some tag ->
+    (TAG: field_tag fid co.(co_members) = Some tag)
     (* eval the location of the tag: to simulate the target statement:
     because we cannot guarantee that store value in m1 does not change
     the address of p! (Non-interference is a difficult problem!) *)
-    eval_place ge le m2 p b1 ofs1 ->
+    (PADDR2: eval_place ge le m2 p b1 ofs1)
     (* set the tag *)
-    Mem.storev Mint32 m2 (Vptr b1 ofs1) (Vint (Int.repr tag)) = Some m3 ->
-    step (State f (Sassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
+    (STAG: Mem.storev Mint32 m2 (Vptr b1 ofs1) (Vint (Int.repr tag)) = Some m3),
+   step (State f (Sassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = Some own2)
