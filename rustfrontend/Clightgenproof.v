@@ -3189,31 +3189,49 @@ Proof.
       eauto. eauto.
       eapply match_env_incr;eauto. 
   (* assign_variant *)
-  - inv MSTMT. simpl in H10.
-    monadInv_comb H10.
+  - inv MSTMT. simpl in H9.
+    monadInv_comb H9.
     unfold transl_assign_variant in EQ0.
-    rename H3 into SENUM.
+    rename H into SENUM.
     unfold ge in SENUM. simpl in SENUM. fold ce in SENUM.
     rewrite SENUM in EQ0.
     destruct (co_sv co) eqn: SCV; [inv EQ0|].
     (* variant_field_offset *)
     exploit variant_field_offset_match.
-    eapply match_prog_comp_env; eauto.   
+    eapply match_prog_comp_env; eauto.
     eauto. auto. 
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E). 
     clear E.
     (* rewrite to_cstmt *)
-    rename H4 into TAG. rewrite TAG in EQ0.
+    rename H5 into TAG. rewrite TAG in EQ0.
     unfold tce in EQ0. rewrite A in EQ0. rewrite C in EQ0.
     rewrite H0 in EQ0.
     inv EQ0.
+    (* eval_lvalue (Efield (Efield x0 union_fid (Tunion union_id noattr)) fid
+       (to_ctype (typeof e))) in tm2 *)    
+    exploit eval_place_inject. 2: eapply H2. simpl.
+    rewrite TYP. rewrite SENUM.
+    unfold tce. rewrite A.  rewrite SCV. rewrite C.
+    unfold tce in EQ1. rewrite EQ1. simpl. eauto.
+    eauto. eauto.
+    instantiate (1 := le0).
+    intros (tb1 & tofs1 & TEVALP1 & VINJ3).
+    (* eval_expr_inject  *)
+    exploit eval_expr_inject; eauto. instantiate (1 := le0).
+    intros (tv & TEVAL & VINJ4).
+    (* sem_cast inject *)
+    exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
+    intros (tv1 & SEMCAST & VINJ5).
+    (* assign_loc inject *)
+    exploit assign_loc_inject; eauto.
+    intros (tm3 & TASSLOC & MINJ3 & INCR3).    
     (* eval_lvalue (Efield x0 tag_fid Ctypes.type_int32s) *)
     exploit eval_place_inject; eauto. instantiate (1 := le0).
     intros (tb & tofs & TEVALP & VINJ1).
     assert (TYTP: Clight.typeof x0 = Ctypes.Tstruct enum_id noattr).
     exploit place_to_cexpr_type; eauto. intros CTYP.
     rewrite <- CTYP. rewrite TYP. simpl. auto.    
-    assert (EVALTAG: eval_lvalue tge te le0 tm (Efield x0 tag_fid Ctypes.type_int32s) tb (Ptrofs.add tofs (Ptrofs.zero)) Full).
+    assert (EVALTAG: eval_lvalue tge te le0 tm3 (Efield x0 tag_fid Ctypes.type_int32s) tb (Ptrofs.add tofs (Ptrofs.zero)) Full).
     { eapply eval_Efield_struct. eapply eval_Elvalue; eauto.
       rewrite TYTP. eapply Clight.deref_loc_copy; eauto.
       eauto. eauto.
@@ -3225,50 +3243,33 @@ Proof.
     inv VINJ1.
     exploit Mem.store_mapped_inject; eauto.
     intros (tm2 & TSTORETAG & VINJ2).
-    (* eval_lvalue (Efield (Efield x0 union_fid (Tunion union_id noattr)) fid
-       (to_ctype (typeof e))) in tm2 *)    
-    exploit eval_place_inject. 2: eapply H7. simpl.
-    rewrite TYP. simpl in H. unfold ce. rewrite H.
-    unfold tce. rewrite A.  rewrite SCV. rewrite C.
-    unfold ce, tce in EQ1. rewrite EQ1. simpl. eauto.
-    eauto. eauto.
-    instantiate (1 := le0).
-    intros (tb1 & tofs1 & TEVALP1 & VINJ3).
-    (* eval_expr_inject  *)
-    exploit eval_expr_inject; eauto. instantiate (1 := le0).
-    intros (tv & TEVAL & VINJ4).
-    (* sem_cast inject *)
-    exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm2).
-    intros (tv1 & SEMCAST & VINJ5).
-    (* assign_loc inject *)
-    exploit assign_loc_inject; eauto.
-    intros (tm3 & TASSLOC & MINJ3 & INCR3).
     (* step in target *)
     eexists. split.
     + eapply plus_left.
       eapply Clight.step_seq.
+      (* assign body *)
+      eapply star_step. econstructor.
+      instantiate (1 := Full). instantiate (1 := tofs1).
+      instantiate (1 := tb1).
+      inv TEVALP1. simpl in H12.  inv H12.
+      eapply eval_Efield_union; eauto.
+      eauto. simpl. erewrite expr_to_cexpr_type in *; eauto.
+      simpl. eauto.
       (* assign tag *)
-      eapply star_step. eapply Clight.step_assign.
+      eapply star_step. econstructor.
+      eapply star_step.
+      eapply Clight.step_assign.
       eauto. econstructor.
       simpl. eapply cast_val_casted. econstructor.
       auto.
       econstructor. simpl. eauto.
       rewrite Ptrofs.add_zero. simpl.
       erewrite Mem.address_inject. eauto.
-      eapply MINJ.
-      exploit Mem.store_valid_access_3. eapply H5.
+      eapply MINJ3.
+      exploit Mem.store_valid_access_3. eapply H7.
       intros. eapply Mem.valid_access_perm. eauto.
-      eauto. 
-      (* assign body *)
-      eapply star_step. econstructor.
-      eapply star_step. econstructor.
-      instantiate (1 := Full). instantiate (1 := tofs1).
-      instantiate (1 := tb1).
-      inv TEVALP1. simpl in H13.  inv H13.
-      eapply eval_Efield_union; eauto.
-      eauto. simpl. erewrite expr_to_cexpr_type in *; eauto.
-      simpl. eauto.
-      econstructor; simpl; eauto.
+      eauto.
+      econstructor.
       1-4 : eauto. 
     + eapply match_regular_state with (j := j);eauto.
       econstructor. simpl. auto. instantiate (1 := initial_generator).
@@ -3276,9 +3277,11 @@ Proof.
       (* inject_incr and match_cont *)
       (* inj_incr *)
       etransitivity. eauto.
-      replace (Mem.support m1) with (Mem.support m2).
-      replace (Mem.support tm) with (Mem.support tm2). auto.
+      replace (Mem.support m3) with (Mem.support m2).
+      replace (Mem.support tm2) with (Mem.support tm3). auto.
+      symmetry.
       eapply Mem.support_store; eauto.
+      symmetry.
       eapply Mem.support_store; eauto.
       
   (* box *)

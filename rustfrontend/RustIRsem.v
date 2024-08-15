@@ -231,24 +231,23 @@ Inductive step : state -> trace -> state -> Prop :=
     (TYP: typeof_place p = Tvariant orgs enum_id),
     ge.(genv_cenv) ! enum_id = Some co ->
     field_type fid co.(co_members) = OK ty ->
-    (* get the location of the place *)
-    eval_place ge le m1 p b ofs ->
+    (* evaluate the expr, return the value *)
+    eval_expr ge le m1 e v ->
+    (* evaluate the location of the variant in p (in memory m1) *)
+    eval_place ge le m1 (Pdowncast p fid ty) b ofs ->
     (* sem_cast to simulate Clight *)
     sem_cast v (typeof e) ty = Some v1 ->
-    (** different from normal assignment: update the tag and assign value *)
-    ge.(genv_cenv) ! enum_id = Some co ->
-    field_tag fid co.(co_members) = Some tag ->
-    (* set the tag *)
-    Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    (* evaluate the expr (in memory m2) *)
-    eval_expr ge le m2 e v ->
-    (* eval downcast to simulate the target statement: because we
-    cannot guarantee that store tag in m1 does not change the address
-    of p! (Non-interference is a difficult problem!) *)
-    eval_place ge le m2 (Pdowncast p fid ty) b1 ofs1 ->
-    (* variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->- *)
     (* set the value *)
-    assign_loc ge ty m2 b1 ofs1 v1 m3 ->
+    assign_loc ge ty m1 b ofs v1 m2 ->
+    (** different from normal assignment: update the tag and assign value *)
+    field_tag fid co.(co_members) = Some tag ->
+    (* eval the location of the tag: to simulate the target statement:
+    because we cannot guarantee that store value in m1 does not change
+    the address of p! (Non-interference is a difficult problem!) *)
+    eval_place ge le m2 p b1 ofs1 ->
+    (* set the tag *)
+    Mem.storev Mint32 m2 (Vptr b1 ofs1) (Vint (Int.repr tag)) = Some m3 ->
+    (* variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->- *)
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs,
     typeof_place p = Tbox ty ->

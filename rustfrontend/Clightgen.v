@@ -596,7 +596,8 @@ Definition transl_assign_variant (p: place) (enum_id arm_id: ident) (e' lhs: Cli
                           let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
                           let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
                           let assign_body := Clight.Sassign lhs' e' in
-                          OK (Clight.Ssequence assign_tag assign_body)
+                          (* We must first eval and store the value of expression and then store the tag because the tag in p may influence the value *)
+                          OK (Clight.Ssequence assign_body assign_tag)
                       | _ => Error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
                       end
                   | _ => Error [CTX enum_id; MSG ": cannot get its tag or body id when translating the variant assignement"]

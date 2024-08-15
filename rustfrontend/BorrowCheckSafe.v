@@ -1952,9 +1952,22 @@ Proof.
     exploit assign_loc_sound; eauto.
     intros (fpm3 & MM3).
     econstructor; eauto.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    admit.
+    (* norepet *)
+    admit.
+    (* accessibility *)
+    instantiate (1 := sg).
+    admit.
+    (* wf_own_env: show own_check_expr and own_check_assign preserve wf_own_env *)
+    admit.
+  (* assign_variant sound *)
+  - inv SOUND.
     
     
-Admitted.
+
 
 
 Lemma reachable_state_sound: forall s,
