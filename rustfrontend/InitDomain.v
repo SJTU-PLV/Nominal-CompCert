@@ -260,8 +260,9 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
           OK [(p, true)]
       else
         Error ([MSG "place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: split_drop_place"])
-  (* Is it correct? *)
-  | _ => Error [MSG ": Normal types do not need drop: split_drop_place"]
+  (* Is it correct? Error or Ignore? Consider that we always reach here *)
+  | _ => OK []
+   (* Error [MSG ": Normal types do not need drop: split_drop_place"] *)
   end.
 
 End SPLIT.
