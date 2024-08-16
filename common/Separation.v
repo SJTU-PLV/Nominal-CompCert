@@ -972,7 +972,8 @@ Lemma alloc_parallel_rule_2:
   /\ thread_same j' m1' m2'
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
-  /\ inject_separated j j' m1 m2 .
+  /\ inject_separated j j' m1 m2
+  /\ inject_separated_noglobal j j'.
 Proof.
   intros.
   set (j1 := fun b => if eq_block b b1 then Some(b2, delta) else j b).
@@ -993,15 +994,16 @@ Proof.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite E; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite E in H10 by auto. congruence.
 - rewrite (Mem.support_alloc m1 0 sz1 m1' b1); eauto.
-- split; auto.
-  split; auto.
-  split; auto.
+- repeat apply conj; auto.
+  + 
   red. intros b0 b3 delta0 H9 H10.
   destruct (eq_block b0 b1).
-  + subst.
+  -- subst.
     rewrite D in H10. inversion H10. subst delta0 b3.
     eauto with mem.
-  + rewrite E in H10; congruence.
+  -- rewrite E in H10; congruence.
+  + red. intros. destruct (eq_block b0 b1). subst. rewrite D in H10. inv H10.
+  split; eapply Mem.alloc_block_noglobal; eauto. erewrite E in H10. congruence. eauto.
 - red. intros. unfold j1 in H10. destruct (eq_block b0 b1). subst. inv H10.
   split; eapply Mem.alloc_block_noglobal; eauto.  congruence.
 Qed.

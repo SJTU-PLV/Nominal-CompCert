@@ -1122,7 +1122,7 @@ Local Opaque b fe.
   generalize (bound_stack_data_pos b) size_no_overflow; lia.
   tauto.
   tauto.
-  clear SEP. intros (j' & SEP & TEQ' & INCR & SAME & INJSEP).
+  clear SEP. intros (j' & SEP & TEQ' & INCR & SAME & INJSEP & NOG).
   (* Remember the freeable permissions using a mconj *)
   assert (SEPCONJ:
     m2' |= mconj (range sp' 0 (fe_stack_data fe) ** range sp' (fe_stack_data fe + bound_stack_data b) (fe_size fe))

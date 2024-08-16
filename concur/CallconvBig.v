@@ -923,6 +923,39 @@ Proof.
   - red. intros. exfalso. apply H7. eauto with mem.
 Qed.
 
+Lemma injp_acc_tl_alloc': forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm' d,
+    Mem.alloc m1 lo1 hi1 = (m1',b1) ->
+    Mem.alloc m2 lo2 hi2 = (m2',b2) ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, d) ->
+    inject_separated f f' m1 m2 ->
+    inject_separated_noglobal f f' ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. intros.
+    exploit Mem.valid_block_alloc_inv. apply H. eauto. intros [|]. subst.
+    apply Mem.alloc_result in H. subst. reflexivity. congruence.
+  - red. intros.
+    exploit Mem.valid_block_alloc_inv. apply H0. eauto. intros [|]. subst.
+    apply Mem.alloc_result in H0. subst. reflexivity. congruence.
+  - eauto using Mem.ro_unchanged_alloc.
+  - eauto using Mem.ro_unchanged_alloc.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_inv in Hp; eauto.
+    destruct (eq_block b b1); eauto; subst.
+    eelim (Mem.fresh_block_alloc m1); eauto.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_inv in Hp; eauto.
+    destruct (eq_block b b2); eauto; subst.
+    eelim (Mem.fresh_block_alloc m2); eauto.
+  - eapply Mem.alloc_unchanged_on_tl; eauto.
+  - eapply Mem.alloc_unchanged_on_tl; eauto.
+  - assumption.
+  - auto. 
+  - auto. 
+  - red. intros. exfalso. apply H8. eauto with mem.
+Qed.
 
 Lemma injp_acc_tl_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
     Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
