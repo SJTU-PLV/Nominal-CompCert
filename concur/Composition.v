@@ -58,8 +58,7 @@ Qed.
 Next Obligation.
   inv H. auto.
 Qed.
-
-
+(*
 Section RESTRICT.
   Context {li} (L: semantics li li).
   Context (I: invariant li).
@@ -146,12 +145,13 @@ Section RESTRICT.
     eauto.
   Qed.
 End RESTRICT.
-
-Lemma restrict_fsim:
+ *)
+(*
+Lemma restrict_fsim {li} (L :semantics li li) IA IS:
     preserves L IA IA IS ->
-    GS.forward_simulation (cc_inv IA) L restrict.
+    GS.forward_simulation (cc_inv IA) L (restrict L IA IA IS).
   Proof.
-    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
+    fsim (apply GS.forward_simulation_step with (match_states := rel_inv (IS w));
           destruct Hse; subst); cbn; auto.
     - destruct 1. reflexivity.
     - intros q _ s [Hq] Hs. exists s.
@@ -169,8 +169,6 @@ Lemma restrict_fsim:
       exists s'. eauto 10 using rel_inv_intro.
   Qed.
   
-Infix "@" := GS.cc_compose (at level 30, right associativity).
-
 
 Section METHODS.
   Context {li1 li2} {cc: GS.callconv li1 li2}.
@@ -196,6 +194,8 @@ Section METHODS.
     apply expand_fsim; auto.
   Qed.
 End METHODS.
+*)
+Infix "@" := GS.cc_compose (at level 30, right associativity).
 
 
 
