@@ -746,13 +746,6 @@ Qed.
 (** Can we just use get and set here??? or we have to define a ro_injp as single
     callconv and prove it equivent to ro @ c_injp ?
     Or we can use the same way as Stacking to separate ro with c_injp? *)
-(* Compute (GS.gworld (ro @ c_injp)).
-Compute (GS.ccworld (ro @ c_injp)).
-Definition set_ro_injp (w: GS.ccworld (ro @ c_injp)) (gw : GS.gworld (ro@ c_injp)) :
-  GS.ccworld (ro @ c_injp) :=
-  (fst w, ((fst (snd w)), snd gw)).
-Compute row.
-*)
 Lemma transf_final_states:
   forall gw n st1 st2 r1,
   match_states n gw st1 st2 -> final_state st1 r1 ->
@@ -765,7 +758,6 @@ Proof.
   eexists. simpl. auto. constructor; eauto.
 Qed.
 
-(*Why *)
 Lemma transf_external_states:
   forall n gw st1 st2 q1, match_states n gw st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
   exists (wx: GS.ccworld (ro @ c_injp)) q2, at_external tge st2 q2 /\ gw *-> (snd (get wx)) /\ GS.match_query (ro @ c_injp) wx q1 q2 /\ GS.match_senv (ro @ c_injp) wx se tse /\
@@ -791,7 +783,21 @@ Proof.
   }
   eexists (se,((row se m),(injpw _ _ _ MEM'))). eexists. cbn. intuition idtac.
   - econstructor; eauto.
-  - admit.   (** The most critical part: does the reduction of injections break the ACCI? *)
+  - clear - ACCI jbc JBC_COMPOSE.
+    assert (EQJ: jbc = compose_meminj (inj_of_bc bc) j).
+    apply Axioms.extensionality. auto.
+    inv ACCI. econstructor; eauto.
+    + rewrite <- EQJ. unfold jbc.
+      red. intros. exploit H8; eauto. intro. 
+      unfold compose_meminj. unfold inj_of_bc.
+      destruct (bc b) eqn: Hbc; simpl; eauto.
+      admit. (*Can we keep f b = Some -> bc b <> BCinvalid? *)
+    + red. intros. rewrite <- EQJ in H0. eapply H10; eauto.
+      unfold jbc in H0.
+      destruct (bc b1) eqn: Hbc; simpl in H0; inv H0; eauto.
+    + red. intros. rewrite <- EQJ in H0. eapply H11; eauto.
+      unfold jbc in H0.
+      destruct (bc b1) eqn: Hbc; simpl in H0; inv H0; eauto.
   - assert (sound_memory_ro ge m).
     {
       red. split. eapply romatch_exten; eauto.
@@ -853,8 +859,10 @@ Proof.
         destruct (bc b) eqn:BC;
           unfold j''; rewrite BC; eauto.
         destruct (j b) as [[b'' d']|] eqn :Hj.
+        
         exploit H13; eauto. unfold compose_meminj, inj_of_bc.
-        rewrite BC. reflexivity. admit. intros [A B].
+        rewrite BC. reflexivity.
+        admit. intros [A B].
         inversion Hm. exploit mi_freeblocks; eauto. intro. congruence.
         eauto.
       }
@@ -875,7 +883,8 @@ Proof.
           rewrite <- JBC_COMPOSE in Hjbc. erewrite H11 in H; eauto. inv H.
           rewrite JBC_COMPOSE in Hjbc.  unfold jbc in Hjbc.
           destruct (bc b); try congruence; split; try congruence; eauto.
-          left. exploit H13; eauto. rewrite JBC_COMPOSE. eauto. admit.
+          left. exploit H13; eauto. rewrite JBC_COMPOSE. eauto.
+          admit.
           intros [A B]. eauto.
         }
         inv Hm'.
@@ -1005,20 +1014,23 @@ Proof.
         destruct (bc b1) eqn:BC; eauto. rewrite H1 in H2. eauto.
       * econstructor; eauto; try (red; intros; congruence).
         split; eauto with mem. split; eauto with mem.
-        red. intros. 
-        admit. (*TODO: BC <> invalid -> local block *)
-        red. intros. admit.
-        
+        -- red. intros. unfold j'' in H2.
+           destruct (bc b1) eqn: Hbc; simpl in H2; try congruence.
+           
+        admit. (*TODO: BC = invalid -> not initial block *)
+        -- red. intros. unfold j'' in H2.
+           destruct (bc b1) eqn: Hbc; simpl in H2; try congruence.
+           admit. (*TODO: BC = invalid -> not global block *)
       * eapply ro_acc_trans; eauto.
     + (* sound_state *)
       (* Part 2: constructing bc' from j' *)
-      assert (JBELOW: forall b, sup_In b (Mem.support m) -> j' b = jbc b).
+      assert (JBELOW: forall b, sup_In b (Mem.support m) -> fst b = Mem.tid (Mem.support m) -> j' b = jbc b).
       {
         intros. destruct (jbc b) as [[b' delta] | ] eqn:EQ.
         rewrite <- JBC_COMPOSE in EQ.
         eapply H11; eauto.
         destruct (j' b) as [[b'' delta'] | ] eqn:EQ'; auto.
-        exploit H13; eauto. rewrite JBC_COMPOSE. eauto. admit.
+        exploit H13; eauto. rewrite JBC_COMPOSE. eauto.
         intros [A B]. exfalso. eauto.
       }
       set (f := fun b => if Mem.sup_dec b (Mem.support m)
@@ -1045,12 +1057,13 @@ Proof.
                                                  (bc b <> BCinvalid /\ j b = None /\ Mem.valid_block m b)).
       {
         simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
-        rewrite JBELOW by auto. unfold jbc.
+        erewrite JBELOW; auto. unfold jbc.
         destruct (j b) as [[b' delta]|] eqn : Hjb.
         left.
         exists b', delta. destruct (bc b); try congruence.
-        right. eauto.
-        destruct (j' b) as [[b' delta] | ]. left.
+        right. eauto. admit.
+        destruct (j' b) as [[b' delta] | ].
+        left.
         exists b', delta; auto.
         congruence.
       }
@@ -1060,8 +1073,8 @@ Proof.
   {
     intros. constructor. simpl; unfold f.
     destruct (Mem.sup_dec b (Mem.support m)).
-    rewrite JBELOW in H1 by auto.
-    unfold jbc in H1. destruct (bc b); try congruence; eauto.
+    erewrite JBELOW in H1;auto.
+    unfold jbc in H1. destruct (bc b); try congruence; eauto. admit.
     rewrite H1; congruence.
   }
   assert (VMTOP: forall v v', Val.inject j' v v' -> vmatch bc' v Vtop).
