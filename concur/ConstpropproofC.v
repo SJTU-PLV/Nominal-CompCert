@@ -1114,25 +1114,27 @@ Proof.
         exploit H13; eauto. rewrite JBC_COMPOSE. eauto.
         intros [A B]. exfalso. eauto.
       }
-      set (f := fun b => if Mem.sup_dec b (Mem.support m)
+      set (f := fun b => if j b(* Mem.sup_dec b (Mem.support m) *)
                       then bc b
                       else match j' b with None => BCinvalid | Some _ => BCother end).
       assert (F_stack: forall b1 b2, f b1 = BCstack -> f b2 = BCstack -> b1 = b2).
       {
         assert (forall b, f b = BCstack -> bc b = BCstack).
-        { unfold f; intros. destruct (Mem.sup_dec b (Mem.support m)); auto. destruct (j' b); discriminate. }
+        { unfold f; intros. destruct (j b); auto. destruct (j' b); discriminate. }
         intros. apply (bc_stack bc); auto.
       }
       assert (F_glob: forall b1 b2 id, f b1 = BCglob id -> f b2 = BCglob id -> b1 = b2).
       {
         assert (forall b id, f b = BCglob id -> bc b = BCglob id).
-        { unfold f; intros. destruct (Mem.sup_dec b (Mem.support m)); auto. destruct (j' b); discriminate. }
+        { unfold f; intros. destruct (j b); auto. destruct (j' b); discriminate. }
         intros. eapply (bc_glob bc); eauto.
       }
       set (bc' := BC f F_stack F_glob). unfold f in bc'.
       assert (BCINCR: bc_incr bc bc').
       {
-        red; simpl; intros. apply pred_dec_true. eapply mmatch_below; eauto.
+        red; simpl; intros.
+        destruct (j b); auto. destruct (j' b); auto. 
+        apply pred_dec_true. eapply mmatch_below; eauto.
       }
       assert (BC'INV: forall b, bc' b <> BCinvalid -> (exists b' delta, j' b = Some(b', delta)) \/
                                                  (bc b <> BCinvalid /\ j b = None /\ Mem.valid_block m b)).
@@ -1154,9 +1156,12 @@ Proof.
   {
     intros. constructor. simpl; unfold f.
     destruct (Mem.sup_dec b (Mem.support m)).
-    erewrite JBELOW in H1;auto.
-    unfold jbc in H1. destruct (bc b); try congruence; eauto. admit.
-    rewrite H1; congruence.
+    - intro.  destruct (Nat.eq_dec (fst b) (Mem.tid (Mem.support m))).      
+      rewrite JBELOW in H1; auto.
+      unfold jbc in H1. destruct (bc b) eqn:HHHH; try congruence; eauto.
+      apply n.
+    admit.
+    - rewrite H1; congruence.
   }
   assert (VMTOP: forall v v', Val.inject j' v v' -> vmatch bc' v Vtop).
   {
