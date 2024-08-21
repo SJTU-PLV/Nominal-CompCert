@@ -722,7 +722,7 @@ Inductive place_footprint (e: env) : place -> block -> Z -> footprint -> Prop :=
 
 (* The value stored in m[b, ofs] is consistent with the type of p. [p]
 is owned. *)
-Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : footprint -> type -> Prop :=
+Inductive bmatch (m: mem) (b: block) (ofs: Z) (own: own_env) : footprint -> type -> Prop :=
 | bm_box: forall ty b1 fp
     (* valid resource. If the loaded value is not a pointer, it is a *)
 (*     type error instead of a memory error *)
@@ -744,7 +744,7 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : footpr
         (*    (exists fp, place_footprint p fp *)
       (*         /\ sem_wt_loc ce m fp b ofs (typeof_place p)))), *)
       Mem.range_perm m b1 0 (sizeof ce ty) Cur Freeable),
-    bmatch m b ofs p own (fp_box b1 fp) (Tbox ty)
+    bmatch m b ofs own (fp_box b1 fp) (Tbox ty)
 | bm_struct: forall co fpl orgs id
     (CO: ce ! id = Some co)
     (* all fields are semantically well typed *)
@@ -752,8 +752,8 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : footpr
         nth_error co.(co_members) n = Some (Member_plain fid fty) ->
         nth_error fpl n = Some ffp ->
         field_offset ce fid co.(co_members) = OK fofs ->
-        bmatch m b (ofs + fofs) (Pfield p fid fty) own ffp fty),
-    bmatch m b ofs p own (fp_struct fpl) (Tstruct orgs id)
+        bmatch m b (ofs + fofs) own ffp fty),
+    bmatch m b ofs own (fp_struct fpl) (Tstruct orgs id)
 | bm_enum: forall fp orgs id co tagz
     (CO: ce ! id = Some co)
     (* Interpret the field by the tag and prove that it is well-typed *)
@@ -763,14 +763,14 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) (p: place) (own: own_env) : footpr
     (FMATCH: forall fid fty fofs,        
         list_nth_z co.(co_members) tagz = Some (Member_plain fid fty) ->
         variant_field_offset ce fid (co_members co) = OK fofs ->
-        bmatch m b (ofs + fofs) (Pdowncast p fid fty) own fp fty),
-    bmatch m b ofs p own (fp_enum tagz fp) (Tvariant orgs id)
+        bmatch m b (ofs + fofs) own fp fty),
+    bmatch m b ofs own (fp_enum tagz fp) (Tvariant orgs id)
 | bm_scalar: forall ty chunk v
     (TY: scalar_type ty = true)
     (MODE: Rusttypes.access_mode ty = Ctypes.By_value chunk)
     (LOAD: Mem.load chunk m b ofs = Some v)
     (WT: sem_wt_val ce m fp_emp v ty),
-    bmatch m b ofs p own fp_emp ty
+    bmatch m b ofs own fp_emp ty
 (** TODO: bm_reference  *)
 .
 
@@ -790,7 +790,7 @@ Definition mmatch (m: mem) (e: env) (own: own_env) : Prop :=
     place_footprint e p b ofs fp ->
     (* We only consider the initialized place *)
     is_owned own p = true ->
-    bmatch m b ofs p own fp (typeof_place p).
+    bmatch m b ofs own fp (typeof_place p).
     
     
 (* Record wf_footprint (e: env) : Prop := *)
@@ -1269,6 +1269,20 @@ Lemma eval_place_sound: forall e m p b ofs own fpm
 (*     + admit. *)
 Admitted.
 
+Lemma eval_place_unchanged: forall fpm m1 m2 le own b ofs fp p
+        (MM: mmatch ce fpm m1 le own)
+        (PFP: place_footprint ce fpm le p b ofs fp)
+        (UNC: Mem.unchanged_on (fun b1 ofs1 => ~ In b1 (footprint_flat fp)
+                                            /\ (b1 <> b \/ ~ ofs <= ofs1 < ofs + sizeof ce (typeof_place p))) m1 m2),
+        eval_place ce le m2 p b (Ptrofs.repr ofs).
+Admitted.
+
+Lemma eval_place_determinate: forall ce le m p b1 b2 ofs1 ofs2,
+    eval_place ce le m p b1 ofs1 ->
+    eval_place ce le m p b2 ofs2 ->
+    b1 = b2 /\ ofs1 = ofs2.
+Admitted.
+
 
 Lemma eval_place_no_mem_error: forall e m p own fpm
     (MM: mmatch ce fpm m e own)
@@ -1496,18 +1510,42 @@ Admitted.
   
 (* assign_loc remains sound. We need a more general one *)
 
+Lemma assign_loc_sem_wt: forall ce m1 m2 fp v ty b ofs
+        (WT: sem_wt_val ce m1 fp v ty)
+        (AS: assign_loc ce ty m1 b ofs v m2),
+        sem_wt_loc ce m2 fp b (Ptrofs.unsigned ofs) ty.
+Admitted.
+
 (** Important Lemma  *)
 (* Consider assign to a variant? *)
 Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p fp e ty
     (MM: mmatch ce fpm1 m1 e own1)
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val ce m1 fp v ty)
+    (* use eval_place because p may be a composite *)
     (EP: eval_place ce e m1 p b ofs)
-    (CKAS: own_check_assign own1 p = Some own2),
+    (CKAS: own_check_assign own1 p = Some own2)
+    (WTP: wt_place (env_to_tenv e) ce p)
+    (NOTENUM: forall orgs id, typeof_place p <> Tvariant orgs id),
     (* (PH: path_of_place ce p id phl), *)
   (* require some relation between abstracter and footprint_map *)
    (* set_footprint_map id phl fp fpm1 = Some fpm2 *)
    exists fpm2, mmatch ce fpm2 m2 e own2.
+Admitted.
+
+Lemma assign_variant_sound: forall fpm1 m1 m2 m3 own1 own2 b ofs v p fp e ty orgs id fofs co fid tag
+    (MM: mmatch ce fpm1 m1 e own1)
+    (WT: sem_wt_val ce m1 fp v ty)
+    (EP: eval_place ce e m1 p b ofs)
+    (CKAS: own_check_assign own1 p = Some own2)
+    (WTP: wt_place (env_to_tenv e) ce p)
+    (TYP: typeof_place p = Tvariant orgs id)
+    (CO: ce ! id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
+    (TAG: field_tag fid co.(co_members) = Some tag)
+    (AS: assign_loc ce ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v m2)
+    (STAG: Mem.store Mint32 m2 b (Ptrofs.unsigned ofs) (Vint (Int.repr tag)) = Some m3),    
+   exists fpm2, mmatch ce fpm2 m3 e own2.
 Admitted.
 
 
@@ -1951,8 +1989,9 @@ Proof.
     intros (vfp & fpm2 & WT1 & MM1).
     exploit sem_cast_sem_wt; eauto.
     intros WT2.
-    exploit path_of_eval_place; eauto. intros (phl & PATH).
     exploit assign_loc_sound; eauto.
+    (** TODO: p is well typed *)
+    admit.
     intros (fpm3 & MM3).
     econstructor; eauto.
     (* sound_cont: show the unchanged m1 m2 *)
@@ -1968,10 +2007,102 @@ Proof.
     admit.
   (* assign_variant sound *)
   - inv SOUND.
-    assign_loc_sound
-    
-
-
+    exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WT1 & MM1).
+    exploit sem_cast_sem_wt; eauto.
+    intros WT2.
+    (** TODO: prove that the address of p does not change *)
+    assert (PADDR3: eval_place (globalenv se prog) le m2 p b ofs).
+    { exploit eval_place_sound. eapply PADDR1. eauto.
+      (* own2 is wf_own_env *)
+      admit.
+      (* wt_place *)
+      admit.
+      unfold own_check_assign in CHKASSIGN.
+      destruct (place_dominator_own own2 p); auto; try congruence.
+      intros (pfp & PFP).
+      (* use eval_place_unchanged *)
+      exploit eval_place_unchanged; eauto.
+      instantiate (1 := m2).
+      (** TODO: assign_loc unchanged_on *)
+      assert (ASUNC: Mem.unchanged_on (fun b0 ofs0 => b0 <> b \/ ~ Ptrofs.unsigned ofs <= ofs0 < Ptrofs.unsigned ofs + fofs) m1 m2). admit.
+      eapply Mem.unchanged_on_implies. eauto.
+      intros b0 ofs0 (A & B) C.
+      destruct B; auto. right.
+      (* easy: to prove fofs < sizeof ce (typeof_place p) *)
+      admit.
+      rewrite Ptrofs.repr_unsigned. auto. }
+    (* b=b1 by the determinism of eval_place *)
+    exploit eval_place_determinate. eapply PADDR2. eapply PADDR3.
+    intros (A & B). subst.
+    (** Use assign_variant_sound *)
+    clear PADDR2 PADDR3.
+    exploit assign_variant_sound;eauto.
+    (* wt_place *)
+    admit.
+    intros (fpm3 & MM3).
+    econstructor; eauto.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    admit.
+    (* norepet *)
+    admit.
+    (* accessibility *)
+    instantiate (1 := sg).
+    admit.
+    (* wf_own_env: show own_check_expr and own_check_assign preserve wf_own_env *)
+    admit.
+  (* step_box sound *)
+  - inv SOUND.
+    (* how to prove alloc a block and modify this block does not
+    affect mmatch? Maybe we can use mmatch_unchanged *)
+    assert (MM3: mmatch ce fpm m3 le own1).
+    { eapply unchanged_mem_preserves_mmatch. eauto.
+      (* modify the fresh block unchange m1 *)
+      admit. }
+    exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WT1 & MM3').
+    exploit sem_cast_sem_wt; eauto.
+    intros WT2.
+    assert (MM4: mmatch ce fpm2 m4 le own2).
+    { eapply unchanged_mem_preserves_mmatch. eauto.
+      (* modify the fresh block unchange m3 *)
+      admit. }
+    (** show assign the value to the new allocated block would create a
+        well-typed location *)
+    exploit assign_loc_sem_wt; eauto. rewrite Ptrofs.unsigned_zero.
+    intros WTLOC.
+    (* show the box pointer is sem_wt *)
+    assert (WTVAL: sem_wt_val ce m4 (fp_box b vfp) (Vptr b Ptrofs.zero) (Tbox ty)).
+    { econstructor. auto.
+      (* show b is freeable *)
+      admit. }
+    exploit assign_loc_sound. eapply MM4. 1-2: eauto.
+    rewrite H. eauto.
+    eauto. eauto.
+    (* wt_place *)
+    admit. rewrite H. congruence.
+    intros (fpm3 & MM5).
+    econstructor; eauto.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    admit.
+    (* norepet *)
+    admit.
+    (* accessibility *)
+    instantiate (1 := sg).
+    admit.
+    (* wf_own_env: show own_check_expr and own_check_assign preserve wf_own_env *)
+    admit.    
+  (** NOTEASY: step_to_dropplace sound *)    
+  - admit.    
+  (* step_in_dropplace sound *)
+  - eapply step_dropplace_sound; eauto.
+  (* step_dropstate sound *)
+  - eapply step_drop_sound; eauto.
+(* Admitted. *)
 
 Lemma reachable_state_sound: forall s,
     (* What about after external? *)

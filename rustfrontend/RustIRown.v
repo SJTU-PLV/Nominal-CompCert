@@ -487,7 +487,8 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = Some own2)
-    (CHKASSIGN: own_check_assign own2 p = Some own3),
+    (CHKASSIGN: own_check_assign own2 p = Some own3)
+    (TYP: forall orgs id, typeof_place p <> Tvariant orgs id),
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
