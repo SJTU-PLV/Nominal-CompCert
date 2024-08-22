@@ -1010,12 +1010,12 @@ Proof.
                                                  (bc b <> BCinvalid /\ j b = None /\ Mem.valid_block m b)).
       {
         simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
-        rewrite JBELOW by auto. unfold jbc.
+        - rewrite JBELOW by auto. unfold jbc.
         destruct (j b) as [[b' delta]|] eqn : Hjb.
         left.
         exists b', delta. destruct (bc b); try congruence.
         right. eauto.
-        destruct (j' b) as [[b' delta] | ]. left.
+        - destruct (j' b) as [[b' delta] | ]. left.
         exists b', delta; auto.
         congruence.
       }
@@ -1038,8 +1038,9 @@ Proof.
     intros; split; intros.
     - 
       exploit BC'INV; eauto. intros [(b' & delta & J') | [A [B C]]].
-      exploit Mem.load_inject. eexact Hm3. eauto. eauto. intros (v' & A & B).
+      + exploit Mem.load_inject. eexact Hm3. eauto. eauto. intros (v' & A & B).
       eapply VMTOP; eauto.
+      + 
       eapply vmatch_incr; eauto.
       eapply vmatch_top.
       inv MM. exploit mmatch_top. eauto.
