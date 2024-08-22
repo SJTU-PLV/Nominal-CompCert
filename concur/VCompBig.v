@@ -457,21 +457,18 @@ Proof.
         + exploit H14; eauto. intros [X Y].
           destruct (j23 bi) as [[? ?] |] eqn: Hb2.
           exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
-          exploit H23; eauto. erewrite <- inject_tid; eauto.
-          erewrite <- inject_val_tid. 3: eauto. auto. eauto.
-          intros [X1 Y1]. intuition auto.
+          exploit H23; eauto.
   - red. intros. unfold compose_meminj in H, H0.
     destruct (j12 b1) as [[bi d]|] eqn: Hj1; inv H.
     + 
       destruct (j23 bi) as [[b2' d']|] eqn: Hj2; inv H2.
       apply H13 in Hj1 as Hj1'. rewrite Hj1' in H0.
       destruct (j23' bi) as [[b2'' d'']|] eqn: Hj2'; inv H0.
-      exploit H24; eauto. intros [A B]. split; auto.
-      intro. apply A. red. erewrite <- inject_block_tid. 3: eauto. eauto. eauto.
+      exploit H24; eauto. intros A. erewrite inject_tid; eauto.
+      erewrite inject_block_tid. 3: eauto. eauto. eauto.
     + destruct (j12' b1) as [[bi d]|] eqn: Hj1'; inv H0.
       destruct (j23' bi) as [[b2' d'']|] eqn: Hj2'; inv H1.
-      exploit H15; eauto. intros [A B]. split; auto.
-      intro. apply B. red. erewrite inject_block_tid; eauto.
+      exploit H15; eauto. 
   - red. intros. unfold compose_meminj in H. rename b2 into b3.
     destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
     destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.

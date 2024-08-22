@@ -625,9 +625,7 @@ Opaque builtin_strength_reduction.
     etransitivity. eauto. eapply injp_acc_tl_i; eauto.
     inv GWJ. constructor. intros. destruct (j b) as [[b'' d']|] eqn :Hjb.
     apply F in Hjb as Heq. rewrite H5 in Heq. inv Heq. eauto.
-    (** THe I : inject_separated_noglobal should be inject_separated_local, which
-        inplies the former *)
-    assert (fst b = Mem.tid (Mem.support m)). admit.
+    exploit I; eauto. intro.
     erewrite <- acci_tid1. eauto. eauto.
     unfold m01 in *. inv ACCE. eapply ro_acc_trans. eauto.
     eapply ro_acc_external; eauto.
@@ -738,9 +736,7 @@ Opaque builtin_strength_reduction.
   etransitivity. eauto. eapply injp_acc_tl_i; eauto.
   inv GWJ. constructor. intros. destruct (j b) as [[b'' d']|] eqn :Hjb.
   apply F in Hjb as Heq. rewrite H1 in Heq. inv Heq. eauto.
-  (** THe I : inject_separated_noglobal should be inject_separated_local, which
-        inplies the fo                         rmer *)
-  assert (fst b = Mem.tid (Mem.support m)). admit.
+  exploit I; eauto. intro.
   erewrite <- acci_tid1. eauto. eauto.
   eapply ro_acc_trans. eauto. constructor.
   red. intros. eapply external_call_readonly; eauto.
@@ -752,7 +748,7 @@ Opaque builtin_strength_reduction.
   left; exists O; econstructor; split.
   eapply exec_return; eauto.
   econstructor; eauto. constructor. apply set_reg_inject; auto.
-Admitted.
+Qed.
 
 Definition ro_w : GS.ccworld (ro @ c_injp) := (se, ((row ge m01), w)).
 Infix "@" := GS.cc_compose (at level 30, right associativity).
@@ -798,6 +794,25 @@ Inductive sound_bc_gw : block_classification -> injp_world -> Prop :=
 Lemma sound_state_extend : forall bc gw, sound_bc_gw bc gw.
 Admitted.
 
+Lemma sound_stack_ext1: 
+  forall m' bc stk m bound,
+  sound_stack bc stk m bound ->
+  (forall b ofs n bytes,
+       sup_In b bound -> bc b = BCinvalid -> fst b = Mem.tid (Mem.support m) -> n >= 0 ->
+       Mem.loadbytes m' b ofs n = Some bytes ->
+       Mem.loadbytes m b ofs n = Some bytes) ->
+  sound_stack bc stk m' bound.
+Proof. Admitted.
+
+Lemma sound_stack_exten1:
+  forall bc stk m bound (bc1: block_classification),
+  sound_stack bc stk m bound ->
+  (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> bc1 b = bc b) ->
+  sound_stack bc1 stk m bound.
+Proof. Admitted.
+
+(*maybe we cannot increase bound and bc separately? *)
+  
 Lemma transf_external_states:
   forall n gw st1 st2 q1, match_states n gw st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
   exists (wx: GS.ccworld (ro @ c_injp)) q2, at_external tge st2 q2 /\ gw *-> (snd (get wx)) /\ GS.match_query (ro @ c_injp) wx q1 q2 /\ GS.match_senv (ro @ c_injp) wx se tse /\
@@ -1113,7 +1128,12 @@ Proof.
         intros [A B]. exfalso. eauto.
       }
       set (f := fun b => if Mem.sup_dec b (Mem.support m)
-                      then bc b
+                        then
+                          (if (Nat.eq_dec (fst b) (Mem.tid (Mem.support m))) then bc b else
+                             match j' b with
+                           | None => BCinvalid
+                           | Some _ => BCother end
+                          )
                       else match j' b with
                            | None => BCinvalid
                            | Some _ => BCother end).

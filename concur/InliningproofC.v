@@ -1402,6 +1402,7 @@ Proof.
     eapply match_stacks_inside_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto. eapply unchanged_on_tl_e; eauto.
+    eapply inject_incr_local_noglobal; eauto.
     inversion C. inv mi_thread. auto.
     eapply external_call_support; eauto. destruct D as [[_ D]]. auto.
   auto. eauto. auto.
@@ -1644,9 +1645,9 @@ Proof.
     - red. intros. destruct (eq_block b1 stk). subst. exfalso. apply H8.
       apply Mem.alloc_result in H. rewrite H. reflexivity. erewrite D in H7; eauto.
       congruence.
-    - red. intros. destruct (eq_block b1 stk). subst. split.
-    eapply Mem.alloc_block_noglobal; eauto. rewrite C in H7. inv H7.
-    eapply Genv.thread_noglobal; eauto. erewrite D in H7. congruence. eauto.
+    - red. intros. destruct (eq_block b1 stk). subst.
+      apply Mem.alloc_result in H. rewrite H. reflexivity.
+      erewrite D in H7. congruence. eauto.
     - red. intros.  destruct (eq_block b1 stk). subst. split.
       intro. eapply Mem.fresh_block_alloc; eauto.
       inv ACCE. destruct H19. inv unchanged_on_e'. apply unchanged_on_support. auto.
@@ -1691,7 +1692,9 @@ Proof.
     eapply match_stacks_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto.
-    eapply unchanged_on_tl_e; eauto. inversion C. inv mi_thread. auto.
+    eapply unchanged_on_tl_e; eauto.
+    eapply inject_incr_local_noglobal; eauto.
+    inversion C. inv mi_thread. auto.
     eapply external_call_support; eauto. destruct D as [[_ D]]. auto.
     eapply external_call_support; eauto. destruct E as [[_ E]]. auto.
     destruct E as [[_ X] _]. auto. auto.

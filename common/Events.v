@@ -633,6 +633,19 @@ Definition inject_separated_internal (f f' : meminj) (m1 m2: mem) :=
 Definition inject_separated_noglobal (f f' : meminj) :=
   forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> ~ Genv.global_block b1 /\ ~ Genv.global_block b2.
 
+Definition inject_incr_local (f f' : meminj) (m : mem) :=
+  forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) -> fst b1 = Mem.tid (Mem.support m).
+
+Lemma inject_incr_local_noglobal : forall f f' m m' tm',
+    inject_incr_local f f' m -> Mem.inject f' m' tm' ->
+    inject_separated_noglobal f f'.
+Proof.
+  intros. red. intros. exploit H; eauto. intro.
+  split. eapply Genv.thread_noglobal; eauto.
+  unfold Genv.global_block. inv H0. inv mi_thread.
+  erewrite <- Hjs; eauto. eapply Genv.thread_noglobal; eauto.
+Qed.
+    
 Definition free_preserved j m1 m1' m2' :=
   forall b1 ofs1 b2 delta,
     j b1 = Some (b2, delta) -> fst b1 <> Mem.tid (Mem.support m1) ->
@@ -706,7 +719,7 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'
-    /\ inject_separated_noglobal f f'
+    /\ inject_incr_local f f' m1 (*we treat blocks allocated by [malloc] as local stackframe for now*)
     /\ new_block_local m1 m2
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2';
@@ -1061,7 +1074,7 @@ Proof.
   rewrite D in H2 by auto. congruence.
   red; intros. destruct (eq_block b1 b).
   subst b1. rewrite C in H2. inv H2.
-  split; eapply Mem.alloc_block_noglobal; eauto.
+  apply Mem.alloc_result in H3 as Hb. rewrite Hb. reflexivity.
   rewrite D in H2 by auto. congruence.
   red. intros. 
   eapply Mem.store_valid_block_2 in H2; eauto.
@@ -1654,7 +1667,7 @@ Lemma external_call_mem_inject:
     /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'
-    /\ inject_separated_noglobal f f'
+    /\ inject_incr_local f f' m1
     /\ new_block_local m1 m2
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2'.

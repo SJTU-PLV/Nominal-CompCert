@@ -1116,8 +1116,10 @@ Lemma external_call_inject:
     /\ new_block_local m1' m2'
     /\ free_preserved f m1 m2 m2'.                
 Proof.
-  intros. eapply external_call_mem_inject_gen; eauto.
+  intros. exploit external_call_mem_inject_gen; eauto.
   apply globals_symbols_inject; auto.
+  intros (f' & vres' & m2' & A & B & C & D & E & F & G & I & J & K & L).
+  exists f', vres', m2'. intuition auto. eapply inject_incr_local_noglobal; eauto.
 Qed.
 
 Lemma find_function_inject:

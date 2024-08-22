@@ -950,7 +950,7 @@ Lemma match_callstack_alloc_variables_rec:
     /\ Mem.inject f2 m2 tm
     /\ inject_incr f1 f2
     /\ (forall b1 b2 d, f1 b1 = None -> f2 b1 = Some (b2, d) -> ~ Mem.valid_block m1 b1 /\ ~ sup_In b2 sps)
-    /\ inject_separated_noglobal f1 f2.
+    /\ inject_incr_local f1 f2 m1.
 Proof.
   intros until cs; intros THE SPS VALID REPRES STKSIZE STKPERMS.
   induction 1; intros f1 NOREPET COMPAT SEP1 SEP2 UNBOUND MCS MINJ.
@@ -993,10 +993,9 @@ Proof.
     apply G in C as Heq. rewrite Heq in H2. inv H2. eapply freshness.
     erewrite <- D in H1; eauto. exploit I; eauto. intros [X Y]. split; eauto with mem.
     red. intros. destruct (eq_block b0 b1). subst.
-    split. eapply Mem.alloc_block_noglobal; eauto.
-    apply G in C. rewrite C in H2. inv H2.
-    eapply Genv.thread_noglobal. simpl. reflexivity.
-    erewrite <- D in H1; eauto.
+    apply Mem.alloc_result in H. rewrite H. reflexivity.
+    erewrite <- D in H1; eauto. exploit  J; eauto. intro.
+    erewrite Mem.support_alloc in H5; eauto. simpl in H5. congruence.
 Qed.
 
 Lemma match_callstack_alloc_variables:
@@ -1017,7 +1016,7 @@ Lemma match_callstack_alloc_variables:
     /\ Mem.inject f2 m2 tm2
     /\ inject_incr f1 f2
     /\ inject_separated f1 f2 m1 tm1
-    /\ inject_separated_noglobal f1 f2.
+    /\ inject_incr_local f1 f2 m1.
 Proof.
   intros.
   eapply match_callstack_alloc_variables_rec; eauto.
@@ -1395,7 +1394,7 @@ Theorem match_callstack_function_entry:
      /\ Mem.inject f' m' tm'
      /\ inject_incr f f'
      /\ inject_separated f f' m tm
-     /\ inject_separated_noglobal f f'.
+     /\ inject_incr_local f f' m.
 Proof.
   intros.
   exploit build_compilenv_sound; eauto. intros [C1 C2].
@@ -2293,6 +2292,7 @@ Proof.
   eapply match_callstack_external_call; eauto.
   inv ACCS. eapply unchanged_on_tl_e; eauto.
   inv ACCS. eapply unchanged_on_tl_e; eauto.
+  eapply inject_incr_local_noglobal; eauto.
   inversion MINJ'. inv mi_thread. auto.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.
@@ -2487,6 +2487,7 @@ Proof.
   eapply match_callstack_external_call; eauto.
   inv ACCS. eapply unchanged_on_tl_e; eauto.
   inv ACCS. eapply unchanged_on_tl_e; eauto.
+  eapply inject_incr_local_noglobal; eauto.
   inversion MINJ'. inv mi_thread. auto.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.

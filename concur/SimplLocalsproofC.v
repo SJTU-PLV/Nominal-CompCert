@@ -743,7 +743,7 @@ Lemma match_alloc_variables:
       alloc_variables tge te tm (remove_lifted cenv vars) te' tm'
   /\ Mem.inject j' m' tm'
   /\ inject_incr j j'
-  /\ inject_separated_noglobal j j'
+  /\ inject_incr_local j j' m
   /\ (forall b, Mem.valid_block m b -> j' b = j b)
   /\ (forall b b' delta, j' b = Some(b', delta) -> Mem.valid_block tm b' -> j' b = j b)
   /\ (forall b b' delta, j' b = Some(b', delta) -> ~Mem.valid_block tm b' ->
@@ -778,9 +778,9 @@ Proof.
   split. auto.
   split. eapply inject_incr_trans; eauto.
   split. red in L'. red. intros. destruct (eq_block b0 b1). subst.
-  split. eapply Mem.alloc_block_noglobal; eauto. intro. red in H4.
-  erewrite <- inject_block_tid in H4; eauto. eapply Mem.alloc_block_noglobal; eauto.
-  eapply L'; eauto. rewrite D; eauto.
+  apply Mem.alloc_result in H. rewrite H. reflexivity.
+  erewrite <- D in H1; eauto. exploit L'; eauto. intro.
+  erewrite Mem.support_alloc in H4; eauto. simpl in H4. auto.
   split. intros. transitivity (j1 b). apply M. eapply Mem.valid_block_alloc; eauto.
     apply D. apply Mem.valid_not_valid_diff with m; auto. eapply Mem.fresh_block_alloc; eauto.
   split. intros. transitivity (j1 b). eapply N; eauto.
@@ -824,9 +824,9 @@ Proof.
   split. auto.
   split. eapply inject_incr_trans; eauto.
   split. red in L'. red. intros. destruct (eq_block b0 b1). subst.
-  split. eapply Mem.alloc_block_noglobal; eauto. intro. red in H4.
-  erewrite <- inject_block_tid in H4; eauto. eapply Mem.alloc_block_noglobal. apply H. eauto.
-  eapply L'; eauto. rewrite E; eauto.
+  apply Mem.alloc_result in H. rewrite H. reflexivity.
+  erewrite <- E in H1; eauto. exploit L'; eauto. intro.
+  erewrite Mem.support_alloc in H4; eauto. simpl in H4. auto.
   split. intros. transitivity (j1 b). apply M. eapply Mem.valid_block_alloc; eauto.
     apply E. apply Mem.valid_not_valid_diff with m; auto. eapply Mem.fresh_block_alloc; eauto.
   split. intros. transitivity (j1 b). eapply N; eauto. eapply Mem.valid_block_alloc; eauto.
@@ -1086,7 +1086,7 @@ Theorem match_envs_alloc_variables:
                         te (create_undef_temps (add_lifted cenv vars temps)) (Mem.support tm) (Mem.support tm')
   /\ Mem.inject j' m' tm'
   /\ inject_incr j j'
-  /\ inject_separated_noglobal j j'
+  /\ inject_incr_local j j' m
   /\ (forall b, Mem.valid_block m b -> j' b = j b)
   /\ (forall b b' delta, j' b = Some(b', delta) -> Mem.valid_block tm b' -> j' b = j b)
   /\ (forall id ty, In (id, ty) vars -> VSet.mem id cenv = false -> exists b, te!id = Some(b, ty)).
@@ -2983,6 +2983,7 @@ Proof.
   eapply match_envs_extcall; eauto. eapply unchanged_on_tl_e. eauto.
   red. intros. inversion R. inv mi_thread. eapply Hjs; eauto.
   eapply match_cont_extcall; eauto. eapply unchanged_on_tl_e. eauto.
+  eapply inject_incr_local_noglobal; eauto.
   red. intros. inversion R. inv mi_thread. eapply Hjs; eauto.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
@@ -3147,7 +3148,7 @@ Proof.
   exploit alloc_variables_range. eexact H1. eauto.
   unfold empty_env. rewrite PTree.gempty. intros [?|?]. congruence.
   red; intros; subst b'. destruct H8. congruence.
-  eapply alloc_variables_load; eauto.
+  eapply alloc_variables_load; eauto. eapply inject_incr_local_noglobal; eauto.
   red. intros. inversion R. inv mi_thread. eapply Hjs; eauto.
   apply alloc_variables_support1 in H1. inv H1. rewrite H4.
   erewrite <- bind_parameters_support; eauto.
@@ -3210,8 +3211,8 @@ Proof.
     - eapply alloc_variables_max_perm; eauto.
     - split. eapply alloc_variables_support1; eauto. eapply alloc_variables_unchanged_on; eauto.
     - split. eapply alloc_variables_support1; eauto. eapply alloc_variables_unchanged_on; eauto.
-    - red. intros. split; intro. exploit E; eauto. intro. congruence.
-      exploit F; eauto. intro. congruence.
+    - red. intros. split; intro. rewrite E in H4; eauto.
+      exploit F; eauto.
     - red. intros. elim H6. eapply alloc_variables_perm; eauto.
   }
   (*use alloc_variables_acci or added in [match_alloc_variables]*)
@@ -3254,6 +3255,7 @@ Proof.
   econstructor; eauto.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
   eapply match_cont_extcall; eauto. eapply unchanged_on_tl_e; eauto.
+  eapply inject_incr_local_noglobal; eauto.
   inversion R. inv mi_thread. auto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.

@@ -802,7 +802,7 @@ Qed.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply H21 in Hb'; split; congruence); subst.
         eapply H15; eauto.
-      * edestruct H23; eauto.
+      * eapply inject_incr_local_noglobal; eauto.
     Qed.
 
     Lemma injp_acc_yield_accg : forall w1 w2,
@@ -882,6 +882,7 @@ Qed.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
       - red. intros. eapply H11; eauto. simpl. congruence.
+      - eapply inject_incr_local_noglobal; eauto.
     Qed.
     
     Lemma injp_yield_acci_accg' : forall w1 w2 w3,
@@ -908,6 +909,7 @@ Qed.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
       - red. intros. exploit H11; eauto. simpl in H2. congruence.
+      - eapply inject_incr_local_noglobal; eauto.
     Qed.
 
     Lemma thread_create_inject' : forall j m1 m2,

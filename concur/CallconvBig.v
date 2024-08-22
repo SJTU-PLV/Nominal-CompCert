@@ -586,7 +586,7 @@ Inductive injp_acci : relation injp_world :=
                      Mem.unchanged_on_i (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
                      inject_separated_external f f' m1 m2 ->
-                     inject_separated_noglobal f f' ->
+                     inject_incr_local f f' m1 ->
                      free_preserved f m1 m1' m2' ->
                      injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
@@ -700,7 +700,7 @@ Proof.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply Hi' in Hb'; split; congruence); subst.
         eapply Hs2; eauto.
-      * edestruct Hs2'; eauto.
+      * exploit Hs2'; eauto. intro. destruct S1. congruence.
     + red. intros.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty).
       * eapply Hf'; eauto. inv S1. congruence.
@@ -861,7 +861,7 @@ Inductive injp_acc_tl : relation injp_world :=
                      Mem.unchanged_on_tl (loc_out_of_reach f m1) m2 m2' ->
                      inject_incr f f' ->
                      inject_separated f f' m1 m2 ->
-                     inject_separated_noglobal f f' ->
+                     inject_incr_local f f' m1->
                      free_preserved f m1 m1' m2' ->
                      injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
@@ -873,6 +873,7 @@ Qed.
 Lemma injp_acc_tl_e : forall w1 w2, injp_acc_tl w1 w2 -> injp_acce w1 w2.
 Proof.
   intros. inv H. constructor; eauto using unchanged_on_tl_e.
+  eapply inject_incr_local_noglobal; eauto.
 Qed.
 
 Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm',
@@ -915,10 +916,7 @@ Proof.
     split; eauto using Mem.fresh_block_alloc.
   - red. intros.
     destruct (eq_block b0 b1). subst.
-    split.
-    eapply Mem.alloc_block_noglobal; eauto.
-    rewrite H2 in H5. inv H5.
-    eapply Mem.alloc_block_noglobal; eauto.
+    apply Mem.alloc_result in H. rewrite H. reflexivity.
     erewrite H3 in H5. congruence. auto.
   - red. intros. exfalso. apply H7. eauto with mem.
 Qed.
@@ -929,7 +927,7 @@ Lemma injp_acc_tl_alloc': forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm'
     inject_incr f f' ->
     f' b1 = Some (b2, d) ->
     inject_separated f f' m1 m2 ->
-    inject_separated_noglobal f f' ->
+    inject_incr_local f f' m1->
     injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 Proof.
   intros. constructor.
@@ -1146,7 +1144,7 @@ Inductive injp_acc_small (w0: injp_world) : relation injp_world :=
                                         (fst b <> Mem.tid (Mem.support m1) \/ Mem.valid_block m20 b)) m2 m2' ->
                      inject_incr f f' ->
                      inject_separated_external f f' m1 m2 ->
-                     inject_separated_noglobal f f' ->
+                     inject_incr_local f f' m1->
                      inject_separated f f' m10 m20 ->
                      free_preserved f m1 m1' m2' ->
                      injp_acc_small w0 (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
@@ -1195,7 +1193,7 @@ Proof.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply H19 in Hb'; split; congruence); subst.
         eapply H9; eauto.
-      * eapply H21; eauto.
+      * eapply inject_incr_local_noglobal; eauto.
 Qed.
 
 Lemma injp_acc_small_acci : forall w0 w1 w2,

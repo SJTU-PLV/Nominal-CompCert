@@ -925,7 +925,7 @@ Lemma external_call_parallel_rule:
   /\ thread_same j' m1' m2'
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2
-  /\ inject_separated_noglobal j j'
+  /\ inject_incr_local j j' m1
   /\ new_block_local m1 m1'
   /\ new_block_local m2 m2'
   /\ free_preserved j m1 m1' m2'.
@@ -933,10 +933,12 @@ Proof.
   intros until vargs2; intros CALL SEP TEQ ARGS.
   destruct SEP as (A & B & C). simpl in A.
   exploit external_call_mem_inject; eauto. apply B. tinv.
-  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP & A1 & A2 & A3).
+  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP & A1 & A2 & A3 & A4).
   assert (MAXPERMS: forall b ofs p,
-            Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
+             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }
+  assert (NOG: inject_separated_noglobal j j').
+  eapply inject_incr_local_noglobal; eauto.
   exists j', vres2, m2'; intuition auto.
   split; [|split].
 - tinv.
@@ -947,7 +949,7 @@ Proof.
   eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
-- red; intros. destruct H1 as (b0 & delta & J' & E).
+- red; intros. destruct H as (b0 & delta & J' & E).
   destruct (j b0) as [[b' delta'] | ] eqn:J.
 + erewrite INCR in J' by eauto. inv J'.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
@@ -973,7 +975,7 @@ Lemma alloc_parallel_rule_2:
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ inject_separated j j' m1 m2
-  /\ inject_separated_noglobal j j'.
+  /\ inject_incr_local j j' m1.
 Proof.
   intros.
   set (j1 := fun b => if eq_block b b1 then Some(b2, delta) else j b).
@@ -1003,7 +1005,8 @@ Proof.
     eauto with mem.
   -- rewrite E in H10; congruence.
   + red. intros. destruct (eq_block b0 b1). subst. rewrite D in H10. inv H10.
-  split; eapply Mem.alloc_block_noglobal; eauto. erewrite E in H10. congruence. eauto.
+    apply Mem.alloc_result in H1. rewrite H1. reflexivity.
+    erewrite E in H10. congruence. eauto.
 - red. intros. unfold j1 in H10. destruct (eq_block b0 b1). subst. inv H10.
   split; eapply Mem.alloc_block_noglobal; eauto.  congruence.
 Qed.
