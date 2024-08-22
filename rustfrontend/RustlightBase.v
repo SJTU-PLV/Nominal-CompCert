@@ -562,8 +562,6 @@ Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
 | eval_Enil:
   eval_exprlist nil Tnil nil
 | eval_Econs:   forall a bl ty tyl v1 v2 vl,
-    (* For now, we does not allow type cast *)
-    typeof a = ty ->
     eval_expr a v1 ->
     sem_cast v1 (typeof a) ty = Some v2 ->
     eval_exprlist bl tyl vl ->

@@ -1007,7 +1007,15 @@ Inductive sound_split_drop_place (own: own_env) : list (place * bool) -> Prop :=
     sound_split_drop_place own l ->
     sound_split_drop_place own ((p, false) :: l)
 .
-    
+
+Lemma split_drop_place_sound: forall ce own p universe drops
+    (WF: wf_own_env own)
+    (UNI: (own_universe own) ! (local_of_place p) = Some universe)
+    (SPLIT: split_drop_place ce universe p (typeof_place p) = OK drops),
+  sound_split_drop_place own drops.
+Admitted.
+
+
 (* Inductive sound_drop_fully_owned (own: own_env) : option drop_place_state -> Prop := *)
 (* | sound_drop_fully_owned_none: sound_drop_fully_owned own None *)
 (* | sound_drop_fully_owned_comp: forall p l *)
@@ -1497,17 +1505,28 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v
     (MM: mmatch ce fpm1 m le own1)
     (EVAL: eval_expr ce le m e v)
     (OWN: own_check_expr own1 e = Some own2),
-  (* how to relate fp and fpm2 ? *)
+  (** TODO: how to relate fp and fpm2 ? We should show that they are
+  disjoint *)
   exists fp fpm2, sem_wt_val ce m fp v (typeof e)
         /\ mmatch ce fpm2 m le own2.
 Admitted.
+
 
 Lemma sem_cast_sem_wt: forall v1 v2 ty1 ty2 m fp
     (CAST: RustOp.sem_cast v1 ty1 ty2 = Some v2)
     (WT: sem_wt_val ce m fp v1 ty1),
     sem_wt_val ce m fp v2 ty2.
 Admitted.
-  
+
+Lemma eval_exprlist_sem_wt: forall fpm1 m le own1 own2 al tyl vl
+    (MM: mmatch ce fpm1 m le own1)
+    (EVAL: eval_exprlist ce le m al tyl vl)
+    (OWN: own_check_exprlist own1 al = Some own2),
+  exists fpl fpm2, sem_wt_val_list ce m fpl vl (type_list_of_typelist tyl)
+        /\ mmatch ce fpm2 m le own2.
+Admitted.
+
+
 (* assign_loc remains sound. We need a more general one *)
 
 Lemma assign_loc_sem_wt: forall ce m1 m2 fp v ty b ofs
@@ -1555,6 +1574,15 @@ Lemma unchanged_mem_preserves_mmatch: forall m1 m2 e own fpm
   (MM: mmatch ce fpm m1 e own)
   (UNC: Mem.unchanged_on (fun b _ => In b ((footprint_of_env e) ++ flat_fp_map fpm)) m1 m2),
     mmatch ce fpm m2 e own.
+Admitted.
+
+
+(** Properties of function_entry *)
+Lemma function_entry_sound: forall m1 m2 fpl vl tyl f own le
+    (WT: sem_wt_val_list ce m1 fpl vl tyl)
+    (ENTRY: function_entry ge f vl m1 le m2 own),
+  exists fpm, mmatch ce fpm m2 le own
+         /\ wf_own_env own.
 Admitted.
 
 (* sound_cont is preserved if its footprint is unchanged *)
@@ -2096,12 +2124,52 @@ Proof.
     admit.
     (* wf_own_env: show own_check_expr and own_check_assign preserve wf_own_env *)
     admit.    
-  (** NOTEASY: step_to_dropplace sound *)    
-  - admit.    
+  (** NOTEASY: step_to_dropplace sound *)
+  - inv SOUND.
+    exploit split_drop_place_sound; eauto.
+    intros SOUNDSPLIT.
+    econstructor; eauto.
+    econstructor. auto.    
   (* step_in_dropplace sound *)
   - eapply step_dropplace_sound; eauto.
   (* step_dropstate sound *)
   - eapply step_drop_sound; eauto.
+  (* step_storagelive sound *)
+  - admit.
+  (* step_storagedead sound *)
+  - admit.
+  (* step_call sound *)
+  - inv SOUND.
+    exploit eval_exprlist_sem_wt; eauto.
+    intros (fpl & fpm2 & WT & MM2).
+    econstructor. 1-3: eauto.    
+    (* sound_cont *)
+    instantiate (1 := fpf_func le fpm2 fpf).
+    econstructor. eauto. auto.
+    (* wf_own_env *)
+    admit.
+    eauto.
+    (* norepeat *)
+    admit.
+    (* accessibility *)
+    instantiate (1 := sg).
+    admit.
+  (* step_internal_function sound *)
+  - inv SOUND.
+    exploit function_entry_sound; eauto.
+    intros (fpm & MM & WFOWN).
+    econstructor; eauto.
+    (* prove sound_cont *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    (* prove unchanged_on of function_entry *)
+    admit.
+    (* new allocated blocks are disjoint with the frames *)
+    admit.
+    instantiate (1 := sg).
+    (* accessibility *)
+    admit.
+    
 (* Admitted. *)
 
 Lemma reachable_state_sound: forall s,

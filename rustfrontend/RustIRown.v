@@ -282,6 +282,37 @@ Inductive state: Type :=
     (k: cont)
     (m: mem): state.              
 
+
+(* RustIRown specific function entry *)
+
+Local Open Scope error_monad_scope.
+
+(* copy from init analysis *)
+Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
+  (* collect the whole set in order to simplify the gen and kill operation *)
+  do whole <- collect_func ce f;
+  (* initialize maybeInit set with parameters *)
+  let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
+  (* It is necessary because we have to guarantee that the map is not
+  PathMap.bot in the 'transfer' function *)
+  let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
+  let init := fold_right (add_place whole) empty_pathmap pl in
+  (* initialize maybeUninit with the variables *)
+  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
+  let uninit := fold_right (add_place whole) empty_pathmap vl in
+  OK (mkown init uninit whole).
+
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
+| function_entry_intro: forall m1 
+    (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
+    (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
+    (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2)
+    (* initialize own_env *)
+    (INITOWN: init_own_env ge f = OK own),
+    function_entry ge f vargs m e m2 own.
+
+
+
 Section SMALLSTEP.
 
 Variable ge: genv.
@@ -483,6 +514,7 @@ Inductive step_dropplace_mem_error: state -> Prop :=
     step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) 
 .
 
+
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
@@ -573,13 +605,11 @@ Inductive step : state -> trace -> state -> Prop :=
     (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le own2 k) m)
 
-| step_internal_function: forall vf f vargs k m e m' uninit
+| step_internal_function: forall vf f vargs k m e m' init_own
     (FIND: Genv.find_funct ge vf = Some (Internal f))
-    (NORMAL: f.(fn_drop_glue) = None),
-    function_entry ge f vargs m e m' ->
-    (** Important: initialize own_env in function entry *)
-    collect_func ge f = OK uninit ->    
-    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e (mkown (PTree.empty LPaths.t) uninit uninit) m')
+    (NORMAL: f.(fn_drop_glue) = None)
+    (ENTRY: function_entry ge f vargs m e m' init_own),
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e init_own m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
     (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc))
