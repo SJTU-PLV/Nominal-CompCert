@@ -5,18 +5,11 @@ Require Import AST.
 Require Import Errors.
 Require Import FSetWeakList DecidableType.
 (** TODO: Rustlightbase also depends on InitDomain *)
-Require Import Rusttypes RustlightBase.
+Require Import Rusttypes Rustlight.
 
 Local Open Scope list_scope.
 Local Open Scope error_monad_scope.
 Import ListNotations.
-
-Lemma is_prefix_refl: forall p, is_prefix p p = true.
-Admitted.
-
-
-Lemma is_prefix_trans: forall p1 p2 p3, is_prefix p1 p2 = true -> is_prefix p2 p3 = true -> is_prefix p1 p3 = true.
-Admitted.
 
 
 Module Place <: DecidableType.DecidableType.
@@ -177,6 +170,41 @@ Definition collect_option_place (p: option place) (m: PathsMap.t) : PathsMap.t :
   | None => m
   end.
 
+(* General collect functions *)
+
+Fixpoint collect_pexpr (pe: pexpr) (m: PathsMap.t) : PathsMap.t :=
+  match pe with
+  | Eplace p _
+  | Ecktag p _
+  | Eref _ _ p _ =>
+      (* we only check p which represents/owns a memory location *)
+      if place_owns_loc p then
+        collect_place p m
+      else m
+  | Eunop _ pe _ =>
+      collect_pexpr pe m
+  | Ebinop _ pe1 pe2 _ =>
+      collect_pexpr pe2 (collect_pexpr pe1 m)
+  | _ => m
+end.          
+
+
+Definition collect_expr (e: expr) (m: PathsMap.t) : PathsMap.t :=
+  match e with
+  | Emoveplace p _ =>
+      collect_place p m
+  | Epure pe =>
+      collect_pexpr pe m
+  end.
+
+Fixpoint collect_exprlist (l: list expr) (m: PathsMap.t) : PathsMap.t :=
+  match l with
+  | nil => m
+  | e :: l' =>
+      collect_exprlist l' (collect_expr e m)
+  end.
+
+
 End COMP_ENV.
 
 (* Kill function *)
@@ -271,4 +299,3 @@ Require Import Wfsimpl.
 
 Definition split_drop_place (ce: composite_env) (universe: Paths.t) : place -> type -> res (list (place * bool)) :=
   Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce.
-    

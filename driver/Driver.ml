@@ -460,7 +460,7 @@ let debug_Rustlightgen (syntax: Rustsyntax.program) =
   | Errors.Error msg ->
     fatal_error no_loc "%a"  print_error msg
 
-let debug_RustIRgen (rustlight_prog: RustlightBase.program) =
+let debug_RustIRgen (rustlight_prog: Rustlight.program) =
   Format.fprintf stdout_format "@.RustIR: @.";
   let rustir_prog = RustIRgen.transl_program rustlight_prog in
   PrintRustIR.print_program stdout_format rustir_prog;

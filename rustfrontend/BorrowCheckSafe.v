@@ -8,7 +8,7 @@ Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep SmallstepLinking SmallstepLinkingSafe.
 Require Import LanguageInterface Invariant.
-Require Import Rusttypes RustlightBase.
+Require Import Rusttypes Rustlight.
 Require Import RustIR BorrowCheckDomain BorrowCheckPolonius.
 Require Import Errors.
 Require Import InitDomain InitAnalysis.
@@ -523,38 +523,6 @@ Lemma sem_wt_val_in_wt_loc: forall ce m fp b ofs ty v
 Admitted.
 
 (** Semantics Interface *)
-
-(** ** Rust Interface *)
-
-Record rust_signature : Type := mksignature {
-  sig_generic_origins: list origin;
-  sig_origins_relation: list origin_rel;
-  sig_args: list type;
-  sig_res: type;
-  sig_cc: calling_convention;
-  sig_comp_env: composite_env;
-}.
-  
-Record rust_query :=
-  rsq {
-    rsq_vf: val;
-    rsq_sg: rust_signature;
-    rsq_args: list val;
-    rsq_mem: mem;
-  }.
-
-Record rust_reply :=
-  rsr {
-    rsr_retval: val;
-    rsr_mem: mem;
-  }.
-
-Canonical Structure li_rs :=
-  {|
-    query := rust_query;
-    reply := rust_reply;
-    entry := rsq_vf;
-  |}.
 
 Inductive wt_rs_world :=
   rsw (sg: rust_signature) (fp: flat_footprint) (m: mem).

@@ -7,7 +7,7 @@ Require Import AST Linking.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import Clight.
-Require Import RustlightBase RustIR RustIRsem RustOp.
+Require Import Rustlight RustIR RustIRsem RustOp.
 Require Import Errors.
 Require Import Clightgen Clightgenspec.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.

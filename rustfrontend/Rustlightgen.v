@@ -6,7 +6,7 @@ Require Import Values.
 Require Import AST.
 Require Import Rusttypes.
 Require Import Cop.
-Require Import Rustsyntax RustlightBase.
+Require Import Rustsyntax Rustlight.
 Require Import Errors.
 
 Import ListNotations.

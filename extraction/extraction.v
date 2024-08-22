@@ -186,7 +186,7 @@ Separate Extraction
    Compiler.transf_rust_program 
    (* Some functions are needed in Ocaml side *)
    Rusttypes.signature_of_type Rusttypes.build_composite_env Rustsyntax.empty_drop_globdef
-   Rustsyntax.type_of_function RustlightBase.type_of_function RustIR.type_of_function
+   Rustsyntax.type_of_function Rustlight.type_of_function RustIR.type_of_function
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
    Ctypes.merge_attributes Ctypes.remove_attributes 
    Ctypes.build_composite_env Ctypes.layout_struct

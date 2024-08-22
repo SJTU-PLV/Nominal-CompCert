@@ -4,7 +4,7 @@ open Camlcoq
 (* open Rusttypes *)
 open Ctypes
 open Cop
-open RustlightBase
+open Rustlight
 open PrintCsyntax
 open PrintRustsyntax
 
@@ -113,7 +113,7 @@ let rec print_expr_list p (first, rl) =
       print_expr_list p (false, rl)
 
 
-let rec print_stmt p (s: RustlightBase.statement) =
+let rec print_stmt p (s: Rustlight.statement) =
   match s with
   | Sskip ->
     (* comment *)
@@ -190,7 +190,7 @@ let print_fundecl p id fd =
       ()
   | Rusttypes.Internal f ->
       fprintf p "%s;@ "
-                (name_rust_decl (extern_atom id) (RustlightBase.type_of_function f))
+                (name_rust_decl (extern_atom id) (Rustlight.type_of_function f))
 
 let print_globdef p (id, gd) =
   match gd with
@@ -202,7 +202,7 @@ let print_globdecl p (id, gd) =
   | AST.Gfun f -> print_fundecl p id f
   | AST.Gvar v -> ()
 
-let print_program p (prog: RustlightBase.program) =
+let print_program p (prog: Rustlight.program) =
   fprintf p "@[<v 0>";
   List.iter (PrintRustsyntax.declare_composite p) prog.Rusttypes.prog_types;
   List.iter (PrintRustsyntax.define_composite p) prog.Rusttypes.prog_types;

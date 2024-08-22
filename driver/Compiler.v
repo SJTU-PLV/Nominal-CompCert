@@ -95,7 +95,7 @@ Require Import Compopts.
 (** Rust frontend *)
 Require Rusttypes.
 Require Rustsyntax.
-Require RustlightBase.
+Require Rustlight.
 Require RustIR.
 
 Require Rustlightgen.

@@ -3,7 +3,7 @@ Require Import Maps.
 Require Import AST.
 Require Import FSetWeakList DecidableType.
 Require Import Lattice.
-Require Import Rusttypes RustlightBase RustIR.
+Require Import Rusttypes Rustlight RustIR.
 Require Import Ordered.
 Require FSetAVL.
 Require Import Errors.

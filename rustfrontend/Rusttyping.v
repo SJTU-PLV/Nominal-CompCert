@@ -5,7 +5,7 @@ Require Import Floats.
 Require Import Values.
 Require Import Memory.
 Require Import Ctypes Cop Ctyping.
-Require Import Rusttypes RustOp RustlightBase.
+Require Import Rusttypes RustOp Rustlight.
 Require Import Errors Maps.
 Require Archi.
 

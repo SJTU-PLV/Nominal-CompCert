@@ -5,7 +5,7 @@ Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import AST Linking.
 Require Import Rusttypes.
-Require Import RustlightBase RustIR  RustOp.
+Require Import Rustlight RustIR  RustOp.
 Require Import Errors.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 

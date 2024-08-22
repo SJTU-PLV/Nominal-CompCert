@@ -7,7 +7,7 @@ Require Import Values.
 Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
-Require Import RustlightBase RustIR.
+Require Import Rustlight RustIR.
 
 
 (** Translation from Rustlight to RustIR. The main step is to generate
@@ -43,10 +43,10 @@ Definition gen_drops (local: bool) (l: list (ident * type)) : statement :=
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
 statement for dropping the parameters *)
-Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rustlight.statement) (vars: list (list (ident * type))) : statement :=
   let transl_stmt := transl_stmt params_drops oretv in
   match stmt with
-  | RustlightBase.Sskip => Sskip
+  | Rustlight.Sskip => Sskip
   | Slet id ty stmt' =>
       let s := transl_stmt stmt' (list_list_cons (id,ty) vars) in
       let drop := Sdrop (Plocal id ty) in
@@ -54,40 +54,40 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
         Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
       else
         Ssequence (Sstoragelive id) (Ssequence s (Sstoragedead id))
-  | RustlightBase.Sassign p e =>
+  | Rustlight.Sassign p e =>
       let drop := Sdrop p in
       if own_type ce (typeof_place p) then
         Ssequence drop (Sassign p e)
       else               
         Sassign p e
-  | RustlightBase.Sassign_variant p enum_id fid e =>
+  | Rustlight.Sassign_variant p enum_id fid e =>
       let drop := Sdrop p in
       if own_type ce (typeof_place p) then
         Ssequence drop (Sassign_variant p enum_id fid e)
       else               
         Sassign_variant p enum_id fid e
-  | RustlightBase.Sbox p e =>
+  | Rustlight.Sbox p e =>
       Sbox p e
-  | RustlightBase.Scall p e el =>
+  | Rustlight.Scall p e el =>
       Scall p e el    
-  | RustlightBase.Ssequence s1 s2 =>
+  | Rustlight.Ssequence s1 s2 =>
       let s1' := transl_stmt s1 vars in
       let s2' := transl_stmt s2 vars in
       Ssequence s1' s2'
-  | RustlightBase.Sifthenelse e s1 s2 =>
+  | Rustlight.Sifthenelse e s1 s2 =>
       let s1' := transl_stmt s1 vars in
       let s2' := transl_stmt s2 vars in
       Sifthenelse e s1' s2'
-  | RustlightBase.Sloop s =>
+  | Rustlight.Sloop s =>
       let s := transl_stmt s (nil :: vars) in
       Sloop s        
-  | RustlightBase.Sbreak =>
+  | Rustlight.Sbreak =>
       let drops := gen_drops true (hd nil vars) in
       Ssequence drops Sbreak
-  | RustlightBase.Scontinue =>
+  | Rustlight.Scontinue =>
       let drops := gen_drops true (hd nil vars) in
       Ssequence drops Scontinue
-  | RustlightBase.Sreturn e =>
+  | Rustlight.Sreturn e =>
       let drops := gen_drops true (concat vars) in
       match oretv, e with
       | Some retv, Some e =>
@@ -101,25 +101,12 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
   end.
 
 
-Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
+Fixpoint elaborate_return (stmt: Rustlight.statement) : Rustlight.statement :=
   match stmt with
-  | Slet id ty s =>
-      (id,ty) :: extract_vars s
-  | RustlightBase.Ssequence s1 s2 =>
-      extract_vars s1 ++ extract_vars s2
-  | RustlightBase.Sifthenelse _ s1 s2 =>
-      extract_vars s1 ++ extract_vars s2
-  | RustlightBase.Sloop s =>
-      extract_vars s
-  | _ => nil
-  end.
-
-Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statement :=
-  match stmt with
-  | RustlightBase.Ssequence _ s =>
+  | Rustlight.Ssequence _ s =>
       elaborate_return s
-  | RustlightBase.Sreturn _ => stmt
-  | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
+  | Rustlight.Sreturn _ => stmt
+  | _ => Rustlight.Ssequence stmt (Rustlight.Sreturn None)
   end.
 
 Definition ret_var (ty: type) (v: ident) : option place :=
@@ -130,28 +117,28 @@ Parameter fresh_atom : unit -> ident.
 
 (* The main job is to extract the variables and translate the statement *)
 
-Definition transl_function (f: RustlightBase.function) : function :=
-  let vars := extract_vars f.(RustlightBase.fn_body) in
+Definition transl_function (f: Rustlight.function) : function :=
+  let vars := extract_vars f.(Rustlight.fn_body) in
   (* drop statements for parameters *)
-  let params_drops := gen_drops false f.(RustlightBase.fn_params) in
+  let params_drops := gen_drops false f.(Rustlight.fn_params) in
   (* generate the return variable *)
   let retv := fresh_atom tt in
-  let oretv := ret_var f.(RustlightBase.fn_return) retv in
+  let oretv := ret_var f.(Rustlight.fn_return) retv in
   (* no need to insert return *)
-  (* let body := elaborate_return f.(RustlightBase.fn_body) in *)
-  let stmt' := transl_stmt params_drops oretv f.(RustlightBase.fn_body) nil in
+  (* let body := elaborate_return f.(Rustlight.fn_body) in *)
+  let stmt' := transl_stmt params_drops oretv f.(Rustlight.fn_body) nil in
   (* add the return variable to variable list *)
   let vars' := match oretv with | Some v => (local_of_place v, typeof_place v)  :: vars | None => vars end in
-  mkfunction f.(RustlightBase.fn_generic_origins)
-             f.(RustlightBase.fn_origins_relation)
-             f.(RustlightBase.fn_drop_glue)                     
-             f.(RustlightBase.fn_return)
-             f.(RustlightBase.fn_callconv)
+  mkfunction f.(Rustlight.fn_generic_origins)
+             f.(Rustlight.fn_origins_relation)
+             f.(Rustlight.fn_drop_glue)                     
+             f.(Rustlight.fn_return)
+             f.(Rustlight.fn_callconv)
              vars'
-             f.(RustlightBase.fn_params)
+             f.(Rustlight.fn_params)
              stmt'.
 
-Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
+Definition transl_fundef (fd: Rustlight.fundef) : fundef :=
   match fd with
   | Internal f => (Internal (transl_function f))
   | External orgs org_rels ef targs tres cconv => External orgs org_rels ef targs tres cconv
@@ -159,7 +146,7 @@ Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
 
 End COMPOSITE_ENV.
 
-Definition transl_program (p: RustlightBase.program) : program :=
+Definition transl_program (p: Rustlight.program) : program :=
   let p1 := transform_program (transl_fundef p.(prog_comp_env)) p in
   {| prog_defs := AST.prog_defs p1;
     prog_public := AST.prog_public p1;

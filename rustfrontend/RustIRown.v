@@ -12,7 +12,7 @@ Require Import Smallstep.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
-Require Import Clight RustlightBase RustIR.
+Require Import Clight Rustlight RustIR.
 Require Import InitDomain InitAnalysis.
 
 Import ListNotations.
@@ -20,178 +20,6 @@ Import ListNotations.
 (** ** Ownership based operational semantics for RustIR (the semantics before drop elaboration equipped with an ownership local environment) *)
 
 Section SEMANTICS.
-
-(** Ownership environment: a pair of deep owned place set and
-shallow owned place set (TODO: it should be defined in Rustlight) *)
-    
-(** own_env is actually init environment which is used to check
-every used is initialized. Maybe we should change the name?  *)
-
-(* may be we can use PathMap to optimize it *)
-  Record own_env :=
-    mkown { own_init: PathsMap.t;
-            own_uninit: PathsMap.t;
-            own_universe: PathsMap.t } .
-
-Definition is_owned (own: own_env) (p: place): bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id own.(own_init) in
-  let uninit := PathsMap.get id own.(own_uninit) in
-  (* no p's prefix in uninit and there is some p's prefix in init *)
-  Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
-  && Paths.exists_ (fun p' => is_prefix p' p) init.
-
-(* A owned place is deep owned **xor** shallow owned *)
-
-Definition is_deep_owned (own: own_env) (p: place) : bool :=
-  (* p is owned and no p's children in the universe *)
-  is_owned own p &&
-    let id := local_of_place p in
-    let universe := PathsMap.get id own.(own_universe) in
-    Paths.for_all (fun p' => negb (is_prefix_strict p p')) universe.
-
-Definition is_shallow_owned (own: own_env) (p: place) : bool :=
-  is_owned own p &&
-    (* There is some p's children in the universe, which means that
-    p's ownership may be split. So we only consider p as a partial
-    owned place *)
-    let id := local_of_place p in
-    let universe := PathsMap.get id own.(own_universe) in
-    Paths.exists_ (fun p' => is_prefix_strict p p') universe.
-
-(* check that parents of p are not in uninit (slightly different from
-   the condition in is_owned) *)
-Definition prefix_is_owned (own: own_env) (p: place) : bool :=
-  forallb (is_owned own) (parent_paths p).
-  (* let id := local_of_place p in *)
-  (* let uninit := PathsMap.get id own.(own_uninit) in *)
-  (* (* no p's prefix in uninit *) *)
-  (* Paths.for_all (fun p' => negb (is_prefix_strict p' p)) uninit. *)
-
-Lemma prefix_owned_implies: forall p p' own,
-    prefix_is_owned own p = true ->
-    is_prefix_strict p' p = true ->
-    is_owned own p' = true.
-Proof.
-  intros p p' own POWN PFX.
-  eapply forallb_forall in POWN; eauto.
-  eapply proj_sumbool_true in PFX. auto.
-Qed.  
-  
-(* place with succesive Pdowncast in the end is not a valid owner. For
-example, move (Pdowncast p) is equivalent to move p *)
-Fixpoint valid_owner (p: place) :=
-  match p with
-  | Pdowncast p' _ _ => valid_owner p'
-  | _ => p
-  end.
-
-Definition check_movable (own: own_env) (p: place) : bool :=
-  (* the place itself and its children are all owned *)
-  let id := local_of_place p in
-  let universe := PathsMap.get id (own_universe own) in  
-  Paths.for_all (is_owned own) (Paths.filter (is_prefix p) universe).
-
-
-Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
-  match pe with
-  | Eplace p _
-  | Ecktag p _
-  | Eref _ _ p _ =>
-      (* we only check p which represents/owns a memory location *)
-      if place_owns_loc p then
-        (* copy/reference a place also requires that the place is
-        movable (all its children are owned, otherwise it is not
-        memory safe because the unowned block may be deallocated *)
-        check_movable own p
-      else
-        (* This checking is left for borrow checker *)
-        true
-  | Eunop _ pe _ =>
-      own_check_pexpr own pe
-  | Ebinop _ pe1 pe2 _ =>
-      own_check_pexpr own pe1 && own_check_pexpr own pe2
-  | _ => true
-end.          
-
-Definition move_place (own: own_env) (p: place) : own_env :=
-  (mkown (remove_place p own.(own_init))
-     (add_place own.(own_universe) p own.(own_uninit))
-     own.(own_universe)).
-
-
-(* Move to Rustlight: Check the ownership of expression *)
-Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
-  match e with
-  | Emoveplace p ty =>
-      (** FIXME: when to use valid_owner? *)
-      let p := valid_owner p in
-      if check_movable own p then
-        (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
-        partial owned *)
-        (* remove p from init and add p and its children to uninit *)
-        Some (move_place own p)
-      else
-        (* Error! We must move a movable place! *)
-        None
-  | Epure pe =>
-      if own_check_pexpr own pe then
-        Some own
-      else None
-  end.
-
-Fixpoint own_check_exprlist (own: own_env) (l: list expr) : option own_env :=
-  match l with
-  | nil => Some own
-  | e :: l' =>
-      match own_check_expr own e with
-      | Some own1 =>
-          own_check_exprlist own1 l'
-      | None => None
-      end
-  end.
-
-(* The dominator of a place [p]: the place's demonator decide the
-location of this place *)
-
-Fixpoint place_dominator (p: place) : option place :=
-  match p with
-  | Pderef p' _ => Some p'
-  | Pfield p' _ _ => place_dominator p'
-  | Pdowncast p' _ _ => Some p'
-  | Plocal _ _ => None
-  end.
-
-(* A place's dominator is owned means that this place is the owner of
-the location it resides in *)
-Definition place_dominator_own (own: own_env) (p: place) : bool :=
-  match place_dominator p with
-  | Some p' => is_owned own p'
-  | None => true
-  end.
-
-(* We can use the following function to ensure that the block place
-[p] resides in is in the domain of abstracter *)
-Definition place_dominator_shallow_own (own: own_env) (p: place) : bool :=
-  match place_dominator p with
-  | Some p' => is_shallow_owned own p'
-  | None => true
-  end.
-
-
-(* Update the ownership environment when assigning to p. We must
-ensure that p is not deeply owned because p must be dropped before
-this assignment. *)
-Definition own_check_assign (own: own_env) (p: place) : option own_env :=
-  (* check that the dominator of p is owned (initialized) because we
-  need to compute the address of [p] *)
-  if place_dominator_own own p then
-    Some (mkown (add_place own.(own_universe) p own.(own_init))
-            (remove_place p own.(own_uninit))
-            own.(own_universe))
-  else
-    None.             
-
 
 (* Drop place state *)
 
@@ -286,21 +114,6 @@ Inductive state: Type :=
 (* RustIRown specific function entry *)
 
 Local Open Scope error_monad_scope.
-
-(* copy from init analysis *)
-Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
-  (* collect the whole set in order to simplify the gen and kill operation *)
-  do whole <- collect_func ce f;
-  (* initialize maybeInit set with parameters *)
-  let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
-  (* It is necessary because we have to guarantee that the map is not
-  PathMap.bot in the 'transfer' function *)
-  let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
-  let init := fold_right (add_place whole) empty_pathmap pl in
-  (* initialize maybeUninit with the variables *)
-  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
-  let uninit := fold_right (add_place whole) empty_pathmap vl in
-  OK (mkown init uninit whole).
 
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
 | function_entry_intro: forall m1 

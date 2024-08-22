@@ -4,7 +4,7 @@ Require Import Lattice Kildall.
 Require Import AST.
 Require Import Errors.
 Require Import FSetWeakList DecidableType.
-Require Import Rusttypes RustlightBase RustIR.
+Require Import Rusttypes Rustlight RustIR.
 Require Import InitDomain.
 
 Local Open Scope list_scope.
@@ -12,39 +12,6 @@ Local Open Scope list_scope.
 Section COMP_ENV.
 
 Variable ce : composite_env.
-
-Fixpoint collect_pexpr (pe: pexpr) (m: PathsMap.t) : PathsMap.t :=
-  match pe with
-  | Eplace p _
-  | Ecktag p _
-  | Eref _ _ p _ =>
-      (* we only check p which represents/owns a memory location *)
-      if place_owns_loc p then
-        collect_place ce p m
-      else m
-  | Eunop _ pe _ =>
-      collect_pexpr pe m
-  | Ebinop _ pe1 pe2 _ =>
-      collect_pexpr pe2 (collect_pexpr pe1 m)
-  | _ => m
-end.          
-
-
-Definition collect_expr (e: expr) (m: PathsMap.t) : PathsMap.t :=
-  match e with
-  | Emoveplace p _ =>
-      collect_place ce p m
-  | Epure pe =>
-      collect_pexpr pe m
-  end.
-
-Fixpoint collect_exprlist (l: list expr) (m: PathsMap.t) : PathsMap.t :=
-  match l with
-  | nil => m
-  | e :: l' =>
-      collect_exprlist l' (collect_expr e m)
-  end.
-
 
 Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with

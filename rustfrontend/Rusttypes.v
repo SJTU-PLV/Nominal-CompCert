@@ -1909,3 +1909,38 @@ Local Transparent Linker_program.
 Qed.
 
 End LINK_MATCH_PROGRAM.
+
+(** ** Rust Interface *)
+
+Require Import Memory Values.
+Require Import LanguageInterface.
+
+Record rust_signature : Type := mksignature {
+  sig_generic_origins: list origin;
+  sig_origins_relation: list origin_rel;
+  sig_args: list type;
+  sig_res: type;
+  sig_cc: calling_convention;
+  sig_comp_env: composite_env;
+}.
+  
+Record rust_query :=
+  rsq {
+    rsq_vf: val;
+    rsq_sg: rust_signature;
+    rsq_args: list val;
+    rsq_mem: mem;
+  }.
+
+Record rust_reply :=
+  rsr {
+    rsr_retval: val;
+    rsr_mem: mem;
+  }.
+
+Canonical Structure li_rs :=
+  {|
+    query := rust_query;
+    reply := rust_reply;
+    entry := rsq_vf;
+  |}.

@@ -12,7 +12,7 @@ Require Import Smallstep.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
-Require Import Clight RustlightBase.
+Require Import Clight Rustlight Rustlightown.
 Require Import InitDomain.
 
 Import ListNotations.
@@ -552,13 +552,6 @@ Inductive alloc_variables (ce: composite_env) : env -> mem ->
     alloc_variables ce (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
     alloc_variables ce e m ((id, ty) :: vars) e2 m2.
 
-
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
-| function_entry_intro: forall m1,
-    list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
-    alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-    bind_parameters ge e m1 f.(fn_params) vargs m' ->
-    function_entry ge f vargs m e m'.
 
 Section SMALLSTEP.
 
