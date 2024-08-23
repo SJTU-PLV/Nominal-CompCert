@@ -197,7 +197,7 @@ CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        HCompBig.v \
        InjpAccoComp.v VCompBig.v \
        SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
-       StackingproofC.v \
+       InvariantC.v StackingproofC.v \
        Composition.v
 
 
