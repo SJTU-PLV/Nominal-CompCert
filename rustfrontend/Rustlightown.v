@@ -15,7 +15,7 @@ Require Import LanguageInterface.
 Require Import InitDomain.
 
 Local Open Scope error_monad_scope.
-
+Import ListNotations.
 
 (** Generate drop glue map like RustIR *)
 
@@ -497,15 +497,76 @@ Inductive eval_exprlist_mem_error : list expr -> typelist -> Prop :=
 
 End EXPR.
 
+(** Some definitions of dropplace and dropstate *)
 
-(** Continuations *)
+
+(** Substate for member drop *)
+Inductive drop_member_state : Type :=
+| drop_member_comp
+    (fid: ident)
+    (fty: type)
+    (co_ty: type)
+    (tys: list type): drop_member_state   
+| drop_member_box
+    (fid: ident)
+    (fty: type)
+    (tys: list type): drop_member_state
+.
+
+Fixpoint split_fully_own_place (p: place) (ty: type) :=
+  match ty with
+  | Tbox ty'  =>
+      split_fully_own_place (Pderef p ty') ty' ++ [p]
+  | Tstruct _ _
+  | Tvariant _ _  =>
+      [p]
+  | _ => nil
+  end.
+
+
+(* Drop place state *)
+
+Inductive drop_place_state : Type :=
+| drop_fully_owned_comp
+    (* drop the composite and then drop the box *)
+    (p: place) (l: list place) : drop_place_state
+| drop_fully_owned_box
+    (l: list place) : drop_place_state
+.
+
+Definition gen_drop_place_state (p: place) : drop_place_state :=
+  match split_fully_own_place p (typeof_place p) with
+  | nil => drop_fully_owned_box nil
+  | p' :: l =>
+      match typeof_place p' with
+      | Tstruct _ _
+      | Tvariant _ _ =>
+          drop_fully_owned_comp p' l
+      | _ =>
+          drop_fully_owned_box (p' :: l)
+      end
+  end.
+          
+(** Continuation *)
+
+
+(* TODO: use some kbreak, kcontinue and kassign etc to record the stmt
+after drop. lots of drops before break and continue can be extracted
+from continuation *)
 
 Inductive cont : Type :=
 | Kstop: cont
 | Kseq: statement -> cont -> cont
-| Klet: ident -> cont -> cont
 | Kloop: statement -> cont -> cont
-| Kcall: place  -> function -> env -> own_env -> cont -> cont.
+| Kcall: option place -> function -> env -> own_env -> cont -> cont
+(* used to record Dropplace state *)
+| Kdropplace: function -> option drop_place_state -> list (place * bool) -> env -> own_env -> cont -> cont
+| Kdropcall: ident -> val -> option drop_member_state -> members -> cont -> cont
+| Klet: ident -> type -> cont -> cont
+(* continuation of assign after the drop. bool is used to indicate the
+assign or assign_variant *)
+| Kassign: bool -> place -> expr -> cont
+.
 
 
 (** Pop continuation until a call or stop *)
@@ -514,8 +575,6 @@ Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
   | Kloop s k => call_cont k
-  (* pop Klet *)
-  | Klet id k => call_cont k
   | _ => k
   end.
 
@@ -526,25 +585,43 @@ Definition is_call_cont (k: cont) : Prop :=
   | _ => False
   end.
 
+
 (** States *)
 
 Inductive state: Type :=
-  | State
-      (f: function)
-      (s: statement)
-      (k: cont)
-      (e: env)
-      (ie: own_env)
-      (m: mem) : state
-  | Callstate
-      (vf: val)
-      (args: list val)
-      (k: cont)
-      (m: mem) : state
-  | Returnstate
-      (res: val)
-      (k: cont)
-      (m: mem) : state.                          
+| State
+    (f: function)
+    (s: statement)
+    (k: cont)
+    (e: env)
+    (own: own_env)
+    (m: mem) : state
+| Callstate
+    (vf: val)
+    (args: list val)
+    (k: cont)
+    (m: mem) : state
+| Returnstate
+    (res: val)
+    (k: cont)
+    (m: mem) : state
+(* Simulate elaborate drop *)
+| Dropplace
+    (f: function)
+    (s: option drop_place_state)
+    (l: list (place * bool))
+    (k: cont)
+    (e: env)
+    (own: own_env)
+    (m: mem) : state
+| Dropstate
+    (* composite name *)
+    (c: ident)
+    (v: val)
+    (ds: option drop_member_state)
+    (ms: members)
+    (k: cont)
+    (m: mem): state.              
 
 
 (** Allocate memory blocks for function parameters/variables and build

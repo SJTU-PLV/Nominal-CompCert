@@ -525,19 +525,6 @@ Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
       
 
-(** Substate for member drop *)
-Inductive drop_member_state : Type :=
-| drop_member_comp
-    (fid: ident)
-    (fty: type)
-    (co_ty: type)
-    (tys: list type): drop_member_state   
-| drop_member_box
-    (fid: ident)
-    (fty: type)
-    (tys: list type): drop_member_state
-.
-
 (** Allocate memory blocks for function parameters/variables and build
 the local environment *)
 Inductive alloc_variables (ce: composite_env) : env -> mem ->
@@ -649,16 +636,6 @@ Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> 
     drop_box_rec_mem_error b ofs m1 tys ->
     drop_box_rec_mem_error b ofs m (ty :: tys)
 .
-
-Fixpoint split_fully_own_place (p: place) (ty: type) :=
-  match ty with
-  | Tbox ty'  =>
-      split_fully_own_place (Pderef p ty') ty' ++ [p]
-  | Tstruct _ _
-  | Tvariant _ _  =>
-      [p]
-  | _ => nil
-  end.
 
 
 End SMALLSTEP.
