@@ -231,73 +231,103 @@ Proof.
     auto.
 Qed.
 
-(* Relation between two semantics invariants *)
-Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
-  { inv_match_world: ccworld cc -> inv_world I1 -> inv_world I2 -> Prop;
 
-    (** TODO: how to get inv_match_world? *)
-    inv_match_symtbl: forall w2 se1 se2 ccw,
+(* Similar to ccref *)
+Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
+  { inv_incoming:
+    forall w2 se1 se2 ccw q2,
       symtbl_inv I2 w2 se2 ->
       match_senv cc ccw se1 se2 ->
-      exists w1, inv_match_world ccw w1 w2
-            /\ symtbl_inv I1 w1 se1;
-
-    inv_match_query: forall w1 w2 q2 ccw,
       query_inv I2 w2 q2 ->
-      inv_match_world ccw w1 w2 ->
-      exists q1, match_query cc ccw q1 q2
-            /\ query_inv I1 w1 q1;
+      exists w1 q1, symtbl_inv I1 w1 se1 /\
+                 query_inv I1 w1 q1 /\
+                 match_query cc ccw q1 q2 /\
+                 forall r1,
+                   reply_inv I1 w1 r1 ->
+                   exists r2, reply_inv I2 w2 r2;
 
-    inv_match_reply: forall w1 w2 r2 ccw,
-      reply_inv I2 w2 r2 ->
-      inv_match_world ccw w1 w2 ->
-      exists r1, match_reply cc ccw r1 r2
-            /\ reply_inv I1 w1 r1
+    inv_outgoing:
+    forall w1 se1 se2 ccw q1,
+      symtbl_inv I1 w1 se1 ->
+      match_senv cc ccw se1 se2 ->
+      query_inv I1 w1 q1 ->
+      exists w2 q2, symtbl_inv I2 w2 se2 /\
+                 query_inv I2 w2 q2 /\
+                 match_query cc ccw q1 q2 /\
+                 forall r2,
+                   reply_inv I2 w2 r2 ->
+                   exists r1, reply_inv I1 w1 r1;
+   
+    }.
 
-  }.
 
-Section LTS_SAFETY_PRESERVATION.
+(* Relation between two semantics invariants *)
+(* Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type := *)
+(*   { inv_match_world: ccworld cc -> inv_world I1 -> inv_world I2 -> Prop; *)
 
-Context {li1 li2} (cc: callconv li1 li2).
-Context {state1 state2: Type}.
-Context (L1: lts li1 li1 state1) (L2: lts li2 li2 state2).
-Context (I1: invariant li1) (I2: invariant li2).
-Context (se1 se2: Genv.symtbl).
-Context (ccw: ccworld cc) (w1: inv_world I1) (w2: inv_world I2).
-Context {index: Type} (order: index -> index -> Prop).
-Context (match_states: index -> state1 -> state2 -> Prop).
+(*     (** TODO: how to get inv_match_world? *) *)
+(*     inv_match_symtbl: forall w2 se1 se2 ccw, *)
+(*       symtbl_inv I2 w2 se2 -> *)
+(*       match_senv cc ccw se1 se2 -> *)
+(*       exists w1, inv_match_world ccw w1 w2 *)
+(*             /\ symtbl_inv I1 w1 se1; *)
 
-Hypothesis BSIM_INV: bsim_invariant cc I1 I2.
-Hypothesis MATCHWORLD: inv_match_world cc I1 I2 BSIM_INV ccw w1 w2.
+(*     inv_match_query: forall w1 w2 q2 ccw, *)
+(*       query_inv I2 w2 q2 -> *)
+(*       inv_match_world ccw w1 w2 -> *)
+(*       exists q1, match_query cc ccw q1 q2 *)
+(*             /\ query_inv I1 w1 q1; *)
 
-Lemma lts_safety_preservation:
-  lts_safe se1 L1 I1 I1 safe w1 ->
-  bsim_properties cc cc se1 se2 ccw L1 L2 index order match_states ->
-  lts_safe se2 L2 I2 I2 safe w2.
-Proof.
-  intros SAFE1 BSIM.
-  inv BSIM. inv SAFE1.
-  econstructor.
-  (* prove lts safety preservation *)
-  econstructor.
-  (* step_safe *)
-  - admit.
-  (* initial_safe *)
-  - intros q2 QV2 QINV2.
-    generalize (inv_match_query _ _ _ BSIM_INV w1 w2 q2 ccw QINV2 MATCHWORLD).
-    intros (q1 & MQ & QINV1).
-    exploit initial_safe0.
-    erewrite <- bsim_match_valid_query; eauto.
-    auto. admit.
+(*     inv_match_reply: forall w1 w2 r2 ccw, *)
+(*       reply_inv I2 w2 r2 -> *)
+(*       inv_match_world ccw w1 w2 -> *)
+(*       exists r1, match_reply cc ccw r1 r2 *)
+(*             /\ reply_inv I1 w1 r1 *)
+
+(*   }. *)
+
+(* Section LTS_SAFETY_PRESERVATION. *)
+
+(* Context {li1 li2} (cc: callconv li1 li2). *)
+(* Context {state1 state2: Type}. *)
+(* Context (L1: lts li1 li1 state1) (L2: lts li2 li2 state2). *)
+(* Context (I1: invariant li1) (I2: invariant li2). *)
+(* Context (se1 se2: Genv.symtbl). *)
+(* Context (ccw: ccworld cc) (w1: inv_world I1) (w2: inv_world I2). *)
+(* Context {index: Type} (order: index -> index -> Prop). *)
+(* Context (match_states: index -> state1 -> state2 -> Prop). *)
+
+(* Hypothesis BSIM_INV: bsim_invariant cc I1 I2. *)
+(* Hypothesis MATCHWORLD: inv_match_world cc I1 I2 BSIM_INV ccw w1 w2. *)
+
+(* Lemma lts_safety_preservation: *)
+(*   lts_safe se1 L1 I1 I1 safe w1 -> *)
+(*   bsim_properties cc cc se1 se2 ccw L1 L2 index order match_states -> *)
+(*   lts_safe se2 L2 I2 I2 safe w2. *)
+(* Proof. *)
+(*   intros SAFE1 BSIM. *)
+(*   inv BSIM. inv SAFE1. *)
+(*   econstructor. *)
+(*   (* prove lts safety preservation *) *)
+(*   econstructor. *)
+(*   (* step_safe *) *)
+(*   - admit. *)
+(*   (* initial_safe *) *)
+(*   - intros q2 QV2 QINV2. *)
+(*     generalize (inv_match_query _ _ _ BSIM_INV w1 w2 q2 ccw QINV2 MATCHWORLD). *)
+(*     intros (q1 & MQ & QINV1). *)
+(*     exploit initial_safe0. *)
+(*     erewrite <- bsim_match_valid_query; eauto. *)
+(*     auto. admit. *)
     
-  (* external_safe *)
-  - admit.
-  (* final_safe *)
-  - admit.
-Admitted.
+(*   (* external_safe *) *)
+(*   - admit. *)
+(*   (* final_safe *) *)
+(*   - admit. *)
+(* Admitted. *)
 
 
-End LTS_SAFETY_PRESERVATION.
+(* End LTS_SAFETY_PRESERVATION. *)
 
 
 (** Safety Preservation Under Backward Simulation *)
@@ -317,6 +347,56 @@ Lemma module_safety_preservation:
   backward_simulation cc cc L1 L2 ->
   module_safe L2 I2 I2 safe se2.
 Proof.
+  (** Test2  *)
+  intros MSENV SAFE [BSIM].
+  destruct BSIM as [index order match_states SKEL PROP WF].
+  red. intros w2 VSE2 SINV2.
+  set (safe' (l: lts li2 li2 (state L2)) s :=
+         exists w1: inv_world I1,
+           safe l s /\
+           symtbl_inv I1 w1 se1 /\
+           forall r1,
+             reply_inv I1 w1 r1 ->
+             exists r2, reply_inv I2 w2 r2).
+
+  cut (lts_safe se2 (L2 se2) I2 I2 safe' w2).
+  (** TODO: safe' implies safe *)
+  admit.
+  split.
+  - admit.
+  - intros q2 VQ2 QINV2.
+    destruct (inv_incoming _ _ _ BSIM_INV w2 se1 se2 ccw q2 SINV2 MSENV QINV2) as (w1 & q1 & SINV1 & QINV1 & MQ & Hr).
+    assert (VSE1: Genv.valid_for (skel L1) se1).
+    (** TODO: we need the inevert of match_senv_valid_for  *)
+    admit.
+    assert (VQ1: valid_query (L1 se1) q1 = true).
+    { erewrite <- bsim_match_valid_query. eauto.
+      eapply PROP. eauto.
+      auto. auto. }
+    edestruct (initial_safe _ _ _ _ _ _ (SAFE w1 VSE1 SINV1) q1 VQ1 QINV1) as ((s1 & INIT1) & INIT1'). 
+    edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+    split.
+    + eapply EXIST. eauto.
+    + intros s2 INIT2.
+      red. exists w1.
+      split; auto.
+      (** use bsim_progress *)
+      exploit MATCH; eauto.
+      intros (s1' & INIT1'' & (idx & MST)).
+      (* show s1' is safe *)
+      exploit INIT1'. eapply INIT1''. intros SAFES1'.
+      (** TODO: how to prove safe s1 implies safe s2?  *)
+      (* eapply bsim_progress; eauto. red.  *)
+      admit.
+
+  - intros s2 q2 REACH2 EXTERN2.
+    (** TODO: how to prove there is a reachable state s1 and s1 simulates s2*)
+    assert (A: exists s1 idx, reachable (L1 se1) s1 /\ match_states se1 se2 ccw idx s1 s2).
+    admit.
+    destruct A as (s1 & idx & REACH1 & MST).
+    
+    
+  (** Test1  *)
   (* intros MSENV SAFE BSIM. *)
   (* inv BSIM. rename X into BSIM. *)
   (* red. intros w2 VSE2 INV2. *)
