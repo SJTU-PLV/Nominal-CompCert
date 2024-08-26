@@ -456,6 +456,13 @@ Qed.
 
 End NOSTACK.
 
+Inductive sound_bc_gw : block_classification -> injp_world -> Prop :=
+|sound_bc_gw_intro: forall (bc : block_classification) j m tm Hm
+                      (INVALID: forall b, bc b = BCinvalid -> j b = None)
+                      (EXT_VALID_SOME: forall b, bc b <> BCinvalid -> fst b <> Mem.tid (Mem.support m) ->
+                                            exists b' d, j b = Some (b', d)),
+    sound_bc_gw bc (injpw j m tm Hm).
+
 (** ** Construction 1: allocating the stack frame at function entry *)
 
 Ltac splitall := repeat (match goal with |- _ /\ _ => split end).
@@ -1298,13 +1305,6 @@ Inductive sound_stack: block_classification -> list stackframe -> mem -> sup -> 
         (CONTENTS: bmatch bc' m sp am.(am_stack)),
       sound_stack bc (Stackframe res f (Vptr sp Ptrofs.zero) pc e :: stk) m bound.
 
-Inductive sound_bc_gw : block_classification -> injp_world -> Prop :=
-|sound_bc_gw_intro: forall (bc : block_classification) j m tm Hm
-                      (INVALID: forall b, bc b = BCinvalid -> j b = None)
-                      (EXT_VALID_SOME: forall b, bc b <> BCinvalid -> fst b <> Mem.tid (Mem.support m) ->
-                                            exists b' d, j b = Some (b', d)),
-    sound_bc_gw bc (injpw j m tm Hm).
-
 Inductive sound_state: injp_world -> state -> Prop :=
   | sound_regular_state:
       forall s f sps sp pc e m ae am bc wp
@@ -1565,11 +1565,6 @@ Proof.
   econstructor; eauto.
 Qed.
 
-Lemma external_call_tid : forall ef ge vargs m t vres m',
-    external_call ef ge vargs m t vres m' ->
-    Mem.tid (Mem.support m') = Mem.tid (Mem.support m).
-Admitted.
-
 Theorem sound_step:
   forall wp st t st', RTL.step (Genv.globalenv ge prog) st t st' -> sound_state wp st -> sound_state wp st'.
 Proof.
@@ -1693,7 +1688,7 @@ Proof.
   eauto. eauto. eauto. eauto.
   intros (bc3 & U & V & W & X & Y & Z & AA).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
-  erewrite external_call_tid; eauto.
+  erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
   apply set_builtin_res_sound; auto.
   eauto 10.
@@ -1701,7 +1696,7 @@ Proof.
   apply sound_stack_inv with m. auto.
   intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H8 in H4.
-  eapply freshness. eauto. erewrite <- external_call_tid; eauto.
+  eapply freshness. eauto. erewrite external_call_tid; eauto.
   intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
   inv BCGW. constructor.
   intros. admit.
@@ -1721,14 +1716,14 @@ Proof.
   eauto. eauto. eauto. eauto. eauto.
   intros (bc3 & U & V & W & X & Y & Z & AA).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
-  erewrite external_call_tid; eauto.
+  erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
   apply set_builtin_res_sound; auto. eauto 10.
   apply sound_stack_exten with bc.
   apply sound_stack_inv with m. auto.
   intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H6 in H2.
-  eapply freshness; eauto. erewrite <- external_call_tid; eauto.
+  eapply freshness; eauto. erewrite external_call_tid; eauto.
   intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
   admit.
   }
@@ -1849,7 +1844,7 @@ Proof.
   apply sound_stack_new_bound with (Mem.support m).
   apply sound_stack_exten with bc; auto.
   apply sound_stack_inv with m; auto.
-  erewrite <- external_call_tid; eauto.
+  erewrite external_call_tid; eauto.
   eapply external_call_support; eauto.
   admit.
 
