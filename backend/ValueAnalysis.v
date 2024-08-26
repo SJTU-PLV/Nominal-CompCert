@@ -1314,10 +1314,10 @@ Inductive sound_bc_gw : block_classification -> injp_world  -> Prop :=
                                             exists b' d, j b = Some (b', d)),
     sound_bc_gw bc (injpw j m0 tm0 Hm) .
 
-Inductive sp_notin_gw : injp_world -> block -> Prop :=
-|sp_notin_gw_intro : forall j m0 tm0 Hm b
-    (NSP: ~ Mem.valid_block m0 b),
-    sp_notin_gw (injpw j m0 tm0 Hm) b.
+Inductive sp_none_gw : injp_world -> block -> Prop :=
+|sp_none_gw_intro : forall j m0 tm0 Hm b
+    (NSP: j b = None),
+    sp_none_gw (injpw j m0 tm0 Hm) b.
 
 Inductive support_acc : injp_world -> mem -> Prop :=
 |support_acc_intro: forall j m0 tm0 Hm m
@@ -1327,13 +1327,14 @@ Inductive support_acc : injp_world -> mem -> Prop :=
 
 Inductive sound_state: injp_world -> state -> Prop :=
   | sound_regular_state:
-      forall s f sps sp pc e m ae am bc wp
+      forall s f sps sp pc e m ae am bc j0 m0 tm0 Hm0
         (SPS: sp = fresh_block sps)
         (SINCR: Mem.sup_include (sup_incr sps) (Mem.support m))
         (TID: Mem.tid sps = Mem.tid (Mem.support m))
         (STK: sound_stack bc s m sps)
-        (BCGW: sound_bc_gw bc wp)
-        (SPNOT: sp_notin_gw wp sp)
+        (BCGW: sound_bc_gw bc (injpw j0 m0 tm0 Hm0))
+        (SPNOT: j0 sp = None)
+        (SUP1: Mem.sup_include (Mem.support m0) sps)
         (SACC: support_acc wp m)
         (AN: (analyze rm f)!!pc = VA.State ae am)
         (EM: ematch bc e ae)
@@ -1341,7 +1342,7 @@ Inductive sound_state: injp_world -> state -> Prop :=
         (MM: mmatch bc m am)
         (GE: genv_match bc ge)
         (SP: bc sp = BCstack),
-      sound_state wp (State s f (Vptr sp Ptrofs.zero) pc e m)
+      sound_state (injpw j0 m0 tm0 Hm0) (State s f (Vptr sp Ptrofs.zero) pc e m)
   | sound_call_state:
       forall s fd args m bc wp
         (STK: sound_stack bc s m (Mem.support m))
@@ -1583,7 +1584,7 @@ Lemma sound_succ_state:
   bc sp = BCstack ->
   sound_stack bc s m' sps ->
   sound_bc_gw bc wp ->
-  sp_notin_gw wp sp ->
+  sp_none_gw wp sp ->
   support_acc wp m' ->
   sound_state wp (State s f (Vptr sp Ptrofs.zero) pc' e' m').
 Proof.
@@ -1606,12 +1607,6 @@ Lemma support_acc_trans : forall wp m m',
     support_acc wp m'.
 Proof.
   intros. inv H. constructor; eauto. congruence.
-Qed.
-
-Lemma sp_not_in_none : forall j m tm Hm b,
-    sp_notin_gw (injpw j m tm Hm) b -> j b = None.
-Proof.
-  intros. inv H. inv Hm. eauto.
 Qed.
 
 Theorem sound_step:
@@ -1662,7 +1657,7 @@ Proof.
     eapply mmatch_stack; eauto.
   * inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. eapply sp_not_in_none; eauto.
+       ++ subst. inv SPNOT. auto.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H4. simpl. congruence.
@@ -1681,7 +1676,7 @@ Proof.
     eapply mmatch_below; eauto.
   * inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. eapply sp_not_in_none; eauto.
+       ++ subst. inv SPNOT. auto.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H2. simpl. inv SACC. congruence.
@@ -1701,7 +1696,7 @@ Proof.
   eapply Mem.sup_include_trans; eauto.
   { inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. eapply sp_not_in_none; eauto.
+       ++ subst. inv SPNOT. auto.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H3. simpl. inv SACC. congruence.
@@ -1881,7 +1876,7 @@ Proof.
   intro. intro. apply SINCR. apply Mem.sup_incr_in2. auto.
   inv BCGW. constructor.
   intros. destruct (eq_block b (fresh_block sps)). 
-  subst. eapply sp_not_in_none; eauto.
+  subst. inv SPNOT. auto.
   apply INVALID. rewrite <- C; eauto.
   intros. destruct (eq_block b (fresh_block sps)).
   subst. exfalso. apply H2. simpl. inv SACC. congruence.
@@ -1910,7 +1905,7 @@ Proof.
   red in A.
   destruct (bc b) eqn: Hbc. eauto. admit.
   1-3: erewrite A in H0; eauto; congruence.
-  inv SACC. constructor. intro. 
+  inv SACC. constructor. inversion Hm. apply mi_freeblocks. intro.
   eapply Mem.fresh_block_alloc. eauto. apply SUP1. auto.
   eapply support_acc_trans. eauto.
   red. intros. eapply Mem.valid_block_alloc; eauto.
@@ -1946,8 +1941,8 @@ Proof.
    apply sound_stack_exten with bc'; auto.
    intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto.
    admit.
-   { inv SACC. constructor. inv STK0.
-     intro. eapply freshness; eauto. instantiate (1:= sps). auto.
+   { inv SACC. constructor. inversion Hm. apply mi_freeblocks.
+     intro. eapply freshness; eauto. instantiate (1:= sps).
    admit.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
   + (* from private call *)
