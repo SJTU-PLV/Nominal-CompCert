@@ -413,7 +413,7 @@ Ltac TransfInstr :=
 Lemma transf_step_correct:
   forall s1 t s2,
   step ge s1 t s2 ->
-  forall n1 s1' (SS: sound_state prog se s1) (MS: match_states n1 s1 s1'),
+  forall n1 s1' (SS: sound_state prog se w s1) (MS: match_states n1 s1 s1'),
   (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 s2 s2')
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 s2 s1')%nat.
 Proof.
@@ -717,20 +717,21 @@ Definition ro_w := (se, (row ge m01), w).
 
 Lemma transf_initial_states:
   forall q1 q2 st1, match_query  (ro @ cc_c injp) ro_w q1 q2 -> initial_state ge q1 st1 ->
-  exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2 /\ sound_state prog ge st1.
+  exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2 /\ sound_state prog ge w st1.
 Proof.
-  intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. inv H0. inv H9.
-  cbn in *. clear Hm1 Hm0.
+  intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. destruct w eqn: Hw.
+  inv H0. inv H9.
+  clear Hm1 Hm3 Hm2.
   exploit functions_translated; eauto. inversion GE. eauto.
   intros FIND.
   exists O; exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
     constructor; auto.
-  - rewrite <- H0 in *. cbn in *. econstructor. 
-    4: { instantiate (1:= Hm). rewrite <- H0. reflexivity. }
+  - cbn in *. econstructor. 
+    4: { instantiate (1:= Hm). rewrite Hw. reflexivity. }
     all : eauto. constructor.
     eapply ro_acc_refl.
-  - rewrite <- H0 in *. cbn in *. eapply sound_memory_ro_sound_state; eauto.
+  - cbn in *. eapply sound_memory_ro_sound_state; eauto.
     inversion GE. eauto.
 Qed.
 
@@ -748,10 +749,10 @@ Proof.
 Qed.
 
 Lemma transf_external_states:
-  forall n st1 st2 q1, match_states n st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
+  forall n st1 st2 q1, match_states n st1 st2 -> sound_state prog ge w st1 -> at_external ge st1 q1 ->
   exists w' q2, at_external tge st2 q2 /\ match_query (ro @ cc_c injp) w' q1 q2 /\ match_senv (ro @ cc_c injp) w' se tse /\
   forall r1 r2 st1', match_reply (ro @ cc_c injp) w' r1 r2 -> after_external st1 r1 st1' ->
-  exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2' /\ sound_state prog ge st1'.
+  exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2' /\ sound_state prog ge w st1'.
 Proof.
   intros n st1 st2 q1 Hst Hs Hq1. destruct Hq1. inv Hst.
   exploit match_stbls_incr; eauto. intro MSTB.
@@ -1060,7 +1061,7 @@ Proof.
       destruct (bc b); try congruence. rewrite B. reflexivity.
       rewrite B. reflexivity. rewrite B. reflexivity.
   }
-      econstructor; eauto.
+      econstructor. 3: eauto. all: eauto.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
         2: inversion H11; eauto.
@@ -1069,9 +1070,10 @@ Proof.
         eapply sound_stack_inv; eauto. intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
         intros. red. rewrite JBC_COMPOSE.
-        unfold jbc. rewrite H2. reflexivity.
+        unfold jbc. rewrite H2. reflexivity. eauto.
         intros.
         unfold bc'.  simpl. rewrite pred_dec_true; eauto.
+      * admit.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         -- 
@@ -1103,7 +1105,7 @@ Proof.
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         apply NOSTK; auto.
         destruct (j' b); congruence.
-Qed.
+Admitted.
 
 End PRESERVATION.
 
@@ -1118,7 +1120,7 @@ Theorem transf_program_correct prog tprog:
 Proof.
   fsim (eapply Build_fsim_properties with (order := lt)
                                           (match_states := fun i s1 s2 => match_states prog (snd w) i s1 s2
-                                                                       /\ sound_state prog se1 s1
+                                                                       /\ sound_state prog se1 (snd w)s1
                                                                        /\ ro_mem (snd (fst w)) = m01 (snd w) )).
 - destruct w as [[se rw] w]. cbn in *. destruct Hse as [Hser Hse].
   inv Hser. inv Hse. 

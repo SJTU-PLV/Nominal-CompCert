@@ -564,21 +564,6 @@ Proof.
       destruct H21 as [[_ Z]_]. congruence.
 Qed.
 
-(*
-(** But the introduce of [mid_hidden] is to show the absence of such *weird* injection of positions, why it cannot work? *)
-Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12: Mem.inject j12 m1 m2) (Hm23 :Mem.inject j23 m2 m3) Hm13',
-    let w1 := injpw j12 m1 m2 Hm12 in
-    let w2 := injpw j23 m2 m3 Hm23 in
-    injp_acce  (injpw (compose_meminj j12 j23) m1 m3 Hm13) (injpw j13' m1' m3' Hm13') -> external_mid_hidden w1 w2 ->
-    exists j12' j23' m2' Hm12' Hm23',
-      let w1' := injpw j12' m1' m2' Hm12' in
-      let w2' := injpw j23' m2' m3' Hm23' in
-      j13' = compose_meminj j12' j23' /\
-      injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
-Proof.
-  (*need to be proved in another file*)
-Admitted.
-*)
 Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
     Val.inject (compose_meminj j1 j2) v1 v3 ->
     exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.

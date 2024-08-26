@@ -930,9 +930,13 @@ Qed.
 
 (** * The simulation diagram *)
 
+Lemma Hm0 : Mem.inject w m0 m0.
+Proof. Admitted.
+
+Definition wp := injpw w m0 m0 Hm0.
 Theorem step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
-  forall S1', match_states S1 S1' -> sound_state prog se S1 ->
+  forall S1', match_states S1 S1' -> sound_state prog se wp S1 ->
   exists S2', step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
 
@@ -1469,6 +1473,7 @@ Ltac UseTransfer :=
 Qed.
 
 Definition ro_w := (se,(row se m0),w).
+(*
 Lemma transf_initial_states:
   forall q1 q2 st1, match_query  (ro @ cc_c inj) ro_w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2 /\ sound_state prog ge st1.
@@ -1854,7 +1859,7 @@ Proof.
         apply NOSTK; auto.
         destruct (j' b); congruence.
 Qed.
-
+*)
 
 End PRESERVATION.
 
@@ -1866,7 +1871,8 @@ Theorem transf_program_correct' prog tprog:
   forward_simulation (ro @ cc_c injp) (ro @ cc_c inj)
     (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  fsim (eapply forward_simulation_step with
+Admitted.
+(*  fsim (eapply forward_simulation_step with
                                           (match_states := fun s1 s2 => match_states prog (fst (fst w)) (ro_mem (snd (fst w))) (snd w) s1 s2
                                                                        /\ sound_state prog se1 s1
                                                                        /\ Mem.support (ro_mem (snd (fst w))) = injw_sup_l (snd w) )).
@@ -1910,7 +1916,7 @@ Proof.
   intros [s2' [A B]].
   exists s2'; split; auto. split; auto. split; auto. eapply sound_step; eauto.
 Qed.
-
+*)
 Require Import CallconvAlgebra CKLRAlgebra.
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->

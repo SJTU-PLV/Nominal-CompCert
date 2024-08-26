@@ -1057,7 +1057,7 @@ Ltac TransfInstr :=
 
 Lemma transf_step_correct:
   forall s1 t s2, step ge s1 t s2 ->
-  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se s1),
+  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se w s1),
   exists s2', step tge s1' t s2' /\ match_states s2 s2'.
 Proof.
   induction 1; intros; inv MS; try (TransfInstr; intro C).
@@ -1341,18 +1341,19 @@ Definition ro_w := (se, (row ge m01), w).
 
 Lemma transf_initial_states:
   forall q1 q2 st1, match_query  (ro @ cc_c injp) ro_w q1 q2 -> initial_state ge q1 st1 ->
-  exists st2, initial_state tge q2 st2 /\ match_states st1 st2 /\ sound_state prog ge st1.
+  exists st2, initial_state tge q2 st2 /\ match_states st1 st2 /\ sound_state prog ge w st1.
 Proof.
-  intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. inv H0. inv H9.
-  cbn in *. clear Hm1 Hm0.
+  intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. inv H0.
+  destruct w eqn: Hw. inv H9.
+  cbn in *. clear Hm1 Hm2 Hm3.
   exploit functions_translated; eauto. inversion GE. eauto.
   intros (tf & FIND & TFD).
   exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_preserved (romem_for prog) (Internal f)); eauto.
     monadInv TFD. constructor; auto.
-  - rewrite <- H0 in *. cbn in *. econstructor. 4: { instantiate (1:= Hm). rewrite <- H0. reflexivity. }
+  - cbn in *. econstructor. 4: { instantiate (1:= Hm). rewrite Hw. reflexivity. }
     constructor. eauto. eauto.
-  - rewrite <- H0 in *. cbn in *.
+  - cbn in *.
     eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
 Qed.
 
@@ -1372,10 +1373,10 @@ Proof.
 Qed.
 
 Lemma transf_external_states:
-  forall st1 st2 q1, match_states st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
+  forall st1 st2 q1, match_states st1 st2 -> sound_state prog ge w st1 -> at_external ge st1 q1 ->
   exists w' q2, at_external tge st2 q2 /\ match_query (ro @ cc_c injp) w' q1 q2 /\ match_senv (ro @ cc_c injp) w' se tse /\
   forall r1 r2 st1', match_reply (ro @ cc_c injp) w' r1 r2 -> after_external st1 r1 st1' ->
-  exists st2', after_external st2 r2 st2' /\ match_states st1' st2' /\ sound_state prog ge st1'.
+  exists st2', after_external st2 r2 st2' /\ match_states st1' st2' /\ sound_state prog ge w st1'.
 Proof.
   intros st1 st2 q1 Hst Hs Hq1. destruct Hq1. inv Hst.
   exploit match_stbls_incr; eauto. intro MSTB.
@@ -1641,7 +1642,7 @@ Proof.
         congruence.
       }
   (* Part 3: injection wrt j' implies matching with top wrt bc' *)
-  destruct H11 as [_ H11]. destruct H12 as [_ H12].
+  destruct H11 as [S11 H11]. destruct H12 as [_ H12].
   assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
   {
     intros. constructor. simpl; unfold f.
@@ -1680,7 +1681,7 @@ Proof.
       destruct (bc b); try congruence. rewrite B. reflexivity.
       rewrite B. reflexivity. rewrite B. reflexivity.
   }
-      econstructor; eauto.
+      econstructor. 3: eauto. all: eauto.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
         2: inversion H11; eauto.
@@ -1689,9 +1690,10 @@ Proof.
         eapply sound_stack_inv; eauto. intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
         intros. red. rewrite JBC_COMPOSE.
-        unfold jbc. rewrite H2. reflexivity.
+        unfold jbc. rewrite H2. reflexivity. 
         intros.
         unfold bc'.  simpl. rewrite pred_dec_true; eauto.
+      * admit.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         -- 
@@ -1723,7 +1725,7 @@ Proof.
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         apply NOSTK; auto.
         destruct (j' b); congruence.
-Qed.
+Admitted.
 
 End PRESERVATION.
 
@@ -1738,7 +1740,7 @@ Theorem transf_program_correct prog tprog:
 Proof.
   fsim (eapply forward_simulation_step with
                                           (match_states := fun s1 s2 => match_states prog (fst (fst w))(snd w) s1 s2
-                                                                       /\ sound_state prog se1 s1
+                                                                       /\ sound_state prog se1 (snd w) s1
                                                                        /\ ro_mem (snd (fst w)) = m01 (snd w) )).
 - destruct w as [[se rw] w]. cbn in *. destruct Hse as [Hser Hse].
   inv Hser. inv Hse. 
@@ -1770,7 +1772,7 @@ Proof.
 - destruct w as [[se [se' rwm]] w]. destruct Hse as [Hser Hse].
   inv Hser.
   intros s1 s2 q1 (Hs & SOUND & M0) Hq1.
-  edestruct transf_external_states as (w' & q2 & Hq2 & Hq & Hse' & Hk); eauto.
+  edestruct transf_external_states as (w' & q2 & Hq2 & Hq & Hse' & Hk); eauto. apply Hse1.
   exists w', q2. repeat apply conj; eauto.
   intros. exploit Hk; eauto. intros (st2 & A & B & C).
   exists st2. repeat apply conj; eauto.

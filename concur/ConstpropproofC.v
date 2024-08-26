@@ -437,7 +437,7 @@ Ltac TransfInstr :=
 Lemma transf_step_correct:
   forall s1 wp t s2,
   step ge s1 t s2 ->
-  forall n1 s1' (SS: sound_state prog se s1) (MS: match_states n1 wp s1 s1'),
+  forall n1 s1' (SS: sound_state prog se wp s1) (MS: match_states n1 wp s1 s1'),
   (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 wp s2 s2')
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 wp s2 s1')%nat.
 Proof.
@@ -755,7 +755,7 @@ Infix "@" := GS.cc_compose (at level 30, right associativity).
 
 Lemma transf_initial_states:
   forall q1 q2 st1, GS.match_query  (ro @ c_injp) ro_w q1 q2 -> initial_state ge q1 st1 ->
-  exists n, exists st2, initial_state tge q2 st2 /\ match_states n (get w) st1 st2 /\ sound_state prog ge st1.
+  exists n, exists st2, initial_state tge q2 st2 /\ match_states n (get w) st1 st2 /\ sound_state prog ge (get w) st1.
 Proof.
   intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *.
   inv H0. destruct w eqn: Hw. inv H9. clear Hm1 Hm2 Hm3. cbn in *.
@@ -783,7 +783,7 @@ Proof.
   eexists. split. econstructor; eauto. simpl. constructor. auto.
   eexists. simpl. auto. constructor; eauto.
 Qed.
-
+(*
 Inductive sound_bc_gw : block_classification -> injp_world -> Prop :=
 |sound_bc_gw_intro: forall (bc : block_classification) j m tm Hm
                       (INVALID: forall b, bc b = BCinvalid -> j b = None)
@@ -823,14 +823,13 @@ Lemma sound_stack_exten1:
   (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> bc1 b = bc b) ->
   sound_stack prog ge bc1 stk m bound.
 Proof. Admitted.
-
-(*maybe we cannot increase bound and bc separately? *)
+*)
   
 Lemma transf_external_states:
-  forall n gw st1 st2 q1, match_states n gw st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
+  forall n gw st1 st2 q1, match_states n gw st1 st2 -> sound_state prog ge gw st1 -> at_external ge st1 q1 ->
   exists (wx: GS.ccworld (ro @ c_injp)) q2, at_external tge st2 q2 /\ gw *-> (snd (get wx)) /\ GS.match_query (ro @ c_injp) wx q1 q2 /\ GS.match_senv (ro @ c_injp) wx se tse /\
   forall r1 r2 st1' (gw'': injp_world), (snd (get wx)) o-> gw'' -> GS.match_reply (ro @ c_injp) (set wx (tt,gw'')) r1 r2 -> after_external st1 r1 st1' ->
-  exists n' st2', after_external st2 r2 st2' /\ match_states n' gw'' st1' st2' /\ sound_state prog ge st1'.
+  exists n' st2', after_external st2 r2 st2' /\ match_states n' gw'' st1' st2' /\ sound_state prog ge gw'' st1'.
 Proof.
   intros n gw st1 st2 q1 Hst Hs Hq1. destruct Hq1. inv Hst.
   exploit match_stbls_incr; eauto. intro MSTB.
@@ -849,8 +848,7 @@ Proof.
     destruct (bc b); simpl; eauto;
     destruct (j b) as [[x y]|]; eauto.
   }
-  assert (SOUNDBC: sound_bc_gw bc gw).
-  eapply sound_state_extend. 
+  rename BCGW into SOUNDBC.
   eexists (se,((row se m),(injpw _ _ _ MEM'))). eexists. cbn. intuition idtac.
   - econstructor; eauto.
   - clear - ACCI jbc JBC_COMPOSE SOUNDBC.
@@ -1264,10 +1262,10 @@ Proof.
         2: inversion H9; eauto.
         eapply sound_stack_exten1.
         instantiate (1:= bc).
-        eapply sound_stack_inv1; eauto. intros.
+        eapply sound_stack_inv; eauto. intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
         intros. split. red. rewrite JBC_COMPOSE.
-        unfold jbc. rewrite H2. reflexivity. auto.
+        unfold jbc. rewrite H2. reflexivity. auto. destruct S9. congruence.
         intros. unfold bc'.  simpl. rewrite pred_dec_true; eauto.
         destruct (bc b); auto. rewrite pred_dec_true. auto.
         destruct S9. congruence.
@@ -1329,7 +1327,7 @@ Proof.
   - intros se1 se2 w Hse Hse1.
     eapply GS.Build_fsim_properties with (order := lt)
                                        (match_states := fun gw i s1 s2 => match_states prog (snd (snd w)) i (snd gw)  s1 s2
-                                                                       /\ sound_state prog se1 s1
+                                                                       /\ sound_state prog se1 (snd gw) s1
                                                                        /\ ro_mem (fst (snd w)) = m01 (snd (snd w)) ).
     + destruct w as [se [rw w]]. cbn in *. destruct Hse as [Hser Hse].
       inv Hser. inv Hse. 
@@ -1361,7 +1359,8 @@ Proof.
   inv H. econstructor; eauto. constructor; eauto.
   + destruct w as [se [[se' rwm] w]]. destruct Hse as [Hser Hse].
   inv Hser.
-  intros [tt gw] n s1 s2 q1 (Hs & SOUND & M0) Hq1. simpl in gw, tt, M0.
+  intros [tt gw] n s1 s2 q1 (Hs & SOUND & M0) Hq1. simpl in gw, tt, M0. 
+                                                                              
   edestruct transf_external_states as (w' & q2 & Hq2 & ACCI & Hq & Hse' & Hk); eauto.
   destruct w' as [se'' [tt' w']]. simpl in ACCI, tt'.
   exists (se'', (tt', w') ), q2. repeat apply conj; eauto. constructor.
@@ -1382,9 +1381,3 @@ Proof.
   - apply lt_wf.
 Qed.
 
-(** TODOs 
-1. Add a local world gw in [sound_state] and prove the internal executions preserve the [sound_bc_gw]
-2. Change [sound_stack] in a way 1) satisfies the admitted lemmas above, 2) can still protects the local
-   stack block, 3) can be preserved by any internal executions.
-
-*)
