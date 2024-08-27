@@ -9,8 +9,8 @@ Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep.
-Require Import Ctypes Rusttypes Rustlight.
 Require Import Cop RustOp.
+Require Import Ctypes Rusttypes Rustlight.
 Require Import LanguageInterface.
 Require Import InitDomain.
 
@@ -554,18 +554,29 @@ Definition gen_drop_place_state (p: place) : drop_place_state :=
 after drop. lots of drops before break and continue can be extracted
 from continuation *)
 
+(* The action actually need to do after the inserted drop *)
+Inductive dropcont : Type :=
+(* for [p := q], we insert drop(p) to get [drop(p); p:=q] and the
+assignment after this drop is recorde in this Dassign *)
+| Dassign: place -> expr -> dropcont
+| Dassign_variant : place -> ident -> ident -> expr -> dropcont
+| Dbreak
+| Dcontinue
+(* Dreturn records the return value *)
+| Dreturn: val -> dropcont
+| Dendlet
+.
+
 Inductive cont : Type :=
 | Kstop: cont
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
 | Kcall: option place -> function -> env -> own_env -> cont -> cont
+| Kdropinsert: list place -> dropcont -> cont -> cont
 (* used to record Dropplace state *)
 | Kdropplace: function -> option drop_place_state -> list (place * bool) -> env -> own_env -> cont -> cont
 | Kdropcall: ident -> val -> option drop_member_state -> members -> cont -> cont
 | Klet: ident -> type -> cont -> cont
-(* continuation of assign after the drop. bool is used to indicate the
-assign or assign_variant *)
-| Kassign: bool -> place -> expr -> cont
 .
 
 
@@ -585,6 +596,27 @@ Definition is_call_cont (k: cont) : Prop :=
   | _ => False
   end.
 
+(* compute to drop places from continuation: simulate vars in
+transl_stmt in RustIRgen *)
+
+Fixpoint cont_vars (k: cont) : list (list (ident * type)) :=
+  match k with
+  | Klet id ty k1 =>
+      list_list_cons (id, ty) (cont_vars k1)
+  | Kloop _ k1 =>
+      [] :: cont_vars k1
+  | Kseq _ k1
+  | Kcall _ _ _ _ k1
+  | Kdropinsert _ _ k1
+  | Kdropcall _ _ _ _ k1
+  | Kdropplace _ _ _ _ _ k1 =>
+      cont_vars k1
+  | Kstop =>
+      []
+  end.
+
+Definition vars_to_drops ce (vars: list (ident * type)) : list place :=
+  map (fun elt => Plocal (fst elt) (snd elt)) (filter (fun elt => own_type ce (snd elt)) vars).
 
 (** States *)
 
@@ -605,6 +637,15 @@ Inductive state: Type :=
     (res: val)
     (k: cont)
     (m: mem) : state
+(* Simulate drop inertion *)
+| Dropinsert
+    (f: function)    
+    (l: list place)
+    (dk: dropcont)
+    (k: cont)
+    (e: env)
+    (own: own_env)
+    (m: mem) : state
 (* Simulate elaborate drop *)
 | Dropplace
     (f: function)
@@ -621,7 +662,8 @@ Inductive state: Type :=
     (ds: option drop_member_state)
     (ms: members)
     (k: cont)
-    (m: mem): state.              
+    (m: mem): state
+.
 
 
 (** Allocate memory blocks for function parameters/variables and build
@@ -746,250 +788,546 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
     function_entry ge f vargs m e m2 own.
 
 
-Section SMALLSTEP.
+Section DROPMEMBER.
 
 Variable ge: genv.
 
-Inductive step : state -> trace -> state -> Prop :=
+(** Some definitions for dropstate and dropplace *)
+(* list of ownership types which are the children of [ty] *)
+Fixpoint drop_glue_children_types (ty: type) : list type :=
+  match ty with
+  | Tbox ty' =>
+      drop_glue_children_types ty' ++ [ty]
+  | Tstruct _ id 
+  | Tvariant _ id  => ty::nil
+  | _ => nil
+  end.
 
-| step_assign: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 b ofs v id  orgs,
-    (** FIXME: some ugly restriction  *)
-    typeof_place p = ty ->
-    typeof e = ty ->
-    ty <> Tvariant orgs id  ->
+(* It corresponds to drop_glue_for_member in Clightgen *)
+Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_member_state :=
+  if own_type ge fty then
+    let tys := drop_glue_children_types fty in
+    match tys with
+    | nil => None
+    | ty :: tys' =>
+        match ty with       
+        | Tvariant _ id
+        | Tstruct _ id =>
+            (* provide evidence for the simulation *)
+            match ge.(genv_dropm) ! id with
+            | Some _ =>
+                Some (drop_member_comp fid fty ty tys')
+            | None => None
+            end
+        | _ => Some (drop_member_box fid fty tys)
+        end
+    end
+  else None.
+
+(* Load the value of [ty1] with the address of the starting block
+(with type ty_k) from [ty1;ty2;ty3;...;ty_k] where ty_n points to
+ty_{n-1} *)
+Inductive deref_loc_rec (m: mem) (b: block) (ofs: ptrofs) : list type -> val -> Prop :=
+| deref_loc_rec_nil:
+    deref_loc_rec m b ofs nil (Vptr b ofs)
+| deref_loc_rec_cons: forall ty tys b1 ofs1 v,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    deref_loc ty m b1 ofs1 v ->
+    deref_loc_rec m b ofs (ty::tys) v
+.
+
+Inductive deref_loc_rec_mem_error (m: mem) (b: block) (ofs: ptrofs) : list type -> Prop :=
+| deref_loc_rec_error1: forall ty tys,
+    deref_loc_rec_mem_error m b ofs tys ->
+    deref_loc_rec_mem_error m b ofs (ty::tys)
+| deref_loc_rec_error2: forall ty tys b1 ofs1,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    deref_loc_mem_error ty m b ofs ->
+    deref_loc_rec_mem_error m b ofs (ty::tys)
+.
+
+
+(* big step to recursively drop boxes [Tbox (Tbox (Tbox
+...))]. (b,ofs) is the address of the starting block *)
+Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Prop :=
+| drop_box_rec_nil: forall m,
+    drop_box_rec b ofs m nil m
+| drop_box_rec_cons: forall m m1 m2 b1 ofs1 ty tys,
+    (* (b1, ofs1) is the address of [ty] *)
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    extcall_free_sem ge [Vptr b1 ofs1] m E0 Vundef m1 ->
+    drop_box_rec b ofs m1 tys m2 ->
+    drop_box_rec b ofs m (ty :: tys) m2
+.
+
+Inductive extcall_free_sem_mem_error: val -> mem -> Prop :=
+| free_error1: forall (b : block) (lo : ptrofs) (m : mem),
+    ~ Mem.valid_access m Mptr b (Ptrofs.unsigned lo - size_chunk Mptr) Readable ->
+    extcall_free_sem_mem_error (Vptr b lo) m
+| free_error2: forall (b : block) (lo sz : ptrofs) (m m' : mem),
+    Mem.load Mptr m b (Ptrofs.unsigned lo - size_chunk Mptr) = Some (Vptrofs sz) ->
+    Ptrofs.unsigned sz > 0 ->
+    ~ Mem.range_perm m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable ->
+    extcall_free_sem_mem_error (Vptr b lo) m.
+
+
+Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> Prop :=
+| drop_box_rec_error1: forall m ty tys,
+    deref_loc_rec_mem_error m b ofs tys ->
+    drop_box_rec_mem_error b ofs m (ty :: tys)
+| drop_box_rec_error2: forall m ty tys b1 ofs1,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    extcall_free_sem_mem_error (Vptr b1 ofs1) m -> 
+    drop_box_rec_mem_error b ofs m (ty :: tys)
+| drop_box_rec_error3: forall m m1 ty tys b1 ofs1,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    extcall_free_sem ge [Vptr b1 ofs1] m E0 Vundef m1 ->
+    drop_box_rec_mem_error b ofs m1 tys ->
+    drop_box_rec_mem_error b ofs m (ty :: tys)
+.
+
+End DROPMEMBER.
+
+Section SMALLSTEP.
+
+Variable ge: genv.
+  
+(* Mostly the same as RustIRsem *)
+Inductive step_drop : state -> trace -> state -> Prop :=
+| step_dropstate_init: forall id b ofs fid fty membs k m,
+    step_drop (Dropstate id (Vptr b ofs) None ((Member_plain fid fty) :: membs) k m) E0 (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) membs k m)
+| step_dropstate_struct: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid fty fofs orgs
+    (* step to another struct drop glue *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co1.(co_members)
+           end = OK fofs)
+    (* (cb, cofs is the address of composite id2) *)
+    (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
+    (CO2: ge.(genv_cenv) ! id2 = Some co2)
+    (STRUCT: co2.(co_sv) = Struct),
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty (Tstruct orgs id2) tys)) membs k m) E0
+      (Dropstate id2 (Vptr cb cofs) None co2.(co_members) (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid fty tys)) membs k) m)
+| step_dropstate_enum: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fid2 fty2 fofs tag orgs
+    (* step to another enum drop glue: remember to evaluate the switch statements *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid1 co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
+           end = OK fofs)
+    (* (cb, cofs is the address of composite id2) *)
+    (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
+    (CO2: ge.(genv_cenv) ! id2 = Some co2)
+    (ENUM: co2.(co_sv) = TaggedUnion)
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    (TAG: Mem.loadv Mint32 m (Vptr cb cofs) = Some (Vint tag))
+    (* use tag to choose the member *)
+    (MEMB: list_nth_z co2.(co_members) (Int.unsigned tag) = Some (Member_plain fid2 fty2)),
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m) E0
+      (Dropstate id2 (Vptr cb cofs) (type_to_drop_member_state ge fid2 fty2) nil (Kdropcall id1 (Vptr b1 ofs1) (Some (drop_member_box fid1 fty1 tys)) membs k) m)
+| step_dropstate_box: forall b ofs id co fid fofs m m' tys k membs fty
+    (CO1: ge.(genv_cenv) ! id = Some co)
+    (* evaluate the value of the argument of the drop glue for id2 *)
+    (FOFS: match co.(co_sv) with
+           | Struct => field_offset ge fid co.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co.(co_members)
+           end = OK fofs)
+    (DROPB: drop_box_rec ge b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys m'),
+    step_drop
+      (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m) E0
+      (Dropstate id (Vptr b ofs) None membs k m')
+| step_dropstate_return1: forall b ofs id m f e own k ps s,
+    step_drop
+      (* maybe we should separate step_dropstate_return to reuse
+      step_drop because of the mismatch between Kdropplace and Kcall
+      in RustIRown and RUstIRsem *)
+      (Dropstate id (Vptr b ofs) None nil (Kdropplace f s ps e own k) m) E0
+      (Dropplace f s ps k e own m)
+| step_dropstate_return2: forall b1 b2 ofs1 ofs2 id1 id2 m k membs s,
+    step_drop
+      (Dropstate id1 (Vptr b1 ofs1) None nil (Kdropcall id2 (Vptr b2 ofs2) s membs k) m) E0
+      (Dropstate id2 (Vptr b2 ofs2) s membs k m)
+.
+
+
+Inductive step_drop_mem_error : state -> Prop :=
+| step_dropstate_struct_error: forall id1 id2 co1 b1 ofs1 tys m k membs fid fty fofs orgs
+    (* step to another struct drop glue *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co1.(co_members)
+           end = OK fofs)
+    (* error in loading the address of the composite *)
+    (DEREF: deref_loc_rec_mem_error m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys),
+    step_drop_mem_error
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid fty (Tstruct orgs id2) tys)) membs k m)
+| step_dropstate_enum_error1: forall id1 id2 co1 b1 ofs1 tys m k membs fid1 fty1 fofs orgs
+    (* step to another enum drop glue: remember to evaluate the switch statements *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid1 co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
+           end = OK fofs)
+    (* error in loading the address of the composite *)
+    (DEREF: deref_loc_rec_mem_error m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys),
+    step_drop_mem_error
+    (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m)
+| step_dropstate_enum_error2: forall id1 id2 co1 co2 b1 ofs1 cb cofs tys m k membs fid1 fty1 fofs orgs
+    (* step to another enum drop glue: remember to evaluate the switch statements *)
+    (CO1: ge.(genv_cenv) ! id1 = Some co1)
+    (* evaluate the value of the argument for the drop glue of id2 *)
+    (FOFS: match co1.(co_sv) with
+           | Struct => field_offset ge fid1 co1.(co_members)
+           | TaggedUnion => variant_field_offset ge fid1 co1.(co_members)
+           end = OK fofs)
+    (* (cb, cofs is the address of composite id2) *)
+    (DEREF: deref_loc_rec m b1 (Ptrofs.add ofs1 (Ptrofs.repr fofs)) tys (Vptr cb cofs))
+    (CO2: ge.(genv_cenv) ! id2 = Some co2)
+    (ENUM: co2.(co_sv) = TaggedUnion)
+    (* error in loading the tag *)
+    (TAG: ~ Mem.valid_access m Mint32 cb (Ptrofs.unsigned cofs) Readable),
+    step_drop_mem_error
+      (Dropstate id1 (Vptr b1 ofs1) (Some (drop_member_comp fid1 fty1 (Tvariant orgs id2) tys)) membs k m)      
+| step_dropstate_box_error: forall b ofs id co fid fofs m tys k membs fty
+    (CO1: ge.(genv_cenv) ! id = Some co)
+    (* evaluate the value of the argument of the drop glue for id2 *)
+    (FOFS: match co.(co_sv) with
+           | Struct => field_offset ge fid co.(co_members)
+           | TaggedUnion => variant_field_offset ge fid co.(co_members)
+           end = OK fofs)
+    (* error in dropping the box chain *)
+    (DROPB: drop_box_rec_mem_error ge b (Ptrofs.add ofs (Ptrofs.repr fofs)) m tys),
+    step_drop_mem_error
+      (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m)
+.
+
+
+Inductive step_dropplace : state -> trace -> state -> Prop :=
+| step_dropplace_init1: forall f p ps k le own m full
+    (* p is not owned, so just skip it (How to relate this case with
+    RustIRsem because drop elaboration removes this place earlier in
+    generate_drop_flag) *)
+    (NOTOWN: is_owned own p = false),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f None ps k le own m)
+| step_dropplace_init2: forall f p ps k le own m st (full: bool)
+    (OWN: is_owned own p = true)
+    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f (Some st) ps k le own m)
+| step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
+    (* simulate step_drop_box in RustIRsem *)
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (* Simulate free semantics *)
+    (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
+    (* We are dropping p. fp is the fully owned place which is split into p::l *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m) E0
+      (Dropplace f (Some (drop_fully_owned_box l)) ps k le (move_place own p) m')
+| step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l
+    (* It corresponds to the call step to the drop glue of this struct *)
+    (PTY: typeof_place p = Tstruct orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COSTRUCT: co.(co_sv) = Struct)
+    (PADDR: eval_place ge le m p b ofs),
+    (* update the ownership environment in continuation *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+| step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l
+    (PTY: typeof_place p = Tvariant orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COENUM: co.(co_sv) = TaggedUnion)
+    (PADDR: eval_place ge le m p b ofs)
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    (TAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
+    (* use tag to choose the member *)
+    (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
+    (* update the ownership environment in continuation *)
+    step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
+      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+| step_dropplace_next: forall f ps k le own m,
+    step_dropplace (Dropplace f (Some (drop_fully_owned_box nil)) ps k le own m) E0
+      (Dropplace f None ps k le own m)
+(* return to the dropinsert state because all the dropplace states
+come from dropinsert *)
+| step_dropplace_return: forall f k le own m l dk,
+    step_dropplace (Dropplace f None nil (Kdropinsert l dk k) le own m) E0
+      (Dropinsert f l dk k le own m)
+.
+
+
+Inductive step_dropplace_mem_error: state -> Prop :=
+| step_dropplace_box_error1: forall le m k f p own ps l
+    (* eval_place error *)
+    (PADDR: eval_place_mem_error ge le m p),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_box_error2: forall le m k f p own ps l b ofs ty
+    (* deref_loc error *)
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc_mem_error (Tbox ty) m b ofs),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_box_error3: forall le m k f p own ps l b ofs ty b' ofs'
+    (PADDR: eval_place ge le m p b ofs)
+    (PTY: typeof_place p = Tbox ty)
+    (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
+    (* free error *)
+    (FREE: extcall_free_sem_mem_error (Vptr b' ofs') m),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
+| step_dropplace_comp_error: forall m k p f le own ps l
+    (* p is struct or enum *)
+    (PADDR: eval_place_mem_error ge le m p),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) 
+.
+
+
+(* small step in dropinsert *)
+Inductive step_dropinsert : state -> trace -> state -> Prop :=
+(* simulate step_to_dropplace in RustIRown *)
+| step_dropinsert_to_dropplace: forall f p le own m drops k universe dk l
+    (UNI: own.(own_universe) ! (local_of_place p) = Some universe)
+    (SPLIT: split_drop_place ge universe p (typeof_place p) = OK drops),
+    (* get the owned place to drop *)
+    step_dropinsert (Dropinsert f (p::l) dk k le own m) E0
+      (Dropplace f None drops (Kdropinsert l dk k) le own m)
+| step_dropinsert_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
+    (* check ownership *)
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3)
+    (TYP: forall orgs id, typeof_place p <> Tvariant orgs id),
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
-    (* evaluate the expr, return the value and the moved place (optional) *)
+    (* evaluate the expr, return the value *)
     eval_expr ge le m1 e v ->
-    moved_place e = op ->
-    (* update the initialized environment based on [op] *)
-    remove_own_option own op = Some own' ->
-    (* drop the successors of p (i.e., *p, **p, ...). If ty is not
-    owned type, drop_place has no effect. We must first update the me
-    and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m1 m2 ->
-    (* update the ownership env for p *)
-    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
-    (* assign to p  *)
-    (* note that the type is the expreesion type, consider [a = 1]
-    where a is [variant{int,float} *)
-    assign_loc ge ty m2 b ofs v m3 ->
-    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
-         
-| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag co id fid enum_id  orgs,
-    typeof_place p = ty ->
-    typeof e = ty ->
-    ty = Tvariant orgs id  ->
-    (* get the location of the place *)
-    eval_place ge le m1 p b ofs ->
-    (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_expr ge le m1 e v ->
-    moved_place e = op ->
-    (* update the initialized environment based on [op] *)
-    remove_own_option own op = Some own' ->
-    (* drop the successors of p (i.e., *p, **p, ...). If ty is not
-    owned type, drop_place has no effect. We must first update the me
-    and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m1 m2 ->
-    (* update the ownership env for p *)
-    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
-    (* assign to p  *)
-    (** different from normal assignment: update the tag and assign value *)
-    ge.(genv_cenv) ! id = Some co ->
-    field_tag fid co.(co_members) = Some tag ->
-    (* set the tag *)
-    Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
-    field_offset ge fid co.(co_members) = OK ofs' ->
+    (* sem_cast to simulate Clight *)
+    sem_cast v (typeof e) (typeof_place p) = Some v1 ->
+    (* assign to p *)
+    assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
+    step_dropinsert (Dropinsert f [] (Dassign p e) k le own1 m1) E0
+                    (State f Sskip k le own3 m2)
+| step_dropinsert_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
+    (* check ownership *)
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3)
+    (* necessary for clightgen simulation *)
+    (TYP: typeof_place p = Tvariant orgs enum_id)
+    (CO: ge.(genv_cenv) ! enum_id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
+    (* evaluate the expr, return the value *)
+    (EXPR: eval_expr ge le m1 e v)
+    (* evaluate the location of the variant in p (in memory m1) *)
+    (PADDR1: eval_place ge le m1 p b ofs)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
+    (* sem_cast to simulate Clight *)
+    (CAST: sem_cast v (typeof e) ty = Some v1)
     (* set the value *)
-    assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
-    step (State f (Sassign_variant p enum_id fid e) k le own m1) E0 (State f Sskip k le own'' m4)
+    (AS: assign_loc ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1 m2)
+    (** different from normal assignment: update the tag and assign value *)
+    (TAG: field_tag fid co.(co_members) = Some tag)
+    (* eval the location of the tag: to simulate the target statement:
+    because we cannot guarantee that store value in m1 does not change    the address of p! (Non-interference is a difficult problem!) *)
+    (PADDR2: eval_place ge le m2 p b1 ofs1)
+    (* set the tag *)
+    (STAG: Mem.storev Mint32 m2 (Vptr b1 ofs1) (Vint (Int.repr tag)) = Some m3),
+    step_dropinsert (Dropinsert f [] (Dassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
+| step_dropinsert_break_seq: forall f s k le own m,
+    step_dropinsert (Dropinsert f [] Dbreak (Kseq s k) le own m) E0
+      (Dropinsert f [] Dbreak k le own m)
+| step_dropinsert_break_let: forall f k le own m id ty,
+    (* this variable has been dropped when we meet the break statement *)
+    step_dropinsert (Dropinsert f [] Dbreak (Klet id ty k) le own m) E0
+      (Dropinsert f [] Dbreak k le own m)
+| step_dropinsert_break_loop: forall f s k le own m,
+    step_dropinsert (Dropinsert f [] Dbreak (Kloop s k) le own m) E0
+      (State f Sskip k le own m)
+| step_dropinsert_continue_seq: forall f s k le own m,
+    step_dropinsert (Dropinsert f [] Dcontinue (Kseq s k) le own m) E0
+      (Dropinsert f [] Dcontinue k le own m)
+| step_dropinsert_continue_let: forall f k le own m id ty,
+    step_dropinsert (Dropinsert f [] Dcontinue (Klet id ty k) le own m) E0
+      (Dropinsert f [] Dcontinue k le own m)
+| step_dropinsert_continue_loop: forall f s k le own m,
+    step_dropinsert (Dropinsert f [] Dcontinue (Kloop s k) le own m) E0
+      (State f s (Kloop s k) le own m)
+| step_dropinsert_return: forall f v k le own m1 m2 lb,
+    (* free stack blocks *)
+    blocks_of_env ge le = lb ->
+    Mem.free_list m1 lb = Some m2 ->    
+    step_dropinsert (Dropinsert f [] (Dreturn v) k le own m1) E0
+      (Returnstate v (call_cont k) m2)
+| step_dropinsert_endlet: forall f k le own m,
+    step_dropinsert (Dropinsert f [] Dendlet k le own m) E0
+      (State f Sskip k le own m)
+.
 
-| step_box: forall f e (p: place) ty op k le own1 own2 own3 m1 m2 m3 b v,
-    typeof e = ty ->
-    (* typeof_place p = TSletbox ty attr -> *)
-    eval_expr ge le m1 e v ->
-    (* allocate the memory block *)
-    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
-    (* assign the value *)
-    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
-    (* update the ownership environment *)
-    moved_place e = op ->
-    remove_own_option own1 op = Some own2 ->
-    (* update the ownership env for p *)
-    PTree.set (local_of_place p) (own_path ge p ty) own2 = own3 ->
-    step (State f (Sbox p e) k le own1 m1) E0 (* may be we can change the effect *) (State f Sskip k le own3 m3)  
-         
-| step_let: forall f ty id own m1 m2 le1 le2 b k stmt,
-    (* allocate the block for id *)
-    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
-    (* uppdate the local env *)
-    PTree.set id (b, ty) le1 = le2 ->
-    step (State f (Slet id ty stmt) k le1 own m1) E0 (State f stmt (Klet id k) le2 own m2)
 
-         
-(** FIXME: we do not allow initialization in let statement. So that we
-can initialize struct *)
-(* | step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 m4 le1 le2 b k stmt, *)
-(*     typeof_boxexpr be = ty -> *)
-(*     eval_boxexpr ge le1 m1 be v op m2 -> *)
-(*     (* update the move environment *) *)
-(*     remove_own own1 op = Some own2 -> *)
-(*     (* allocate the block for id *) *)
-(*     Mem.alloc m2 0 (sizeof ge ty) = (m3, b) -> *)
-(*     (* uppdate the local env *) *)
-(*     PTree.set id (b, ty) le1 = le2 -> *)
-(*     (* update the ownership environment *) *)
-(*     PTree.set id (own_path ge (Plocal id ty) ty) own2 = own3 -> *)
-(*     (* assign [v] to [b] *) *)
-(*     assign_loc ge ty m3 b Ptrofs.zero v m4 -> *)
-(*     step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m3) *)
-         
-(* | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres, *)
-(*     classify_fun (typeof a) = fun_case_f tyargs tyres cconv -> *)
-(*     eval_expr ge le m a vf -> *)
-(*     eval_exprlist ge le m al tyargs vargs -> *)
-(*     moved_place_list al = optlp -> *)
-(*     (* CHECKME: update the initialized environment *) *)
-(*     remove_own_list own1 optlp = Some own2 -> *)
-(*     Genv.find_funct ge vf = Some fd -> *)
-(*     type_of_fundef fd = Tfunction tyargs tyres cconv -> *)
-(*     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m) *)
-| step_call_1: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres p orgs org_rels,
+Inductive step : state -> trace -> state -> Prop :=
+| step_assign: forall f e p k le m drops own
+    (GENDROP: drops = if own_type ge (typeof_place p) then [p] else []),
+    step (State f (Sassign p e) k le own m) E0 (Dropinsert f drops (Dassign p e) k le own m)
+| step_assign_variant: forall f e p k le m drops own enum_id fid
+    (GENDROP: drops = if own_type ge (typeof_place p) then [p] else []),
+    step (State f (Sassign_variant p enum_id fid e) k le own m) E0 (Dropinsert f drops (Dassign_variant p enum_id fid e) k le own m)         
+| step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
+    (* check ownership *)
+    (CHKEXPR: own_check_expr own1 e = Some own2)
+    (CHKASSIGN: own_check_assign own2 p = Some own3),
+    typeof_place p = Tbox ty ->
+    (* Simulate malloc semantics to allocate the memory block *)
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    (* evaluate the expression after malloc to simulate*)
+    eval_expr ge le m3 e v ->
+    (* sem_cast the value to simulate function call in Clight *)
+    sem_cast v (typeof e) ty = Some v1 ->
+    (* assign the value to the allocated location *)
+    assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
+    (* assign the address to p *)
+    eval_place ge le m4 p pb pofs ->
+    assign_loc ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) m5 ->
+    step (State f (Sbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
+| step_let: forall f ty id own m k s le,
+    step (State f (Slet id ty s) k le own m) E0 (State f s (Klet id ty k) le own m)
+(* End of a let statement, drop the place *)
+| step_end_let: forall f id ty k le m drops own
+    (GENDROP: drops = if own_type ge ty then [Plocal id ty] else []),
+    step (State f Sskip (Klet id ty k) le own m) E0 (Dropinsert f drops Dendlet k le own m)
+
+(** dynamic drop semantics: simulate the drop elaboration *)
+| step_in_dropinsert: forall f l dk k le own m E S
+    (SDROP: step_dropinsert (Dropinsert f l dk k le own m) E S),
+    step (Dropinsert f l dk k le own m) E S
+| step_in_dropplace: forall f s ps k le own m E S
+    (SDROP: step_dropplace (Dropplace f s ps k le own m) E S),
+    step (Dropplace f s ps k le own m) E S
+| step_dropstate: forall id v s membs k m S E
+    (SDROP: step_drop (Dropstate id v s membs k m) E S),
+    step (Dropstate id v s membs k m) E S
+
+| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
+    (CHKEXPRLIST: own_check_exprlist own1 al = Some own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
-    moved_place_list al = optlp ->
-    (* CHECKME: update the move environment *)
-    remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
-                 
-(* End of a let statement, free the place and its drop obligations *)
-| step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b s,
-    s = Sskip \/ s = Sbreak \/ s = Scontinue ->
-    PTree.get id le1 = Some (b, ty) ->
-    (* free {*id, **id, ...} if necessary *)
-    drop_place ge le1 own1 (Plocal id ty) m1 m2 ->
-    (* free the block [b] of the local variable *)
-    Mem.free m1 b 0 (sizeof ge ty) = Some m2 ->
-    (* clear [id] in the local env and move env. It is necessary for the memory deallocation in return state *)
-    PTree.remove id le1 = le2 ->
-    PTree.remove id own1 = own2 ->
-    step (State f s (Klet id k) le1 own1 m1) E0 (State f s k le2 own2 m3)
+    (* Cannot call drop glue *)
+    (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
+    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le own2 k) m)
 
-| step_internal_function: forall vf f vargs k m e me m'
-    (FIND: Genv.find_funct ge vf = Some (Internal f)),
-    function_entry ge f vargs m e me m' ->
-    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
+| step_internal_function: forall vf f vargs k m e m' init_own
+    (FIND: Genv.find_funct ge vf = Some (Internal f))
+    (NORMAL: f.(fn_drop_glue) = None)
+    (ENTRY: function_entry ge f vargs m e m' init_own),
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e init_own m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
-    (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc)),
+    (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc))
+    (NORMAL: ef <> EF_malloc /\ ef <> EF_free),
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
-(** Return cases  *)
-| step_return_0: forall e own lp lb m1 m2 f k ,
-    places_of_env e = lp ->
-    (* drop the lived drop obligations *)
-    drop_place_list ge e own m1 lp m2 ->
-    blocks_of_env ge e = lb ->
-    (* drop the stack blocks *)
-    Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v op own own' lp lb m1 m2 m3 f k ,
-    eval_expr ge le m1 a v ->
-    moved_place a = op ->
-    (* CHECKME: update move environment, because some place may be
-    moved out to the callee *)
-    remove_own_option own op = Some own' ->
-    places_of_env le = lp ->
-    drop_place_list ge le own' m1 lp m2 ->
-    (* drop the stack blocks *)
-    blocks_of_env ge le = lb ->
-    Mem.free_list m2 lb = Some m3 ->
-    step (State f (Sreturn (Some a)) k le own m1) E0 (Returnstate v (call_cont k) m3)
+(** Return cases *)
+| step_return_0: forall e f k own drops param_drops m
+    (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
+    (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
+    step (State f (Sreturn None) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
+| step_return_1: forall le a v v1 m f k own1 own2 drops param_drops
+    (CHKEXPR: own_check_expr own1 a = Some own2)
+    (EXPR: eval_expr ge le m a v)
+    (* sem_cast to the return type *)
+    (CAST: sem_cast v (typeof a) f.(fn_return) = Some v1)
+    (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
+    (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
+    step (State f (Sreturn (Some a)) k le own1 m) E0 (Dropinsert f (drops++param_drops) (Dreturn v1) k le own2 m)
+
 (* no return statement but reach the end of the function *)
-| step_skip_call: forall e own lp lb m1 m2 m3 f k,
-    is_call_cont k ->
-    places_of_env e = lp ->
-    drop_place_list ge e own m1 lp m2 ->
-    blocks_of_env ge e = lb ->
-    Mem.free_list m2 lb = Some m3 ->
-    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m3)
-         
-(* | step_returnstate_0: forall v m e me f k, *)
-(*     step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m) *)
-| step_returnstate_1: forall (p: place) v b ofs ty m m' m'' e own own' f k,
-    (* drop and replace *)
-    drop_place ge e own p m m' ->
-    (* update the ownership environment *)
-    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own = own' ->
-    eval_place ge e m' p b ofs ->
-    assign_loc ge ty m' b ofs v m'' ->    
-    step (Returnstate v (Kcall p f e own k) m) E0 (State f Sskip k e own' m'')
+| step_skip_call: forall e f k own drops param_drops m
+    (CALLCONT: is_call_cont k)
+    (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
+    (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
+    step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
+
+| step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
+    (CHKASSIGN: own_check_assign own1 p = Some own2),
+    eval_place ge e m1 p b ofs ->
+    assign_loc ge ty m1 b ofs v m2 ->    
+    step (Returnstate v (Kcall (Some p) f e own1 k) m1) E0 (State f Sskip k e own2 m2)
 
 (* Control flow statements *)
-| step_seq:  forall f s1 s2 k e me m,
-    step (State f (Ssequence s1 s2) k e me m)
-      E0 (State f s1 (Kseq s2 k) e me m)
-| step_skip_seq: forall f s k e me m,
-    step (State f Sskip (Kseq s k) e me m)
-      E0 (State f s k e me m)
-| step_continue_seq: forall f s k e me m,
-    step (State f Scontinue (Kseq s k) e me m)
-      E0 (State f Scontinue k e me m)
-| step_break_seq: forall f s k e me m,
-    step (State f Sbreak (Kseq s k) e me m)
-      E0 (State f Sbreak k e me m)
-| step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
+| step_seq:  forall f s1 s2 k e m own,
+    step (State f (Ssequence s1 s2) k e own m)
+      E0 (State f s1 (Kseq s2 k) e own m)
+| step_skip_seq: forall f s k e m own,
+    step (State f Sskip (Kseq s k) e own m)
+      E0 (State f s k e own m)
+| step_continue_insert_drops: forall f k e m own drops
+    (* get the places to insert drop *)
+    (DROPS: drops = vars_to_drops ge (hd nil (cont_vars k))),
+    step (State f Scontinue k e own m)
+      E0 (Dropinsert f drops Dcontinue k e own m)
+| step_break_insert_drops: forall f k e m own drops
+    (* get the places to insert drop *)
+    (DROPS: drops = vars_to_drops ge (hd nil (cont_vars k))),
+    step (State f Sbreak k e own m)
+      E0 (Dropinsert f drops Dbreak k e own m)
+| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1 own2
+    (CHKEXPR: own_check_expr own1 a = Some own2),
     (* there is no receiver for the moved place, so it must be None *)
     eval_expr ge e m a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
-    step (State f (Sifthenelse a s1 s2) k e me m)
-      E0 (State f (if b then s1 else s2) k e me' m)
-| step_loop: forall f s k e me m,
-    step (State f (Sloop s) k e me m)
-      E0 (State f s (Kloop s k) e me m)
-| step_skip_or_continue_loop:  forall f s k e me m x,
-    x = Sskip \/ x = Scontinue ->
-    step (State f x (Kloop s k) e me m)
-      E0 (State f s (Kloop s k) e me m)
-| step_break_loop:  forall f s k e me m,
-    step (State f Sbreak (Kloop s k) e me m)
-      E0 (State f Sskip k e me m)
+    step (State f (Sifthenelse a s1 s2) k e own1 m)
+      E0 (State f (if b then s1 else s2) k e own2 m)
+| step_loop: forall f s k e m own,
+    step (State f (Sloop s) k e own m)
+      E0 (State f s (Kloop s k) e own m)
+| step_skip_loop:  forall f s k e m own,
+    step (State f Sskip (Kloop s k) e own m)
+      E0 (State f s (Kloop s k) e own m)
 .
 
 
 (** Open semantics *)
 
-(** IDEAS: can we check the validity of the input values based on the
-function types?  *)
-Inductive initial_state: c_query -> state -> Prop :=
-| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m orgs org_rels,
+Inductive initial_state: rust_query -> state -> Prop :=
+| initial_state_intro: forall vf f targs tres tcc vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction orgs org_rels targs tres tcc ->
-    (** TODO: val_casted_list *)
+    (* This function must not be drop glue *)
+    f.(fn_drop_glue) = None ->
+    (* how to use it? *)
+    val_casted_list vargs targs ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
-    initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
-                  (Callstate vf vargs Kstop m).
+    initial_state (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres tcc ge) vargs m)
+      (Callstate vf vargs Kstop m).
     
-Inductive at_external: state -> c_query -> Prop:=
+Inductive at_external: state -> rust_query -> Prop:=
 | at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
-    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->    
-    at_external (Callstate vf args k m) (cq vf sg args m).
+    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->
+    at_external (Callstate vf args k m) (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres cconv ge) args m).
 
-Inductive after_external: state -> c_reply -> state -> Prop:=
+Inductive after_external: state -> rust_reply -> state -> Prop:=
 | after_external_intro: forall vf args k m m' v,
     after_external
       (Callstate vf args k m)
-      (cr v m')
+      (rsr v m')
       (Returnstate v k m').
 
-Inductive final_state: state -> c_reply -> Prop:=
+Inductive final_state: state -> rust_reply -> Prop:=
 | final_state_intro: forall v m,
-    final_state (Returnstate v Kstop m) (cr v m).
+    final_state (Returnstate v Kstop m) (rsr v m).
 
 End SMALLSTEP.
 

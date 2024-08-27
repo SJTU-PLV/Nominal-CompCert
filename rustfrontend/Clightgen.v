@@ -7,7 +7,7 @@ Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import Clight.
-Require Import Rustlight RustIR.
+Require Import Rustlight Rustlightown RustIR.
 Require Import Errors.
 
 Import ListNotations.

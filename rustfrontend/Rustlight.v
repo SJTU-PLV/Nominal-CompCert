@@ -271,6 +271,11 @@ Definition classify_fun (ty: type) :=
   | _ => fun_default
   end.
   
+Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
+  match l with
+  | nil => (e::nil)::nil
+  | l' :: l => (e::l') :: l
+  end.
 
 (** ** Notations of Rustlight program *)
 

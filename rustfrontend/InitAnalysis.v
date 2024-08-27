@@ -8,41 +8,22 @@ Require Import Rusttypes Rustlight RustIR.
 Require Import InitDomain.
 
 Local Open Scope list_scope.
-            
-Section COMP_ENV.
 
-Variable ce : composite_env.
-
-Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
-  match s with
-  | Sassign_variant p _ _ e
-  | Sassign p e
-  | Sbox p e =>
-      collect_place ce p (collect_expr e m)
-  | Scall p _ al =>
-      collect_place ce p (collect_exprlist al m)
-  | Sreturn (Some e) =>
-      collect_expr e m
-  | Ssequence s1 s2 =>
-      collect_stmt s1 (collect_stmt s2 m)
-  | Sifthenelse e s1 s2 =>
-      collect_stmt s1 (collect_stmt s2 (collect_expr e m))
-  | Sloop s =>
-      collect_stmt s m
-  | _ => m
+Definition moved_place (e: expr) : option place :=
+  match e with
+  | Emoveplace p _ => Some p
+  | _ => None
   end.
 
-Definition collect_func (f: function) : Errors.res PathsMap.t :=
-  let vars := f.(fn_params) ++ f.(fn_vars) in  
-  if list_norepet_dec ident_eq (map fst vars) then
-    let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
-    (** TODO: add all the parameters and variables to l (may be useless?) *)
-    let init_map := fold_right (collect_place ce) (PTree.empty LPaths.t) l in
-    Errors.OK (collect_stmt f.(fn_body) init_map)
-  else
-    Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
-
-End COMP_ENV.
+Fixpoint moved_place_list (al: list expr) : list place :=
+  match al with
+  | e :: l =>
+      match moved_place e with
+      | Some p => p :: moved_place_list l
+      | None => moved_place_list l
+      end
+  | nil => nil
+  end.
 
 (* S is the whole set, flag = true indicates that it computes the MaybeInit set *)
 Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (pc: node) (before: PathsMap.t) : PathsMap.t :=

@@ -16,12 +16,6 @@ variable. We also need to insert drops for those out-of-scope variable
 in [break], [continue] and [return] *)
 
 
-Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
-  match l with
-  | nil => (e::nil)::nil
-  | l' :: l => (e::l') :: l
-  end.
-
 Section COMPOSITE_ENV.
 
 Variable ce: composite_env.
@@ -64,7 +58,7 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
       let drop := Sdrop p in
       if own_type ce (typeof_place p) then
         Ssequence drop (Sassign_variant p enum_id fid e)
-      else               
+      else
         Sassign_variant p enum_id fid e
   | Rustlight.Sbox p e =>
       Sbox p e
@@ -89,6 +83,7 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
       Ssequence drops Scontinue
   | Rustlight.Sreturn e =>
       let drops := gen_drops true (concat vars) in
+      (* TODO: The fresh return variable is used to store the return value before the drops because the moved place in return expression may be dropped and the return value depends on this moved place. May be we can use some temporary variables to do this so that we do not need to protect this variable *)
       match oretv, e with
       | Some retv, Some e =>
           let s := Sassign retv e in
@@ -100,7 +95,7 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
       end
   end.
 
-
+(* Add return to the end of the program *)
 Fixpoint elaborate_return (stmt: Rustlight.statement) : Rustlight.statement :=
   match stmt with
   | Rustlight.Ssequence _ s =>

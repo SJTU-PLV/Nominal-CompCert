@@ -56,6 +56,12 @@ with typelist : Type :=
 | Tcons: type -> typelist -> typelist.
 
 
+Fixpoint type_list_of_typelist (tl: typelist) : list type :=
+  match tl with
+  | Tnil => nil
+  | Tcons hd tl => hd :: type_list_of_typelist tl
+  end.
+
 Definition type_int32s := Tint I32 Signed.
 Definition type_bool := Tint IBool Signed.  
 

@@ -211,7 +211,7 @@ Section INIT_UNINIT.
 Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
 
 Definition drop_fully_own (p: place) :=
-  makeseq (map (fun p => Sdrop p) (split_fully_own_place p (typeof_place p))).
+  makeseq (map (fun p => Sdrop p) (Rustlightown.split_fully_own_place p (typeof_place p))).
 
 
 (* create a drop statement using drop flag optionally *)

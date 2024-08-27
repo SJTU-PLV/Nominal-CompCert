@@ -331,14 +331,6 @@ Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (li
       Error (error_msg pc ++ [MSG "target is not a variant (check_assign_variant)"])
   end.
   
-
-Fixpoint type_list_of_typelist (tl: typelist) : list type :=
-  match tl with
-  | Tnil => nil
-  | Tcons hd tl => hd :: type_list_of_typelist tl
-  end.
-
-
 (* bind the origins in two type *)
 Fixpoint bind_type_origins (pc: node) (ty1 ty2: type) (fk: flow_kind) : res (list (origin * origin * flow_kind)) :=
   match ty1, ty2 with

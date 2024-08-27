@@ -12,8 +12,10 @@ Require Import Smallstep.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
-Require Import Clight Rustlight RustIR.
+Require Import Clight.
+Require Import Rustlight Rustlightown RustIR.
 Require Import InitDomain InitAnalysis.
+
 
 Import ListNotations.
 
@@ -115,6 +117,20 @@ Inductive state: Type :=
 
 Local Open Scope error_monad_scope.
 
+Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
+  (* collect the whole set in order to simplify the gen and kill operation *)
+  do whole <- collect_func ce f;
+  (* initialize maybeInit set with parameters *)
+  let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
+  (* It is necessary because we have to guarantee that the map is not
+  PathMap.bot in the 'transfer' function *)
+  let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
+  let init := fold_right (add_place whole) empty_pathmap pl in
+  (* initialize maybeUninit with the variables *)
+  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
+  let uninit := fold_right (add_place whole) empty_pathmap vl in
+  OK (mkown init uninit whole).
+
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
 | function_entry_intro: forall m1 
     (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
@@ -123,8 +139,6 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
     (* initialize own_env *)
     (INITOWN: init_own_env ge f = OK own),
     function_entry ge f vargs m e m2 own.
-
-
 
 Section SMALLSTEP.
 
@@ -495,32 +509,33 @@ Inductive step : state -> trace -> state -> Prop :=
 
 (** Open semantics *)
 
-Inductive initial_state: c_query -> state -> Prop :=
+Inductive initial_state: rust_query -> state -> Prop :=
 | initial_state_intro: forall vf f targs tres tcc vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction orgs org_rels targs tres tcc ->
     (* This function must not be drop glue *)
     f.(fn_drop_glue) = None ->
+    (* how to use it? *)
     val_casted_list vargs targs ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
-    initial_state (cq vf (signature_of_type targs tres tcc) vargs m)
-                  (Callstate vf vargs Kstop m).
+    initial_state (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres tcc ge) vargs m)
+      (Callstate vf vargs Kstop m).
     
-Inductive at_external: state -> c_query -> Prop:=
+Inductive at_external: state -> rust_query -> Prop:=
 | at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
-    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->    
-    at_external (Callstate vf args k m) (cq vf sg args m).
+    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->
+    at_external (Callstate vf args k m) (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres cconv ge) args m).
 
-Inductive after_external: state -> c_reply -> state -> Prop:=
+Inductive after_external: state -> rust_reply -> state -> Prop:=
 | after_external_intro: forall vf args k m m' v,
     after_external
       (Callstate vf args k m)
-      (cr v m')
+      (rsr v m')
       (Returnstate v k m').
 
-Inductive final_state: state -> c_reply -> Prop:=
+Inductive final_state: state -> rust_reply -> Prop:=
 | final_state_intro: forall v m,
-    final_state (Returnstate v Kstop m) (cr v m).
+    final_state (Returnstate v Kstop m) (rsr v m).
 
 (* Definition of memory error state in RustIR *)
 

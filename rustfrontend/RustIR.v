@@ -524,6 +524,11 @@ Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env; ge
 Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
       
+(** ** Local environment  *)
+
+Definition env := PTree.t (block * type). (* map variable -> location & type *)
+
+Definition empty_env: env := (PTree.empty (block * type)).
 
 (** Allocate memory blocks for function parameters/variables and build
 the local environment *)
@@ -539,20 +544,67 @@ Inductive alloc_variables (ce: composite_env) : env -> mem ->
     alloc_variables ce (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
     alloc_variables ce e m ((id, ty) :: vars) e2 m2.
 
+(** Assign the values to the memory blocks of the function parameters  *)
+Inductive bind_parameters (ce: composite_env) (e: env):
+                           mem -> list (ident * type) -> list val ->
+                           mem -> Prop :=
+  | bind_parameters_nil:
+      forall m,
+      bind_parameters ce e m nil nil m
+  | bind_paranmeters_cons:
+      forall m id ty params v1 vl b m1 m2,
+      PTree.get id e = Some(b, ty) ->
+      assign_loc ce ty m b Ptrofs.zero v1 m1 ->
+      bind_parameters ce e m1 params vl m2 ->
+      bind_parameters ce e m ((id, ty) :: params) (v1 :: vl) m2.
 
-Section SMALLSTEP.
+End SEMANTICS.
+
+(* Used in RustIRown and InitAnalysis *)
+
+Section COMP_ENV.
+
+Variable ce : composite_env.
+
+Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
+  match s with
+  | Sassign_variant p _ _ e
+  | Sassign p e
+  | Sbox p e =>
+      collect_place ce p (collect_expr ce e m)
+  | Scall p _ al =>
+      collect_place ce p (collect_exprlist ce al m)
+  | Sreturn (Some e) =>
+      collect_expr ce e m
+  | Ssequence s1 s2 =>
+      collect_stmt s1 (collect_stmt s2 m)
+  | Sifthenelse e s1 s2 =>
+      collect_stmt s1 (collect_stmt s2 (collect_expr ce e m))
+  | Sloop s =>
+      collect_stmt s m
+  | _ => m
+  end.
+
+Definition collect_func (f: function) : Errors.res PathsMap.t :=
+  let vars := f.(fn_params) ++ f.(fn_vars) in  
+  if list_norepet_dec ident_eq (map fst vars) then
+    let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
+    (** TODO: add all the parameters and variables to l (may be useless?) *)
+    let init_map := fold_right (collect_place ce) (PTree.empty LPaths.t) l in
+    Errors.OK (collect_stmt f.(fn_body) init_map)
+  else
+    Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
+
+End COMP_ENV.
+
+
+(* Repeated definitions from Rustlightown because the genvs are
+different *)
+Section DROPMEMBER.
 
 Variable ge: genv.
 
-(* list of ownership types which are the children of [ty] *)
-Fixpoint drop_glue_children_types (ty: type) : list type :=
-  match ty with
-  | Tbox ty' =>
-      drop_glue_children_types ty' ++ [ty]
-  | Tstruct _ id 
-  | Tvariant _ id  => ty::nil
-  | _ => nil
-  end.
+(** Some definitions for dropstate and dropplace *)
 
 (* It corresponds to drop_glue_for_member in Clightgen *)
 Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_member_state :=
@@ -574,28 +626,6 @@ Definition type_to_drop_member_state (fid: ident) (fty: type) : option drop_memb
         end
     end
   else None.
-
-(* Load the value of [ty1] with the address of the starting block
-(with type ty_k) from [ty1;ty2;ty3;...;ty_k] where ty_n points to
-ty_{n-1} *)
-Inductive deref_loc_rec (m: mem) (b: block) (ofs: ptrofs) : list type -> val -> Prop :=
-| deref_loc_rec_nil:
-    deref_loc_rec m b ofs nil (Vptr b ofs)
-| deref_loc_rec_cons: forall ty tys b1 ofs1 v,
-    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    deref_loc ty m b1 ofs1 v ->
-    deref_loc_rec m b ofs (ty::tys) v
-.
-
-Inductive deref_loc_rec_mem_error (m: mem) (b: block) (ofs: ptrofs) : list type -> Prop :=
-| deref_loc_rec_error1: forall ty tys,
-    deref_loc_rec_mem_error m b ofs tys ->
-    deref_loc_rec_mem_error m b ofs (ty::tys)
-| deref_loc_rec_error2: forall ty tys b1 ofs1,
-    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    deref_loc_mem_error ty m b ofs ->
-    deref_loc_rec_mem_error m b ofs (ty::tys)
-.
 
 
 (* big step to recursively drop boxes [Tbox (Tbox (Tbox
@@ -637,9 +667,4 @@ Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> 
     drop_box_rec_mem_error b ofs m (ty :: tys)
 .
 
-
-End SMALLSTEP.
-
-End SEMANTICS.
-
-
+End DROPMEMBER.

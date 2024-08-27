@@ -12,7 +12,8 @@ Require Import Smallstep.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
-Require Import Clight Rustlight RustIR.
+Require Import Clight.
+Require Import Rustlight Rustlightown RustIR.
 Require Import InitDomain.
 
 Import ListNotations.

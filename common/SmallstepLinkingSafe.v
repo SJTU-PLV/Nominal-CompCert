@@ -413,3 +413,4 @@ Proof.
   (* intros bsim_prop. inv bsim_prop. *)
 Admitted.
 
+End SAFETY_PRESERVATION.
