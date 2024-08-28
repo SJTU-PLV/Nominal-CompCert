@@ -1,11 +1,13 @@
 Require Import Coqlib.
 Require Import Maps.
 Require Import Lattice Kildall.
-Require Import AST.
-Require Import Errors.
+Require Import Values Memory Events Globalenvs Smallstep.
+Require Import AST Errors.
 Require Import FSetWeakList DecidableType.
-Require Import Rusttypes Rustlight RustIR.
+Require Import Rusttypes Rustlight Rustlightown.
+Require Import RustIR RustIRown.
 Require Import InitDomain.
+
 
 Local Open Scope list_scope.
 
@@ -68,8 +70,9 @@ Module DS := Dataflow_Solver(PathsMap)(NodeSetForward).
 
 Local Open Scope error_monad_scope.
 
-(* The analyze returns the MaybeInit and MaybeUninit sets *)
-Definition analyze (ce: composite_env) (f: function) : Errors.res (PTree.t PathsMap.t * PTree.t PathsMap.t) :=
+(* The analyze returns the MaybeInit and MaybeUninit sets along with
+the universe set *)
+Definition analyze (ce: composite_env) (f: function) : Errors.res (PTree.t PathsMap.t * PTree.t PathsMap.t * PathsMap.t) :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
@@ -88,7 +91,92 @@ let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) e
   match initMap, uninitMap with
   (* we only want the PTree because [None] represent the unreachable
   node *)
-  | Some (_, initMap), Some (_, uninitMap) => Errors.OK (initMap, uninitMap)
+  | Some (_, initMap), Some (_, uninitMap) => Errors.OK (initMap, uninitMap, whole)
   | _, _ => Errors.Error (msg "Error in initialize analysis")
   end.
   
+(** Definitions of must_owned and may_owned used in Drop elaboration *)
+
+Definition must_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let universe := PathsMap.get id universemap in
+  let mustinit := Paths.diff init uninit in
+  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *)
+  Paths.for_all (fun p' => Paths.mem p' mustinit)
+    (Paths.filter (fun p' => is_prefix p' p) universe).
+
+(* place that needs drop flag *)
+Definition may_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let universe := PathsMap.get id universemap in
+  let mayinit := Paths.inter init uninit in
+  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mayinit *)
+  Paths.for_all (fun p' => Paths.mem p' mayinit)
+    (Paths.filter (fun p' => is_prefix p' p) universe).
+
+(* Used in static move checking *)
+Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let universe := PathsMap.get id universemap in
+  let mustinit := Paths.diff init uninit in
+  (* ∀ p' ∈ universe, is_prefix p p' → must_owned p' *)
+  Paths.for_all (must_owned initmap uninitmap universemap)
+    (Paths.filter (is_prefix p) universe).
+
+
+(** * Soundness of Initialized Analysis *)
+
+
+(* relation between the selector and the (stmt, cont) pair *)
+Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont -> Prop :=
+| sel_stmt_base: forall sel n s k,
+    select_stmt body sel = Some s ->
+    match_instr_stmt body (Isel sel n) s k
+| sel_stmt_seq: forall sel n s1 s2 k,
+    match_instr_stmt body (Isel sel n) s1 (Kseq s2 k) ->
+    match_instr_stmt body (Isel sel n) (Ssequence s1 s2) k
+| sel_stmt_kseq: forall sel n s k,
+    match_instr_stmt body (Isel sel n) s k ->
+    match_instr_stmt body (Isel sel n) Sskip (Kseq s k)
+| sel_stmt_ifthenelse: forall e n1 n2 s1 s2 k,
+    match_instr_stmt body (Icond e n1 n2) (Sifthenelse e s1 s2) k
+| sel_stmt_loop: forall n s k,    
+    match_instr_stmt body (Inop n) (Sloop s) k
+| sel_stmt_break: forall n k,    
+    match_instr_stmt body (Inop n) Sbreak k
+| sel_stmt_continue: forall n k,
+    match_instr_stmt body (Inop n) Scontinue k
+.
+
+(* Record sound_own (own: own_env) (init uninit: PathsMap.t) : Type := *)
+(*   PathsMap.t *)
+(*     Paths.diff *)
+
+(** ** Semantic invariant *)
+
+Section SOUNDNESS.
+
+Variable prog: program.
+Variable se: Genv.symtbl.
+
+Let ge := RustIR.globalenv se prog.
+Let ce := ge.(genv_cenv).
+
+(* Inductive sound_state: state -> Prop := *)
+(* | sound_regular_state: forall *)
+(*     (AN: analyze ce f = OK (initMap, uninitMap)) *)
+(*     (INIT: initMap ! pc = Some mayinit) *)
+(*     (UNINIT: uninitMap ! pc = Some mayuninit) *)
+(*     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg)) *)
+(*     (SEL: cfg ! pc = Some instr) *)
+(*     (IS: match_instr_stmt f.(fn_body) instr s k) *)
+(*     (OWN: sound_own own mayinit mayuninit) *)
+(*     sound_state (State f s k le own m) *)
+
+End SOUNDNESS.

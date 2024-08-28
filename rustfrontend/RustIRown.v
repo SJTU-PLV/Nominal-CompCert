@@ -14,7 +14,7 @@ Require Import Cop RustOp.
 Require Import LanguageInterface.
 Require Import Clight.
 Require Import Rustlight Rustlightown RustIR.
-Require Import InitDomain InitAnalysis.
+Require Import InitDomain.
 
 
 Import ListNotations.

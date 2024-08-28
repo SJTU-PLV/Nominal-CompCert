@@ -72,7 +72,8 @@ shallow owned place set (TODO: it should be defined in Rustlight) *)
 (** own_env is actually init environment which is used to check
 every used is initialized. Maybe we should change the name?  *)
 
-(* may be we can use PathMap to optimize it *)
+(** TODO: add some properties in own_env such as init ∪ unint =
+universe, init ∩ uninit = ∅ and etc *)
 Record own_env :=
   mkown { own_init: PathsMap.t;
           own_uninit: PathsMap.t;
@@ -81,12 +82,12 @@ Record own_env :=
 Definition is_owned (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
-  let uninit := PathsMap.get id own.(own_uninit) in
-  (* no p's prefix in uninit and there is some p's prefix in init *)
-  Paths.for_all (fun p' => negb (is_prefix p' p)) uninit
-  && Paths.exists_ (fun p' => is_prefix p' p) init.
+  let universe := PathsMap.get id own.(own_universe) in
+  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *)
+  Paths.for_all (fun p' => Paths.mem p' init)
+    (Paths.filter (fun p' => is_prefix p' p) universe).
 
-(* A owned place is deep owned **xor** shallow owned *)
+(** Unused: A owned place is deep owned **xor** shallow owned *)
 
 Definition is_deep_owned (own: own_env) (p: place) : bool :=
   (* p is owned and no p's children in the universe *)

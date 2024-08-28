@@ -177,30 +177,29 @@ Fixpoint elaborate_drop_for_unused (pc: node) (mayinit mayuninit universe: Paths
         end
   end.
 
-Fixpoint generate_drop_flags_for (mayinit mayuninit: Paths.t) (l: list (place * bool)) : mon (list (place * option ident * bool)) :=
+Fixpoint generate_drop_flags_for (mayinit mayuninit universe: PathsMap.t) (l: list (place * bool)) : mon (list (place * option ident * bool)) :=
   match l with
   | nil => ret nil
   | (p, full) :: l' =>
-      do flags <- generate_drop_flags_for mayinit mayuninit l';
-      if Paths.mem p mayinit then
-        if Paths.mem p mayuninit then
+      do flags <- generate_drop_flags_for mayinit mayuninit universe l';
+      if must_owned mayinit mayuninit universe p then
+        (* this place must be init, no need for drop flag *)
+        ret ((p, None, full) :: flags)
+      else if may_owned mayinit mayuninit universe p then
         (* need drop flag *)
         do drop_flag <- gensym type_bool p;
         ret ((p, Some drop_flag, full) :: flags)
-        else
-          (* this place must be init, no need for drop flag *)
-          do flags <- generate_drop_flags_for mayinit mayuninit l';
-          ret ((p, None, full) :: flags)
       else
         (* this place must be uninit, no need to drop *)
         ret flags
   end.
 
-Definition elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
+Definition elaborate_drop_for (pc: node) (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
+  let universe := PathsMap.get (local_of_place p) universemap in
   match split_drop_place ce universe p (typeof_place p) with
   | OK drop_places =>      
       (** may be we should check the disjointness of drop flags *)
-      generate_drop_flags_for mayinit mayuninit drop_places     
+      generate_drop_flags_for mayinit mayuninit universemap drop_places
   | Error msg =>
       error msg
   end.
@@ -209,10 +208,10 @@ Definition elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (
 Section INIT_UNINIT.
 
 Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
+Variable universe : PathsMap.t.
 
 Definition drop_fully_own (p: place) :=
   makeseq (map (fun p => Sdrop p) (Rustlightown.split_fully_own_place p (typeof_place p))).
-
 
 (* create a drop statement using drop flag optionally *)
 Definition generate_drop (p: place) (flag: option ident) (full: bool) : statement :=
@@ -235,12 +234,8 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
       | Some mayinit, Some mayuninit =>
           match select_stmt f.(fn_body) sel with
           | Some (Sdrop p) =>
-              let id := local_of_place p in
-              let init := PathsMap.get id mayinit in
-              let uninit := PathsMap.get id mayuninit in
-              let universe := Paths.union init uninit in
               (* drops are the list of to-drop places and their drop flags *)
-              do drops <- elaborate_drop_for pc init uninit universe ce p;
+              do drops <- elaborate_drop_for pc mayinit mayuninit universe ce p;
               let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
           | _ => ret tt
@@ -346,14 +341,15 @@ Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: pl
   end.                          
   
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
-  do (mayinit, mayuninit) <- analyze ce f;
+  do analysis_res <- analyze ce f;
+  let '(mayinit, mayuninit, universe) := analysis_res in
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
   (* let next_flag := Pos.succ (fold_left Pos.max vars 1%positive) in *)
   let init_state := initial_generator f.(fn_body) in
   (** FIXME: we generate cfg twice *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (* step 1 and step 2 *)
-  match elaborate_drop mayinit mayuninit ce f cfg init_state with
+  match elaborate_drop mayinit mayuninit universe ce f cfg init_state with
   | Res _ st =>
       (* step 3: initialize and update drop flag *)
       let flags := concat (snd (split (PTree.elements (snd st.(gen_map))))) in
@@ -395,4 +391,3 @@ Definition transl_program (p: program) : Errors.res program :=
               prog_types := prog_types p;
               prog_comp_env := prog_comp_env p;
               prog_comp_env_eq := prog_comp_env_eq p |}.
-

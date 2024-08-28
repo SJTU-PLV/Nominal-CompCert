@@ -5,11 +5,10 @@ Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import AST Linking.
 Require Import Rusttypes.
-Require Import Rustlight RustIR  RustOp.
 Require Import Errors.
-Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
-
-Require Import ElaborateDrop. 
+Require Import LanguageInterface CKLR Inject InjectFootprint.
+Require Import InitDomain InitAnalysis ElaborateDrop.
+Require Import Rustlight RustIR RustOp.
 Require Import RustIRsem RustIRown.
 
 Import ListNotations.
@@ -38,8 +37,8 @@ Admitted.
 
 
 Section MATCH_PROGRAMS.
-Variable p: RustIR.program.
-Variable tp: RustIR.program.
+Variable p: program.
+Variable tp: program.
 Hypothesis TRANSL: match_prog p tp.
 
 Section INJECT.
@@ -64,15 +63,10 @@ End MATCH_PROGRAMS.
 
 
 
-
-
 Section PRESERVATION.
 
-Variable prog: RustIR.program.
-Variable tprog: RustIR.program.
-(* Let build_ctx := build_clgen_env p tp. *)
-
-
+Variable prog: program.
+Variable tprog: program.
 
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
@@ -80,12 +74,13 @@ Variable tse: Genv.symtbl.
 
 Let ge := globalenv se prog.
 Let tge := globalenv tse tprog.
-
+Let ce := ge.(genv_cenv).
 
 Inductive match_states: state -> RustIRsem.state -> Prop := 
   | match_regular_state:
-      forall f s k e own m tf ts tk te tm j dropflags
-      (TRS: transl_stmt dropflags s = ts)
+    forall f s k e own m tf ts tk te tm j dropflags
+      (AN: analyze ce f = OK (mayinit, mayuninit))
+        
       (MINJ: Mem.inject j m tm),
       match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm). 
 

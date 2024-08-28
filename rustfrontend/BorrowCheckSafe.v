@@ -578,28 +578,6 @@ Inductive rtype : Type :=
 | rt_comp_rec (id: ident)
 .
 
-(* relation between the selector and the (stmt, cont) pair *)
-Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont -> Prop :=
-| sel_stmt_base: forall sel n s k,
-    select_stmt body sel = Some s ->
-    match_instr_stmt body (Isel sel n) s k
-| sel_stmt_seq: forall sel n s1 s2 k,
-    match_instr_stmt body (Isel sel n) s1 (Kseq s2 k) ->
-    match_instr_stmt body (Isel sel n) (Ssequence s1 s2) k
-| sel_stmt_kseq: forall sel n s k,
-    match_instr_stmt body (Isel sel n) s k ->
-    match_instr_stmt body (Isel sel n) Sskip (Kseq s k)
-| sel_stmt_ifthenelse: forall e n1 n2 s1 s2 k,
-    match_instr_stmt body (Icond e n1 n2) (Sifthenelse e s1 s2) k
-| sel_stmt_loop: forall n s k,    
-    match_instr_stmt body (Inop n) (Sloop s) k
-| sel_stmt_break: forall n k,    
-    match_instr_stmt body (Inop n) Sbreak k
-| sel_stmt_continue: forall n k,
-    match_instr_stmt body (Inop n) Scontinue k
-.
-
-
 (** Footprint map which records the footprint starting from stack
 blocks (denoted by variable names). It represents the ownership chain
 from a stack block. *)
