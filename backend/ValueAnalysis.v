@@ -258,6 +258,7 @@ Definition romem_for {F V} (p: AST.program F V) : romem :=
 
 (** Properties of the dataflow solution. *)
 
+
 Lemma analyze_entrypoint:
   forall rm f vl m bc,
   (forall v, In v vl -> vmatch bc v (Ifptr Nonstack)) ->
@@ -310,6 +311,96 @@ Proof.
 - rewrite H2. rewrite PMap.gi. split; intros. apply AE.ge_top. eapply mmatch_top'; eauto.
 Qed.
 
+
+Definition stack_leaked (am : amem) : Prop := pincl (am_nonstack am) Nonstack = false.
+
+Lemma transfer_call_leaked_forward : forall ae am l r ae' am',
+    transfer_call ae am l r = VA.State ae' am' ->
+    stack_leaked am -> stack_leaked am'.
+Proof.
+  intros.
+  unfold transfer_call, analyze_call in H.
+  destruct (pincl (am_nonstack am) Nonstack && forallb (fun av : aval => vpincl av Nonstack) (aregs ae l)) eqn: pub.
+  exfalso. rewrite H0 in pub. simpl in pub. congruence.
+  inv H. unfold mafter_public_call. red. simpl. reflexivity.
+Qed.
+
+Ltac clean_destr :=
+  match goal with
+  | H: _ = left _ |- _ => clear H
+  | H: _ = right _ |- _ => clear H
+  end.
+
+Ltac destr :=
+  match goal with
+    |- context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
+  end; repeat clean_destr.
+
+Ltac destr_in H :=
+  match type of H with
+    context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
+  | _ => inv H
+  end; repeat clean_destr.
+
+
+Lemma pincl_vplub_Nonstack_false : forall ap av,
+    pincl ap Nonstack = false ->
+    pincl (vplub av ap) Nonstack = false.
+Proof.
+  intros. destruct ap; simpl in H; try congruence.
+  - destruct av; simpl; eauto. destruct p; simpl; eauto. destr.
+    destruct p; simpl; eauto. destr.
+  - destruct av; simpl; eauto. destruct p; simpl; eauto.
+    destruct p; simpl; eauto.
+  - destruct av; simpl; eauto. destruct p; simpl; eauto.
+    destruct p; simpl; eauto.
+Qed.
+
+Lemma pincl_plub_Nonstack_false1 : forall ap ap',
+    pincl ap Nonstack = false ->
+    pincl (plub ap ap') Nonstack = false.
+Proof.
+  intros. destruct ap; simpl in H; try congruence; destruct ap'; simpl; eauto.
+  destr.
+Qed.
+
+Lemma pincl_plub_Nonstack_false2 : forall ap ap',
+    pincl ap Nonstack = false ->
+    pincl (plub ap' ap) Nonstack = false.
+Proof.
+  intros. destruct ap; simpl in H; try congruence; destruct ap'; simpl; eauto.
+  destr.
+Qed.
+
+Lemma transfer_builtin_default_leaked_forward : forall ae am rm l b ae' am',
+    transfer_builtin_default ae am rm l b = VA.State ae' am' ->
+    stack_leaked am -> stack_leaked am'.
+Proof.
+  intros.
+  unfold transfer_builtin_default, analyze_call in H.
+  destruct (pincl (am_nonstack am) Nonstack &&
+              forallb (fun av : aval => vpincl av Nonstack) (map (abuiltin_arg ae am rm) l)) eqn:pub.
+  exfalso. rewrite H0 in pub. simpl in pub. congruence.
+  inv H. unfold mafter_public_call. red. simpl. reflexivity.
+Qed.
+
+Lemma transfer_leaked_forward : forall f rm n ae am ae' am',
+    transfer f rm n ae am = VA.State ae' am' ->
+    stack_leaked am -> stack_leaked am'.
+Proof.
+  intros. unfold transfer in H.
+  destruct ((fn_code f)!n); inv H. destruct i; inv H2; eauto.
+  - (*storev*)
+    red. simpl. destr; simpl; eauto using pincl_vplub_Nonstack_false.
+  - (*call*)
+    eapply transfer_call_leaked_forward; eauto.
+  - (*builtin*)
+    unfold transfer_builtin in H1.
+    destruct e; simpl; try repeat destr_in H1; eauto using transfer_builtin_default_leaked_forward.
+    red. simpl. eapply pincl_plub_Nonstack_false1; eauto.
+    red. simpl. destr; eauto using pincl_plub_Nonstack_false2; eauto.
+Qed.
+
 Lemma analyze_succ:
   forall e m rm f n ae am instr s ae' am' bc,
   (analyze rm f)!!n = VA.State ae am ->
@@ -321,7 +412,7 @@ Lemma analyze_succ:
   exists ae'' am'',
      (analyze rm f)!!s = VA.State ae'' am''
   /\ ematch bc e ae''
-  /\ mmatch bc m am''.
+  /\ mmatch bc m am''.             
 Proof.
   intros. exploit analyze_successor; eauto. rewrite H2.
   destruct (analyze rm f)#s as [ | ae'' am'']; simpl; try tauto. intros [A B].
@@ -747,7 +838,8 @@ Theorem return_from_public_call:
    /\ mmatch bc m mafter_public_call
    /\ genv_match bc ge
    /\ bc sp = BCstack
-   /\ (forall b, sup_In b bound -> bc b = caller b).
+   /\ (forall b, sup_In b bound -> bc b = caller b)
+   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid).
 Proof.
   intros until m; intros BELOW SP1 SP2 SAME GE1 EM BOUND RESM MM GE2 NOSTACK.
 (* Constructing bc *)
@@ -824,6 +916,7 @@ Proof.
 - (* unchanged *)
   simpl; intros. destruct (eq_block b sp). congruence.
   symmetry. apply SAME; auto.
+- simpl; intros. destruct (eq_block b sp). congruence. auto.
 Qed.
 
 (** Construction 5: restore the stack after a private call *)
@@ -849,7 +942,8 @@ Theorem return_from_private_call:
    /\ mmatch bc m (mafter_private_call am)
    /\ genv_match bc ge
    /\ bc sp = BCstack
-   /\ (forall b, sup_In b bound -> bc b = caller b).
+   /\ (forall b, sup_In b bound -> bc b = caller b)
+   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid).
 Proof.
   intros until am; intros BELOW SP1 SP2 SAME GE1 EM CONTENTS BOUND RESM MM GE2 NOSTACK.
 (* Constructing bc *)
@@ -933,6 +1027,8 @@ Proof.
 - (* unchanged *)
   simpl; intros. destruct (eq_block b sp). congruence.
   symmetry. apply SAME; auto.
+- simpl; intros. destruct (eq_block b sp). congruence.
+  auto.
 Qed.
 
 (** Construction 6: external call *)
@@ -952,7 +1048,7 @@ Theorem external_call_match:
   /\ (forall rm, romatch bc m rm -> romatch bc' m' rm)
   /\ mmatch bc' m' mtop
   /\ bc_nostack bc'
-  /\ (forall b ofs n, Mem.valid_block m b -> bc b = BCinvalid -> Mem.loadbytes m' b ofs n = Mem.loadbytes m b ofs n).
+  /\ (forall b ofs n, Mem.valid_block m b -> bc b = BCinvalid -> Mem.loadbytes m' b ofs n = Mem.loadbytes m b ofs n)  /\ (forall b, bc' b = BCinvalid -> bc b = BCinvalid).
 Proof.
   intros until am; intros EC GENV ARGS MM NOSTACK.
   (* Part 1: using ec_mem_inject *)
@@ -1066,6 +1162,10 @@ Proof.
 - (* unmapped blocks are invariant *)
   intros. eapply Mem.loadbytes_unchanged_on_1; auto.
   apply UNCH1; auto. intros; red. unfold inj_of_bc; rewrite H0; auto.
+- intros. unfold bc' in H. simpl in H. repeat destr_in H.
+  inv MM. red in mmatch_below.
+  destruct (bc b) eqn: Hbc; eauto.
+  all : elim n; eapply mmatch_below; congruence.
 Qed.
 
 
@@ -1325,6 +1425,7 @@ Inductive support_acc : injp_world -> mem -> Prop :=
     (SUP2: Mem.tid (Mem.support m0) = Mem.tid (Mem.support m)),
     support_acc (injpw j m0 tm0 Hm) m.
 
+
 Inductive sound_state: injp_world -> state -> Prop :=
   | sound_regular_state:
       forall s f sps sp pc e m ae am bc j0 m0 tm0 Hm0
@@ -1333,9 +1434,9 @@ Inductive sound_state: injp_world -> state -> Prop :=
         (TID: Mem.tid sps = Mem.tid (Mem.support m))
         (STK: sound_stack bc s m sps)
         (BCGW: sound_bc_gw bc (injpw j0 m0 tm0 Hm0))
-        (SPNOT: j0 sp = None)
+        (SPNOT: j0 sp = None \/ stack_leaked am)
         (SUP1: Mem.sup_include (Mem.support m0) sps)
-        (SACC: support_acc wp m)
+        (SACC: support_acc (injpw j0 m0 tm0 Hm0) m)
         (AN: (analyze rm f)!!pc = VA.State ae am)
         (EM: ematch bc e ae)
         (RO: romatch bc m rmge)
@@ -1569,7 +1670,7 @@ Qed.
 (** ** Preservation of the semantic invariant by one step of execution *)
 
 Lemma sound_succ_state:
-  forall bc pc ae am instr ae' am'  s f sps sp pc' e' m' wp,
+  forall bc pc ae am instr ae' am'  s f sps sp pc' e' m' j0 m0 tm0 Hm0,
   (analyze rm f)!!pc = VA.State ae am ->
   f.(fn_code)!pc = Some instr ->
   In pc' (successors_instr instr) ->
@@ -1583,14 +1684,17 @@ Lemma sound_succ_state:
   genv_match bc ge ->
   bc sp = BCstack ->
   sound_stack bc s m' sps ->
-  sound_bc_gw bc wp ->
-  sp_none_gw wp sp ->
-  support_acc wp m' ->
-  sound_state wp (State s f (Vptr sp Ptrofs.zero) pc' e' m').
+  sound_bc_gw bc (injpw j0 m0 tm0 Hm0) ->
+  (j0 sp = None \/ stack_leaked am) ->
+  Mem.sup_include (Mem.support m0) sps ->
+  support_acc (injpw j0 m0 tm0 Hm0) m' ->
+  sound_state (injpw j0 m0 tm0 Hm0) (State s f (Vptr sp Ptrofs.zero) pc' e' m').
 Proof.
   intros. exploit analyze_succ; eauto. intros (ae'' & am'' & AN & EM & MM).
-  econstructor; eauto.
-Qed.
+  econstructor. 9: eauto. all: eauto. destruct H13.
+  left. auto. right. admit.
+Admitted.
+(** TODO: succ_leak_forward *)
 
 Lemma support_acc_eq: forall wp m m',
     support_acc wp m ->
@@ -1657,7 +1761,7 @@ Proof.
     eapply mmatch_stack; eauto.
   * inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. inv SPNOT. auto.
+       ++ subst. destruct SPNOT. auto. rewrite H4 in H1. congruence.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H4. simpl. congruence.
@@ -1676,7 +1780,7 @@ Proof.
     eapply mmatch_below; eauto.
   * inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. inv SPNOT. auto.
+       ++ subst. congruence.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H2. simpl. inv SACC. congruence.
@@ -1696,7 +1800,7 @@ Proof.
   eapply Mem.sup_include_trans; eauto.
   { inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
-       ++ subst. inv SPNOT. auto.
+       ++ subst. congruence.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H3. simpl. inv SACC. congruence.
@@ -1715,7 +1819,7 @@ Proof.
   (* The default case *)
   assert (DEFAULT:
             transfer f rm pc ae am = transfer_builtin_default ae am rm args res ->
-            sound_state wp
+            sound_state (injpw j0 m1 tm0 Hm0)
                (State s f (Vptr (fresh_block sps) Ptrofs.zero) pc' (regmap_setres res vres rs) m')).
   { unfold transfer_builtin_default, analyze_call; intros TR'.
   set (aargs := map (abuiltin_arg ae am rm) args) in *.
@@ -1731,7 +1835,7 @@ Proof.
   exploit external_call_match; eauto.
   intros. exploit list_forall2_in_left; eauto. intros (av & U & V).
   eapply D; eauto with va. apply vpincl_ge. apply H3; auto.
-  intros (bc2 & J & K & L & M & N & O & P & Q).
+  intros (bc2 & J & K & L & M & N & O & P & Q & R).
   exploit (return_from_private_call bc bc2).
   eapply mmatch_below; eauto.
   rewrite K. apply B. auto. auto.
@@ -1741,7 +1845,7 @@ Proof.
   intros. apply Q; auto.
   eapply external_call_support; eauto.
   eauto. eauto. eauto. eauto.
-  intros (bc3 & U & V & W & X & Y & Z & AA).
+  intros (bc3 & U & V & W & X & Y & Z & AA & BB).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
   erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
@@ -1753,7 +1857,19 @@ Proof.
   rewrite C; auto with ordered_type. intro. rewrite H8 in H4.
   eapply freshness. eauto. erewrite external_call_tid; eauto.
   intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
-  admit. eapply support_acc_trans. eauto. eapply external_call_support. eauto.
+  {
+    inv BCGW. constructor.
+    -- intros. destruct (eq_block b (fresh_block sps)). 
+       ++ subst. destruct SPNOT. auto. rewrite H5 in H2. congruence.
+       ++ apply INVALID. rewrite <- C; eauto.
+    -- intros. destruct (eq_block b (fresh_block sps)).
+       subst. exfalso. apply H5. simpl. simpl in H5. inv SACC. congruence.
+       eapply EXT_VALID_SOME; eauto. 
+       inv X. exploit mmatch_below. eauto. intro VALID.
+       assert (sup_In b (Mem.support m)). admit. 
+       rewrite <- AA; eauto.
+  }
+  eapply support_acc_trans. eauto. eapply external_call_support. eauto.
   eapply external_call_tid; eauto.
   
 * (* public builtin call *)
@@ -1761,15 +1877,15 @@ Proof.
   intros (bc1 & A & B & C & D & E & F & G).
   exploit external_call_match; eauto.
   intros. exploit list_forall2_in_left; eauto. intros (av & U & V). eapply D; eauto with va.
-  intros (bc2 & J & K & L & M & N & O & P & Q).
+  intros (bc2 & J & K & L & M & N & O & P & Q & R).
   exploit (return_from_public_call bc bc2).
   eapply mmatch_below; eauto.
   rewrite K. apply B. auto. auto.
   intros. rewrite K; auto. rewrite C; auto.
   eauto. eauto.
   eapply external_call_support; eauto.
-  eauto. eauto. eauto. eauto. eauto.
-  intros (bc3 & U & V & W & X & Y & Z & AA).
+  eauto. eauto. eauto. eauto.
+  intros (bc3 & U & V & W & X & Y & Z & AA & BB).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
   erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
@@ -1780,7 +1896,20 @@ Proof.
   rewrite C; auto with ordered_type. intro. rewrite H6 in H2.
   eapply freshness; eauto. erewrite external_call_tid; eauto.
   intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
-  admit. eapply support_acc_trans. eauto. eapply external_call_support. eauto.
+  
+ {
+    inv BCGW. constructor.
+    -- intros. destruct (eq_block b (fresh_block sps)). 
+       ++ subst. congruence.
+       ++ apply INVALID. rewrite <- C; eauto.
+    -- intros. destruct (eq_block b (fresh_block sps)).
+       subst. exfalso. apply H3. simpl. simpl in H3. inv SACC. congruence.
+       eapply EXT_VALID_SOME; eauto. 
+       inv X. exploit mmatch_below. eauto. intro VALID.
+       assert (sup_In b (Mem.support m)). admit. 
+       rewrite <- AA; eauto.
+  }
+  eapply support_acc_trans. eauto. eapply external_call_support. eauto.
   eapply external_call_tid; eauto.
   }
   unfold transfer_builtin in TR.
@@ -1874,13 +2003,14 @@ Proof.
   eapply sound_stack_free; eauto.
   intros. apply C. intro. rewrite H2 in H1. eapply freshness. eauto.
   intro. intro. apply SINCR. apply Mem.sup_incr_in2. auto.
-  inv BCGW. constructor.
+  { inv BCGW. constructor.
   intros. destruct (eq_block b (fresh_block sps)). 
-  subst. inv SPNOT. auto.
+  subst. congruence.
   apply INVALID. rewrite <- C; eauto.
   intros. destruct (eq_block b (fresh_block sps)).
   subst. exfalso. apply H2. simpl. inv SACC. congruence.
   eapply EXT_VALID_SOME; eauto. erewrite <- C; eauto.
+  }
   eapply support_acc_eq; eauto. erewrite <- Mem.support_free; eauto.
   destruct or; simpl. eapply D; eauto. constructor.
   eauto using romatch_free.
@@ -1891,22 +2021,29 @@ Proof.
   intros (bc' & A & B & C & D & E & F & G).
   exploit (analyze_entrypoint rm f args m' bc'); eauto.
   intros (ae & am & AN & EM & MM'). apply Mem.support_alloc in H as SUP.
+  destruct wp.
   econstructor.
   eapply Mem.alloc_result. eauto.
   rewrite <- SUP.
   eapply Mem.sup_include_refl. rewrite SUP. simpl. reflexivity.
-  6: eauto. all: eauto.
+  7: eauto. all: eauto.
   apply sound_stack_exten with bc; auto.
   apply sound_stack_inv with m; auto.
   intros. eapply Mem.loadbytes_alloc_unchanged; eauto.
   rewrite SUP. reflexivity.
-  inv BCGW. constructor; intros. red in A.
-  destruct (bc b) eqn: Hbc. eauto. 1-3: erewrite A in H0; eauto; congruence.
-  red in A.
-  destruct (bc b) eqn: Hbc. eauto. admit.
-  1-3: erewrite A in H0; eauto; congruence.
-  inv SACC. constructor. inversion Hm. apply mi_freeblocks. intro.
+  { inv BCGW. constructor; intros.
+    red in A.
+    destruct (bc b) eqn: Hbc. eauto. 1-3: erewrite A in H0; eauto; congruence.
+    red in A. inv MM'. exploit mmatch_below; eauto.
+    intro.
+    exploit Mem.valid_block_alloc_inv; eauto. intros [X|X].
+    exfalso. subst. apply H1. apply Mem.alloc_result in H. rewrite H.
+    simpl. inv SACC. congruence. eapply EXT_VALID_SOME; eauto.
+    rewrite <- F; eauto.
+  }
+  inv SACC. left. inversion Hm. apply mi_freeblocks. intro.
   eapply Mem.fresh_block_alloc. eauto. apply SUP1. auto.
+  inv SACC. auto.
   eapply support_acc_trans. eauto.
   red. intros. eapply Mem.valid_block_alloc; eauto.
   apply Mem.support_alloc in H. rewrite H. reflexivity.
