@@ -1271,6 +1271,7 @@ Proof.
         intros. unfold bc'.  simpl. rewrite pred_dec_true; eauto.
         destruct (bc b); auto. rewrite pred_dec_true. auto.
         destruct S9. congruence.
+        intros. simpl. destr. destr.
       * constructor; eauto.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
