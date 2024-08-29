@@ -673,6 +673,11 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
     sem ge vargs m1 t vres m2 ->
     Mem.valid_block m1 b -> Mem.valid_block m2 b;
 
+  ec_new_block_local:
+    forall ge vargs m1 t vres m2 b,
+    sem ge vargs m1 t vres m2 ->
+    ~ Mem.valid_block m1 b -> Mem.valid_block m2 b -> fst b = Mem.tid (Mem.support m1);
+      
   ec_tid:
     forall ge vargs m1 t vres m2,
     sem ge vargs m1 t vres m2 ->
@@ -812,6 +817,7 @@ Proof.
   eapply Mem.load_rettype; eauto.
 (* valid blocks *)
 - inv H; auto.
+- inv H. congruence.
 (* max perms *)
 - inv H; auto.
 (* readonly *)
@@ -966,6 +972,7 @@ Proof.
 - unfold proj_sig_res; simpl. inv H; constructor.
 (* valid block *)
 - inv H. inv H1. auto. eauto with mem.
+- inv H. inv H2. elim H0. eauto with mem. elim H0. eauto with mem.
 - inv H. inv H0. auto. erewrite <- Mem.support_store; eauto.
 (* perms *)
 - inv H. inv H2. auto. eauto with mem.
@@ -1043,6 +1050,10 @@ Proof.
 - inv H. simpl. unfold Tptr; destruct Archi.ptr64; auto.
 (* valid block *)
 - inv H. eauto with mem.
+- inv H. exploit Mem.valid_block_alloc_inv; eauto.
+  instantiate (1:= b). eauto with mem. intros [X|X].
+  subst. apply Mem.alloc_result in H2. rewrite H2. reflexivity.
+  congruence.
 - inv H. apply Mem.support_alloc in H0. apply Mem.support_store in H1.
   rewrite H1, H0. reflexivity.
 (* perms *)
@@ -1131,6 +1142,7 @@ Proof.
 - inv H; simpl; auto.
 (* valid block *)
 - inv H; eauto with mem.
+- inv H; elim H0; eauto with mem.
 - inv H. erewrite <- Mem.support_free; eauto. auto.
 (* perms *)
 - inv H; eauto using Mem.perm_free_3.
@@ -1252,6 +1264,7 @@ Proof.
   intros. inv H. exact I.
 - (* valid blocks *)
   intros. inv H. eauto with mem.
+- intros. inv H. elim H0. eauto with mem.
 - intros. inv H. erewrite <- Mem.support_storebytes; eauto.
 - (* perms *)
   intros. inv H. eapply Mem.perm_storebytes_2; eauto.
@@ -1376,6 +1389,7 @@ Proof.
 - inv H. simpl. auto.
 (* valid blocks *)
 - inv H; auto.
+- inv H. congruence.
 (* perms *)
 - inv H; auto.
 - inv H; auto.
@@ -1423,6 +1437,7 @@ Proof.
 - inv H. eapply eventval_match_type; eauto.
 (* valid blocks *)
 - inv H; auto.
+- inv H. congruence.
 (* perms *)
 - inv H; auto.
 - inv H; auto.
@@ -1469,6 +1484,7 @@ Proof.
 - inv H. simpl. auto.
 (* valid blocks *)
 - inv H; auto.
+- inv H. congruence.
 - inv H; auto.
 (* perms *)
 - inv H; auto.
@@ -1519,6 +1535,7 @@ Proof.
   auto.
 (* valid blocks *)
 - inv H; auto.
+- inv H. congruence.
 (* perms *)
 - inv H; auto.
 - inv H; auto.
@@ -1637,6 +1654,7 @@ Qed.
 
 Definition external_call_well_typed_gen ef := ec_well_typed (external_call_spec ef).
 Definition external_call_valid_block ef := ec_valid_block (external_call_spec ef).
+Definition external_call_new_block_local ef := ec_new_block_local (external_call_spec ef).
 Definition external_call_tid ef := ec_tid (external_call_spec ef).
 Definition external_call_max_perm ef := ec_max_perm (external_call_spec ef).
 Definition external_call_readonly ef := ec_readonly (external_call_spec ef).

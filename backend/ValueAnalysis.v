@@ -1875,8 +1875,10 @@ Proof.
        rewrite <- C; eauto. rewrite <- K; eauto.
        rewrite CC in H4. destr_in H4.
        inv X. exploit mmatch_below. eauto. intro VALID.
-       assert (sup_In b (Mem.support m)). admit.
-       auto.
+       assert (sup_In b (Mem.support m)).
+       destruct (Mem.sup_dec b (Mem.support m)). auto.
+       exploit external_call_new_block_local; eauto. intro.
+       inv SACC. congruence. auto.
   }
   eapply support_acc_trans. eauto. eapply external_call_support. eauto.
   eapply external_call_tid; eauto.
@@ -1915,7 +1917,10 @@ Proof.
        subst. exfalso. apply H3. simpl. simpl in H3. inv SACC. congruence.
        eapply EXT_VALID_SOME; eauto. 
        inv X. exploit mmatch_below. eauto. intro VALID.
-       assert (sup_In b (Mem.support m)). admit.
+       assert (sup_In b (Mem.support m)).
+       destruct (Mem.sup_dec b (Mem.support m)). auto.
+       exploit external_call_new_block_local; eauto. intro.
+       inv SACC. congruence. auto.
        rewrite <- C; eauto. rewrite <- K; eauto.
        rewrite CC in H2. destr_in H2.
   }
@@ -2073,7 +2078,10 @@ Proof.
   destruct (bc b) eqn: Hbc; eauto.
   intros. red in A. inv F. exploit mmatch_below; eauto.
   intro.
-  assert (sup_In b (Mem.support m)). admit.
+  assert (sup_In b (Mem.support m)).
+  destruct (Mem.sup_dec b (Mem.support m)). auto.
+  exploit external_call_new_block_local; eauto. intro.
+  inv SACC. congruence. auto.
   eapply EXT_VALID_SOME; eauto.
   rewrite <- B; eauto.
   }
@@ -2121,14 +2129,11 @@ Proof.
        elim H0. subst b. simpl. inv SACC. congruence.
    }
    {
-     left.
+     left. admit.
    }
    {
      admit.
    }
-   admit.
-   admit.
-   admit.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
 Admitted.
 
