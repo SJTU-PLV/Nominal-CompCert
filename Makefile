@@ -133,9 +133,9 @@ BACKEND=\
   RTLtyping.v \
   Kildall.v Liveness.v \
   ValueDomain.v ValueAOp.v ValueAnalysis.v \
-  ConstpropOp.v Constprop.v ConstpropOpproof.v Constpropproof.v \
-  CSEdomain.v CombineOp.v CSE.v CombineOpproof.v CSEproof.v \
-  NeedDomain.v NeedOp.v Deadcode.v Deadcodeproof.v \
+  ConstpropOp.v Constprop.v ConstpropOpproof.v \
+  CSEdomain.v CombineOp.v CSE.v CombineOpproof.v \
+  NeedDomain.v NeedOp.v Deadcode.v \
   Unusedglob.v Unusedglobproof.v \
   Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
   Allocation.v Allocproof.v \
@@ -149,6 +149,7 @@ BACKEND=\
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   Asmrel.v AsmLinking.v \
 
+  # Constpropproof.v \	CSEproof.v \ Deadcodeproof.v 
 
 # C front-end modules (in cfrontend/)
 
@@ -181,14 +182,18 @@ endif
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v CallConv.v CA.v Compiler.v
+DRIVER=Compopts.v CallConv.v CA.v
+
+# Compiler.v
 
 # Complements.v
 
 
 # Closes semantics
 
-CLOSE=SmallstepClosed.v CompilerClosed.v
+CLOSE=SmallstepClosed.v
+
+#CompilerClosed.v
 
 # Concurrent semantics
 

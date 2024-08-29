@@ -823,7 +823,8 @@ Theorem return_from_public_call:
   bc_below caller bound ->
   callee sp = BCother ->
   caller sp = BCstack ->
-  (forall b, sup_In b bound -> b <> sp -> caller b = callee b) ->
+  (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> b <> sp -> caller b = callee b) ->
+  (forall b, caller b <> BCinvalid -> b <> sp -> callee b = caller b) ->
   genv_match caller ge ->
   ematch caller e ae ->
   Mem.sup_include bound (Mem.support m) ->
@@ -838,10 +839,11 @@ Theorem return_from_public_call:
    /\ mmatch bc m mafter_public_call
    /\ genv_match bc ge
    /\ bc sp = BCstack
-   /\ (forall b, sup_In b bound -> bc b = caller b)
-   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid).
+   /\ (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> bc b = caller b)
+   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid)
+   /\ (forall b, bc b = if eq_block b sp then BCstack else callee b).
 Proof.
-  intros until m; intros BELOW SP1 SP2 SAME GE1 EM BOUND RESM MM GE2 NOSTACK.
+  intros until m; intros BELOW SP1 SP2 SAME INCR1 GE1 EM BOUND RESM MM GE2 NOSTACK.
 (* Constructing bc *)
   set (f := fun b => if eq_block b sp then BCstack else callee b).
   assert (F_stack: forall b1 b2, f b1 = BCstack -> f b2 = BCstack -> b1 = b2).
@@ -860,7 +862,7 @@ Proof.
   assert (INCR: bc_incr caller bc).
   {
     red; simpl; intros. destruct (eq_block b sp). congruence.
-    symmetry; apply SAME; auto.
+    apply INCR1. auto. auto.
   }
 (* Invariance properties *)
   assert (PM: forall b ofs p, pmatch callee b ofs p -> pmatch bc b ofs Ptop).
@@ -907,16 +909,17 @@ Proof.
 - (* genv *)
   eapply genv_match_exten with caller; eauto.
   simpl; intros. destruct (eq_block b sp). intuition congruence.
-  split; intros. rewrite SAME in H by eauto with va. auto.
+  split; intros. erewrite INCR1; eauto. congruence.
   apply <- (proj1 GE2) in H. apply (proj1 GE1) in H. auto.
   simpl; intros. destruct (eq_block b sp). congruence.
-  rewrite <- SAME; eauto with va.
+  erewrite INCR1; eauto. congruence.
 - (* sp *)
   simpl. apply dec_eq_true.
 - (* unchanged *)
   simpl; intros. destruct (eq_block b sp). congruence.
   symmetry. apply SAME; auto.
 - simpl; intros. destruct (eq_block b sp). congruence. auto.
+- intros. reflexivity.
 Qed.
 
 (** Construction 5: restore the stack after a private call *)
@@ -926,7 +929,8 @@ Theorem return_from_private_call:
   bc_below caller bound ->
   callee sp = BCinvalid ->
   caller sp = BCstack ->
-  (forall b, sup_In b bound -> b <> sp -> caller b = callee b) ->
+  (forall b, sup_In b bound -> b <> sp -> fst b = Mem.tid (Mem.support m) -> caller b = callee b) ->
+  (forall b, caller b <> BCinvalid -> b <> sp -> callee b = caller b) ->
   genv_match caller ge ->
   ematch caller e ae ->
   bmatch caller m sp am.(am_stack) ->
@@ -942,10 +946,11 @@ Theorem return_from_private_call:
    /\ mmatch bc m (mafter_private_call am)
    /\ genv_match bc ge
    /\ bc sp = BCstack
-   /\ (forall b, sup_In b bound -> bc b = caller b)
-   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid).
+   /\ (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> bc b = caller b)
+   /\ (forall b, bc b = BCinvalid -> callee b = BCinvalid)
+   /\ (forall b, bc b = if eq_block b sp then BCstack else callee b).
 Proof.
-  intros until am; intros BELOW SP1 SP2 SAME GE1 EM CONTENTS BOUND RESM MM GE2 NOSTACK.
+  intros until am; intros BELOW SP1 SP2 SAME INCR GE1 EM CONTENTS BOUND RESM MM GE2 NOSTACK.
 (* Constructing bc *)
   set (f := fun b => if eq_block b sp then BCstack else callee b).
   assert (F_stack: forall b1 b2, f b1 = BCstack -> f b2 = BCstack -> b1 = b2).
@@ -964,7 +969,7 @@ Proof.
   assert (INCR1: bc_incr caller bc).
   {
     red; simpl; intros. destruct (eq_block b sp). congruence.
-    symmetry; apply SAME; auto.
+    apply INCR; eauto.
   }
   assert (INCR2: bc_incr callee bc).
   {
@@ -1029,6 +1034,7 @@ Proof.
   symmetry. apply SAME; auto.
 - simpl; intros. destruct (eq_block b sp). congruence.
   auto.
+- intros. reflexivity.
 Qed.
 
 (** Construction 6: external call *)
@@ -1840,23 +1846,24 @@ Proof.
   eapply mmatch_below; eauto.
   rewrite K. apply B. auto. auto.
   intros. rewrite K; auto. rewrite C; auto.
+  intros. rewrite K; auto. inv MM. apply mmatch_below. auto.
   eauto. eauto.
   apply bmatch_inv with m. eapply mmatch_stack; eauto.
   intros. apply Q; auto.
   eapply external_call_support; eauto.
   eauto. eauto. eauto. eauto.
-  intros (bc3 & U & V & W & X & Y & Z & AA & BB).
+  intros (bc3 & U & V & W & X & Y & Z & AA & BB & CC).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
   erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
   apply set_builtin_res_sound; auto.
   eauto 10.
-  apply sound_stack_exten with bc.
+  apply sound_stack_exten1 with bc.
   apply sound_stack_inv with m. auto.
   intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H8 in H4.
   eapply freshness. eauto. erewrite external_call_tid; eauto.
-  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
+  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto. auto.
   {
     inv BCGW. constructor.
     -- intros. destruct (eq_block b (fresh_block sps)). 
@@ -1864,10 +1871,12 @@ Proof.
        ++ apply INVALID. rewrite <- C; eauto.
     -- intros. destruct (eq_block b (fresh_block sps)).
        subst. exfalso. apply H5. simpl. simpl in H5. inv SACC. congruence.
-       eapply EXT_VALID_SOME; eauto. 
+       eapply EXT_VALID_SOME; eauto.
+       rewrite <- C; eauto. rewrite <- K; eauto.
+       rewrite CC in H4. destr_in H4.
        inv X. exploit mmatch_below. eauto. intro VALID.
-       assert (sup_In b (Mem.support m)). admit. 
-       rewrite <- AA; eauto.
+       assert (sup_In b (Mem.support m)). admit.
+       auto.
   }
   eapply support_acc_trans. eauto. eapply external_call_support. eauto.
   eapply external_call_tid; eauto.
@@ -1882,20 +1891,20 @@ Proof.
   eapply mmatch_below; eauto.
   rewrite K. apply B. auto. auto.
   intros. rewrite K; auto. rewrite C; auto.
-  eauto. eauto.
+  intros. rewrite K; auto. inv MM. apply mmatch_below. auto.  eauto. eauto.
   eapply external_call_support; eauto.
   eauto. eauto. eauto. eauto.
-  intros (bc3 & U & V & W & X & Y & Z & AA & BB).
+  intros (bc3 & U & V & W & X & Y & Z & AA & BB & CC).
   eapply sound_succ_state with (bc := bc3); eauto. simpl; auto.
   erewrite <- external_call_tid; eauto.
   eapply Mem.sup_include_trans. eauto. eapply external_call_support. eauto.
   apply set_builtin_res_sound; auto. eauto 10.
-  apply sound_stack_exten with bc.
+  apply sound_stack_exten1 with bc.
   apply sound_stack_inv with m. auto.
   intros. apply Q. red. apply SINCR. apply Mem.sup_incr_in2. auto.
   rewrite C; auto with ordered_type. intro. rewrite H6 in H2.
   eapply freshness; eauto. erewrite external_call_tid; eauto.
-  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto.
+  intros. apply AA. apply SINCR. apply Mem.sup_incr_in2. auto. auto.
   
  {
     inv BCGW. constructor.
@@ -1906,8 +1915,9 @@ Proof.
        subst. exfalso. apply H3. simpl. simpl in H3. inv SACC. congruence.
        eapply EXT_VALID_SOME; eauto. 
        inv X. exploit mmatch_below. eauto. intro VALID.
-       assert (sup_In b (Mem.support m)). admit. 
-       rewrite <- AA; eauto.
+       assert (sup_In b (Mem.support m)). admit.
+       rewrite <- C; eauto. rewrite <- K; eauto.
+       rewrite CC in H2. destr_in H2.
   }
   eapply support_acc_trans. eauto. eapply external_call_support. eauto.
   eapply external_call_tid; eauto.
@@ -2050,20 +2060,23 @@ Proof.
   
 - (* external function *)
   exploit external_call_match; eauto with va.
-  intros (bc' & A & B & C & D & E & F & G & K).
+  intros (bc' & A & B & C & D & E & F & G & K & L).
   econstructor. 4: eauto. all: eauto.
   apply sound_stack_new_bound with (Mem.support m).
   apply sound_stack_exten with bc; auto.
   apply sound_stack_inv with m; auto.
   erewrite external_call_tid; eauto.
   eapply external_call_support; eauto.
+  {
   inv BCGW. constructor.
   intros. red in A.
   destruct (bc b) eqn: Hbc; eauto.
-  1-3 : erewrite A in H0; eauto; congruence.
-  intros. red in A.
-  destruct (bc b) eqn: Hbc; eauto. admit.
-  1-3 : erewrite A in H0; eauto; congruence.
+  intros. red in A. inv F. exploit mmatch_below; eauto.
+  intro.
+  assert (sup_In b (Mem.support m)). admit.
+  eapply EXT_VALID_SOME; eauto.
+  rewrite <- B; eauto.
+  }
   eapply support_acc_trans. eauto. eapply external_call_support; eauto.
   eapply external_call_tid; eauto.
 
@@ -2071,25 +2084,49 @@ Proof.
   inv STK.
   + (* from public call *)
    exploit return_from_public_call; eauto.
-   intros; rewrite SAME; auto.  admit.
-   intros (bc1 & A & B & C & D & E & F & G).
+   intros; rewrite SAME; auto. admit.
+   intros (bc1 & A & B & C & D & E & F & G & I & J).
    destruct (analyze rm f)#pc as [ |ae' am'] eqn:EQ; simpl in AN; try contradiction. destruct AN as [A1 A2].
+   destruct wp.
    eapply sound_regular_state with (bc := bc1); eauto.
-   apply sound_stack_exten with bc'; auto.
-   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto.
-   admit.
-   { inv SACC. constructor. inversion Hm. apply mi_freeblocks.
-     intro. eapply freshness; eauto. instantiate (1:= sps).
-   admit.
+   apply sound_stack_exten1 with bc'; auto.
+   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto. auto.
+   {
+     inv BCGW.
+     constructor; intros.
+     - rewrite J in H. destr_in H. apply INVALID. auto.
+     - eapply EXT_VALID_SOME; eauto. rewrite J in H. destr_in H.
+   }
+   {
+     right. admit.
+   }
+   {
+     admit.
+   }
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
   + (* from private call *)
    exploit return_from_private_call; eauto.
    intros; rewrite SAME; auto. admit.
-   intros (bc1 & A & B & C & D & E & F & G).
+   intros (bc1 & A & B & C & D & E & F & G & I & J).
    destruct (analyze rm f)#pc as [ |ae' am'] eqn:EQ; simpl in AN; try contradiction. destruct AN as [A1 A2].
+   destruct wp.
    eapply sound_regular_state with (bc := bc1); eauto.
-   apply sound_stack_exten with bc'; auto.
-   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto.
+   apply sound_stack_exten1 with bc'; auto.
+   intros. apply G. apply SINCR. apply Mem.sup_incr_in2. auto. auto.
+   {
+     inv BCGW.
+     constructor; intros.
+     - rewrite J in H. destr_in H. apply INVALID. auto.
+     - eapply EXT_VALID_SOME; eauto. rewrite J in H. destr_in H.
+       elim H0. subst b. simpl. inv SACC. congruence.
+   }
+   {
+     left.
+   }
+   {
+     admit.
+   }
+   admit.
    admit.
    admit.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
@@ -2497,6 +2534,7 @@ Proof.
       destruct Genv.invert_symbol; inv H3.
     * unfold bc, bc_of_inj in H3. simpl in H3. destruct (j b) as [[b' d]|]; eauto.
       congruence.
+  + constructor; eauto.
   + eapply bc_of_inj_vmatch; eauto.
   + eapply bc_of_inj_args_vmatch; eauto.
   + red in H2. destruct H2 as [H2 H2'].

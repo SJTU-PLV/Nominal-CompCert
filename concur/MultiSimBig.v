@@ -3,7 +3,7 @@ Require Import LanguageInterface.
 Require Import Smallstep SmallstepClosed.
 Require Import ValueAnalysis.
 Require Import MultiLibs CMulti AsmMulti.
-Require Import InjectFootprint CA Compiler.
+Require Import InjectFootprint CA.
 Require Import CallconvBig.
 
 (** * TODOs after completing this : Generalization *)

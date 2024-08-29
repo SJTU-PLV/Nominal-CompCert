@@ -526,7 +526,7 @@ Proof.
   exploit eval_addressing_inject. eapply match_stbls_incr; eauto. eauto.
   eapply regs_inject; eauto. eexact P.
   intros (a'' & U & V). rewrite eval_shift_stack_addressing in U.
-  exploit Mem.loadv_inject. eauto. eauto. eapply Mem.val_lessdef_inject_compose; eauto.
+  exploit Mem.loadv_inject. apply Hm. eauto. eapply Mem.val_lessdef_inject_compose; eauto.
   intros (v' & X & Y).
   left; econstructor; econstructor; split.
   eapply exec_Iload; eauto.
@@ -545,7 +545,7 @@ Proof.
   exploit eval_addressing_inject. eapply match_stbls_incr; eauto. eauto.
   eapply regs_inject; eauto. eexact P.
   intros (a'' & U & V). rewrite eval_shift_stack_addressing in U.
-  exploit Mem.storev_mapped_inject. eauto. eauto.
+  exploit Mem.storev_mapped_inject. apply Hm. eauto.
   eapply Mem.val_lessdef_inject_compose; eauto. apply REGS.
   intros (m2' & X & Y).
   assert (ACCTL: injp_acc_tl (injpw j m m'0 Hm) (injpw j m' m2' Y)).
@@ -573,8 +573,9 @@ Proof.
   apply regs_inject; auto.
 
   - (* Itailcall *)
-  exploit match_stbls_incr; eauto. intro MSTB.
-  exploit Mem.free_parallel_inject; eauto. intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
+  exploit match_stbls_incr; eauto. intro MSTB. 
+  exploit Mem.free_parallel_inject. apply Hm. eauto. eauto.
+  intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
   exploit (ros_address_translated j ros); eauto. intros FEXT.
   exploit functions_translated; eauto using ros_address_translated. intro FIND.
   TransfInstr; intro.
@@ -601,7 +602,7 @@ Opaque builtin_strength_reduction.
           exists (n2 : nat) (s2' : state),
             step tge
              (State s' (transf_function rm f) (Vptr sp' Ptrofs.zero) pc rs' m'0) t s2' /\
-            match_states n2 wp
+            match_states n2 (injpw j0 m1 tm0 Hm0)
              (State s f (Vptr (fresh_block sps) Ptrofs.zero) pc' (regmap_setres res vres rs) m') s2').
   {
     exploit builtin_strength_reduction_correct; eauto. intros (vargs' & P & Q).
@@ -684,7 +685,8 @@ Opaque builtin_strength_reduction.
   eapply match_states_succ; eauto.
 
 - (* Ireturn *)
-  exploit Mem.free_parallel_inject; eauto. intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
+  exploit Mem.free_parallel_inject. apply Hm. eauto. eauto.
+  intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
   assert (ACCTL : injp_acc_tl (injpw j m m'0 Hm) (injpw j m' m2' B)).
   eapply injp_acc_tl_free_0; eauto. lia.
   left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'); split.
@@ -1269,6 +1271,7 @@ Proof.
         intros. unfold bc'.  simpl. rewrite pred_dec_true; eauto.
         destruct (bc b); auto. rewrite pred_dec_true. auto.
         destruct S9. congruence.
+      * constructor; eauto.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         -- destruct (bc b) eqn : Hbc; try congruence.
