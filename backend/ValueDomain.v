@@ -4637,11 +4637,13 @@ Module VA <: SEMILATTICE.
   Inductive t' := Bot | State (ae: aenv) (am: amem).
   Definition t := t'.
 
+  Definition stack_leaked (am : amem) : Prop := pincl (am_nonstack am) Nonstack = false.
+
   Definition eq (x y: t) :=
     match x, y with
     | Bot, Bot => True
     | State ae1 am1, State ae2 am2 =>
-        AE.eq ae1 ae2 /\ forall bc m, mmatch bc m am1 <-> mmatch bc m am2
+        AE.eq ae1 ae2 /\ (forall bc m, mmatch bc m am1 <-> mmatch bc m am2) /\ (stack_leaked am1 <-> stack_leaked am2)
     | _, _ => False
     end.
 
@@ -4651,14 +4653,14 @@ Module VA <: SEMILATTICE.
   Qed.
   Lemma eq_sym: forall x y, eq x y -> eq y x.
   Proof.
-    destruct x, y; simpl; auto. intros [A B].
-    split. apply AE.eq_sym; auto. intros. rewrite B. tauto.
+    destruct x, y; simpl; auto. intros [A [B C]].
+    split. apply AE.eq_sym; auto. split. intros. rewrite B. tauto. tauto.
   Qed.
   Lemma eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
   Proof.
-    destruct x, y, z; simpl; try tauto. intros [A B] [C D]; split.
-    eapply AE.eq_trans; eauto.
-    intros. rewrite B; auto.
+    destruct x, y, z; simpl; try tauto. intros [A [B1 B2]] [C [D1 D2]]; split.
+    eapply AE.eq_trans; eauto. split.
+    intros. rewrite B1; auto. tauto.
   Qed.
 
   Definition beq (x y: t) : bool :=
@@ -4675,28 +4677,31 @@ Module VA <: SEMILATTICE.
     congruence.
     congruence.
     InvBooleans; split.
-    apply AE.beq_correct; auto.
+    apply AE.beq_correct; auto. split.
     intros. apply mbeq_sound; auto.
+    unfold mbeq in H1.
+    InvBooleans. unfold stack_leaked. rewrite H1. reflexivity.
   Qed.
 
+  
   Definition ge (x y: t) : Prop :=
     match x, y with
     | _, Bot => True
     | Bot, _ => False
-    | State ae1 am1, State ae2 am2 => AE.ge ae1 ae2 /\ forall bc m, mmatch bc m am2 -> mmatch bc m am1
+    | State ae1 am1, State ae2 am2 => AE.ge ae1 ae2 /\ (forall bc m, mmatch bc m am2 -> mmatch bc m am1) /\ (stack_leaked am2 -> stack_leaked am1)
     end.
 
   Lemma ge_refl: forall x y, eq x y -> ge x y.
   Proof.
-    destruct x, y; simpl; try tauto. intros [A B]; split.
-    apply AE.ge_refl; auto.
-    intros. rewrite B; auto.
+    destruct x, y; simpl; try tauto. intros [A [B1 B2]].
+    split. apply AE.ge_refl; auto. split.
+    intros. rewrite B1; auto. tauto.
   Qed.
   Lemma ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
   Proof.
-    destruct x, y, z; simpl; try tauto. intros [A B] [C D]; split.
+    destruct x, y, z; simpl; try tauto. intros [A [B1 B2]] [C [D1 D2]]; split.
     eapply AE.ge_trans; eauto.
-    eauto.
+    split; eauto.
   Qed.
 
   Definition bot : t := Bot.
@@ -4712,13 +4717,31 @@ Module VA <: SEMILATTICE.
     | State ae1 am1, State ae2 am2 => State (AE.lub ae1 ae2) (mlub am1 am2)
     end.
 
+  Lemma pincl_plub_Nonstack_false1 : forall ap ap',
+    pincl ap Nonstack = false ->
+    pincl (plub ap ap') Nonstack = false.
+  Proof.
+    intros. destruct ap; simpl in H; try congruence; destruct ap'; simpl; eauto.
+    destr.
+  Qed.
+
+  Lemma pincl_plub_Nonstack_false2 : forall ap ap',
+      pincl ap Nonstack = false ->
+      pincl (plub ap' ap) Nonstack = false.
+  Proof.
+    intros. destruct ap; simpl in H; try congruence; destruct ap'; simpl; eauto.
+    destr.
+  Qed.
+
   Lemma ge_lub_left: forall x y, ge (lub x y) x.
   Proof.
     destruct x, y.
     apply ge_refl; apply eq_refl.
     simpl. auto.
     apply ge_refl; apply eq_refl.
-    simpl. split. apply AE.ge_lub_left. intros; apply mmatch_lub_l; auto.
+    simpl. split. apply AE.ge_lub_left. split. intros; apply mmatch_lub_l; auto.
+    unfold mlub. unfold stack_leaked. destruct am. simpl.
+    intros. apply pincl_plub_Nonstack_false1. auto.
   Qed.
   Lemma ge_lub_right: forall x y, ge (lub x y) y.
   Proof.
@@ -4726,7 +4749,9 @@ Module VA <: SEMILATTICE.
     apply ge_refl; apply eq_refl.
     apply ge_refl; apply eq_refl.
     simpl. auto.
-    simpl. split. apply AE.ge_lub_right. intros; apply mmatch_lub_r; auto.
+    simpl. split. apply AE.ge_lub_right. split. intros; apply mmatch_lub_r; auto.
+    unfold mlub. unfold stack_leaked. destruct am. simpl.
+    intros. apply pincl_plub_Nonstack_false2. auto.
   Qed.
 
 End VA.

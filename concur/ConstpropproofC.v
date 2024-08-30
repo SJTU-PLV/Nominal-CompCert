@@ -701,7 +701,7 @@ Opaque builtin_strength_reduction.
   - (* internal function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
   exploit functions_translated; eauto. intro FIND'.
-  exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
+  exploit Mem.alloc_parallel_inject. apply Hm. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (f' & m2' & b2 & A & B & C & D & E).
   simpl. unfold transf_function.
   assert (INCR0 :injp_acc_tl (injpw j m m'0 Hm) (injpw f' m' m2' B)).
@@ -785,48 +785,32 @@ Proof.
   eexists. split. econstructor; eauto. simpl. constructor. auto.
   eexists. simpl. auto. constructor; eauto.
 Qed.
-(*
-Inductive sound_bc_gw : block_classification -> injp_world -> Prop :=
-|sound_bc_gw_intro: forall (bc : block_classification) j m tm Hm
-                      (INVALID: forall b, bc b = BCinvalid -> j b = None)
-                      (EXT_VALID_SOME: forall b, bc b <> BCinvalid -> fst b <> Mem.tid (Mem.support m) ->
-                                            exists b' d, j b = Some (b', d)),
-    sound_bc_gw bc (injpw j m tm Hm).
 
-(** The invariant need to be added in ValueAnalysis, can be preserved in local steps (free), builtin
-    functions and external functions here *)
-Lemma sound_state_extend : forall bc gw, sound_bc_gw bc gw.
-Admitted.
 
-Lemma sound_stack_inv1 :
-forall (prog : program) (ge : Genv.symtbl) (m' : mem) (bc : block_classification) 
-  (stk : list stackframe) (m : mem) (bound : sup),
-sound_stack prog ge bc stk m bound ->
-(forall (b : block) (ofs n : Z),
-    sup_In b bound -> bc b = BCinvalid -> fst b = Mem.tid (Mem.support m) ->
-    n >= 0 -> Mem.loadbytes m' b ofs n = Mem.loadbytes m b ofs n) ->
-sound_stack prog ge bc stk m' bound.
-Proof. Admitted.
-(*
-Lemma sound_stack_ext1: 
-  forall m' bc stk m bound,
-  sound_stack prog ge bc stk m bound ->
-  (forall b ofs n bytes,
-       sup_In b bound -> bc b = BCinvalid -> fst b = Mem.tid (Mem.support m) -> n >= 0 ->
-       Mem.loadbytes m' b ofs n = Some bytes ->
-       Mem.loadbytes m b ofs n = Some bytes) ->
-  sound_stack prog ge bc stk m' bound.
-Proof. Admitted.
- *)
+Lemma  sound_stack_incr :
+forall (ge : Genv.symtbl) (bc : block_classification) 
+  (stk : list stackframe) (m: mem) (bound : sup) (j j': meminj),
+  sound_stack prog ge j bc stk m bound ->
+  (forall b, j' b <> None -> Mem.valid_block m b) ->
+  (forall b, bc b = BCinvalid -> sup_In b bound -> fst b = Mem.tid (Mem.support m) -> j b = None -> j' b = None) ->
+  sound_stack prog ge j' bc stk m bound.
+Proof.
+  induction 1; intros.
+  - econstructor. eauto.
+  - econstructor. all : eauto.
+    eapply IHsound_stack. eauto.
+    intros.
+    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
+    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
+  - eapply sound_stack_private_call; eauto.
+    eapply IHsound_stack. eauto.
+    intros.
+    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
+    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
+    apply H1. auto. apply INCR. apply SINCR. subst sp. apply Mem.sup_incr_in1.
+    subst sp. simpl. auto. auto.
+Qed.
 
-Lemma sound_stack_exten1:
-  forall bc stk m bound (bc1: block_classification),
-  sound_stack prog ge bc stk m bound ->
-  (forall b, sup_In b bound -> fst b = Mem.tid (Mem.support m) -> bc1 b = bc b) ->
-  sound_stack prog ge bc1 stk m bound.
-Proof. Admitted.
-*)
-  
 Lemma transf_external_states:
   forall n gw st1 st2 q1, match_states n gw st1 st2 -> sound_state prog ge gw st1 -> at_external ge st1 q1 ->
   exists (wx: GS.ccworld (ro @ c_injp)) q2, at_external tge st2 q2 /\ gw *-> (snd (get wx)) /\ GS.match_query (ro @ c_injp) wx q1 q2 /\ GS.match_senv (ro @ c_injp) wx se tse /\
@@ -857,13 +841,13 @@ Proof.
     inv ACCI. econstructor; eauto.
     + 
       red. intros. rewrite JBC_COMPOSE.
-      exploit H8; eauto. intro. unfold jbc.
+      exploit H11; eauto. intro. unfold jbc.
       destruct (bc b) eqn: Hbc; simpl; eauto.
       inv SOUNDBC. exploit INVALID; eauto. intro. congruence.
-    + red. intros. rewrite JBC_COMPOSE in H0. eapply H10; eauto.
+    + red. intros. rewrite JBC_COMPOSE in H0. eapply H12; eauto.
       unfold jbc in H0.
       destruct (bc b1) eqn: Hbc; simpl in H0; inv H0; eauto.
-    + red. intros. rewrite JBC_COMPOSE in H0. eapply H11; eauto.
+    + red. intros. rewrite JBC_COMPOSE in H0. eapply H13; eauto.
       unfold jbc in H0.
       destruct (bc b1) eqn: Hbc; simpl in H0; inv H0; eauto.
   - assert (sound_memory_ro ge m).
@@ -1127,7 +1111,6 @@ Proof.
         intro. destruct S9. rewrite <- H12. erewrite acci_tid1; eauto.
       * eapply ro_acc_trans; eauto.
     + (* sound_state *)
-      (* assert (LOCAL: forall b, bc b <> BCinvalid -> fst b = Mem.tid (Mem.support m)). admit. *)
       (* Part 2: constructing bc' from j' *)
       assert (JBELOW: forall b, sup_In b (Mem.support m) -> fst b = Mem.tid (Mem.support m) -> j' b = jbc b).
       {
@@ -1224,7 +1207,7 @@ Proof.
     intros; split; intros.
     - 
       exploit BC'INV; eauto. intros [(b' & delta & J') | [A [B [C D]]]].
-      + exploit Mem.load_inject. eexact Hm4. eauto. eauto. intros (v' & A & B).
+      + exploit Mem.load_inject. eexact Hm5. eauto. eauto. intros (v' & A & B).
       eapply VMTOP; eauto.
       + eapply vmatch_incr; eauto.
       eapply vmatch_top.
@@ -1235,7 +1218,7 @@ Proof.
       destruct (bc b); try congruence. rewrite B. reflexivity.
       rewrite B. reflexivity. rewrite B. reflexivity. auto.
     - exploit BC'INV; eauto. intros [(b'' & delta & J') | [A [B [C D]]]].
-      exploit Mem.loadbytes_inject. eexact Hm4. eauto. eauto. intros (bytes & A & B).
+      exploit Mem.loadbytes_inject. eexact Hm5. eauto. eauto. intros (bytes & A & B).
       inv B. inv H15. inv H19. eapply PMTOP; eauto.
       eapply pmatch_incr; eauto.
       inv MM. exploit mmatch_top. eauto.
@@ -1262,16 +1245,27 @@ Proof.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
         2: inversion H9; eauto.
+        eapply sound_stack_incr.
         eapply sound_stack_exten1.
         instantiate (1:= bc).
-        eapply sound_stack_inv; eauto. intros.
+        eapply sound_stack_inv. eauto.
+        intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
         intros. split. red. rewrite JBC_COMPOSE.
         unfold jbc. rewrite H2. reflexivity. auto. destruct S9. congruence.
+        inversion H9. auto.
         intros. unfold bc'.  simpl. rewrite pred_dec_true; eauto.
         destruct (bc b); auto. rewrite pred_dec_true. auto.
         destruct S9. congruence.
         intros. simpl. destr. destr.
+        inversion Hm6. intros. destruct (Mem.sup_dec b (Mem.support m'0)).
+        auto. exploit mi_freeblocks. eauto. intro. congruence.
+        intros. unfold bc' in H1. simpl in H1. rewrite pred_dec_true in H1; auto.
+        destr_in H1. rewrite pred_dec_true in H1; auto. inv GWJ.
+        assert (jbc b = None). unfold jbc. rewrite Heqb0. auto.
+        destruct (j' b) as [[b' d]|] eqn:Hj'; auto.
+        exploit H13; eauto. rewrite JBC_COMPOSE. auto. destruct S9. congruence.
+        intros [A B]. exfalso. apply A. auto. destruct S9. congruence.
       * constructor; eauto.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
