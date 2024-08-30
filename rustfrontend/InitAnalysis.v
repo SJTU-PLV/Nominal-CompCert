@@ -130,6 +130,75 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   Paths.for_all (must_owned initmap uninitmap universemap)
     (Paths.filter (is_prefix p) universe).
 
+(* move it to a new file *)
+(** * Relations between the generated CFG and the source statement *)
+
+(* Translation relation of the generate_cfg: [tr_stmt body cfg stmt pc
+  out cont break endn] holds if the graph [cfg], starting at node
+  [pc], contains instructions that perform the RustIR statement
+  [stmt]. These instructions branch to node [out] if the statement
+  terminates normally, branch to node [cont] if the statement reaches
+  Scontinue, branch to break if the statement reaches Sbreak and
+  branch to [endn] if the statement returns *)
+Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -> option node -> option node -> node -> Prop :=
+| tr_Sskip: forall pc cont brk endn,
+    tr_stmt body cfg Sskip pc pc cont brk endn
+| tr_Sassign: forall pc next sel p e cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sassign p e)),
+    tr_stmt body cfg (Sassign p e) pc next cont brk endn
+| tr_Sassign_variant: forall pc next sel p e enum_id fid cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sassign_variant p enum_id fid e)),
+    tr_stmt body cfg (Sassign_variant p enum_id fid e) pc next cont brk endn
+| tr_Sbox: forall pc next sel p e cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sbox p e)),
+    tr_stmt body cfg (Sbox p e) pc next cont brk endn
+| tr_Sstoragelive: forall pc next sel id cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sstoragelive id)),
+    tr_stmt body cfg (Sstoragelive id) pc next cont brk endn
+| tr_Sstoragedead: forall pc next sel id cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sstoragedead id)),
+    tr_stmt body cfg (Sstoragedead id) pc next cont brk endn
+| tr_Sdrop: forall pc next sel p cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sdrop p)),
+    tr_stmt body cfg (Sdrop p) pc next cont brk endn
+| tr_Scall: forall pc next sel p e args cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Scall p e args)),
+    tr_stmt body cfg (Scall p e args) pc next cont brk endn
+| tr_Ssequence: forall s1 s2 n1 n2 n3 cont brk endn
+    (STMT1: tr_stmt body cfg s1 n1 n2 cont brk endn)
+    (STMT2: tr_stmt body cfg s2 n2 n3 cont brk endn),
+    tr_stmt body cfg (Ssequence s1 s2) n1 n3 cont brk endn
+| tr_Sifthenelse: forall s1 s2 e pc n1 n2 endif cont brk endn
+    (STMT1: tr_stmt body cfg s1 n1 endif cont brk endn)
+    (STMT2: tr_stmt body cfg s2 n2 endif cont brk endn)
+    (SEL: cfg ! pc = Some (Icond e n1 n2)),
+    tr_stmt body cfg (Sifthenelse e s1 s2) pc endif cont brk endn
+| tr_Sloop: forall s next loop_start loop_jump_node cont brk endn
+    (STMT: tr_stmt body cfg s loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
+    (SEL: cfg ! loop_jump_node = Some (Inop loop_start)),
+    (* next is not specific because loop is impossible to terminate
+    normally *)
+    tr_stmt body cfg (Sloop s) loop_start next brk cont endn
+| tr_Sbreak: forall pc brk cont endn
+    (SEL: cfg ! pc = Some (Inop brk)),
+    tr_stmt body cfg Sbreak pc brk cont (Some brk) endn
+| tr_Scontinue: forall pc brk cont endn
+    (SEL: cfg ! pc = Some (Inop cont)),
+    tr_stmt body cfg Scontinue pc cont (Some cont) brk endn
+| tr_Sreturn: forall pc sel endn e cont brk
+    (SEL: cfg ! pc = Some (Isel sel endn))
+    (STMT: select_stmt body sel = Some (Sreturn e)),
+    tr_stmt body cfg (Sreturn e) pc endn cont brk endn
+.
+
+
 
 (** * Soundness of Initial Analysis *)
 

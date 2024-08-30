@@ -490,6 +490,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       do s2' <- transl_stmt s2;
       ret (Ssequence s1' s2')
   | Rustsyntax.Sifthenelse e s1 s2 =>
+      (* TODO: To ensure safety or no leak? e' must not be move expression *)
       do (sl, e') <- transl_value_expr e;
       (* e is in temporary scope *)
       do s' <- finish_stmt sl;

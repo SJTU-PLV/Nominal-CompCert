@@ -207,7 +207,7 @@ Definition elaborate_drop_for (pc: node) (mayinit mayuninit universemap: PathsMa
 
 Section INIT_UNINIT.
 
-Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
+Variable (maybeInit maybeUninit: PMap.t PathsMap.t).
 Variable universe : PathsMap.t.
 
 Definition drop_fully_own (p: place) :=
@@ -228,24 +228,24 @@ Definition generate_drop (p: place) (flag: option ident) (full: bool) : statemen
 Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instruction) (pc: node) : mon unit :=
   match instr with
   | Isel sel _ =>
-      let mayinit := maybeInit!pc in
-      let mayuninit := maybeUninit!pc in
-      match mayinit, mayuninit with
-      | Some mayinit, Some mayuninit =>
-          match select_stmt f.(fn_body) sel with
-          | Some (Sdrop p) =>
-              (* drops are the list of to-drop places and their drop flags *)
-              do drops <- elaborate_drop_for pc mayinit mayuninit universe ce p;
-              let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
-              set_stmt sel (makeseq drop_stmts)
-          | _ => ret tt
-          end
-      | _, _ =>
-          (** FIXME: this pc has no information of initialized
-              variables (it may be unreachable), so we do not
-              elaborate it and set it to Sskip (may be wrong?) *)
-          set_stmt sel Sskip
+      let mayinit := maybeInit!!pc in
+      let mayuninit := maybeUninit!!pc in
+      (* match mayinit, mayuninit with *)
+      (* | Some mayinit, Some mayuninit => *)
+      match select_stmt f.(fn_body) sel with
+      | Some (Sdrop p) =>
+          (* drops are the list of to-drop places and their drop flags *)
+          do drops <- elaborate_drop_for pc mayinit mayuninit universe ce p;
+          let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
+          set_stmt sel (makeseq drop_stmts)
+      | _ => ret tt
       end
+      (* | _, _ => *)
+      (*     (** FIXME: this pc has no information of initialized *)
+      (*         variables (it may be unreachable), so we do not *)
+      (*         elaborate it and set it to Sskip (may be wrong?) *) *)
+      (*     set_stmt sel Sskip *)
+      (* end *)
   | _ => ret tt
   end.
 
@@ -353,11 +353,11 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   | Res _ st =>
       (* step 3: initialize and update drop flag *)
       let flags := concat (snd (split (PTree.elements (snd st.(gen_map))))) in
-      match mayinit!entry, mayuninit!entry with
-      | Some entry_init, Some entry_uninit =>
-          (* init drop flags: if no flags, it would be a Sskip *)
-          let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit) flags) in
-          (* update drop flags when encountering assginment *)
+      let entry_init := mayinit!!entry in
+      let entry_uninit := mayuninit!!entry in
+      (* init drop flags: if no flags, it would be a Sskip *)
+      let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit) flags) in
+      (* update drop flags when encountering assginment *)
           let stmt' := transl_stmt (snd st.(gen_map)) st.(gen_stmt) in
           Errors.OK (mkfunction f.(fn_generic_origins)
                                 f.(fn_origins_relation)
@@ -367,8 +367,8 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
                         (f.(fn_vars) ++ st.(gen_trail))
                         f.(fn_params)
                         (Ssequence init_stmt stmt'))      
-      | _, _ => Errors.Error (msg "There is no init information in the entry node")
-      end
+      (* | _, _ => Errors.Error (msg "There is no init information in the entry node") *)
+      (* end *)
   | Err msg =>
       Errors.Error msg
   end.
