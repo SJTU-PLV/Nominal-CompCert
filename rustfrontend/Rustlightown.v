@@ -80,9 +80,10 @@ Record own_env :=
           own_universe: PathsMap.t;
 
           (* algebraic properties of own_env *)
-          own_consistent: PathsMap.eq (PathsMap.lub own_init own_uninit) own_universe;
+          own_consistent: forall id,
+            LPaths.eq (Paths.union (PathsMap.get id own_init) (PathsMap.get id own_uninit)) (PathsMap.get id own_universe);
           own_disjoint: forall id,
-            Paths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_init)) Paths.empty;
+            LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_init)) Paths.empty;
           (* ∀ p ∈ W, p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
           own_wf_init: forall (p: place),
             let id := local_of_place p in
@@ -193,73 +194,45 @@ Next Obligation.
   destruct own. simpl.
   unfold remove_place, add_place.
   clear own_disjoint0 own_wf_init0 own_wf_uninit0.
-  set (id := (local_of_place p)) in *.
-  set (init := (PathsMap.set id
-             (Paths.filter
-                (fun elt : Paths.elt => negb (is_prefix p elt))
-                (PathsMap.get id own_init0)) own_init0)).
-  set (uninit := (PathsMap.set id
-          (Paths.union (PathsMap.get id own_uninit0)
-             (Paths.filter (fun elt : Paths.elt => is_prefix p elt)
-                (PathsMap.get id own_universe0))) own_uninit0)).
-  unfold PathsMap.lub in *.
-  set (f := (fun a b : option LPaths.t =>
-        match a with
-        | Some u =>
-            match b with
-            | Some v => Some (LPaths.lub u v)
-            | None => a
-            end
-        | None => b
-        end)) in *.
-  red. intros id'.
-  generalize (own_consistent0 id').
-  intros EQ. 
-  eapply LPaths.eq_trans. 2: eauto.
-  eapply LPaths.eq_trans. eapply PathsMap.gcombine_bot. auto.
-  eapply LPaths.eq_trans.
-  2: { symmetry. eapply PathsMap.gcombine_bot. auto. }
-  (* helper function to use PathsMap.gsspec *)
-  assert (FEQ: forall m1 m2 i,
-             LPaths.eq
-               (match f m1!i m2!i with
-                | Some x => x
-                | None => LPaths.bot
-                end) (LPaths.lub (PathsMap.get i m1) (PathsMap.get i m2))).
-  { intros. unfold PathsMap.get.
-    destruct (m1 ! i); destruct (m2 ! i).
-    + simpl. reflexivity.
-    + simpl. red. red. intros. unfold LPaths.lub.
-      split. eapply Paths.union_2.
-      intros A. eapply Paths.union_1 in A. destruct A.
-      auto.
-      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
-      eauto.
-    + simpl. red. red. intros. unfold LPaths.lub.
-      split. eapply Paths.union_3.
-      intros A. eapply Paths.union_1 in A. destruct A.
-      auto.
-      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
-      eauto. auto.
-    + simpl. red. red. intros. unfold LPaths.lub.
-      split. eapply Paths.union_3.
-      intros A. eapply Paths.union_1 in A. destruct A.
-      auto.
-      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
-      eauto. }
-  etransitivity. eapply FEQ.
-  symmetry. etransitivity. eapply FEQ.
-  unfold init, uninit.
+  generalize (own_consistent0 id). intros WP.
+  set (pid := (local_of_place p)) in *.
   do 2 erewrite PathsMap.gsspec.
-  destruct (peq id' id).
-  - subst.
-    admit.
-  - reflexivity.
-           
+  destruct (peq id pid).
+  - subst.    
+    red. red. intros.
+    set (I := (PathsMap.get pid own_init0)) in *.
+    set (U := (PathsMap.get pid own_uninit0)) in *.
+    set (W := (PathsMap.get pid own_universe0)) in *.
+    split.
+    + intros IN.
+      eapply WP. 
+      eapply Paths.union_1 in IN. destruct IN as [IN1 | IN2].
+      * eapply Paths.filter_1 in IN1.
+        eapply Paths.union_2.
+        auto.        
+        red. Morphisms.solve_proper.
+      * eapply Paths.union_1 in IN2. destruct IN2 as [IN3 | IN4].
+        -- eapply Paths.union_3. auto.
+        -- eapply Paths.filter_1 in IN4.
+           eapply WP. auto.
+           red. Morphisms.solve_proper.
+    + intros IN.
+      eapply WP in IN. eapply Paths.union_1 in IN.
+      destruct IN as [IN1 | IN2].
+      * destruct (negb (is_prefix p a)) eqn: FL.
+        -- eapply Paths.union_2.
+           eapply Paths.filter_3; auto.
+           red. Morphisms.solve_proper.
+        -- eapply Paths.union_3. eapply Paths.union_3.
+           eapply negb_false_iff in FL.
+           eapply Paths.filter_3; auto.
+           red. Morphisms.solve_proper.
+           eapply WP. eapply Paths.union_2. auto.
+      * eapply Paths.union_3.
+        eapply Paths.union_2. auto.
+  - auto.
+Defined.           
                             
-  
-                                      
-  
 
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
