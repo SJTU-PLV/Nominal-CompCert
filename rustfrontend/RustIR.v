@@ -436,7 +436,7 @@ Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: n
       do body_start <- transl_stmt stmt (sel ++ [Selloop]) loop_jump_node (Some loop_jump_node) (Some succ);
       do _ <- update_instr loop_jump_node (Inop body_start);
       (* return loop_jump_node and return body_start are equivalent *)
-      ret body_start
+      ret loop_jump_node
   | Sbreak =>
       match brk with
       | None =>

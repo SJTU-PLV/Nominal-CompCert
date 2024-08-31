@@ -211,8 +211,9 @@ End COMP_ENV.
 Definition remove_place (p: place) (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in  
-  let rm := Paths.filter (fun elt => is_prefix p elt) l in
-  PathsMap.set id (Paths.diff l rm) m.
+  let rm := Paths.filter (fun elt => negb (is_prefix p elt)) l in
+  PathsMap.set id rm m.
+
 
 Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
   match p with 

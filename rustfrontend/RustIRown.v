@@ -274,8 +274,9 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_owned own p = true)
     (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
+    (* move p to match drop p *)
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
-      (Dropplace f (Some st) ps k le own m)
+      (Dropplace f (Some st) ps k le (move_place own p) m)
 | step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)
@@ -285,7 +286,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
     (* We are dropping p. fp is the fully owned place which is split into p::l *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m) E0
-      (Dropplace f (Some (drop_fully_owned_box l)) ps k le (move_place own p) m')
+      (Dropplace f (Some (drop_fully_owned_box l)) ps k le own m')
 | step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l
     (* It corresponds to the call step to the drop glue of this struct *)
     (PTY: typeof_place p = Tstruct orgs id)

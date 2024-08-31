@@ -63,6 +63,11 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
               remove_option p' before
             else
               add_option S p' before
+        | Sdrop p =>
+            if flag then
+              remove_place p before
+            else
+              add_place S p before
         | _ => before
         end
         end
@@ -185,7 +190,7 @@ Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -
     (SEL: cfg ! loop_jump_node = Some (Inop loop_start)),
     (* next is not specific because loop is impossible to terminate
     normally *)
-    tr_stmt body cfg (Sloop s) loop_start next brk cont endn
+    tr_stmt body cfg (Sloop s) loop_jump_node next brk cont endn
 | tr_Sbreak: forall pc brk cont endn
     (SEL: cfg ! pc = Some (Inop brk)),
     tr_stmt body cfg Sbreak pc brk cont (Some brk) endn
@@ -199,30 +204,42 @@ Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -
 .
 
 
-
 (** * Soundness of Initial Analysis *)
 
+Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
+| tr_fun_intro: forall entry cfg
+    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
+    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret),
+    tr_fun f nret cfg.
 
-(* relation between the selector and the (stmt, cont) pair *)
-Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont -> Prop :=
-| sel_stmt_base: forall sel n s k,
-    select_stmt body sel = Some s ->
-    match_instr_stmt body (Isel sel n) s k
-| sel_stmt_seq: forall sel n s1 s2 k,
-    match_instr_stmt body (Isel sel n) s1 (Kseq s2 k) ->
-    match_instr_stmt body (Isel sel n) (Ssequence s1 s2) k
-| sel_stmt_kseq: forall sel n s k,
-    match_instr_stmt body (Isel sel n) s k ->
-    match_instr_stmt body (Isel sel n) Sskip (Kseq s k)
-| sel_stmt_ifthenelse: forall e n1 n2 s1 s2 k,
-    match_instr_stmt body (Icond e n1 n2) (Sifthenelse e s1 s2) k
-| sel_stmt_loop: forall n s k,    
-    match_instr_stmt body (Inop n) (Sloop s) k
-| sel_stmt_break: forall n k,    
-    match_instr_stmt body (Inop n) Sbreak k
-| sel_stmt_continue: forall n k,
-    match_instr_stmt body (Inop n) Scontinue k
+Inductive tr_cont : statement -> rustcfg -> cont -> node -> option node -> option node -> node -> Prop :=
+| tr_Kseq: forall body cfg s pc next cont brk nret k
+    (STMT: tr_stmt body cfg s pc next cont brk nret)
+    (CONT: tr_cont body cfg k next cont brk nret),
+    tr_cont body cfg (Kseq s k) pc cont brk nret
+| tr_Kstop: forall body cfg nret
+    (RET: cfg ! nret = Some Iend),
+    tr_cont body cfg Kstop nret None None nret
+| tr_Kloop: forall body cfg s body_start loop_jump_node exit_loop nret cont brk k
+    (STMT: tr_stmt body cfg s body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
+    (SEL: cfg ! loop_jump_node = Some (Inop body_start))
+    (CONT: tr_cont body cfg k exit_loop cont brk nret),
+    tr_cont body cfg (Kloop s k) loop_jump_node cont brk nret
+| tr_Kdropplace: forall body cfg k pc cont brk nret f st l le own
+    (CONT: tr_cont body cfg k pc cont brk nret)
+    (TRFUN: tr_fun f nret cfg),
+    tr_cont body cfg (Kdropplace f st l le own k) pc cont brk nret
+| tr_Kdropcall: forall body cfg k pc cont brk nret st membs b ofs id
+    (CONT: tr_cont body cfg k pc cont brk nret),
+    tr_cont body cfg (Kdropcall id (Vptr b ofs) st membs k) pc cont brk nret
+| tr_Kcall: forall body1 cfg1 body2 cfg2 k pc cont brk nret1 nret2 f le own p
+    (RET: cfg1 ! nret1 = Some Iend)
+    (* invariant for the caller *)
+    (CONT: tr_cont body2 cfg2 k pc cont brk nret2)
+    (TRFUN: tr_fun f nret2 cfg2),
+    tr_cont body1 cfg1 (Kcall p f le own k) nret1 None None nret1
 .
+
 
 Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
   { sound_own_init: PathsMap.ge init own.(own_init);
@@ -233,6 +250,17 @@ Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
 
     
 (** ** Semantic invariant *)
+
+(* relation of moveing split places *)
+Inductive move_split_places : own_env -> list (place * bool) -> own_env -> Prop :=
+| move_split_places_nil: forall own,
+    move_split_places own nil own
+| move_split_places_cons: forall own1 own2 own3 p full l
+    (MOVE: move_place own1 p = own2)
+    (MSPLIT: move_split_places own2 l own3),
+    move_split_places own1 ((p,full) :: l) own3
+.
+  
 
 Section SOUNDNESS.
 
@@ -250,39 +278,41 @@ Inductive sound_cont: cont -> Prop :=
 | sound_cont_loop: forall s k,
     sound_cont k ->
     sound_cont (Kloop s k)
-| sound_cont_call: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg instr k own le p
-    (AN: analyze ce f = OK (initMap, uninitMap, universe))
-    (INIT: initMap !! pc = mayinit)
-    (UNINIT: uninitMap !! pc =  mayuninit)
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (SEL: cfg ! pc = Some instr)
-    (IS: match_instr_stmt f.(fn_body) instr Sskip k)
-    (OWN: sound_own own mayinit mayuninit universe)
-    (CONT: sound_cont k),
-    sound_cont (Kcall p f le own k)
-| sound_cont_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg instr k own le st l
-    (AN: analyze ce f = OK (initMap, uninitMap, universe))
-    (INIT: initMap !! pc =  mayinit)
-    (UNINIT: uninitMap !! pc =  mayuninit)
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (SEL: cfg ! pc = Some instr)
-    (IS: match_instr_stmt f.(fn_body) instr Sskip k)
-    (OWN: sound_own own mayinit mayuninit universe)
-    (CONT: sound_cont k),
-    sound_cont (Kdropplace f st l le own k)
-| sound_cont_dropcall: forall id b ofs st membs k,
-    sound_cont k ->
-    sound_cont (Kdropcall id (Vptr b ofs) st membs k)
-  .
-    
-Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg instr s k own le m
+| sound_cont_call: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg k own le p cont brk nret
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc = mayinit)
     (UNINIT: uninitMap !! pc = mayuninit)
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (SEL: cfg ! pc = Some instr)
-    (IS: match_instr_stmt f.(fn_body) instr s k)
+    (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
+    (OWN: sound_own own mayinit mayuninit universe)
+    (CONT: sound_cont k),
+    sound_cont (Kcall p f le own k)
+| sound_cont_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg k own1 own2 le st l cont brk nret
+    (AN: analyze ce f = OK (initMap, uninitMap, universe))
+    (INIT: initMap !! pc =  mayinit)
+    (UNINIT: uninitMap !! pc =  mayuninit)
+    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
+    (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
+    (OWN: sound_own own2 mayinit mayuninit universe)
+    (MOVESPLIT: move_split_places own1 l own2)
+    (CONT: sound_cont k),
+    sound_cont (Kdropplace f st l le own1 k)
+| sound_cont_dropcall: forall id b ofs st membs k,
+    sound_cont k ->
+    sound_cont (Kdropcall id (Vptr b ofs) st membs k)
+.
+
+  
+Inductive sound_state: state -> Prop :=
+| sound_regular_state: forall f initMap uninitMap pc mayinit mayuninit universe cfg s k own le m nret next cont brk
+    (AN: analyze ce f = OK (initMap, uninitMap, universe))
+    (INIT: initMap !! pc = mayinit)
+    (UNINIT: uninitMap !! pc = mayuninit)
+    (* invariant of generate_cfg *)
+    (TRFUN: tr_fun f nret cfg)
+    (TRSTMT: tr_stmt f.(fn_body) cfg s pc next cont brk nret)
+    (TRCONT: tr_cont f.(fn_body) cfg k next cont brk nret)
+    (CONT: sound_cont k)
     (OWN: sound_own own mayinit mayuninit universe),
     sound_state (State f s k le own m)
 | sound_callstate: forall vf args k m
@@ -291,18 +321,21 @@ Inductive sound_state: state -> Prop :=
 | sound_returnstate: forall v k m
     (CONT: sound_cont k),
     sound_state (Returnstate v k m)
-| sound_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg instr k own le st l m
+| sound_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe cfg k own1 own2 le st l m nret next cont brk
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc = mayinit)
     (UNINIT: uninitMap !! pc = mayuninit)
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (SEL: cfg ! pc = Some instr)
-    (IS: match_instr_stmt f.(fn_body) instr Sskip k)
-    (OWN: sound_own own mayinit mayuninit universe)
+    (* invariant of generate_cfg *)
+    (TRFUN: tr_fun f nret cfg)
+    (TRCONT: tr_cont f.(fn_body) cfg k next cont brk nret)
+    (* small-step move_place to simulate big-step move_place in
+    transfer *)
+    (MOVESPLIT: move_split_places own1 l own2)
+    (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
-    sound_state (Dropplace f st l k le own m)
-| sound_dropstate: forall id b ofs st membs k m,
-    sound_cont k ->
+    sound_state (Dropplace f st l k le own1 m)
+| sound_dropstate: forall id b ofs st membs k m
+    (CONT: sound_cont k),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
 .
 
@@ -318,12 +351,37 @@ Lemma analyze_successor: forall f initMap uninitMap mayinit1 mayinit2 mayuninit1
     (PC: In pc2 (successors_instr instr))
     (TFINIT: transfer universe true f cfg pc1 mayinit1 = mayinit2)
     (TFUNINIT: transfer universe false f cfg pc1 mayuninit1 = mayuninit2),
-    PathsMap.ge (initMap !! pc2) mayinit1
-    /\ PathsMap.ge (uninitMap !! pc2) mayuninit1
+    PathsMap.ge (initMap !! pc2) mayinit2
+    /\ PathsMap.ge (uninitMap !! pc2) mayuninit2
 .
-  (* use fixpoint_solution *)
+Proof.  (* use fixpoint_solution *)
+  unfold analyze; intros. 
+  monadInv AN.
+  rewrite EQ1 in CFG. inv CFG.
+  set (params_init := (fold_right (add_place x)
+               (PTree.map
+                  (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)
+               (map
+                  (fun elt : ident * type =>
+                   Plocal (fst elt) (snd elt)) (fn_params f)))) in *.
+  set (vars_uninit := (fold_right (add_place x)
+                   (PTree.map
+                      (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)
+                   (map
+                      (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f)))) in *.
+  destruct (DS.fixpoint cfg successors_instr (transfer x true f cfg) entry
+              params_init) eqn: INITMAP; try congruence.
+  destruct (DS.fixpoint cfg successors_instr (transfer x false f cfg) entry
+              vars_uninit) eqn: UNINITMAP; try congruence.
+  inv EQ2.
+  split.
+  - eapply DS.fixpoint_solution; eauto.
+    (** TODO: transfer bot to bot *)
+    admit.
+  - eapply DS.fixpoint_solution; eauto.
+    admit.
 Admitted.
-
+    
          
 (* use transfer to act as the bridge to construct the succ abstract
 env *)
@@ -343,25 +401,59 @@ Lemma analyze_succ: forall f initMap uninitMap mayinit1 mayinit2 mayuninit1 mayu
     /\ sound_own own2 mayinit3 mayuninit3 universe.
   (* show that PathsMap.ge ae1 ae2 and sound_own ae1 implies sound_own
   ae2 *)
-Admitted.
+Proof.
+  intros. exploit analyze_successor; eauto.
+  intros (A & B).
+  exists (initMap !! pc2), (uninitMap !! pc2).
+  split; auto. split; auto.
+  destruct OWN.
+  constructor.
+  - eapply PathsMap.ge_trans; eauto.
+  - eapply PathsMap.ge_trans; eauto.
+  - eapply PathsMap.eq_trans; eauto.
+    apply PathsMap.eq_refl.
+Qed.
 
-Lemma sound_state_succ: forall f initMap uninitMap mayinit1 mayinit2 mayuninit1 mayuninit2 universe entry cfg instr1 instr2 own2 pc1 pc2 s k m le
+
+Lemma sound_state_succ: forall f initMap uninitMap mayinit1 mayinit2 mayuninit1 mayuninit2 universe entry cfg instr1 own2 pc1 pc2 s k m le nret next cont brk
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc1 = mayinit1)
     (UNINIT: uninitMap !! pc1 = mayuninit1)
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (SEL1: cfg ! pc1 = Some instr1)
     (PC: In pc2 (successors_instr instr1))
-    (* how to prove it? *)
-    (SEL2: cfg ! pc2 = Some instr2)
-    (IS: match_instr_stmt f.(fn_body) instr2 s k)
+    (TRFUN: tr_fun f nret cfg)
+    (TRSTMT: tr_stmt f.(fn_body) cfg s pc2 next cont brk nret)
+    (TRCONT: tr_cont f.(fn_body) cfg k next cont brk nret)
+    (CONT: sound_cont k)
     (TFINIT: transfer universe true f cfg pc1 mayinit1 = mayinit2)
     (TFUNINIT: transfer universe false f cfg pc1 mayuninit1 = mayuninit2)
     (OWN: sound_own own2 mayinit2 mayuninit2 universe),
     sound_state (State f s k le own2 m).
-Admitted.
+Proof.
+  intros. exploit analyze_succ; eauto.
+  intros (mayinit3 & mayuninit3 & (A & B & C)).
+  econstructor; eauto.
+Qed.  
 
 
+(* Key point: match the small step ownership transfer and the big step
+analysis in transfer function of Sdrop *)
+Lemma sound_step_droppplace: forall s t s',
+    step_dropplace ge s t s' ->
+    sound_state s ->
+    sound_state s'.
+Proof.
+  intros s t s' STEP SOUND.
+  inv STEP; inv SOUND.
+  inv MOVESPLIT.
+  - econstructor; eauto.
+    
+    
+  - econstructor; eauto.
+  - econstructor; eauto.
+
+    
 Theorem sound_step: forall s t s',
     step ge s t s' ->
     sound_state s ->
@@ -370,18 +462,43 @@ Proof.
   intros s t s' STEP SOUND.
   inv STEP; inv SOUND.
   (* step_assign *)
-  - inv IS.
-    eapply sound_state_succ with (pc2:= n); eauto.
+  - inv TRSTMT. inv TRFUN.
+    eapply sound_state_succ with (pc2:= next); eauto.
     simpl. auto.
-    (* TODO: properties of generated cfg *)
-    admit.
-    admit.
+    econstructor; eauto.
+    econstructor.
     (* prove sound_own *)
     inv OWN.
-    unfold transfer. rewrite SEL. rewrite H3.
+    unfold transfer. rewrite SEL. rewrite STMT.
     (* maybe easy *)
     unfold own_check_expr, own_check_assign in *.
     admit.
+  (* step_assign_variant *)
+  - inv TRSTMT. inv TRFUN.
+    eapply sound_state_succ with (pc2:= next); eauto.
+    simpl. auto.
+    econstructor; eauto.
+    econstructor.
+    (* prove sound_own *)
+    inv OWN.
+    unfold transfer. rewrite SEL. rewrite STMT.
+    admit.
+  (* step_box *)
+  - inv TRSTMT. inv TRFUN.
+    eapply sound_state_succ with (pc2:= next); eauto.
+    simpl. auto.
+    econstructor; eauto.
+    econstructor.
+    (* prove sound_own *)
+    inv OWN.
+    unfold transfer. rewrite SEL. rewrite STMT.
+    admit.
+  (* step_to_dropplace *)
+  - inv TRSTMT.
+    econstructor; eauto.
+  (* step_in_dropplace *)
+  -
+    
 Admitted.      
     
 End SOUNDNESS.

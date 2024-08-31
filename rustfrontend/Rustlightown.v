@@ -77,7 +77,31 @@ universe, init ∩ uninit = ∅ and etc *)
 Record own_env :=
   mkown { own_init: PathsMap.t;
           own_uninit: PathsMap.t;
-          own_universe: PathsMap.t } .
+          own_universe: PathsMap.t;
+
+          (* algebraic properties of own_env *)
+          own_consistent: PathsMap.eq (PathsMap.lub own_init own_uninit) own_universe;
+          own_disjoint: forall id,
+            Paths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_init)) Paths.empty;
+          (* ∀ p ∈ W, p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
+          own_wf_init: forall (p: place),
+            let id := local_of_place p in
+            let init := PathsMap.get id own_init in
+            let universe := PathsMap.get id own_universe in
+            Paths.For_all (fun p => if Paths.mem p init
+                                 then Paths.For_all (fun p' => if is_prefix p' p then Paths.mem p' init = true else True) universe
+                                 else True) universe;
+
+          (* ∀ p ∈ W, p ∈ U → ∀ p' ∈ W, is_prefix p p' → p' ∈ U *)
+          own_wf_uninit: forall (p: place),
+            let id := local_of_place p in
+            let uninit := PathsMap.get id own_uninit in
+            let universe := PathsMap.get id own_universe in
+            Paths.For_all (fun p => if Paths.mem p uninit
+                                 then Paths.For_all (fun p' => if is_prefix p p' then Paths.mem p' uninit = true else True) universe
+                                 else True) universe;
+
+    }.
 
 Definition is_owned (own: own_env) (p: place): bool :=
   let id := local_of_place p in
@@ -159,12 +183,83 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
       own_check_pexpr own pe1 && own_check_pexpr own pe2
   | _ => true
 end.          
+  
 
-Definition move_place (own: own_env) (p: place) : own_env :=
-  (mkown (remove_place p own.(own_init))
-     (add_place own.(own_universe) p own.(own_uninit))
-     own.(own_universe)).
-
+Program Definition move_place (own: own_env) (p: place) : own_env :=
+  {| own_init := (remove_place p own.(own_init));
+    own_uninit := (add_place own.(own_universe) p own.(own_uninit));
+    own_universe := own.(own_universe) |}.
+Next Obligation.
+  destruct own. simpl.
+  unfold remove_place, add_place.
+  clear own_disjoint0 own_wf_init0 own_wf_uninit0.
+  set (id := (local_of_place p)) in *.
+  set (init := (PathsMap.set id
+             (Paths.filter
+                (fun elt : Paths.elt => negb (is_prefix p elt))
+                (PathsMap.get id own_init0)) own_init0)).
+  set (uninit := (PathsMap.set id
+          (Paths.union (PathsMap.get id own_uninit0)
+             (Paths.filter (fun elt : Paths.elt => is_prefix p elt)
+                (PathsMap.get id own_universe0))) own_uninit0)).
+  unfold PathsMap.lub in *.
+  set (f := (fun a b : option LPaths.t =>
+        match a with
+        | Some u =>
+            match b with
+            | Some v => Some (LPaths.lub u v)
+            | None => a
+            end
+        | None => b
+        end)) in *.
+  red. intros id'.
+  generalize (own_consistent0 id').
+  intros EQ. 
+  eapply LPaths.eq_trans. 2: eauto.
+  eapply LPaths.eq_trans. eapply PathsMap.gcombine_bot. auto.
+  eapply LPaths.eq_trans.
+  2: { symmetry. eapply PathsMap.gcombine_bot. auto. }
+  (* helper function to use PathsMap.gsspec *)
+  assert (FEQ: forall m1 m2 i,
+             LPaths.eq
+               (match f m1!i m2!i with
+                | Some x => x
+                | None => LPaths.bot
+                end) (LPaths.lub (PathsMap.get i m1) (PathsMap.get i m2))).
+  { intros. unfold PathsMap.get.
+    destruct (m1 ! i); destruct (m2 ! i).
+    + simpl. reflexivity.
+    + simpl. red. red. intros. unfold LPaths.lub.
+      split. eapply Paths.union_2.
+      intros A. eapply Paths.union_1 in A. destruct A.
+      auto.
+      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
+      eauto.
+    + simpl. red. red. intros. unfold LPaths.lub.
+      split. eapply Paths.union_3.
+      intros A. eapply Paths.union_1 in A. destruct A.
+      auto.
+      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
+      eauto. auto.
+    + simpl. red. red. intros. unfold LPaths.lub.
+      split. eapply Paths.union_3.
+      intros A. eapply Paths.union_1 in A. destruct A.
+      auto.
+      exfalso. eapply Paths.empty_1. unfold LPaths.bot in H.
+      eauto. }
+  etransitivity. eapply FEQ.
+  symmetry. etransitivity. eapply FEQ.
+  unfold init, uninit.
+  do 2 erewrite PathsMap.gsspec.
+  destruct (peq id' id).
+  - subst.
+    admit.
+  - reflexivity.
+           
+                            
+  
+                                      
+  
 
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
@@ -1024,7 +1119,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (OWN: is_owned own p = true)
     (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
-      (Dropplace f (Some st) ps k le own m)
+      (Dropplace f (Some st) ps k le (move_place own p) m)
 | step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)
@@ -1034,7 +1129,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),
     (* We are dropping p. fp is the fully owned place which is split into p::l *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m) E0
-      (Dropplace f (Some (drop_fully_owned_box l)) ps k le (move_place own p) m')
+      (Dropplace f (Some (drop_fully_owned_box l)) ps k le own m')
 | step_dropplace_struct: forall m k orgs co id p b ofs f le own ps l
     (* It corresponds to the call step to the drop glue of this struct *)
     (PTY: typeof_place p = Tstruct orgs id)
