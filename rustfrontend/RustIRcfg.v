@@ -444,12 +444,12 @@ Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -
     (* next is not specific because loop is impossible to terminate
     normally *)
     tr_stmt body cfg (Sloop s) loop_jump_node next brk cont endn
-| tr_Sbreak: forall pc brk cont endn
-    (SEL: cfg ! pc = Some (Inop brk)),
-    tr_stmt body cfg Sbreak pc brk cont (Some brk) endn
-| tr_Scontinue: forall pc brk cont endn
-    (SEL: cfg ! pc = Some (Inop cont)),
-    tr_stmt body cfg Scontinue pc cont (Some cont) brk endn
+(* backward traversal of CFG. [next] node is used in tr_cont, so it
+should matches the AST *)
+| tr_Sbreak: forall brk cont endn next,
+    tr_stmt body cfg Sbreak brk next cont (Some brk) endn
+| tr_Scontinue: forall brk cont endn next,
+    tr_stmt body cfg Scontinue cont next (Some cont) brk endn
 | tr_Sreturn: forall pc sel endn e cont brk
     (SEL: cfg ! pc = Some (Isel sel endn))
     (STMT: select_stmt body sel = Some (Sreturn e)),
@@ -459,7 +459,8 @@ Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -
 Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
 | tr_fun_intro: forall entry cfg
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret),
+    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret)
+    (RET: cfg ! nret = Some Iend),
     tr_fun f nret cfg.
 
 

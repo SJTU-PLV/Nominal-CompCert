@@ -152,7 +152,7 @@ Inductive tr_cont : statement -> rustcfg -> cont -> node -> option node -> optio
     (STMT: tr_stmt body cfg s body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
     (SEL: cfg ! loop_jump_node = Some (Inop body_start))
     (CONT: tr_cont body cfg k exit_loop cont brk nret),
-    tr_cont body cfg (Kloop s k) loop_jump_node cont brk nret
+    tr_cont body cfg (Kloop s k) loop_jump_node (Some loop_jump_node) (Some exit_loop) nret
 | tr_Kdropplace: forall body cfg k pc cont brk nret f st l le own
     (CONT: tr_cont body cfg k pc cont brk nret)
     (TRFUN: tr_fun f nret cfg),
@@ -160,13 +160,19 @@ Inductive tr_cont : statement -> rustcfg -> cont -> node -> option node -> optio
 | tr_Kdropcall: forall body cfg k pc cont brk nret st membs b ofs id
     (CONT: tr_cont body cfg k pc cont brk nret),
     tr_cont body cfg (Kdropcall id (Vptr b ofs) st membs k) pc cont brk nret
-| tr_Kcall: forall body1 cfg1 body2 cfg2 k pc cont brk nret1 nret2 f le own p
-    (RET: cfg1 ! nret1 = Some Iend)
-    (* invariant for the caller *)
-    (CONT: tr_cont body2 cfg2 k pc cont brk nret2)
-    (TRFUN: tr_fun f nret2 cfg2),
-    tr_cont body1 cfg1 (Kcall p f le own k) nret1 None None nret1
-.
+| tr_Kcall: forall body cfg k nret f le own p
+    (STK: tr_stacks (Kcall p f le own k))
+    (RET: cfg ! nret = Some Iend),
+    tr_cont body cfg (Kcall p f le own k) nret None None nret
+
+(* Used to restore tr_cont in function calls *)
+with tr_stacks: cont -> Prop :=
+| tr_stacks_stop:
+  tr_stacks Kstop
+| tr_stacks_call: forall f nret cfg pc cont brk k own p le
+    (TRFUN: tr_fun f nret cfg)
+    (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret),
+    tr_stacks (Kcall p f le own k).
 
 
 Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
@@ -198,6 +204,14 @@ Variable se: Genv.symtbl.
 Let ge := RustIR.globalenv se prog.
 Let ce := ge.(genv_cenv).
 
+(* We can generate cfg for all analyzed functions. This property is
+guaranteed by the compilation pass which actually uses the analyze
+function *)
+Hypothesis function_analyzed: forall (v : val) (f: function),
+    Genv.find_funct ge v = Some (Internal f) ->
+    exists initMap uninitMap universe,
+      analyze ce f = OK (initMap, uninitMap, universe).
+
 Inductive sound_cont: cont -> Prop :=
 | sound_cont_stop: sound_cont Kstop
 | sound_cont_seq: forall s k,
@@ -206,15 +220,19 @@ Inductive sound_cont: cont -> Prop :=
 | sound_cont_loop: forall s k,
     sound_cont k ->
     sound_cont (Kloop s k)
-| sound_cont_call: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg k own le p cont brk nret
+| sound_cont_call: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg k own1 own2 le p cont brk nret
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc = mayinit)
     (UNINIT: uninitMap !! pc = mayuninit)
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
-    (OWN: sound_own own mayinit mayuninit universe)
+    (* own2 is built after the function call *)
+    (AFTER: own2 = match p with
+                   | Some p => move_place own1 p
+                   | None => own1 end)
+    (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
-    sound_cont (Kcall p f le own k)
+    sound_cont (Kcall p f le own1 k)
 | sound_cont_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe  cfg k own1 own2 le st l cont brk nret
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc =  mayinit)
@@ -239,15 +257,19 @@ Inductive sound_state: state -> Prop :=
     (* invariant of generate_cfg *)
     (TRFUN: tr_fun f nret cfg)
     (TRSTMT: tr_stmt f.(fn_body) cfg s pc next cont brk nret)
+    (* k may be contain some statement not located in [next], e.g.,
+    statements after continue and break *)
     (TRCONT: tr_cont f.(fn_body) cfg k next cont brk nret)
     (CONT: sound_cont k)
     (OWN: sound_own own mayinit mayuninit universe),
     sound_state (State f s k le own m)
 | sound_callstate: forall vf args k m
-    (CONT: sound_cont k),
+    (CONT: sound_cont k)
+    (TRSTK: tr_stacks k),
     sound_state (Callstate vf args k m) 
 | sound_returnstate: forall v k m
-    (CONT: sound_cont k),
+    (CONT: sound_cont k)
+    (TRSTK: tr_stacks k),
     sound_state (Returnstate v k m)
 | sound_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe cfg k own1 own2 le st l m nret cont brk
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
@@ -266,6 +288,41 @@ Inductive sound_state: state -> Prop :=
     (CONT: sound_cont k),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
 .
+
+(* inversion of analyze  *)
+Lemma analyze_function_inv: forall f initMap uninitMap universe
+    (AN: analyze ce f = OK (initMap, uninitMap, universe)),
+  exists entry cfg, generate_cfg f.(fn_body) = OK (entry, cfg).
+Admitted.
+
+    
+(* soundness of function entry *)
+Lemma sound_function_entry: forall f initMap uninitMap universe entry cfg own
+    (AN: analyze ce f = OK (initMap, uninitMap, universe))
+    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
+    (FENTRY: init_own_env ce f = OK own),
+    sound_own own initMap!!entry uninitMap!!entry universe.
+Admitted.
+
+(* Some properties of call_cont *)
+Lemma sound_call_cont: forall k,
+    sound_cont k -> sound_cont (call_cont k).
+Proof.
+  intros k SOUND.
+  induction k; inv SOUND; simpl; try econstructor; eauto.
+Qed.
+
+Lemma tr_stacks_call_cont: forall k body cfg pc cont brk nret
+    (SOUND: tr_cont body cfg k pc cont brk nret),
+  tr_stacks (call_cont k).
+Proof.
+  induction k; intros; inv SOUND; simpl; try (econstructor; eauto; fail).
+  - eapply IHk. eauto.
+  - eapply IHk. eauto.
+  - inv STK. econstructor; eauto.
+  - eapply IHk. eauto.
+  - eapply IHk. eauto.
+Qed.
 
 (* use fixpoint_soulution to prove that the final abstract env
 approximates more than the abstract env computed by transfer
@@ -420,8 +477,8 @@ Proof.
   inv STEP; inv SOUND.
   (* step_assign *)
   - inv TRSTMT. inv TRFUN.
-    eapply sound_state_succ with (pc2:= next); eauto.
-    simpl. auto.
+    eapply sound_state_succ with (pc1:= pc); eauto.
+    simpl. eauto.
     econstructor; eauto.
     econstructor.
     (* prove sound_own *)
@@ -432,7 +489,7 @@ Proof.
     admit.
   (* step_assign_variant *)
   - inv TRSTMT. inv TRFUN.
-    eapply sound_state_succ with (pc2:= next); eauto.
+    eapply sound_state_succ with (pc1:= pc); eauto.
     simpl. auto.
     econstructor; eauto.
     econstructor.
@@ -442,7 +499,7 @@ Proof.
     admit.
   (* step_box *)
   - inv TRSTMT. inv TRFUN.
-    eapply sound_state_succ with (pc2:= next); eauto.
+    eapply sound_state_succ with (pc1:= pc); eauto.
     simpl. auto.
     econstructor; eauto.
     econstructor.
@@ -463,7 +520,7 @@ Proof.
     econstructor; eauto.
   (* step_storagelive *)
   - inv TRSTMT. inv TRFUN.
-    eapply sound_state_succ with (pc2:= next); eauto.
+    eapply sound_state_succ with (pc1:= pc); eauto.
     simpl. auto.
     econstructor; eauto.
     econstructor.
@@ -472,13 +529,130 @@ Proof.
     auto.
   (* step_storagedead *)
   - inv TRSTMT. inv TRFUN.
-    eapply sound_state_succ with (pc2:= next); eauto.
+    eapply sound_state_succ with (pc1:= pc); eauto.
     simpl. auto.
     econstructor; eauto.
     econstructor.
     (* prove sound_own *)
     unfold transfer. rewrite SEL. rewrite STMT.
     auto.
+  - inv TRSTMT. econstructor.
+    inv TRFUN.
+    econstructor; eauto.
+    exploit analyze_succ. 1-4: eauto. eapply SEL.
+    instantiate (1 :=next). simpl. auto. eauto. eauto.
+    (* prove sound_own *)
+    instantiate (1 := move_place own2 p). admit.
+    intros (mayinit3 & mayuninit3 & A & B & C). subst. auto.
+    econstructor; eauto.
+  (* step_internal_function *)
+  - exploit function_analyzed; eauto.
+    intros (initMap & uninitMap & universe & AN).
+    exploit analyze_function_inv; eauto.
+    intros (entry & cfg & CFG).
+    exploit generate_cfg_charact; eauto.
+    intros (nret & TRFUN).
+    inv ENTRY.
+    exploit sound_function_entry; eauto.
+    intros SOUND_INIT.
+    inv TRFUN. 
+    econstructor; eauto.
+    econstructor; eauto.
+    rewrite CFG in CFG0. inv CFG0. 
+    (* tr_cont *)
+    inv TRSTK.
+    econstructor. auto.
+    econstructor; eauto.
+    econstructor; eauto.
+    (* sound_own *)
+    rewrite CFG in CFG0. inv CFG0. 
+    auto.
+  (* step_external_function *)    
+  - econstructor; eauto.
+  (* step_return_0 *)
+  - econstructor.
+    apply sound_call_cont; auto.
+    eapply tr_stacks_call_cont; eauto.
+  (* step_return_1 *)
+  - econstructor.
+    apply sound_call_cont; auto.
+    eapply tr_stacks_call_cont; eauto.
+  (* step_skip_call *)
+  - econstructor.
+    apply sound_call_cont; auto.
+    eapply tr_stacks_call_cont; eauto.
+  (* step_returnstate *)
+  - inv TRSTK. inv CONT.
+    econstructor; eauto.
+    econstructor.
+    (* prove sound_own *)
+    admit.
+  (* step_seq *)
+  - inv TRSTMT.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+  (* step_skip_seq *)
+  - inv TRSTMT. inv TRCONT.
+    econstructor; eauto.
+    inv CONT. auto.
+  (* step_continue_seq *)
+  - inv TRSTMT. inv TRCONT.
+    econstructor; eauto.
+    econstructor.
+    inv CONT. auto.
+  (* step_break_seq *)
+  - inv TRSTMT. inv TRCONT.
+    econstructor; eauto.
+    econstructor.
+    inv CONT. auto.
+  (* step_ifthenelse *)
+  - inv TRSTMT.
+    econstructor; eauto.
+    instantiate (1 := if b then n1 else n2).
+    destruct b; auto.
+    (** TODO: ifthenelse must use pure expression *)
+    admit.
+  (* step_loop *)
+  - inv TRSTMT.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+    inv TRFUN.
+    exploit analyze_succ. 1-4: eauto. eapply SEL.
+    simpl. eauto.
+    unfold transfer. rewrite SEL. eauto.
+    unfold transfer. rewrite SEL. eauto.
+    eauto.
+    intros (mayinit3 & mayuninit3 & A & B & C).
+    subst. auto.
+  (* step_skip_or_continue_loop *)
+  - inv TRCONT.
+    econstructor; eauto.    
+    econstructor; eauto.
+    inv TRFUN.
+    destruct H; inv H.
+    + inv TRSTMT.
+      exploit analyze_succ. 1-4: eauto. eapply SEL.
+      simpl. eauto.
+      unfold transfer. rewrite SEL. eauto.
+      unfold transfer. rewrite SEL. eauto.
+      eauto.
+      intros (mayinit3 & mayuninit3 & A & B & C).
+      subst. auto.
+    + inv TRSTMT.
+      exploit analyze_succ. 1-4: eauto. eapply SEL.
+      simpl. eauto.
+      unfold transfer. rewrite SEL. eauto.
+      unfold transfer. rewrite SEL. eauto.
+      eauto.
+      intros (mayinit3 & mayuninit3 & A & B & C).
+      subst. auto.
+  (* step_break_loop *)
+  - inv TRSTMT. inv TRCONT. inv CONT.
+    econstructor; eauto.
+    econstructor.
 Admitted.
 
 End SOUNDNESS.
+

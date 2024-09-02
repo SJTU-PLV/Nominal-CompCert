@@ -63,8 +63,10 @@ Inductive cont : Type :=
 
 Fixpoint call_cont (k: cont) : cont :=
   match k with
-  | Kseq s k => call_cont k
-  | Kloop s k => call_cont k
+  | Kseq _ k
+  | Kloop _ k
+  | Kdropplace _ _ _ _ _ k
+  | Kdropcall _ _ _ _ k  => call_cont k
   | _ => k
   end.
 
