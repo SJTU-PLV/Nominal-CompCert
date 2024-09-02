@@ -1136,12 +1136,12 @@ Proof.
   apply A. destruct chunk; simpl; lia.
 Qed.
 
-Lemma injp_acc_tl_storebytes' : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_storebytes'1 : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2',
     Mem.storebytes m1 b1 ofs1 vs1 = Some m1' ->
     Mem.storebytes m2 b2 (ofs1 + delta) vs2 = Some m2' ->
     length vs1 = length vs2 ->
     f b1 = Some (b2, delta) ->
-    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f m1' m2').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -1166,6 +1166,17 @@ Proof.
   - apply inject_separated_refl.
   - red. intros. congruence.
   - red. intros. exfalso. apply H6. eauto with mem.
+Qed.
+
+Lemma injp_acc_tl_storebytes' : forall f b1 b2 ofs1 delta vs1 vs2 m1 m2 m1' m2' Hm Hm',
+    Mem.storebytes m1 b1 ofs1 vs1 = Some m1' ->
+    Mem.storebytes m2 b2 (ofs1 + delta) vs2 = Some m2' ->
+    length vs1 = length vs2 ->
+    f b1 = Some (b2, delta) ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_storebytes'1. apply H. apply H0. all: eauto.
+  intro X. inv X. constructor; eauto.
 Qed.
 
 Lemma injp_acc_tl_storebytes : forall f b1 b2 ofs1 ofs2 vs1 vs2 m1 m2 m1' m2' Hm Hm',
