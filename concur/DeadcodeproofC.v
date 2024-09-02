@@ -588,13 +588,6 @@ Proof.
   intros. inv H. destruct H10 as [[_ X]_]. congruence.
 Qed.
 
-Record injp_world' :=
-  injpw' {
-    injpw_meminj : meminj;
-    injpw_m: mem;
-    injpw_tm: mem;
-    }.
-
 Inductive injp_acce_magree : injp_world -> injp_world' -> Prop :=
   injp_acce_magree_intro : forall f m1 m2 Hm f' m1' m2',
        Mem.ro_unchanged m1 m1' ->
@@ -623,6 +616,13 @@ Inductive injp_acci_magree :  injp_world -> injp_world' -> Prop :=
       inject_incr_local f f' m1 ->
       free_preserved f m1 m1' m2' ->
       injp_acci_magree (injpw f m1 m2 Hm) (injpw' f' m1' m2').
+
+Lemma acci_magree_tid1 : forall f m tm Hm f' m' tm',
+    injp_acci_magree (injpw f m tm Hm) (injpw' f' m' tm') ->
+    Mem.tid (Mem.support m') = Mem.tid (Mem.support m).
+Proof.
+  intros. inv H. destruct H12 as [[_ X]_]. congruence.
+Qed.
 
 Inductive match_states: injp_world -> state -> state -> Prop :=
   | match_regular_states:
@@ -979,7 +979,66 @@ Proof.
   eapply eagree_ge; eauto.
 Qed.
 
+  Lemma injp_acce_magree_tl : forall w j m tm j' m' tm',
+      injp_acce_magree w (injpw' j m tm) ->
+      injp_acc_tl' (injpw' j m tm) (injpw' j' m' tm') ->
+      injp_acce_magree w (injpw' j' m' tm').
+  Proof.
+  intros.
+  inv H. inv H0.
+  destruct H8 as [[S81 S82] H8].
+  destruct H9 as [[S91 S92] H9].
+  destruct H19 as [[S191 S192] H19].
+  destruct H20 as [[S201 S202] H20].
+  econstructor; eauto.
+  - eapply Mem.ro_unchanged_trans; eauto. inv H8. auto.
+  - eapply Mem.ro_unchanged_trans; eauto. inv H9. auto.
+  - red. intros. eapply H6; eauto. eapply H17; eauto. inv H8.
+    apply unchanged_on_support. auto.
+  - red. intros. eapply H7; eauto. eapply H18; eauto. inv H9.
+    apply unchanged_on_support. auto.
+  - split. constructor. lia. congruence.
+    eapply mem_unchanged_on_trans_implies_valid; eauto.
+    intros. simpl. destruct H. red in H. 
+    destruct (j b) as [[? ?]|] eqn: Hf'.
+    exploit H12; eauto. intros [X Y]. congruence.
+    auto.
+  - split. constructor. lia. congruence.
+    eapply mem_unchanged_on_trans_implies_valid; eauto.
+    intros. simpl. destruct H. red in H.
+    red. intros. destruct (f b0) as [[b' d']|] eqn:Hj.
+    apply H11 in Hj as Heq. rewrite H2 in Heq. inv Heq.
+    intro. eapply H; eauto. eapply H6; eauto using Mem.valid_block_inject_1.
+    exploit H12; eauto. inv Hm. inv mi_thread. inv Hms.
+    rewrite H10.
+    (* inversion Hm'. inv mi_thread.
+    erewrite Hjs0; eauto. *)
+    admit.
+    intros [X Y]. congruence.
+  - eapply inject_incr_trans; eauto.
+  - intros b1 b2 delta Hb Hb'' HT.
+      destruct (j b1) as [[xb2 xdelta] | ] eqn:Hb'.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply H21 in Hb'; split; congruence); subst.
+        eapply H12; eauto.
+      * edestruct H22; eauto.
+        intuition eauto using Mem.valid_block_unchanged_on.
+  - intros b1 b2 delta Hb Hb''.
+    destruct (j b1) as [[xb2 xdelta] | ] eqn:Hb'.
+    * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply H21 in Hb'; split; congruence); subst.
+      eapply H13; eauto.
+    * exploit H23; eauto. intro.
+      split. eapply Genv.thread_noglobal; eauto.
+      admit.
+  Admitted.
 
+  Lemma injp_acci_magree_tl : forall w j m tm j' m' tm',
+      injp_acci_magree w (injpw' j m tm) ->
+      injp_acc_tl' (injpw' j m tm) (injpw' j' m' tm') ->
+      injp_acci_magree w (injpw' j' m' tm').
+  Admitted.
+  
 Theorem step_simulation:
   forall S1 wp t S2, step ge S1 t S2 ->
   forall S1', match_states wp S1 S1' -> sound_state prog se wp S1 ->
@@ -1124,9 +1183,10 @@ Ltac UseTransfer :=
   eapply exec_Istore with (a := Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))). eauto.
   eauto. eauto.
   eapply match_succ_states; eauto. simpl; auto.
-  eauto 3 with na.
-  admit. admit.
-  
+  eauto 3 with na. 
+  eapply injp_acce_magree_tl; eauto. eapply injp_acc_tl_store'; eauto.
+  eapply injp_acci_magree_tl; eauto. eapply injp_acc_tl_store'; eauto.
+   
 + (* dead instruction, turned into a nop *)
   destruct a; simpl in H1; try discriminate.
   assert (MA': magree j m' tm (nlive ge sp0 nm)).
@@ -1136,22 +1196,9 @@ Ltac UseTransfer :=
   econstructor; split.
   eapply exec_Inop; eauto.
   eapply match_succ_states; eauto. simpl; auto.
-  admit. admit.
-  (* Acc. eapply Mem.ro_unchanged_trans. eauto. eapply Mem.ro_unchanged_store; eauto.
-  destruct H22 as [_ [A B]]. auto.
-  red. intros. eauto with mem.
-  red. intros. eauto with mem.
-  split. erewrite (Mem.support_store _ _ _ _ _ _ H1); eauto. inv H22. auto.
-  inv H22. eapply Mem.unchanged_on_trans. eauto.
-  eapply Mem.store_unchanged_on; eauto.
-  intros. intro. destruct H3. red in H3.
-  Search eval_addressing.
-  congruence.
-  erewrite  Mem.support_store; eauto.
-  eapply ro_acc_trans. eauto. eapply ro_acc_store; eauto.
-  etransitivity. eauto. constructor; eauto. red. intros. congruence.
-  erewrite <- Mem.support_store; eauto. *)
-
+  inv GWJ.
+  admit. admit. (* we have to show the "dead position" is mapped or not in gw *)
+  
 - (* call *)
   TransfInstr; UseTransfer.
   assert (Hse: Genv.match_stbls j se tse).
@@ -1191,7 +1238,11 @@ Ltac UseTransfer :=
   erewrite stacksize_translated by eauto. rewrite !Z.add_0_r in C. eexact C.
   eapply match_call_states; eauto 2 with na.
   eapply ros_address_translated; eauto 2 with na.
-  instantiate (1:= Hm). admit. admit.
+  instantiate (1:= Hm).
+  exploit injp_acce_magree_tl. eauto. eapply injp_acc_tl_free_0'; eauto.
+  intro. inv H1. constructor; eauto.
+  exploit injp_acci_magree_tl. eauto. eapply injp_acc_tl_free_0'; eauto.
+  intro. inv H1. constructor; eauto.
 
 - (* builtin *)
   TransfInstr; UseTransfer.
@@ -1251,17 +1302,23 @@ Ltac UseTransfer :=
   intros (tv2 & A2 & B2 & C2 & D2).
   exploit transf_volatile_store; eauto.
   intros (EQ & tm' & P & Q). subst vres.
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm')).
+  {
+    inv P; inv H1. inv H7; inv H8. constructor; eauto; try (red; intros; congruence).
+    split; eauto with mem.    split; eauto with mem. inv B1.
+    eapply injp_acc_tl_store'; eauto. instantiate (1:= tv2).
+    erewrite <- address_inject. eauto. apply D2.
+    apply Mem.store_valid_access_3 in H5. destruct H5. apply H5. split. lia. destruct chunk; simpl; lia.
+    eauto.
+  }
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
   constructor. eauto. constructor. eauto. constructor.
   simpl; eauto.
   eapply match_succ_states; eauto. simpl; auto.
   apply eagree_set_res; auto.
-  admit. admit.
-  (* eapply ro_acc_trans. eauto. eapply ro_acc_external with (ef := EF_vstore chunk ) ; eauto.
-  etransitivity. eauto. constructor; eauto. red. intros. congruence.
-  eapply external_call_support with (ef := EF_vstore chunk ). simpl. eauto.
-  eapply external_call_support with (ef := EF_vstore chunk ). simpl. eauto. *)
+  eapply injp_acce_magree_tl; eauto.
+  eapply injp_acci_magree_tl; eauto.
 
 + (* memcpy *)
   rewrite e1 in TI.
@@ -1327,20 +1384,25 @@ Ltac UseTransfer :=
   apply RPDST. lia.
   exploit address_inject. apply D2. eexact PSRC. eauto. intros EQ1.
   exploit address_inject. apply D2. eexact PDST. eauto. intros EQ2.
-    econstructor; split.
-    eapply exec_Ibuiltin; eauto.
-    constructor. eauto. constructor. eauto. constructor.
-    simpl. econstructor; eauto.
-    rewrite EQ1. intros. eapply aligned_area_inject. apply D1. all: eauto.
-    rewrite EQ2. intros. eapply aligned_area_inject. apply D1. all: eauto.
-    rewrite EQ1. rewrite EQ2.
-    eapply disjoint_or_equal_inject; eauto. eapply ma_no_overlap. apply D1.
-    eapply Mem.range_perm_max with Cur; eauto.
-    eapply Mem.range_perm_max with Cur; eauto. lia.
-    rewrite EQ1. eauto. rewrite EQ2. eauto.
-    eapply match_succ_states; eauto. simpl; auto.
-    apply eagree_set_res; auto.
-    admit. admit.
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm')).
+  {
+    admit.
+  }
+  econstructor; split.
+  eapply exec_Ibuiltin; eauto.
+  constructor. eauto. constructor. eauto. constructor.
+  simpl. econstructor; eauto.
+  rewrite EQ1. intros. eapply aligned_area_inject. apply D1. all: eauto.
+  rewrite EQ2. intros. eapply aligned_area_inject. apply D1. all: eauto.
+  rewrite EQ1. rewrite EQ2.
+  eapply disjoint_or_equal_inject; eauto. eapply ma_no_overlap. apply D1.
+  eapply Mem.range_perm_max with Cur; eauto.
+  eapply Mem.range_perm_max with Cur; eauto. lia.
+  rewrite EQ1. eauto. rewrite EQ2. eauto.
+  eapply match_succ_states; eauto. simpl; auto.
+  apply eagree_set_res; auto.
+  eapply injp_acce_magree_tl; eauto.
+  eapply injp_acci_magree_tl; eauto.
 
 + (* memcpy eliminated *)
   rewrite e1 in TI.
@@ -1348,6 +1410,10 @@ Ltac UseTransfer :=
   set (adst := aaddr_arg (vanalyze prog f) # pc dst) in *.
   set (asrc := aaddr_arg (vanalyze prog f) # pc src) in *.
   inv H1.
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm)).
+  {
+    admit.
+  }
   econstructor; split.
   eapply exec_Inop; eauto.
   eapply match_succ_states; eauto. simpl; auto.
@@ -1359,7 +1425,8 @@ Ltac UseTransfer :=
   intros. eapply nlive_contains; eauto.
   erewrite Mem.loadbytes_length in H0 by eauto.
   rewrite Z2Nat.id in H0 by lia. auto.
-  admit. admit.
+  eapply injp_acce_magree_tl; eauto.
+  eapply injp_acci_magree_tl; eauto.
   
 + (* annot *)
   destruct (transfer_builtin_args (kill_builtin_res res ne, nm) _x2) as (ne1, nm1) eqn:TR.
@@ -1405,7 +1472,13 @@ Ltac UseTransfer :=
   intros (tvl & A & B & C & D).
   exploit external_call_mem_inject; eauto 2 with na.
   eapply magree_inject; eauto. intros. apply nlive_all.
-  intros (j' & v' & tm' & P & Q & R & S & T & U & V & W).
+  intros (j' & v' & tm' & P & Q & R & S & T & U & V & W & X1 & X2 & X3).
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j' m' tm')).
+  econstructor; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
   eapply match_succ_states. instantiate (1:= j').
@@ -1414,7 +1487,13 @@ Ltac UseTransfer :=
   eauto. simpl; auto.
   apply eagree_set_res; auto. eapply eagree_incr; eauto.
   eapply minject_agree; eauto.
-  admit. admit. admit.
+  eapply injp_acce_magree_tl; eauto.
+  eapply injp_acci_magree_tl; eauto.
+  inv GWJ. constructor. intros.
+  destruct (j b) as [[b'' d']|] eqn :Hjb.
+  apply U in Hjb as Heq. rewrite H4 in Heq. inv Heq. eauto.
+  exploit W; eauto. intro.
+  erewrite <- acci_magree_tid1. eauto. eauto.
 
 - (* conditional *)
   TransfInstr; UseTransfer. destruct (peq ifso ifnot).
@@ -1445,12 +1524,16 @@ Ltac UseTransfer :=
   intros; eapply nlive_dead_stack; eauto.
   intros (tm' & A & B). simpl in A. rewrite Z.add_0_r in A.
   exploit magree_inject; eauto. apply nlive_all. intro Hm.
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm')).
+  eapply injp_acc_tl_free_0'. eauto. eauto. eauto. lia.
   econstructor; split.
   eapply exec_Ireturn; eauto.
   erewrite stacksize_translated by eauto. eexact A.
   econstructor; eauto.
   destruct or; simpl; eauto 2 with na.
-  instantiate (1:= Hm). admit. admit. (*para free*)
+  instantiate (1:= Hm).
+  exploit injp_acce_magree_tl; eauto. intro X. inv X. econstructor; eauto.
+  exploit injp_acci_magree_tl; eauto. intro X. inv X. econstructor; eauto.
 
 - (* internal function *)
   assert (Hse: Genv.match_stbls j se tse).
@@ -1460,14 +1543,19 @@ Ltac UseTransfer :=
   destruct (analyze (vanalyze prog f) f) as [an|] eqn:AN; inv EQ'.
   exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & tm' & A & B & C & D & E & F).
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j' m' tm')).
+  eapply injp_acc_tl_alloc1. eauto. eauto. eauto. eauto. eauto.
   econstructor; split.
   econstructor; simpl; eauto.
   simpl. econstructor. instantiate (1:= j'). all: eauto.
   eapply match_stackframes_incr; eauto.
   apply eagree_init_regs; auto. eauto with mem.
   apply minject_agree; auto.
-  admit. admit. admit.
-  
+  eapply injp_acce_magree_tl; eauto. inv ACCE. constructor; eauto.
+  eapply injp_acci_magree_tl; eauto. inv ACCI. constructor; eauto.
+  inv GWJ. constructor. intros. destruct (eq_block b stk).
+  subst. apply Mem.alloc_result in H. rewrite H.
+  erewrite <- acci_tid1. 2: eauto. eauto. erewrite F in H1. eauto. eauto.
 - (* external function *)
   assert (Hse: Genv.match_stbls j se tse).
   destruct w. inv GE. inv ACCE. eapply Genv.match_stbls_incr_noglobal; eauto.
@@ -1475,11 +1563,23 @@ Ltac UseTransfer :=
   exploit external_call_mem_inject; eauto.
   intros (j' & res' & tm' & A & B & C & D & E & F & G & I & X1 & X2 & X3).
   simpl in FUN. inv FUN.
+  assert (ACCTL: injp_acc_tl (injpw j m tm Hm) (injpw j' m' tm' C)).
+  econstructor; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intro. eauto using external_call_readonly; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
   econstructor; split.
   econstructor; eauto.
   econstructor. instantiate (1:= j'). all: eauto.
   eapply match_stackframes_incr; eauto. instantiate (1:= C).
-  admit. admit. admit.
+  etransitivity. eauto. eapply injp_acc_tl_e; eauto.
+  etransitivity. eauto. eapply injp_acc_tl_i; eauto.
+  inv GWJ. constructor. intros.
+  destruct (j b) as [[b'' d']|] eqn :Hjb.
+  apply F in Hjb as Heq. rewrite H1 in Heq. inv Heq. eauto.
+  exploit I; eauto. intro.
+  erewrite <- acci_tid1. eauto. eauto.
 
 - (* return *)
   inv STACKS. inv H1.
@@ -1523,31 +1623,6 @@ Proof.
   constructor; eauto. destruct H6 as [_ [A _]]. auto.
   econstructor; eauto. constructor.
 Qed.
-
-Lemma  sound_stack_incr :
-forall (ge : Genv.symtbl) (bc : block_classification) 
-  (stk : list stackframe) (m: mem) (bound : sup) (j j': meminj),
-  sound_stack prog ge j bc stk m bound ->
-  (forall b, j' b <> None -> Mem.valid_block m b) ->
-  (forall b, bc b = BCinvalid -> sup_In b bound -> fst b = Mem.tid (Mem.support m) -> j b = None -> j' b = None) ->
-  sound_stack prog ge j' bc stk m bound.
-Proof.
-  induction 1; intros.
-  - econstructor. eauto.
-  - econstructor. all : eauto.
-    eapply IHsound_stack. eauto.
-    intros.
-    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
-    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
-  - eapply sound_stack_private_call; eauto.
-    eapply IHsound_stack. eauto.
-    intros.
-    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
-    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
-    apply H1. auto. apply INCR. apply SINCR. subst sp. apply Mem.sup_incr_in1.
-    subst sp. simpl. auto. auto.
-Qed.
-
 
 Lemma transf_external_states:
   forall gw st1 st2 q1, match_states gw st1 st2 -> sound_state prog ge gw st1 -> at_external ge st1 q1 ->

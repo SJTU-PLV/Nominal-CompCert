@@ -846,6 +846,30 @@ Proof.
   intros. apply H.
 Qed.
 
+Record injp_world' :=
+  injpw' {
+    injpw_meminj : meminj;
+    injpw_m: mem;
+    injpw_tm: mem;
+    }.
+
+Inductive injp_acc_tl' : relation injp_world' :=
+  injp_acc_tl_intro' : forall (f : meminj) (m1 m2 : mem) (f' : meminj) 
+                        (m1' m2' : mem)
+                     (Hnb1: new_block_local m1 m1')
+                     (Hnb2:new_block_local m2 m2'),
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                      injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     Mem.unchanged_on_tl (loc_unmapped f) m1 m1' ->
+                     Mem.unchanged_on_tl (loc_out_of_reach f m1) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     inject_incr_local f f' m1->
+                     free_preserved f m1 m1' m2' ->
+                     injp_acc_tl' (injpw' f m1 m2) (injpw' f' m1' m2').
+
 (* thread_local, the local accessibility for internel transitions and builtin functions
    which only change public memories  *)
 Inductive injp_acc_tl : relation injp_world :=
@@ -876,13 +900,13 @@ Proof.
   eapply inject_incr_local_noglobal; eauto.
 Qed.
 
-Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_alloc1: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2',
     Mem.alloc m1 lo1 hi1 = (m1',b1) ->
     Mem.alloc m2 lo2 hi2 = (m2',b2) ->
     inject_incr f f' ->
     f' b1 = Some (b2, 0) ->
     (forall b, b<> b1 -> f' b = f b) ->
-    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f' m1' m2').
 Proof.
   intros. constructor.
   - red. intros.
@@ -921,14 +945,27 @@ Proof.
   - red. intros. exfalso. apply H7. eauto with mem.
 Qed.
 
-Lemma injp_acc_tl_alloc': forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm' d,
+
+Lemma injp_acc_tl_alloc: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm',
+    Mem.alloc m1 lo1 hi1 = (m1',b1) ->
+    Mem.alloc m2 lo2 hi2 = (m2',b2) ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, 0) ->
+    (forall b, b<> b1 -> f' b = f b) ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_alloc1. apply H. apply H0. all : eauto.
+  intro X. inv X. constructor; eauto.
+Qed.
+
+Lemma injp_acc_tl_alloc'1: forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' d,
     Mem.alloc m1 lo1 hi1 = (m1',b1) ->
     Mem.alloc m2 lo2 hi2 = (m2',b2) ->
     inject_incr f f' ->
     f' b1 = Some (b2, d) ->
     inject_separated f f' m1 m2 ->
     inject_incr_local f f' m1->
-    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f' m1' m2' ).
 Proof.
   intros. constructor.
   - red. intros.
@@ -955,11 +992,25 @@ Proof.
   - red. intros. exfalso. apply H8. eauto with mem.
 Qed.
 
-Lemma injp_acc_tl_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
+Lemma injp_acc_tl_alloc': forall f f' m1 m2 b1 b2 lo1 hi1 lo2 hi2 m1' m2' Hm Hm' d,
+    Mem.alloc m1 lo1 hi1 = (m1',b1) ->
+    Mem.alloc m2 lo2 hi2 = (m2',b2) ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, d) ->
+    inject_separated f f' m1 m2 ->
+    inject_incr_local f f' m1->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_alloc'1. apply H. apply H0. all: eauto.
+  intro. inv H5.
+  constructor; eauto.
+Qed.
+
+Lemma injp_acc_tl_free': forall f m1 m2 b1 b2 delta lo1 sz m1' m2',
     Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
     Mem.free m2 b2 (lo1 + delta) (lo1 + sz + delta) = Some m2' ->
     f b1 = Some (b2, delta) ->
-    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f m1' m2').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -990,6 +1041,29 @@ Proof.
     + congruence.
 Qed.
 
+Lemma injp_acc_tl_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
+    Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
+    Mem.free m2 b2 (lo1 + delta) (lo1 + sz + delta) = Some m2' ->
+    f b1 = Some (b2, delta) ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_free'. apply H. apply H0. eauto.
+  intros X. inv X. constructor; eauto.
+Qed.
+
+Lemma injp_acc_tl_free_0': forall f m1 m2 b1 b2 delta sz m1' m2' sz',
+    Mem.free m1 b1 0 sz = Some m1' ->
+    Mem.free m2 b2 delta sz' = Some m2' ->
+    f b1 = Some (b2, delta) ->
+    sz' = sz + delta ->
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f m1' m2').
+Proof.
+  intros. exploit injp_acc_tl_free'.
+  replace sz with (0 + sz) in H by lia. eauto.
+  rewrite !Z.add_0_l. subst sz'. eauto. eauto.
+  intro. apply H3.
+Qed.
+
 Lemma injp_acc_tl_free_0: forall f m1 m2 b1 b2 delta sz m1' m2' Hm Hm' sz',
     Mem.free m1 b1 0 sz = Some m1' ->
     Mem.free m2 b2 delta sz' = Some m2' ->
@@ -1003,12 +1077,12 @@ Proof.
   intro. apply H3.
 Qed.
 
-Lemma injp_acc_tl_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
+Lemma injp_acc_tl_store' : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2',
     Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
     Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
     (* Val.inject f v1 v2 -> *)
     f b1 = Some (b2,delta) ->
-    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+    injp_acc_tl' (injpw' f m1 m2) (injpw' f m1' m2').
 Proof.
   intros. constructor.
   - red. intros. unfold Mem.valid_block in *.
@@ -1034,6 +1108,17 @@ Proof.
   - apply inject_separated_refl.
   - red. intros. congruence.
   - red. intros. exfalso. apply H5. eauto with mem.
+Qed.
+
+Lemma injp_acc_tl_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
+    Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
+    Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
+    (* Val.inject f v1 v2 -> *)
+    f b1 = Some (b2,delta) ->
+    injp_acc_tl (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. exploit injp_acc_tl_store'. apply H. apply H0. eauto.
+  intros X. inv X. constructor; eauto.
 Qed.
 
 Lemma injp_acc_tl_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',

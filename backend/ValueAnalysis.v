@@ -1388,6 +1388,29 @@ Inductive support_acc : injp_world -> mem -> Prop :=
     (SUP2: Mem.tid (Mem.support m0) = Mem.tid (Mem.support m)),
     support_acc (injpw j m0 tm0 Hm) m.
 
+Lemma sound_stack_incr :
+forall (bc : block_classification) 
+  (stk : list stackframe) (m: mem) (bound : sup) (j j': meminj),
+  sound_stack j bc stk m bound ->
+  (forall b, j' b <> None -> Mem.valid_block m b) ->
+  (forall b, bc b = BCinvalid -> sup_In b bound -> fst b = Mem.tid (Mem.support m) -> j b = None -> j' b = None) ->
+  sound_stack j' bc stk m bound.
+Proof.
+  induction 1; intros.
+  - econstructor. eauto.
+  - econstructor. all : eauto.
+    eapply IHsound_stack. eauto.
+    intros.
+    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
+    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
+  - eapply sound_stack_private_call; eauto.
+    eapply IHsound_stack. eauto.
+    intros.
+    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
+    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
+    apply H1. auto. apply INCR. apply SINCR. subst sp. apply Mem.sup_incr_in1.
+    subst sp. simpl. auto. auto.
+Qed.
 
 Inductive sound_state: injp_world -> state -> Prop :=
   | sound_regular_state:

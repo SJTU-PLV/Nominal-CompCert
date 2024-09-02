@@ -1420,31 +1420,6 @@ Proof.
   econstructor; eauto. constructor.
 Qed.
 
-Lemma  sound_stack_incr :
-forall (ge : Genv.symtbl) (bc : block_classification) 
-  (stk : list stackframe) (m: mem) (bound : sup) (j j': meminj),
-  sound_stack prog ge j bc stk m bound ->
-  (forall b, j' b <> None -> Mem.valid_block m b) ->
-  (forall b, bc b = BCinvalid -> sup_In b bound -> fst b = Mem.tid (Mem.support m) -> j b = None -> j' b = None) ->
-  sound_stack prog ge j' bc stk m bound.
-Proof.
-  induction 1; intros.
-  - econstructor. eauto.
-  - econstructor. all : eauto.
-    eapply IHsound_stack. eauto.
-    intros.
-    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
-    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
-  - eapply sound_stack_private_call; eauto.
-    eapply IHsound_stack. eauto.
-    intros.
-    apply H1; auto. rewrite SAME. auto. apply SINCR. apply Mem.sup_incr_in2.
-    auto. auto. congruence. apply INCR. apply SINCR. apply Mem.sup_incr_in2. auto.
-    apply H1. auto. apply INCR. apply SINCR. subst sp. apply Mem.sup_incr_in1.
-    subst sp. simpl. auto. auto.
-Qed.
-
-
 Lemma transf_external_states:
   forall gw st1 st2 q1, match_states gw st1 st2 -> sound_state prog ge gw st1 -> at_external ge st1 q1 ->
   exists (wx : GS.ccworld (ro @ c_injp)) q2, at_external tge st2 q2 /\ gw *-> (snd (get wx)) /\ GS.match_query (ro @ c_injp) wx q1 q2 /\ GS.match_senv (ro @ c_injp) wx se tse /\
