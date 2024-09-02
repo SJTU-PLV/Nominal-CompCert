@@ -117,7 +117,7 @@ Inductive state: Type :=
 
 Local Open Scope error_monad_scope.
 
-Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
+Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
@@ -129,7 +129,17 @@ Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
   let uninit := fold_right (add_place whole) empty_pathmap vl in
-  OK (mkown init uninit whole).
+  OK {| own_init := init;
+       own_uninit := uninit;
+       own_universe := whole |}.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
 
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
 | function_entry_intro: forall m1 
@@ -295,7 +305,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (PADDR: eval_place ge le m p b ofs),
     (* update the ownership environment in continuation *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned_box l)) ps le own k) m)
 | step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l
     (PTY: typeof_place p = Tvariant orgs id)
     (SCO: ge.(genv_cenv) ! id = Some co)
@@ -308,7 +318,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
     (* update the ownership environment in continuation *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned_box l)) ps le own k) m)
 | step_dropplace_next: forall f ps k le own m,
     step_dropplace (Dropplace f (Some (drop_fully_owned_box nil)) ps k le own m) E0
       (Dropplace f None ps k le own m)

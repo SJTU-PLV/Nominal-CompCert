@@ -7,7 +7,7 @@ Require Import Values.
 Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
-Require Import Rustlight RustIR.
+Require Import Rustlight RustIR RustIRcfg.
 Require Import InitDomain InitAnalysis.
 
 Import ListNotations.

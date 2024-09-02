@@ -3,7 +3,7 @@ Require Import Maps.
 Require Import AST.
 Require Import FSetWeakList DecidableType.
 Require Import Lattice Kildall.
-Require Import Rusttypes Rustlight RustIR.
+Require Import Rusttypes Rustlight RustIR RustIRcfg.
 Require Import Errors.
 Require Import BorrowCheckDomain ReplaceOrigins.
 

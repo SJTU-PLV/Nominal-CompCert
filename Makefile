@@ -168,7 +168,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 RUSTFRONTEND=Rusttypes.v Rustsyntax.v Rustlight.v RustIR.v\
   Rustlightown.v RustIRsem.v RustIRown.v\
   Rustlightgen.v\
-  RustIRgen.v \
+  RustIRgen.v RustIRcfg.v\
   InitDomain.v InitAnalysis.v ElaborateDrop.v\
   BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v\
   Clightgen.v Clightgenspec.v Clightgenproof.v\

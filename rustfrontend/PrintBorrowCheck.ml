@@ -4,6 +4,7 @@ open Camlcoq
 open Rusttypes
 (* open Ctypes *)
 open RustIR
+open RustIRcfg
 (* open PrintCsyntax *)
 open PrintRustlight
 open Maps

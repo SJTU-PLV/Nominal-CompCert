@@ -83,7 +83,7 @@ Record own_env :=
           own_consistent: forall id,
             LPaths.eq (Paths.union (PathsMap.get id own_init) (PathsMap.get id own_uninit)) (PathsMap.get id own_universe);
           own_disjoint: forall id,
-            LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_init)) Paths.empty;
+            LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_uninit)) Paths.empty;
           (* ∀ p ∈ W, p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
           own_wf_init: forall (p: place),
             let id := local_of_place p in
@@ -232,8 +232,44 @@ Next Obligation.
         eapply Paths.union_2. auto.
   - auto.
 Defined.           
-                            
-
+Next Obligation.
+  destruct own. simpl.
+  unfold remove_place, add_place.
+  clear own_wf_init0 own_wf_uninit0.
+  set (pid := (local_of_place p)) in *.
+  generalize (own_disjoint0 pid). intros DIS.
+  generalize (own_consistent0 pid). intros CON.
+  do 2 erewrite PathsMap.gsspec.
+  destruct (peq id pid).
+  - subst. red. red. intros.    
+    split.
+    + intros IN. exfalso.
+      eapply Paths.empty_1. eapply DIS.
+      instantiate (1 := a).
+      eapply Paths.inter_3.
+      * eapply Paths.inter_1 in IN.
+        eapply Paths.filter_1 in IN. auto.
+        red. Morphisms.solve_proper.
+      * exploit Paths.inter_1;eauto. intros IN1.
+        exploit Paths.inter_2;eauto. intros IN2.
+        eapply Paths.union_1 in IN2.
+        destruct IN2 as [IN3|IN4].
+        -- auto.
+        (* IN1 and IN4 are contradict *)
+        -- eapply Paths.filter_2 in IN1.
+           eapply Paths.filter_2 in IN4.
+           rewrite IN4 in IN1. simpl in IN1. congruence.
+           red. Morphisms.solve_proper.
+           red. Morphisms.solve_proper.
+    + intros IN. exfalso.
+      eapply Paths.empty_1. eauto.
+  - auto.
+Defined.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+  
 (* Move to Rustlight: Check the ownership of expression *)
 Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
   match e with
@@ -293,6 +329,21 @@ Definition place_dominator_shallow_own (own: own_env) (p: place) : bool :=
   end.
 
 
+(* initialize a place *)
+Program Definition init_place (own: own_env) (p: place) : own_env :=
+  {| own_init := (add_place own.(own_universe) p own.(own_init));
+    own_uninit := (remove_place p own.(own_uninit));
+    own_universe := own.(own_universe) |}.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+
+
 (* Update the ownership environment when assigning to p. We must
 ensure that p is not deeply owned because p must be dropped before
 this assignment. *)
@@ -300,12 +351,10 @@ Definition own_check_assign (own: own_env) (p: place) : option own_env :=
   (* check that the dominator of p is owned (initialized) because we
   need to compute the address of [p] *)
   if place_dominator_own own p then
-    Some (mkown (add_place own.(own_universe) p own.(own_init))
-            (remove_place p own.(own_uninit))
-            own.(own_universe))
+    Some (init_place own p)
   else
     None.             
-
+     
 (** Deference a location based on the type  *)
 
 Inductive deref_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs) : val -> Prop :=
@@ -830,7 +879,7 @@ Definition collect_func (f: function) : Errors.res PathsMap.t :=
 End WITH_CE.
 
 (* copy from init analysis *)
-Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
+Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
@@ -842,7 +891,19 @@ Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) (extract_vars f.(fn_body)) in
   let uninit := fold_right (add_place whole) empty_pathmap vl in
-  OK (mkown init uninit whole).
+  OK {| own_init := init;
+       own_uninit := uninit;
+       own_universe := whole |}.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+Next Obligation.
+Admitted.
+
+
 
 (* Use extract_vars to extract the local variables *)
 
@@ -1111,7 +1172,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (PADDR: eval_place ge le m p b ofs),
     (* update the ownership environment in continuation *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+      (Dropstate id (Vptr b ofs) None co.(co_members) (Kdropplace f (Some (drop_fully_owned_box l)) ps le own  k) m)
 | step_dropplace_enum: forall m k p orgs co id fid fty tag b ofs f le own ps l
     (PTY: typeof_place p = Tvariant orgs id)
     (SCO: ge.(genv_cenv) ! id = Some co)
@@ -1124,7 +1185,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (MEMB: list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty)),
     (* update the ownership environment in continuation *)
     step_dropplace (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) E0
-      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned_box l)) ps le (move_place own p) k) m)
+      (Dropstate id (Vptr b ofs) (type_to_drop_member_state ge fid fty) nil (Kdropplace f (Some (drop_fully_owned_box l)) ps le own k) m)
 | step_dropplace_next: forall f ps k le own m,
     step_dropplace (Dropplace f (Some (drop_fully_owned_box nil)) ps k le own m) E0
       (Dropplace f None ps k le own m)

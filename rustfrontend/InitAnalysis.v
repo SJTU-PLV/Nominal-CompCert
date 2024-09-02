@@ -5,7 +5,7 @@ Require Import Values Memory Events Globalenvs Smallstep.
 Require Import AST Errors.
 Require Import FSetWeakList DecidableType.
 Require Import Rusttypes Rustlight Rustlightown.
-Require Import RustIR RustIRown.
+Require Import RustIR RustIRcfg RustIRown.
 Require Import InitDomain.
 
 
@@ -136,81 +136,9 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
     (Paths.filter (is_prefix p) universe).
 
 (* move it to a new file *)
-(** * Relations between the generated CFG and the source statement *)
-
-(* Translation relation of the generate_cfg: [tr_stmt body cfg stmt pc
-  out cont break endn] holds if the graph [cfg], starting at node
-  [pc], contains instructions that perform the RustIR statement
-  [stmt]. These instructions branch to node [out] if the statement
-  terminates normally, branch to node [cont] if the statement reaches
-  Scontinue, branch to break if the statement reaches Sbreak and
-  branch to [endn] if the statement returns *)
-Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -> option node -> option node -> node -> Prop :=
-| tr_Sskip: forall pc cont brk endn,
-    tr_stmt body cfg Sskip pc pc cont brk endn
-| tr_Sassign: forall pc next sel p e cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sassign p e)),
-    tr_stmt body cfg (Sassign p e) pc next cont brk endn
-| tr_Sassign_variant: forall pc next sel p e enum_id fid cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sassign_variant p enum_id fid e)),
-    tr_stmt body cfg (Sassign_variant p enum_id fid e) pc next cont brk endn
-| tr_Sbox: forall pc next sel p e cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sbox p e)),
-    tr_stmt body cfg (Sbox p e) pc next cont brk endn
-| tr_Sstoragelive: forall pc next sel id cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sstoragelive id)),
-    tr_stmt body cfg (Sstoragelive id) pc next cont brk endn
-| tr_Sstoragedead: forall pc next sel id cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sstoragedead id)),
-    tr_stmt body cfg (Sstoragedead id) pc next cont brk endn
-| tr_Sdrop: forall pc next sel p cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Sdrop p)),
-    tr_stmt body cfg (Sdrop p) pc next cont brk endn
-| tr_Scall: forall pc next sel p e args cont brk endn
-    (SEL: cfg ! pc = Some (Isel sel next))
-    (STMT: select_stmt body sel = Some (Scall p e args)),
-    tr_stmt body cfg (Scall p e args) pc next cont brk endn
-| tr_Ssequence: forall s1 s2 n1 n2 n3 cont brk endn
-    (STMT1: tr_stmt body cfg s1 n1 n2 cont brk endn)
-    (STMT2: tr_stmt body cfg s2 n2 n3 cont brk endn),
-    tr_stmt body cfg (Ssequence s1 s2) n1 n3 cont brk endn
-| tr_Sifthenelse: forall s1 s2 e pc n1 n2 endif cont brk endn
-    (STMT1: tr_stmt body cfg s1 n1 endif cont brk endn)
-    (STMT2: tr_stmt body cfg s2 n2 endif cont brk endn)
-    (SEL: cfg ! pc = Some (Icond e n1 n2)),
-    tr_stmt body cfg (Sifthenelse e s1 s2) pc endif cont brk endn
-| tr_Sloop: forall s next loop_start loop_jump_node cont brk endn
-    (STMT: tr_stmt body cfg s loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
-    (SEL: cfg ! loop_jump_node = Some (Inop loop_start)),
-    (* next is not specific because loop is impossible to terminate
-    normally *)
-    tr_stmt body cfg (Sloop s) loop_jump_node next brk cont endn
-| tr_Sbreak: forall pc brk cont endn
-    (SEL: cfg ! pc = Some (Inop brk)),
-    tr_stmt body cfg Sbreak pc brk cont (Some brk) endn
-| tr_Scontinue: forall pc brk cont endn
-    (SEL: cfg ! pc = Some (Inop cont)),
-    tr_stmt body cfg Scontinue pc cont (Some cont) brk endn
-| tr_Sreturn: forall pc sel endn e cont brk
-    (SEL: cfg ! pc = Some (Isel sel endn))
-    (STMT: select_stmt body sel = Some (Sreturn e)),
-    tr_stmt body cfg (Sreturn e) pc endn cont brk endn
-.
 
 
 (** * Soundness of Initial Analysis *)
-
-Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
-| tr_fun_intro: forall entry cfg
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret),
-    tr_fun f nret cfg.
 
 Inductive tr_cont : statement -> rustcfg -> cont -> node -> option node -> option node -> node -> Prop :=
 | tr_Kseq: forall body cfg s pc next cont brk nret k
@@ -256,7 +184,7 @@ Inductive move_split_places : own_env -> list (place * bool) -> own_env -> Prop 
 | move_split_places_nil: forall own,
     move_split_places own nil own
 | move_split_places_cons: forall own1 own2 own3 p full l
-    (MOVE: move_place own1 p = own2)
+    (MOVE: own2 = if is_owned own1 p then move_place own1 p else own1)
     (MSPLIT: move_split_places own2 l own3),
     move_split_places own1 ((p,full) :: l) own3
 .
@@ -287,11 +215,11 @@ Inductive sound_cont: cont -> Prop :=
     (OWN: sound_own own mayinit mayuninit universe)
     (CONT: sound_cont k),
     sound_cont (Kcall p f le own k)
-| sound_cont_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe entry cfg k own1 own2 le st l cont brk nret
+| sound_cont_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe  cfg k own1 own2 le st l cont brk nret
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc =  mayinit)
     (UNINIT: uninitMap !! pc =  mayuninit)
-    (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
+    (TRFUN: tr_fun f nret cfg)
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (OWN: sound_own own2 mayinit mayuninit universe)
     (MOVESPLIT: move_split_places own1 l own2)
@@ -321,15 +249,15 @@ Inductive sound_state: state -> Prop :=
 | sound_returnstate: forall v k m
     (CONT: sound_cont k),
     sound_state (Returnstate v k m)
-| sound_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe cfg k own1 own2 le st l m nret next cont brk
+| sound_dropplace: forall f initMap uninitMap pc mayinit mayuninit universe cfg k own1 own2 le st l m nret cont brk
     (AN: analyze ce f = OK (initMap, uninitMap, universe))
     (INIT: initMap !! pc = mayinit)
     (UNINIT: uninitMap !! pc = mayuninit)
     (* invariant of generate_cfg *)
     (TRFUN: tr_fun f nret cfg)
-    (TRCONT: tr_cont f.(fn_body) cfg k next cont brk nret)
+    (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (* small-step move_place to simulate big-step move_place in
-    transfer *)
+    transfer. maybe difficult to prove *)
     (MOVESPLIT: move_split_places own1 l own2)
     (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
@@ -439,21 +367,50 @@ Qed.
 
 (* Key point: match the small step ownership transfer and the big step
 analysis in transfer function of Sdrop *)
-Lemma sound_step_droppplace: forall s t s',
+Lemma sound_step_dropplace: forall s t s',
     step_dropplace ge s t s' ->
     sound_state s ->
     sound_state s'.
 Proof.
   intros s t s' STEP SOUND.
   inv STEP; inv SOUND.
-  inv MOVESPLIT.
+  - inv MOVESPLIT.
+    econstructor; eauto.
+    rewrite NOTOWN in MSPLIT. auto.
+  - inv MOVESPLIT.
+    econstructor; eauto.
+    rewrite OWN in MSPLIT. auto.
   - econstructor; eauto.
-    
-    
+  - econstructor; eauto.
+    econstructor; eauto.
+  - econstructor; eauto.
+    econstructor; eauto.
   - econstructor; eauto.
   - econstructor; eauto.
+    econstructor. inv MOVESPLIT.
+    auto.
+Qed.
 
-    
+Lemma sound_step_dropstate: forall s t s',
+    step_drop ge s t s' ->
+    sound_state s ->
+    sound_state s'.
+Proof.
+  intros s t s' STEP SOUND.
+  inv STEP; inv SOUND.
+  - econstructor; eauto.
+  - econstructor; eauto.
+    econstructor; eauto.
+  - econstructor; eauto.
+    econstructor; eauto.
+  - econstructor; eauto.
+  - inv CONT.
+    econstructor; eauto.
+  - econstructor; eauto.
+    inv CONT. auto.
+Qed.
+
+
 Theorem sound_step: forall s t s',
     step ge s t s' ->
     sound_state s ->
@@ -494,11 +451,34 @@ Proof.
     unfold transfer. rewrite SEL. rewrite STMT.
     admit.
   (* step_to_dropplace *)
-  - inv TRSTMT.
-    econstructor; eauto.
+  - eapply sound_dropplace; eauto.
+  (** Difficult part: prove split_drop_place small-step simulates the
+  analysis *)
+    admit. admit.    
   (* step_in_dropplace *)
-  -
-    
-Admitted.      
-    
+  - eapply sound_step_dropplace; eauto.
+    econstructor; eauto.
+  (* step_dropstate *)
+  - eapply sound_step_dropstate; eauto.
+    econstructor; eauto.
+  (* step_storagelive *)
+  - inv TRSTMT. inv TRFUN.
+    eapply sound_state_succ with (pc2:= next); eauto.
+    simpl. auto.
+    econstructor; eauto.
+    econstructor.
+    (* prove sound_own *)
+    unfold transfer. rewrite SEL. rewrite STMT.
+    auto.
+  (* step_storagedead *)
+  - inv TRSTMT. inv TRFUN.
+    eapply sound_state_succ with (pc2:= next); eauto.
+    simpl. auto.
+    econstructor; eauto.
+    econstructor.
+    (* prove sound_own *)
+    unfold transfer. rewrite SEL. rewrite STMT.
+    auto.
+Admitted.
+
 End SOUNDNESS.
