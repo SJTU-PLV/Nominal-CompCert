@@ -1093,6 +1093,18 @@ Qed.
         eapply Hf; eauto. inv H2. apply unchanged_on_support.
         eapply Mem.valid_block_inject_2; eauto.
 Qed.
+
+
+(* Lemma eval_addressing_block : forall se sp addr rs args b i,
+    eval_addressing se (Vptr sp Ptrofs.zero) addr rs ## args = Some (Vptr b i) ->
+    b = sp \/ sup_In b (Genv.genv_sup se).
+Proof.
+  intros. unfold eval_addressing in H.
+  destruct Archi.ptr64 eqn:Bit.
+  - destruct addr; simpl in H; repeat destr_in H.
+    + unfold Val.addl in H1. destr_in H1. rewrite Bit in H1. inv H1. admit.
+    + admit.
+ *)
   
 Theorem step_simulation:
   forall S1 wp t S2, step ge S1 t S2 ->
@@ -1220,7 +1232,7 @@ Ltac UseTransfer :=
   apply eagree_update; eauto 2 with na.
   eapply magree_monotone; eauto. intros. apply incl_nmem_add; auto.
 - (* store *)
-  TransfInstr; UseTransfer.
+  TransfInstr. UseTransfer.
   destruct (nmem_contains nm (aaddressing (vanalyze prog f) # pc addr args)
              (size_chunk chunk)) eqn:CONTAINS.
 + (* preserved *)
@@ -1255,16 +1267,34 @@ Ltac UseTransfer :=
   intros. eapply nlive_contains; eauto.
   assert (ACCTL : injp_acc_tl' (injpw' j m tm) (injpw' j m' tm)).
   {
+    exploit aaddressing_sound; eauto. intros (bc & A & B & C).
+    assert (~ nlive ge sp0 nm b (Ptrofs.unsigned i)).
+    eapply nlive_contains; eauto.
+    split. lia. destruct chunk; simpl; lia.
+    assert (b = sp0 \/ exists id, Genv.find_symbol ge id = Some b).
+    {
+      destruct (eq_block b sp0). left. auto.
+      destruct (Genv.invert_symbol ge b) eqn: Hrev.
+      right. exists i0. 
+      apply Genv.invert_find_symbol. eauto.
+      exfalso. apply H2. destruct nm.
+      constructor; auto.
+      constructor. intro. congruence.
+      intros. apply Genv.find_invert_symbol in H3. congruence.
+    }
     econstructor; eauto; try (red; intros; congruence).
-    - red. intros. elim H2. eauto with mem.
+    - red. intros. elim H4. eauto with mem.
     - eapply Mem.ro_unchanged_store. eauto.
     - red. intros. eauto with mem.
     - split. erewrite <- Mem.support_store; eauto.
       eapply Mem.store_unchanged_on. eauto.
-      intros.
-      admit.
+      intros. intro. red in H5.
+      destruct H3 as [EQ | [id Hfind]]. subst. congruence.
+      assert (Hse: Genv.match_stbls j se tse).
+      destruct w. inv GE. inv ACCE. eapply Genv.match_stbls_incr_noglobal; eauto.
+      inv Hse. edestruct mge_dom. eapply Genv.genv_symb_range. eauto. congruence.
     - split; eauto with mem.
-    - red. intros. elim H5. eauto with mem.
+    - red. intros. elim H7. eauto with mem.
   }
   econstructor; split.
   eapply exec_Inop; eauto.
@@ -1485,19 +1515,6 @@ Ltac UseTransfer :=
   set (adst := aaddr_arg (vanalyze prog f) # pc dst) in *.
   set (asrc := aaddr_arg (vanalyze prog f) # pc src) in *.
   inv H1.
-  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm)).
-  {
-    econstructor; eauto; try (red; intros; congruence).
-    - red. intros. elim H0. eauto with mem.
-    - eapply Mem.ro_unchanged_storebytes. eauto.
-    - red. intros. eauto with mem.
-    - split. erewrite <- Mem.support_storebytes; eauto.
-      eapply Mem.storebytes_unchanged_on. eauto.
-      intros.
-      admit.
-    - split; eauto with mem.
-    - red. intros. elim H12. eauto with mem. 
-  }
   exploit magree_storebytes_left; eauto.
    clear H3.
   exploit aaddr_arg_sound; eauto.
@@ -1506,6 +1523,40 @@ Ltac UseTransfer :=
   erewrite Mem.loadbytes_length in H0 by eauto.
   rewrite Z2Nat.id in H0 by lia. auto.
   intro MA'.
+  assert (ACCTL: injp_acc_tl' (injpw' j m tm) (injpw' j m' tm)).
+  {
+    destruct (Z.eq_dec sz 0). subst.
+    rewrite Mem.loadbytes_empty in H11. inv H11.
+    apply Mem.storebytes_empty in H16. inv H16.
+    constructor; eauto; try (red; intros; congruence).
+    split; eauto with mem.    split; eauto with mem. auto. lia.
+    clear H3.
+    exploit aaddr_arg_sound; eauto. intros (bc & A & B & C).
+    assert (~ nlive ge sp0 nm bdst (Ptrofs.unsigned odst)).
+    eapply nlive_contains; eauto. lia. 
+    assert (bdst = sp0 \/ exists id, Genv.find_symbol ge id = Some bdst).
+    {
+      destruct (eq_block bdst sp0). left. auto.
+      destruct (Genv.invert_symbol ge bdst) eqn: Hrev.
+      right. exists i. 
+      apply Genv.invert_find_symbol. eauto.
+      exfalso. apply H0. destruct nm.
+      constructor; auto.
+      constructor. intro. congruence.
+      intros. apply Genv.find_invert_symbol in H1. congruence.
+    }
+    econstructor; eauto; try (red; intros; congruence).
+    - red. intros. elim H2. eauto with mem.
+    - eapply Mem.ro_unchanged_storebytes. eauto.
+    - red. intros. eauto with mem.
+    - split. erewrite <- Mem.support_storebytes; eauto.
+      eapply Mem.storebytes_unchanged_on. eauto.
+      intros. intro. red in H3.
+      destruct H1 as [EQ | [id Hfind]]. subst. congruence.
+      inv Hse. edestruct mge_dom. eapply Genv.genv_symb_range. eauto. congruence.
+    - split; eauto with mem.
+    - red. intros. elim H13. eauto with mem. 
+  }
   econstructor; split.
   eapply exec_Inop; eauto.
   eapply match_succ_states; eauto. simpl; auto.
@@ -1676,7 +1727,7 @@ Ltac UseTransfer :=
   constructor.
   econstructor; eauto. apply minject_agree. auto.
   inv ACCE. constructor; eauto. inv ACCI. constructor; eauto.
-Admitted.
+Qed.
 
 Definition m01 := match w with
                  | injpw f m1 m2 Hm => m1

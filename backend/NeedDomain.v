@@ -1220,7 +1220,11 @@ Inductive nlive: nmem -> block -> Z -> Prop :=
            Genv.find_symbol ge id = Some b ->
            gl!id = Some iv ->
            ~ISet.In ofs iv),
-      nlive (NMem stk gl) b ofs.
+      nlive (NMem stk gl) b ofs
+| nlive_intro_dead : forall b ofs
+    (STK: b <> sp)
+    (GL: Genv.invert_symbol ge b = None),
+    nlive NMemDead b ofs.
 
 (** All locations are live *)
 
@@ -1298,22 +1302,22 @@ Lemma incl_nmem_add:
   forall nm b i p sz,
   nlive nm b i -> nlive (nmem_add nm p sz) b i.
 Proof.
-  intros. inversion H; subst. unfold nmem_add; destruct p; try (apply nlive_all).
+  intros. inversion H; subst; unfold nmem_add; destruct p; try (apply nlive_all).
 - (* Gl id ofs *)
   destruct gl!id as [iv|] eqn:NG.
-  + split; simpl; intros. auto.
+  + constructor; simpl; intros. auto.
     rewrite PTree.gsspec in H1. destruct (peq id0 id); eauto. inv H1.
     rewrite ISet.In_remove. intros [P Q]. eelim GL; eauto.
   + auto.
 - (* Glo id *)
-  split; simpl; intros. auto.
+  constructor; simpl; intros. auto.
   rewrite PTree.grspec in H1. destruct (PTree.elt_eq id0 id). congruence. eauto.
 - (* Stk ofs *)
-  split; simpl; intros.
+  constructor; simpl; intros.
   rewrite ISet.In_remove. intros [P Q]. eelim STK; eauto.
   eauto.
 - (* Stack *)
-  split; simpl; intros.
+  constructor; simpl; intros.
   apply ISet.In_empty.
   eauto.
 Qed.
@@ -1348,7 +1352,7 @@ Lemma nlive_remove:
   b' <> b \/ i < Ptrofs.unsigned ofs \/ Ptrofs.unsigned ofs + sz <= i ->
   nlive (nmem_remove nm p sz) b' i.
 Proof.
-  intros. inversion H2; subst. unfold nmem_remove; inv H1; auto.
+  intros. inversion H2; subst; unfold nmem_remove; inv H1; auto.
 - (* Gl id ofs *)
   set (iv' := match gl!id with
                   | Some iv =>
@@ -1358,14 +1362,14 @@ Proof.
                         (Ptrofs.unsigned ofs + sz)
               end).
   assert (Genv.find_symbol ge id = Some b) by (eapply H; eauto).
-  split; simpl; auto; intros.
+  constructor; simpl; auto; intros.
   rewrite PTree.gsspec in H6. destruct (peq id0 id).
 + inv H6. destruct H3. congruence. destruct gl!id as [iv0|] eqn:NG.
   unfold iv'; rewrite ISet.In_add. intros [P|P]. lia. eelim GL; eauto.
   unfold iv'; rewrite ISet.In_interval. lia.
 + eauto.
 - (* Stk ofs *)
-  split; simpl; auto; intros. destruct H3.
+  constructor; simpl; auto; intros. destruct H3.
   elim H3. subst b'. eapply bc_stack; eauto.
   rewrite ISet.In_add. intros [P|P]. lia. eapply STK; eauto.
 Qed.
@@ -1375,7 +1379,11 @@ Qed.
 
 Definition nmem_contains (nm: nmem) (p: aptr) (sz: Z) :=
   match nm with
-  | NMemDead => false
+  | NMemDead => match p with
+               | Gl id ofs => false
+               | Stk ofs => false
+               | _ => true
+               end
   | NMem stk gl =>
       match p with
       | Gl id ofs =>
@@ -1398,7 +1406,7 @@ Lemma nlive_contains:
   Ptrofs.unsigned ofs <= i < Ptrofs.unsigned ofs + sz ->
   ~(nlive nm b i).
 Proof.
-  unfold nmem_contains; intros. red; intros L; inv L.
+  unfold nmem_contains. intros; red; intros L; inv L.
   inv H1; try discriminate.
 - (* Gl id ofs *)
   assert (Genv.find_symbol ge id = Some b) by (eapply H; eauto).
@@ -1408,6 +1416,10 @@ Proof.
 - (* Stk ofs *)
   destruct (ISet.contains (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) stk) eqn:IC; try discriminate.
   rewrite ISet.contains_spec in IC. eelim STK; eauto. eapply bc_stack; eauto.
+- inv H1; try discriminate.
+  + assert (Genv.find_symbol ge id = Some b) by (eapply H; eauto).
+    apply Genv.find_invert_symbol in H1. congruence.
+  + exploit bc_stack. apply H0. apply H4. intro. congruence.
 Qed.
 
 (** Kill all stack locations between 0 and [sz], and mark everything else
@@ -1445,25 +1457,30 @@ Definition nmem_lub (nm1 nm2: nmem) : nmem :=
 Lemma nlive_lub_l:
   forall nm1 nm2 b i, nlive nm1 b i -> nlive (nmem_lub nm1 nm2) b i.
 Proof.
-  intros. inversion H; subst. destruct nm2; simpl. auto.
+  intros. inversion H; subst; destruct nm2; simpl. auto.
   constructor; simpl; intros.
 - rewrite ISet.In_inter. intros [P Q]. eelim STK; eauto.
 - rewrite PTree.gcombine in H1 by auto.
   destruct gl!id as [iv1|] eqn:NG1; try discriminate;
   destruct gl0!id as [iv2|] eqn:NG2; inv H1.
   rewrite ISet.In_inter. intros [P Q]. eelim GL; eauto.
+- constructor; auto.
+- constructor; auto.
+  intros. apply Genv.find_invert_symbol in H0. congruence.
 Qed.
 
 Lemma nlive_lub_r:
   forall nm1 nm2 b i, nlive nm2 b i -> nlive (nmem_lub nm1 nm2) b i.
 Proof.
-  intros. inversion H; subst. destruct nm1; simpl. auto.
+  intros. inversion H; subst; destruct nm1; simpl. auto.
   constructor; simpl; intros.
 - rewrite ISet.In_inter. intros [P Q]. eelim STK; eauto.
 - rewrite PTree.gcombine in H1 by auto.
   destruct gl0!id as [iv1|] eqn:NG1; try discriminate;
   destruct gl!id as [iv2|] eqn:NG2; inv H1.
   rewrite ISet.In_inter. intros [P Q]. eelim GL; eauto.
+- constructor; auto.
+- constructor; auto. intros. apply Genv.find_invert_symbol in H0. congruence.
 Qed.
 
 (** Boolean-valued equality test *)
@@ -1482,7 +1499,7 @@ Lemma nmem_beq_sound:
 Proof.
   unfold nmem_beq; intros.
   destruct nm1 as [ | stk1 gl1]; destruct nm2 as [ | stk2 gl2]; try discriminate.
-- split; intros L; inv L.
+- split; intros L; inv L; constructor; auto.
 - InvBooleans. rewrite ISet.beq_spec in H0. rewrite PTree.beq_correct in H1.
   split; intros L; inv L; constructor; intros.
 + rewrite <- H0. eauto.
@@ -1556,7 +1573,8 @@ Module NA <: SEMILATTICE.
   Proof.
     unfold ge, bot; destruct x; simpl. split.
     apply NE.ge_bot.
-    intros. inv H.
+    intros. inv H. destruct n0; constructor; auto.
+    intros. apply Genv.find_invert_symbol in H. congruence.
   Qed.
 
   Definition lub (x y: t) : t :=
