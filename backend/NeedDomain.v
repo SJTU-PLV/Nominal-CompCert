@@ -1202,7 +1202,10 @@ Inductive nmem : Type :=
   | NMem (stk: ISet.t) (gl: PTree.t ISet.t).
 
 (** Interpretation of [nmem]:
-- [NMemDead]: all memory locations are unused (dead).  Acts as bottom.
+- [NMemDead]: all memory locations are used, except:
+  - all stack locations
+  - all global locations
+  Acts as bottom.
 - [NMem stk gl]: all memory locations are used, except:
   - the stack locations whose offset is in the interval [stk]
   - the global locations whose offset is in the corresponding entry of [gl].

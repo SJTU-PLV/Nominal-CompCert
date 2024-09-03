@@ -1094,17 +1094,19 @@ Qed.
         eapply Mem.valid_block_inject_2; eauto.
 Qed.
 
-
-(* Lemma eval_addressing_block : forall se sp addr rs args b i,
-    eval_addressing se (Vptr sp Ptrofs.zero) addr rs ## args = Some (Vptr b i) ->
-    b = sp \/ sup_In b (Genv.genv_sup se).
+Lemma dead_position_stack_or_global : forall sp nm b ofs,
+    ~ nlive ge sp nm b ofs ->
+    b = sp \/ exists id, Genv.find_symbol ge id = Some b.
 Proof.
-  intros. unfold eval_addressing in H.
-  destruct Archi.ptr64 eqn:Bit.
-  - destruct addr; simpl in H; repeat destr_in H.
-    + unfold Val.addl in H1. destr_in H1. rewrite Bit in H1. inv H1. admit.
-    + admit.
- *)
+  intros.
+  destruct (eq_block b sp). left. auto.
+  destruct (Genv.invert_symbol ge b) eqn: Hrev.
+  right. exists i. 
+  apply Genv.invert_find_symbol. eauto.
+  exfalso. apply H. destruct nm;
+  constructor; auto.
+  intros. apply Genv.find_invert_symbol in H0. congruence.
+Qed.
   
 Theorem step_simulation:
   forall S1 wp t S2, step ge S1 t S2 ->
@@ -1271,17 +1273,7 @@ Ltac UseTransfer :=
     assert (~ nlive ge sp0 nm b (Ptrofs.unsigned i)).
     eapply nlive_contains; eauto.
     split. lia. destruct chunk; simpl; lia.
-    assert (b = sp0 \/ exists id, Genv.find_symbol ge id = Some b).
-    {
-      destruct (eq_block b sp0). left. auto.
-      destruct (Genv.invert_symbol ge b) eqn: Hrev.
-      right. exists i0. 
-      apply Genv.invert_find_symbol. eauto.
-      exfalso. apply H2. destruct nm.
-      constructor; auto.
-      constructor. intro. congruence.
-      intros. apply Genv.find_invert_symbol in H3. congruence.
-    }
+    exploit dead_position_stack_or_global; eauto. intro H3.
     econstructor; eauto; try (red; intros; congruence).
     - red. intros. elim H4. eauto with mem.
     - eapply Mem.ro_unchanged_store. eauto.
@@ -1533,18 +1525,8 @@ Ltac UseTransfer :=
     clear H3.
     exploit aaddr_arg_sound; eauto. intros (bc & A & B & C).
     assert (~ nlive ge sp0 nm bdst (Ptrofs.unsigned odst)).
-    eapply nlive_contains; eauto. lia. 
-    assert (bdst = sp0 \/ exists id, Genv.find_symbol ge id = Some bdst).
-    {
-      destruct (eq_block bdst sp0). left. auto.
-      destruct (Genv.invert_symbol ge bdst) eqn: Hrev.
-      right. exists i. 
-      apply Genv.invert_find_symbol. eauto.
-      exfalso. apply H0. destruct nm.
-      constructor; auto.
-      constructor. intro. congruence.
-      intros. apply Genv.find_invert_symbol in H1. congruence.
-    }
+    eapply nlive_contains; eauto. lia.
+    exploit dead_position_stack_or_global; eauto. intro H1.
     econstructor; eauto; try (red; intros; congruence).
     - red. intros. elim H2. eauto with mem.
     - eapply Mem.ro_unchanged_storebytes. eauto.
