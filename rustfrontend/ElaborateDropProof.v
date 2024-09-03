@@ -9,7 +9,7 @@ Require Import Errors.
 Require Import LanguageInterface CKLR Inject InjectFootprint.
 Require Import InitDomain InitAnalysis ElaborateDrop.
 Require Import Rustlight RustIR RustOp.
-Require Import RustIRsem RustIRown.
+Require Import RustIRsem RustIRown RustIRcfg.
 
 Import ListNotations.
 
@@ -61,8 +61,47 @@ Admitted.
 End INJECT.
 End MATCH_PROGRAMS.
 
+(* Translation relation between source statment and target statement *)
 
+(* Dynamic elaboration of statement based on own_env *)
+(* Inductive el_stmt (own: own_env) : statement -> statement -> Prop := *)
+(* | el_Sdrop: forall p *)
+(*     (SPLIT: split_drop_place ce universe p (typeof_place p) = OK drops) *)
+    
+(*     , *)
+(*     el_stmt (Sdrop p)  *)
+(* | el_Ssequence: forall *)
+(*     (EL1: el_stmt own s1 ts1) *)
+(*     (EL2: el_stmt own s2 ts2) *)
 
+(* relation between the selector and the (stmt, cont) pair *)
+Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont -> Prop :=
+| sel_stmt_base: forall sel n s k,
+    select_stmt body sel = Some s ->
+    match_instr_stmt body (Isel sel n) s k
+| sel_stmt_seq: forall sel n s1 s2 k,
+    match_instr_stmt body (Isel sel n) s1 (Kseq s2 k) ->
+    match_instr_stmt body (Isel sel n) (Ssequence s1 s2) k
+| sel_stmt_kseq: forall sel n s k,
+    match_instr_stmt body (Isel sel n) s k ->
+    match_instr_stmt body (Isel sel n) Sskip (Kseq s k)
+| sel_stmt_ifthenelse: forall e n1 n2 s1 s2 k,
+    match_instr_stmt body (Icond e n1 n2) (Sifthenelse e s1 s2) k
+| sel_stmt_loop: forall n s k,
+    match_instr_stmt body (Inop n) (Sloop s) k
+| sel_stmt_break: forall n k,
+    match_instr_stmt body (Inop n) Sbreak k
+| sel_stmt_continue: forall n k,
+    match_instr_stmt body (Inop n) Scontinue k
+.
+
+(* dynamic selector in execution *)
+Inductive sel_stmt : statement -> selector -> statement -> cont -> Prop :=
+| sel_Ssequence: forall
+    
+    sel_stmt body sel (Ssequence s1 s2) k
+
+    
 Section PRESERVATION.
 
 Variable prog: program.
@@ -79,8 +118,8 @@ Let ce := ge.(genv_cenv).
 Inductive match_states: state -> RustIRsem.state -> Prop := 
   | match_regular_state:
     forall f s k e own m tf ts tk te tm j dropflags
-      (AN: analyze ce f = OK (mayinit, mayuninit))
-        
+
+        transf_function ce f = OK tf
       (MINJ: Mem.inject j m tm),
       match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm). 
 
