@@ -422,18 +422,6 @@ Fixpoint next_sel (sel: selector) : selector :=
   end.
 
 
-Definition cont_sel (s: statement) (sel: selector) : selector :=
-  match s with
-  | Sskip => sel
-  | _ => next_sel sel
-  end.
-
-Lemma cont_sel_nil: forall s,
-    cont_sel s [] = [].
-Proof.
-  intros s; destruct s; auto.
-Qed.
-
 (** * Relations between the generated CFG and the source statement *)
 
 (* Translation relation of the generate_cfg: [tr_stmt body cfg stmt pc
@@ -443,70 +431,70 @@ Qed.
   terminates normally, branch to node [cont] if the statement reaches
   Scontinue, branch to break if the statement reaches Sbreak and
   branch to [endn] if the statement returns *)
-Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> selector -> node -> node -> option node -> option node -> node -> Prop :=
-| tr_Sskip: forall sel pc cont brk endn,    
-    tr_stmt body cfg Sskip sel pc pc cont brk endn
+Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -> option node -> option node -> node -> Prop :=
+| tr_Sskip: forall pc cont brk endn,    
+    tr_stmt body cfg Sskip pc pc cont brk endn
 | tr_Sassign: forall pc next sel p e cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sassign p e)),
-    tr_stmt body cfg (Sassign p e) sel pc next cont brk endn
+    tr_stmt body cfg (Sassign p e) pc next cont brk endn
 | tr_Sassign_variant: forall pc next sel p e enum_id fid cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sassign_variant p enum_id fid e)),
-    tr_stmt body cfg (Sassign_variant p enum_id fid e) sel pc next cont brk endn
+    tr_stmt body cfg (Sassign_variant p enum_id fid e) pc next cont brk endn
 | tr_Sbox: forall pc next sel p e cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sbox p e)),
-    tr_stmt body cfg (Sbox p e) sel pc next cont brk endn
+    tr_stmt body cfg (Sbox p e) pc next cont brk endn
 | tr_Sstoragelive: forall pc next sel id cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sstoragelive id)),
-    tr_stmt body cfg (Sstoragelive id) sel pc next cont brk endn
+    tr_stmt body cfg (Sstoragelive id) pc next cont brk endn
 | tr_Sstoragedead: forall pc next sel id cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sstoragedead id)),
-    tr_stmt body cfg (Sstoragedead id) sel pc next cont brk endn
+    tr_stmt body cfg (Sstoragedead id) pc next cont brk endn
 | tr_Sdrop: forall pc next sel p cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sdrop p)),
-    tr_stmt body cfg (Sdrop p) sel pc next cont brk endn
+    tr_stmt body cfg (Sdrop p) pc next cont brk endn
 | tr_Scall: forall pc next sel p e args cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Scall p e args)),
-    tr_stmt body cfg (Scall p e args) sel pc next cont brk endn
-| tr_Ssequence: forall s1 s2 n1 n2 n3 cont brk endn sel
-    (STMT1: tr_stmt body cfg s1 (Selseqleft :: sel) n1 n2 cont brk endn)
-    (STMT2: tr_stmt body cfg s2 (Selseqright :: sel) n2 n3 cont brk endn),
-    tr_stmt body cfg (Ssequence s1 s2) sel n1 n3 cont brk endn
-| tr_Sifthenelse: forall s1 s2 e pc n1 n2 endif cont brk endn sel
-    (STMT1: tr_stmt body cfg s1 (Selifthen :: sel) n1 endif cont brk endn)
-    (STMT2: tr_stmt body cfg s2 (Selifelse :: sel) n2 endif cont brk endn)
+    tr_stmt body cfg (Scall p e args) pc next cont brk endn
+| tr_Ssequence: forall s1 s2 n1 n2 n3 cont brk endn
+    (STMT1: tr_stmt body cfg s1 n1 n2 cont brk endn)
+    (STMT2: tr_stmt body cfg s2 n2 n3 cont brk endn),
+    tr_stmt body cfg (Ssequence s1 s2) n1 n3 cont brk endn
+| tr_Sifthenelse: forall s1 s2 e pc n1 n2 endif cont brk endn
+    (STMT1: tr_stmt body cfg s1 n1 endif cont brk endn)
+    (STMT2: tr_stmt body cfg s2 n2 endif cont brk endn)
     (SEL: cfg ! pc = Some (Icond e n1 n2)),
-    tr_stmt body cfg (Sifthenelse e s1 s2) sel pc endif cont brk endn
-| tr_Sloop: forall s next loop_start loop_jump_node cont brk endn sel
-    (STMT: tr_stmt body cfg s (Selloop :: sel) loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
+    tr_stmt body cfg (Sifthenelse e s1 s2) pc endif cont brk endn
+| tr_Sloop: forall s next loop_start loop_jump_node cont brk endn
+    (STMT: tr_stmt body cfg s loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
     (SEL: cfg ! loop_jump_node = Some (Inop loop_start)),
     (* next is not specific because loop is impossible to terminate
     normally *)
-    tr_stmt body cfg (Sloop s) sel loop_jump_node next brk cont endn
+    tr_stmt body cfg (Sloop s) loop_jump_node next brk cont endn
 (* backward traversal of CFG. [next] node is used in tr_cont, so it
 should matches the AST *)
 | tr_Sbreak: forall brk cont endn next sel
     (STMT: select_stmt body sel = Some Sbreak),
-    tr_stmt body cfg Sbreak sel brk next cont (Some brk) endn
+    tr_stmt body cfg Sbreak brk next cont (Some brk) endn
 | tr_Scontinue: forall brk cont endn next sel
     (STMT: select_stmt body sel = Some Scontinue),
-    tr_stmt body cfg Scontinue sel cont next (Some cont) brk endn
+    tr_stmt body cfg Scontinue cont next (Some cont) brk endn
 | tr_Sreturn: forall pc sel endn e cont brk
     (SEL: cfg ! pc = Some (Isel sel endn))
     (STMT: select_stmt body sel = Some (Sreturn e)),
-    tr_stmt body cfg (Sreturn e) sel pc endn cont brk endn
+    tr_stmt body cfg (Sreturn e) pc endn cont brk endn
 .
 
 Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
 | tr_fun_intro: forall entry cfg
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) [] entry nret None None nret)
+    (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret)
     (RET: cfg ! nret = Some Iend),
     tr_fun f nret cfg.
 
@@ -515,7 +503,7 @@ Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
 Lemma transl_stmt_charact: forall body sel stmt nret succ cont brk s s' n R,
     select_stmt body sel = Some stmt ->
     transl_stmt nret stmt sel succ cont brk s = Res n s' R ->
-    tr_stmt body s'.(st_code) stmt sel n succ cont brk nret.
+    tr_stmt body s'.(st_code) stmt n succ cont brk nret.
 Admitted.
 
 

@@ -1950,3 +1950,34 @@ Canonical Structure li_rs :=
     reply := rust_reply;
     entry := rsq_vf;
   |}.
+
+(** Rust calling convention *)
+Require Import CKLR.
+
+Inductive cc_rs_query R (w: world R): relation rust_query :=
+  | cc_rs_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+      Val.inject (mi R w) vf1 vf2 ->
+      Val.inject_list (mi R w) vargs1 vargs2 ->
+      match_mem R w m1 m2 ->
+      vf1 <> Vundef ->
+      cc_rs_query R w (rsq vf1 sg vargs1 m1) (rsq vf2 sg vargs2 m2).
+
+Inductive cc_rs_reply R (w: world R): relation rust_reply :=
+  | cc_rs_reply_intro vres1 vres2 m1' m2':
+      Val.inject (mi R w) vres1 vres2 ->
+      match_mem R w m1' m2' ->
+      cc_rs_reply R w (rsr vres1 m1') (rsr vres2 m2').
+
+Program Definition cc_rs (R: cklr): callconv li_rs li_rs :=
+  {|
+    ccworld := world R;
+    match_senv := match_stbls R;
+    match_query := cc_rs_query R;
+    match_reply := (<> cc_rs_reply R)%klr;
+  |}.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+Qed.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
