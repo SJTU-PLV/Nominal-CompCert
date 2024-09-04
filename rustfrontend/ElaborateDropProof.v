@@ -96,7 +96,7 @@ Inductive match_instr_stmt (body: statement) : instruction -> statement -> cont 
 .
 
 (* dynamic selector in execution *)
-Inductive sel_stmt : statement -> selector -> statement -> cont -> Prop :=
+Inductive sel_stmt_cont : statement -> selector -> statement -> cont -> Prop :=
 | sel_Ssequence: forall
     
     sel_stmt body sel (Ssequence s1 s2) k
