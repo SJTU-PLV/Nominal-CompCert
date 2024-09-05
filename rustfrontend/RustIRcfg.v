@@ -479,11 +479,9 @@ Inductive tr_stmt (body: statement) (cfg: rustcfg) : statement -> node -> node -
     tr_stmt body cfg (Sloop s) loop_jump_node next brk cont endn
 (* backward traversal of CFG. [next] node is used in tr_cont, so it
 should matches the AST *)
-| tr_Sbreak: forall brk cont endn next sel
-    (STMT: select_stmt body sel = Some Sbreak),
+| tr_Sbreak: forall brk cont endn next,
     tr_stmt body cfg Sbreak brk next cont (Some brk) endn
-| tr_Scontinue: forall brk cont endn next sel
-    (STMT: select_stmt body sel = Some Scontinue),
+| tr_Scontinue: forall brk cont endn next,
     tr_stmt body cfg Scontinue cont next (Some cont) brk endn
 | tr_Sreturn: forall pc sel endn e cont brk
     (SEL: cfg ! pc = Some (Isel sel endn))
@@ -518,3 +516,67 @@ Proof.
   inv GEN. unfold generate_cfg' in GCFG.
   (** TODO: copy some monadInv from RTLgenspec.v *)
 Admitted.
+
+
+(** * A general framework for CFG compilation based on selectors *)
+
+Local Open Scope error_monad_scope.
+
+Definition set_stmt (pc: node) (body: statement) (sel: selector) (s: statement) : Errors.res statement :=
+  match update_stmt body sel s with
+  | Some body1 => OK body1
+  | None =>
+      Error [CTX pc; MSG " update_stmt error in set_stmt"]
+  end.
+
+
+Section TRANSL.
+
+Context {AN: Type} {An: Type} (get_an: AN -> node -> An).
+Context (ae: AN).
+Context (transl_stmt: An -> statement -> Errors.res statement).
+
+Definition transl_on_instr (src: statement) (pc: node) (instr: instruction) : Errors.res statement :=
+  match instr with
+  | Isel sel _ =>
+      match select_stmt src sel with
+      | Some s =>
+          do ts <- transl_stmt (get_an ae pc) s;
+          set_stmt pc src sel ts
+      | None =>
+          Error [CTX pc; MSG " select_stmt error in transl_on_instr"]
+      end
+  (* no way to translate them in the AST side without selector *)
+  | _ => OK src
+  end.
+
+Definition transl_on_cfg (src: statement) (cfg: rustcfg) : Errors.res statement :=
+  PTree.fold (fun body pc instr => do body' <- body; transl_on_instr body' pc instr) cfg (OK src).
+
+(* Translation relation between source statment and target statement *)
+
+Section SPEC.
+
+(* Dynamic elaboration of statement based on own_env *)
+Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -> node -> node -> Prop :=
+| match_Sdrop: forall p pc next (* cont brk nret *) ts sel
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sdrop p))
+    (TR: transl_stmt (get_an ae pc) (Sdrop p) = OK ts),
+    match_stmt body cfg (Sdrop p) ts pc next
+| match_Ssequence: forall s1 ts1 s2 ts2 n1 n2 n3
+    (MSTMT1: match_stmt body cfg s1 ts1 n1 n2)
+    (MSTMT2: match_stmt body cfg s2 ts2 n2 n3),
+    match_stmt body cfg (Ssequence s1 s2) (Ssequence ts1 ts2) n1 n3
+.
+
+(** How to prove? *)
+Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
+    (CFG: generate_cfg s = OK (entry, cfg))
+    (TRANSL: transl_on_cfg s cfg = OK ts),
+  exists nret, match_stmt s cfg s ts entry nret.
+Admitted.
+
+End SPEC.
+
+End TRANSL.

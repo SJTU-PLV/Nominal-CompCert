@@ -157,11 +157,9 @@ Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: c
 
 Section ELABORATE.
 
-Variable (maybeInit maybeUninit: PMap.t PathsMap.t).
-Variable universe : PathsMap.t.
-
 (* map from place to its drop flag *)
 Variable m: PTree.t (list (place * ident)).
+Variable ce: composite_env.
 
 Definition Ibool (b: bool) := Epure (Econst_int (if b then Int.one else Int.zero) type_bool).
 
@@ -189,54 +187,72 @@ Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
   let stmts := fold_right (fun elt acc => add_dropflag elt flag :: acc) nil l in
   makeseq stmts.
 
-Definition set_stmt (pc: node) (body: statement) (sel: selector) (s: statement) : Errors.res statement :=
-  match update_stmt body sel s with
-  | Some body1 => OK body1
-  | None =>
-      Error [CTX pc; MSG " update_stmt error in elaborate_stmt"]
+(* Instance of transl_stmt in the transl_on_cfg. [an] is (mayinit,
+mayuninit, universe) *)
+Definition elaborate_stmt (an: PathsMap.t * PathsMap.t * PathsMap.t) (stmt: statement) : Errors.res statement :=
+  let '(mayinit, mayuninit, universe) := an in
+  match stmt with
+  | Sdrop p =>
+      elaborate_drop_for mayinit mayuninit universe ce m p
+  | Sassign p e
+  | Sassign_variant p _ _ e
+  | Sbox p e =>
+      let deinit := moved_place e in
+      let stmt1 := add_dropflag_option deinit false in
+      let stmt2 := add_dropflag p true in
+      OK (makeseq (stmt1 :: stmt2 :: stmt :: nil))
+  | Scall p e el =>
+      let mvpaths := moved_place_list el in
+      let stmt1 := add_dropflag_list mvpaths false in
+      let stmt2 := add_dropflag p true in
+      OK (makeseq (stmt1 :: stmt :: stmt2 :: nil))
+  | _ => OK stmt
   end.
-
-(* elaborate the leaf statement in [body] *)
-Definition elaborate_leaf_stmt (ce: composite_env) (f: function) (body: Errors.res statement) (pc: node) (instr: instruction) : Errors.res statement :=
-  do body <- body;
-  match instr with
-  | Isel sel _ =>
-      let mayinit := maybeInit!!pc in
-      let mayuninit := maybeUninit!!pc in
-      match select_stmt f.(fn_body) sel with
-      | Some stmt =>
-          match stmt with
-          | Sdrop p =>
-              do drop <- elaborate_drop_for mayinit mayuninit universe ce m p;
-              set_stmt pc body sel drop
-          | Sassign p e
-          | Sassign_variant p _ _ e
-          | Sbox p e =>
-              let deinit := moved_place e in
-              let stmt1 := add_dropflag_option deinit false in
-              let stmt2 := add_dropflag p true in
-              set_stmt pc body sel (makeseq (stmt1 :: stmt2 :: stmt :: nil))
-          | Scall p e el =>
-              let mvpaths := moved_place_list el in
-              let stmt1 := add_dropflag_list mvpaths false in
-              let stmt2 := add_dropflag p true in
-              set_stmt pc body sel (makeseq (stmt1 :: stmt :: stmt2 :: nil))
-          | _ => OK body
-          end
-      | None => Error [CTX pc; MSG " select_stmt error in elaborate_stmt"]
-      end
-  | _ => OK body
-  end.
-
-
-(* Collect the to-drop places and its drop flag from a statement, meanwhile updating the statement *)
-
-Definition elaborate_stmt (ce: composite_env) (f: function) (cfg: rustcfg) : Errors.res statement :=
-  PTree.fold (elaborate_leaf_stmt ce f) cfg (OK f.(fn_body)).
 
 End ELABORATE.
 
-  
+(* (* elaborate the leaf statement in [body] *) *)
+(* Definition elaborate_leaf_stmt (ce: composite_env) (f: function) (body: Errors.res statement) (pc: node) (instr: instruction) : Errors.res statement := *)
+(*   do body <- body; *)
+(*   match instr with *)
+(*   | Isel sel _ => *)
+(*       let mayinit := maybeInit!!pc in *)
+(*       let mayuninit := maybeUninit!!pc in *)
+(*       (**TODO: The following translation is specific to this pass, so we can use a framework to implement translation and plug in the following translation step to implement drop elaboration *) *)
+(*       match select_stmt f.(fn_body) sel with *)
+(*       | Some stmt => *)
+(*           match stmt with *)
+(*           | Sdrop p => *)
+(*               do drop <- elaborate_drop_for mayinit mayuninit universe ce m p; *)
+(*               set_stmt pc body sel drop *)
+(*           | Sassign p e *)
+(*           | Sassign_variant p _ _ e *)
+(*           | Sbox p e => *)
+(*               let deinit := moved_place e in *)
+(*               let stmt1 := add_dropflag_option deinit false in *)
+(*               let stmt2 := add_dropflag p true in *)
+(*               set_stmt pc body sel (makeseq (stmt1 :: stmt2 :: stmt :: nil)) *)
+(*           | Scall p e el => *)
+(*               let mvpaths := moved_place_list el in *)
+(*               let stmt1 := add_dropflag_list mvpaths false in *)
+(*               let stmt2 := add_dropflag p true in *)
+(*               set_stmt pc body sel (makeseq (stmt1 :: stmt :: stmt2 :: nil)) *)
+(*           | _ => OK body *)
+(*           end *)
+(*       | None => Error [CTX pc; MSG " select_stmt error in elaborate_stmt"] *)
+(*       end *)
+(*   | _ => OK body *)
+(*   end. *)
+
+
+(* (* Collect the to-drop places and its drop flag from a statement, meanwhile updating the statement *) *)
+
+(* Definition elaborate_stmt (ce: composite_env) (f: function) (cfg: rustcfg) : Errors.res statement := *)
+(*   PTree.fold (elaborate_leaf_stmt ce f) cfg (OK f.(fn_body)). *)
+
+(* End ELABORATE. *)
+
+
 Local Open Scope error_monad_scope.
 
 Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: place * ident) : statement :=
@@ -251,7 +267,12 @@ Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: pl
           set_dropflag flag false
         else Sskip
   | _, _ => Sskip
-  end.                          
+  end.
+
+(* instance of [get_an] *)
+Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t)) (pc: node) : PathsMap.t * PathsMap.t * PathsMap.t :=
+  let '(mayinit, mayuninit, universe) := an in
+  (mayinit!!pc, mayuninit!!pc, universe).
 
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do analysis_res <- analyze ce f;
@@ -262,7 +283,8 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   do flags <- generate_drop_flags mayinit mayuninit universe ce f cfg;
   let flagm := generate_place_map flags in
   (** step 2: elaborate the statements *)
-  do stmt <- elaborate_stmt mayinit mayuninit universe flagm ce f cfg;
+  do stmt <- transl_on_cfg get_init_info (mayinit, mayuninit, universe) (elaborate_stmt flagm ce) f.(fn_body) cfg;
+  (* do stmt <- elaborate_stmt mayinit mayuninit universe flagm ce f cfg; *)
   (** step 3: initialize drop flags *)
   let entry_init := mayinit!!entry in
   let entry_uninit := mayuninit!!entry in
