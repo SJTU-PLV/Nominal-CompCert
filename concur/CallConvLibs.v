@@ -271,7 +271,9 @@ Proof.
        eauto with mem.
        intros. rewrite H in H0. inv H0. extlia.
     +
-     assert (Hm' : Mem.inject f m1 lmw_m). admit. simpl in Hse1.
+      assert (Hm' : Mem.inject f m1 lmw_m). admit.
+      (** It is correct *)
+      simpl in Hse1.
      exists (stkw injp (injpw f m1 lmw_m Hm') sig' ls1 (Vptr sb sofs) lmw_m).
      repeat apply conj; eauto.
      -- inv Hse1. constructor; eauto. erewrite <- Mem.support_free; eauto.
@@ -290,63 +292,165 @@ Proof.
     -- simpl. admit. (** match should contain [args_removed] *)
     -- intros. inv H3. simpl in H5, H11.
        exists (wp1', tt). simpl. repeat apply conj; eauto.
-       simpl. inv H5. constructor; eauto.
-       simpl. inv H11. constructor; eauto.
-       inv H3.
-       set (ls2' := make_locset rs2' m2' lmw_sp).
-       exists (lr ls2' m2'). split.
-       constructor; eauto. constructor.
-       constructor; eauto.
-
-       red in H8.
-       intros. specialize (H8 (R r)) as HH.
-       exploit HH. constructor.
-       intro VINJ1.
-       exploit H16. eauto. intro VINJ2. simpl in VINJ1.
-       admit. (** need fix, about callee-save regs *)
-       eauto with mem.
-       intros. rewrite H in H0. inv H0. extlia.
-      intros. inv H0. simpl in H1, H3.
-       exists (wp1', tt). simpl. repeat apply conj; eauto.
-       simpl.  inv H1. constructor; eauto.
-       simpl. inv H2. constructor; eauto.
-       inv H3.
-       set (ls2' := make_locset rs2' m2' lmw_sp).
-       exists (lr ls2' m2'). split.
-       constructor; eauto. constructor.
-       constructor; eauto.
-
-       red in H8.
-       intros. specialize (H8 (R r)) as HH.
-       exploit HH. constructor.
-       intro VINJ1.
-       exploit H16. eauto. intro VINJ2. simpl in VINJ1.
-       admit. (** need fix, about callee-save regs *)
-       eauto with mem.
-       intros. rewrite H in H0. inv H0. extlia.
-
-
-      admit. (** same but more complicated *)
+       ++ admit. (** todo*)
+       ++ admit. (** todo*)
+       ++ admit. (** todo*)
   - red. intros. simpl in wp1, wp2, w1.
     inv H0. inv H. cbn in H1. inv H2.
-    Compute ccworld (locset_injp @ cc_locset_mach).
+    (* Compute ccworld (locset_injp @ cc_locset_mach). *)
     exists (se2, (sg, (injpw f m1 m2 Hm), (lmw sg rs2 m2 sp2))).
-    repeat apply conj; simpl; eauto.
-    + inv H1. constructor; eauto.
-    + set (ls2 := make_locset rs2 m2 sp2).
+    repeat apply conj; eauto.
+    + simpl. inv H1. constructor; eauto.
+    + simpl. auto.
+    + simpl. auto.
+    + simpl. set (ls2 := make_locset rs2 m2 sp2).
       exists (lq vf2 sg ls2 m2). split.
       constructor; eauto. red. intros; simpl; eauto.
-      inv H. eauto. inv H6. admit.
+      inv H. eauto. inv H6. admit. 
       constructor.
       constructor; eauto. admit.
-    + 
-        
+      (** seems to be right here *)
+    + intros. simpl in H. destruct wp2' as [wp2' a]. destruct a. destruct H.
+      inv H2. simpl in H. exists wp2'. simpl in H0.
+      simpl. split. auto. split. admit.
+      destruct wp2'. constructor.
+Admitted.
+(** Seems can be proved? *)
 
-      
+Definition l_ext := cc_locset ext.
 
+Definition Locmap_set_list (rs : Locmap.t) (vals: list val) (pairs : list (rpair loc)) := rs.
+
+Definition set (l : loc) (v : val) (m: Locmap.t) (p: loc):=
+  if Loc.eq l p then v else m p.
+
+Definition setpairloc (p : rpair loc) (v: val) (m: Locmap.t) :=
+  match p with
+  |One l => set l v m
+  |Twolong hi lo => set lo (Val.loword v) (set hi (Val.hiword v) m)
+  end.
+
+Lemma setpairloc_gsspair : forall l v m m',
+    setpairloc (One l) v m = m' ->
+    Locmap.getpair (One l) m'= v.
+Proof.
   intros.
+  - simpl in *. subst m'. unfold set. rewrite pred_dec_true; auto.
+Qed.
 
+Lemma setpairloc_gss : forall l v m m',
+    setpairloc (One l) v m = m' ->
+    m' l = v.
+Proof.
+  intros.
+  - simpl in *. subst m'. unfold set. rewrite pred_dec_true; auto.
+Qed.
 
+Lemma setpairloc_gso1 : forall l v m m' l',
+    setpairloc (One l) v m = m' ->
+    Loc.diff l l' ->
+    Locmap.getpair (One l') m' = Locmap.getpair (One l') m.
+Proof.
+  intros.
+  - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
+    apply Loc.diff_not_eq. auto.
+Qed.
+
+Lemma setpairloc_gso : forall l v m m' l',
+    setpairloc (One l) v m = m' ->
+    l <> l' ->
+    m' l' = m l'.
+Proof.
+  intros.
+  - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
+Qed.
+
+Lemma setpairloc_gso2 : forall l v m m' l1 l2,
+    setpairloc (One l) v m = m' ->
+    Loc.diff l l1 -> Loc.diff l l2 ->
+    Locmap.getpair (Twolong l1 l2) m' = Locmap.getpair (Twolong l1 l2) m. 
+Proof.
+  intros.
+  - simpl in *. subst m'. unfold set. repeat rewrite pred_dec_false; auto.
+    apply Loc.diff_not_eq. auto. apply Loc.diff_not_eq. auto.
+Qed.
+
+Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
+Proof.
+  econstructor. instantiate (1:= eq).
+  - red. intros [se' [x sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
+    simpl in x,sg. destruct x. inv Hse2. inv Hse1. inv Hq2. inv Hq1.
+    cbn in H4, H5, H6.
+    exists (se2,(sg,(sg,tt))). repeat apply conj; eauto.
+    + constructor; eauto. constructor. constructor.
+    + Search loc_arguments.
+      generalize (loc_arguments_always_one sg). intro.
+      assert (exists rs1, (fun p : rpair loc => Locmap.getpair p rs1) ## (loc_arguments sg) = vargs1 /\
+                       forall l : loc, loc_external sg l -> Val.inject inject_id (rs1 l) (rs l)).
+      { generalize dependent vargs1.
+        induction loc_arguments; cbn; intros.
+        - inv H5. exists rs. split. auto. intros. reflexivity.
+        - inv H5. exploit IHl; eauto. intros. exploit H. right. eauto.
+          auto.
+          exploit H. left. reflexivity. intros [la Hla].
+          intros [rs1 [A B]].
+          exists (setpairloc a v rs1). split.
+          + simpl. f_equal.  rewrite Hla.
+          erewrite setpairloc_gsspair; eauto.
+          rewrite <- A.          {
+          induction l. reflexivity.
+          simpl. f_equal. admit. apply IHl0.
+          - intros. apply H. destr_in H0. left. auto. right. right. auto.
+          - intros.
+          intros.
+          Search map. admit.
+          + intros. rewrite Hla.
+            destruct (Loc.eq la l0).
+            * subst. erewrite setpairloc_gss; eauto.
+            * erewrite setpairloc_gso. 2: eauto. eauto. auto.
+      }
+      destruct H0 as [rs1 [A B]].
+      exists (lq vf1 sg rs1 m1). split. econstructor; eauto.
+      constructor; eauto.
+    + intros. exists (tt,tt). split. simpl. auto.
+      split. auto. inv H1. destruct wp1'. inv H0.
+      destruct H2 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2.
+      destruct H0. inv H2. simpl in H11, H13. clear H H1 H3 H8 H0.
+      eexists. simpl. split. exists tt. split. reflexivity.
+      constructor; simpl; eauto.
+      2: {constructor. reflexivity. }
+      red in H11. simpl.
+      destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr in *. cbn in *.
+      apply H11. auto.
+  - red. intros [? ?] [? ?] [se [sg [sg' t]]]. simpl in w,w0,w1,w2,sg,sg',t.
+    intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2.  inv Hse1. inv Hse2.
+    inv Hq1. inv Hq2. simpl in H3, H5,H6. clear A1 A2.
+    (* Compute (ccworld (c_ext @ cc_c_locset)). *)
+    exists (se2,(tt,sg)). repeat apply conj; eauto. reflexivity. reflexivity.
+    + constructor; eauto. constructor. constructor.
+    + eexists. split. econstructor; eauto.
+      2: { econstructor. reflexivity. }
+      simpl. red in H5.
+      pose proof (loc_arguments_external sg).
+      induction loc_arguments; cbn in *; auto.
+      constructor; auto.
+      apply locmap_getpair_inject.
+      assert (forall_rpair (loc_external sg) a) by eauto.
+      destruct a; cbn in *; intuition auto.
+    + intros r1 r2 [a b] AC1 Hr. destruct Hr as [r1' [[x [Hx Hr1]] Hr2]].
+      inv Hr1. inv Hr2. simpl in H, H0.
+      exists (tt,tt). split. reflexivity. split.
+      set (rs'' := Locmap.setpair (loc_result sg) vres1 (rs')).
+      econstructor. split. econstructor. instantiate (1:= rs'').
+      unfold rs''. simpl.
+      destruct (loc_result_always_one sg) as [r ->].
+      cbn. rewrite Locmap.gss. reflexivity.
+      econstructor. split. reflexivity. constructor; eauto.
+      red. intros.  unfold rs''.
+      destruct (loc_result_always_one sg) as [r' Hr]. rewrite Hr in *. cbn in *.
+      intuition subst. rewrite Locmap.gss. auto.
+      destruct a. destruct b. reflexivity.
+Qed.
 
 
 (** Idea: first try to compose all C level passes? Clight -> LTL *)
