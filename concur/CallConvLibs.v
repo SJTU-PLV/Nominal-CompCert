@@ -348,12 +348,11 @@ Qed.
 
 Lemma setpairloc_gso1 : forall l v m m' l',
     setpairloc (One l) v m = m' ->
-    Loc.diff l l' ->
+    l <> l' ->
     Locmap.getpair (One l') m' = Locmap.getpair (One l') m.
 Proof.
   intros.
   - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
-    apply Loc.diff_not_eq. auto.
 Qed.
 
 Lemma setpairloc_gso : forall l v m m' l',
@@ -365,15 +364,24 @@ Proof.
   - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
 Qed.
 
-Lemma setpairloc_gso2 : forall l v m m' l1 l2,
-    setpairloc (One l) v m = m' ->
-    Loc.diff l l1 -> Loc.diff l l2 ->
-    Locmap.getpair (Twolong l1 l2) m' = Locmap.getpair (Twolong l1 l2) m. 
+Lemma loc_arguments_norepet sg:
+  list_norepet (loc_arguments sg).
 Proof.
-  intros.
-  - simpl in *. subst m'. unfold set. repeat rewrite pred_dec_false; auto.
-    apply Loc.diff_not_eq. auto. apply Loc.diff_not_eq. auto.
-Qed.
+  unfold loc_arguments. replace Archi.ptr64 with true by reflexivity.
+  destruct Archi.win64.
+* cut (forall x y, list_norepet (loc_arguments_win64 (sig_args sg) x y)).
+  - eauto.
+  - induction (sig_args sg); cbn.
+    + constructor.
+    + intros x y.
+      destruct a, (if zeq x _ then _ else _) eqn: Hz; cbn; admit.
+* cut (forall x y z, list_norepet (loc_arguments_elf64 (sig_args sg) x y z)).
+  - intros. apply (H 0 0 0).
+  - induction sig_args; cbn -[list_nth_z].
+    + constructor.
+    + intros x y z.
+      destruct a, list_nth_z; cbn; admit.
+Admitted. (** Obviously true, however dirty to prove.. *)
 
 Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
 Proof.
@@ -384,32 +392,32 @@ Proof.
     exists (se2,(sg,(sg,tt))). repeat apply conj; eauto.
     + constructor; eauto. constructor. constructor.
     + Search loc_arguments.
-      generalize (loc_arguments_always_one sg). intro.
+      generalize (loc_arguments_always_one sg). intro Hone.
+      generalize (loc_arguments_norepet sg). intro Hnorepet.
       assert (exists rs1, (fun p : rpair loc => Locmap.getpair p rs1) ## (loc_arguments sg) = vargs1 /\
                        forall l : loc, loc_external sg l -> Val.inject inject_id (rs1 l) (rs l)).
       { generalize dependent vargs1.
         induction loc_arguments; cbn; intros.
         - inv H5. exists rs. split. auto. intros. reflexivity.
-        - inv H5. exploit IHl; eauto. intros. exploit H. right. eauto.
-          auto.
-          exploit H. left. reflexivity. intros [la Hla].
+        - inv H5. exploit IHl; eauto. intros.
+          exploit Hone. right. eauto. auto.
+          inv Hnorepet. auto.
+          exploit Hone. left. reflexivity. intros [la Hla].
           intros [rs1 [A B]].
           exists (setpairloc a v rs1). split.
           + simpl. f_equal.  rewrite Hla.
           erewrite setpairloc_gsspair; eauto.
-          rewrite <- A.          {
-          induction l. reflexivity.
-          simpl. f_equal. admit. apply IHl0.
-          - intros. apply H. destr_in H0. left. auto. right. right. auto.
-          - intros.
-          intros.
-          Search map. admit.
+          rewrite <- A.
+          apply map_ext_in. intros. exploit Hone; eauto.
+          right. eauto. intros [la0 Hla0]. rewrite Hla0.
+          erewrite setpairloc_gso1; eauto. rewrite Hla. reflexivity.
+          inv Hnorepet. congruence.
           + intros. rewrite Hla.
             destruct (Loc.eq la l0).
             * subst. erewrite setpairloc_gss; eauto.
             * erewrite setpairloc_gso. 2: eauto. eauto. auto.
       }
-      destruct H0 as [rs1 [A B]].
+      destruct H as [rs1 [A B]].
       exists (lq vf1 sg rs1 m1). split. econstructor; eauto.
       constructor; eauto.
     + intros. exists (tt,tt). split. simpl. auto.
