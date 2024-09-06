@@ -558,23 +558,73 @@ Definition transl_on_cfg (src: statement) (cfg: rustcfg) : Errors.res statement 
 Section SPEC.
 
 (* Dynamic elaboration of statement based on own_env *)
-Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -> node -> node -> Prop :=
-| match_Sdrop: forall p pc next (* cont brk nret *) ts sel
+Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -> node -> node -> option node -> option node -> node -> Prop :=
+| match_Sskip: forall pc cont brk endn,
+    match_stmt body cfg Sskip Sskip pc pc cont brk endn
+| match_Sassign: forall pc next sel p e ts cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sassign p e))
+    (TR: transl_stmt (get_an ae pc) (Sassign p e) = OK ts),
+    match_stmt body cfg (Sassign p e) ts pc next cont brk endn
+| match_Sassign_variant: forall pc next sel p e enum_id fid ts cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sassign_variant p enum_id fid e))
+    (TR: transl_stmt (get_an ae pc) (Sassign_variant p enum_id fid e) = OK ts),
+    match_stmt body cfg (Sassign_variant p enum_id fid e) ts pc next cont brk endn
+| match_Sbox: forall pc next sel p e ts cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sbox p e))
+    (TR: transl_stmt (get_an ae pc) (Sbox p e) = OK ts),
+    match_stmt body cfg (Sbox p e) ts pc next cont brk endn
+| match_Sstoragelive: forall pc next sel ts id cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sstoragelive id))
+    (TR: transl_stmt (get_an ae pc) (Sstoragelive id) = OK ts),
+    match_stmt body cfg (Sstoragelive id) ts pc next cont brk endn
+| match_Sstoragedead: forall pc next sel ts id cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sstoragedead id))
+    (TR: transl_stmt (get_an ae pc) (Sstoragedead id) = OK ts),
+    match_stmt body cfg (Sstoragedead id) ts pc next cont brk endn
+| match_Sdrop: forall p pc next ts sel cont brk endn
     (SEL: cfg ! pc = Some (Isel sel next))
     (STMT: select_stmt body sel = Some (Sdrop p))
     (TR: transl_stmt (get_an ae pc) (Sdrop p) = OK ts),
-    match_stmt body cfg (Sdrop p) ts pc next
-| match_Ssequence: forall s1 ts1 s2 ts2 n1 n2 n3
-    (MSTMT1: match_stmt body cfg s1 ts1 n1 n2)
-    (MSTMT2: match_stmt body cfg s2 ts2 n2 n3),
-    match_stmt body cfg (Ssequence s1 s2) (Ssequence ts1 ts2) n1 n3
+    match_stmt body cfg (Sdrop p) ts pc next cont brk endn
+| match_Scall: forall pc next sel ts p e l cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Scall p e l))
+    (TR: transl_stmt (get_an ae pc) (Scall p e l) = OK ts),
+    match_stmt body cfg (Scall p e l) ts pc next cont brk endn
+| match_Ssequence: forall s1 ts1 s2 ts2 n1 n2 n3 cont brk endn
+    (MSTMT1: match_stmt body cfg s1 ts1 n1 n2 cont brk endn)
+    (MSTMT2: match_stmt body cfg s2 ts2 n2 n3 cont brk endn),
+    match_stmt body cfg (Ssequence s1 s2) (Ssequence ts1 ts2) n1 n3 cont brk endn
+| match_Sifthenelse: forall s1 ts1 s2 ts2 n1 n2 endif cont brk endn e
+    (MSTMT1: match_stmt body cfg s1 ts1 n1 endif cont brk endn)
+    (MSTMT2: match_stmt body cfg s2 ts2 n2 endif cont brk endn),
+    (* For now, no way to compile the expression in Icond *)
+    match_stmt body cfg (Sifthenelse e s1 s2) (Sifthenelse e ts1 ts2) n1 endif cont brk endn
+| match_Sloop: forall s ts next loop_start loop_jump_node cont brk endn
+    (MSTMT: match_stmt body cfg s ts loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
+    (START: cfg ! loop_jump_node = Some (Inop loop_start)),
+    match_stmt body cfg (Sloop s) (Sloop ts) loop_jump_node next brk cont endn
+| match_Sbreak: forall brk cont endn next,
+    match_stmt body cfg Sbreak Sbreak brk next cont (Some brk) endn
+| match_Scontinue: forall brk cont endn next,
+    match_stmt body cfg Scontinue Scontinue cont next (Some cont) brk endn
+| match_Sreturn: forall pc sel next e ts cont brk endn
+    (SEL: cfg ! pc = Some (Isel sel next))
+    (STMT: select_stmt body sel = Some (Sreturn e))
+    (TR: transl_stmt (get_an ae pc) (Sreturn e) = OK ts),
+    match_stmt body cfg (Sreturn e) ts pc next cont brk endn
 .
 
-(** How to prove? *)
+(** How to prove? added a visited list (list of pc) in match_stmt *)
 Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
     (CFG: generate_cfg s = OK (entry, cfg))
     (TRANSL: transl_on_cfg s cfg = OK ts),
-  exists nret, match_stmt s cfg s ts entry nret.
+  exists nret, match_stmt s cfg s ts entry nret None None nret.
 Admitted.
 
 End SPEC.

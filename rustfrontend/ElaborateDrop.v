@@ -140,7 +140,7 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
         (Ssequence (generate_drop p full (get_dropflag_temp flagm p)) stmt)
       else
         (* this place must be uninit, no need to drop *)
-        stmt
+        (Ssequence Sskip stmt)
   end.
 
 Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (flagm: PTree.t (list (place * ident))) (p: place) : Errors.res statement :=
