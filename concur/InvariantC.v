@@ -18,6 +18,7 @@ Require Import CallconvBig VCompBig.
   conventions asserting that the source and target queries are
   identical, and furthermore satisfy the given invariant. *)
 
+(*
 Program Coercion cc_inv {li : language_interface} (I : invariant li) : GS.callconv li li :=
   {|
     GS.ccworld := inv_world I;
@@ -32,7 +33,7 @@ Qed.
 Next Obligation.
   inv H. auto.
 Qed.
-
+ *)
 
 (** With this, an invariant preservation proof can itself be lifted
   into a self-simulation by the invariant calling conventions. *)

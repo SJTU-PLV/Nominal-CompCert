@@ -668,18 +668,6 @@ Proof.
   apply cctrans_injp_comp.
 Qed.
 
-(**  TODOs*)
-
-(** 3.Introduce callconv with empty world (ext, inj, CLLMMA) *)
-(** 4.Try the composition of these trivial callconv using cctrans *)
-
-(** Question: Can we compose the simulation of [id] and [ext] passes with new [injp] passes 
-    without modifing the proofs?
-
-    Yes for [id]
- *)
-
-
 Local Instance world_unit {T: Type} : World T :=
   {
     w_state := unit;
@@ -688,205 +676,25 @@ Local Instance world_unit {T: Type} : World T :=
     w_acce := fun _ _ => True;
   }.
 
-Program Definition cc_id {li : language_interface} : callconv li li :=
+(** Parametrize the upper lemmas : 
+    Smallstep.forward_simulation cc cc L1 L2 ->
+    GS.forward_simulation cc' L1 L2.
+    where cc' contains a unit world.
+*)
+
+Program Definition cc_unit_world {li1 li2} (cc: LanguageInterface.callconv li1 li2) : callconv li1 li2 :=
   {|
-    ccworld := unit;
+    ccworld := LanguageInterface.ccworld cc;
     ccworld_world := world_unit;
-    match_senv w := eq;
-    match_query w := eq;
-    match_reply w := eq;
+    match_senv w := LanguageInterface.match_senv cc w;
+    match_query w := LanguageInterface.match_query cc w;
+    match_reply w := LanguageInterface.match_reply cc w;
   |}.
-
-Lemma cctrans_id_1 {li1 li2 : language_interface} : forall (cc: callconv li1 li2),
-    cctrans (cc_compose cc_id cc) cc.
-Proof.
-  econstructor. instantiate (1:= fun w1 w => eq (snd w1) w).
-  - econstructor. repeat apply conj; eauto.
-    + instantiate (1:= (se1,(tt,w2))). econstructor; eauto. reflexivity.
-    + econstructor; eauto. split. reflexivity. auto.
-    + reflexivity.
-    + intros. destruct wp1 as [xx wp2']. simpl in H1, H2.  subst wp2'.
-      destruct wp1' as [xy wp2'']. destruct H3. destruct H2. simpl in *.
-      eexists. split; eauto. split; eauto.
-      destruct H4 as [r1' [A B]]. subst. auto.
-  - red. intros. destruct w1 as [se' [tt w2]].
-    simpl in H. destruct H as [Heq H]. subst se'.
-    simpl in H0. destruct H0 as [q1' [Heq H0]]. subst q1'.
-    destruct wp1 as [tt' wp2'].
-    destruct H1. simpl in H1, H3. simpl in H2. subst wp2'.
-    exists w2. intuition auto.
-    exists (tt, wp2'). intuition auto.
-    split; auto. exists r1. split. econstructor; eauto. auto.
+Next Obligation.
+  eapply LanguageInterface.match_senv_public_preserved; eauto.
+Qed.
+Next Obligation.
+  eapply LanguageInterface.match_senv_valid_for; eauto.
 Qed.
 
-Lemma cctrans_id_2 {li1 li2 : language_interface} : forall (cc: callconv li1 li2),
-    cctrans (cc_compose cc cc_id) cc.
-Proof.
-  econstructor. instantiate (1:= fun w1 w => eq (fst w1) w).
-  - econstructor. repeat apply conj; eauto.
-    + instantiate (1:= (se2,(w2,tt))). econstructor; eauto. reflexivity.
-    + exists q2. split; auto. econstructor; eauto.
-    + reflexivity.
-    + intros. destruct wp1 as [wp2' xx]. simpl in H1, H2.  subst wp2'.
-      destruct wp1' as [wp2'' xy]. destruct H3. destruct H2. simpl in *.
-      eexists. split; eauto. split; eauto.
-      destruct H4 as [r1' [A B]]. subst. auto.
-  - red. intros. destruct w1 as [se' [w2 tt]].
-    simpl in H. destruct H as [H Heq]. subst se'.
-    simpl in H0. destruct H0 as [q2' [H0 Heq]]. subst q2'.
-    destruct wp1 as [wp2' tt'].
-    destruct H1. simpl in H1, H3. simpl in H2. subst wp2'.
-    exists w2. intuition auto.
-    exists (wp2',tt). intuition auto. split; simpl. auto. reflexivity.
-    exists r2. split. auto. econstructor; eauto.
-Qed.
-
-Lemma oldfsim_newfsim_ccid : forall {li : language_interface} (L1 L2: semantics li li),
-    Smallstep.forward_simulation LanguageInterface.cc_id LanguageInterface.cc_id L1 L2 ->
-    forward_simulation cc_id L1 L2.
-Proof.
-  intros. red in H. inv H. constructor.
-  inv X. econstructor; eauto.
-  intros. exploit fsim_lts0; eauto.
-  intros FPros.
-  instantiate (1:= fun se1 se2 wB gw idx s1 s2 =>  fsim_match_states0 se1 se2 wB idx s1 s2).
-  simpl.
-  inv FPros. econstructor; eauto.
-  - intros. exploit fsim_match_final_states0; eauto.
-    intros [r2 [A B]]. exists r2. exists tt. intuition auto. reflexivity. reflexivity.
-  - intros. exploit fsim_match_external0; eauto.
-    intros (w0 & q2 & A & B & C).
-    exists w0, q2. intuition auto. reflexivity.
-    eapply H4; eauto.
-Qed.
-
-
-(** Q : Can we (Should we) define the new [injp] as [cklr] instead of several different
-        callconvs for different interfaces ?
-      
-    1. Compare the [c_injp] defined above v.s. [cc_c injp]. 
-       Can we define another version of cc_c based on another [cklr] equipped with acci and acce?
-    2. Try []
-
-  *)
-
-Lemma compose_id_new_injp_1 {li1 li2: language_interface} : forall (cc: callconv li1 li2) L1 L2 L3,
-    Smallstep.forward_simulation 1 1 L1 L2 ->
-    forward_simulation cc L2 L3 ->
-    forward_simulation cc L1 L3.
-Proof.
-  intros. eapply open_fsim_cctrans.
-  eapply st_fsim_vcomp; eauto. eapply oldfsim_newfsim_ccid; eauto.
-  eapply cctrans_id_1.
-Qed.
-
-Lemma compose_id_new_injp_2 {li1 li2: language_interface} : forall (cc: callconv li1 li2) L1 L2 L3,
-    forward_simulation cc L1 L2 ->
-    Smallstep.forward_simulation 1 1 L2 L3 ->
-    forward_simulation cc L1 L3.
-Proof.
-  intros. eapply open_fsim_cctrans.
-  eapply st_fsim_vcomp; eauto. eapply oldfsim_newfsim_ccid; eauto.
-  eapply cctrans_id_2.
-Qed.
-
-(*
-c_injp
-  cc_c
-    Extends.ext
-    inj
- *)
-
-Require Import Extends.
-Program Definition c_ext : callconv li_c li_c :=
-  {|
-    ccworld := unit;
-    ccworld_world := world_unit;
-    match_senv w := eq;
-    match_query w := cc_c_query ext w;
-    match_reply w := cc_c_reply ext w;
-  |}.
-
-Lemma cctrans_ext_comp : cctrans (cc_compose c_ext c_ext) c_ext.
-Proof.
-  econstructor. instantiate (1:= fun _ _ => True).
-  - red. intros. inv H.  inv H0. simpl in H, H1, H2.
-    exists (se2, (tt,tt)). intuition auto. econstructor; eauto. reflexivity. reflexivity.
-    exists (cq vf1 sg vargs1 m1). split.
-    econstructor; eauto. reflexivity. simpl.
-    generalize dependent vargs1.
-    induction 1. constructor. constructor; eauto. reflexivity.
-    simpl. eapply Mem.extends_refl.
-    econstructor; eauto.
-    exists tt. intuition auto. destruct wp1'. simpl in H6. 
-    destruct H6 as [r1' [A B]]. inv A. inv B. simpl in *.
-    econstructor; simpl; eauto.
-    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
-    eapply Mem.extends_extends_compose; eauto.
-  - red. intros. destruct w1 as [se' [w11 w12]]. inv H. inv H3. inv H4. inv H2.
-    inv H0. inv H. inv H0. inv H2. simpl in H9, H11, H12, H , H3, H4.
-    exists tt. intuition auto. reflexivity. constructor.
-    constructor; simpl; eauto.
-    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
-    eapply CallConv.val_inject_lessdef_list_compose. eauto.
-    eapply (ext_lessdef_list tt). eauto.
-    eapply Mem.extends_extends_compose; eauto.
-    exists (tt,tt). split. reflexivity. split. exists r1. inv H2. simpl in *.
-    split. econstructor; simpl; eauto. eapply val_inject_id.
-    eapply Val.lessdef_refl.
-    eapply Mem.extends_refl.
-    econstructor; eauto. auto.
-Qed.
-
-
-Lemma oldfsim_newfsim_ext_c : forall  (L1 L2: semantics li_c li_c),
-    Smallstep.forward_simulation (cc_c ext) (cc_c ext) L1 L2 ->
-    forward_simulation c_ext L1 L2.
-Proof.
-  intros. red in H. inv H. constructor.
-  inv X. econstructor; eauto.
-  intros. exploit fsim_lts0; eauto.
-  intros FPros.
-  instantiate (1:= fun se1 se2 wB gw idx s1 s2 =>  fsim_match_states0 se1 se2 wB idx s1 s2).
-  simpl.
-  inv FPros. econstructor; eauto.
-  - intros. exploit fsim_match_final_states0; eauto.
-    intros [r2 [A B]]. exists r2. exists tt. intuition auto. reflexivity. reflexivity.
-    destruct B as [x [X Y]]. simpl. destruct x. destruct w. auto.
-  - intros. exploit fsim_match_external0; eauto.
-    intros (w0 & q2 & A & B & C).
-    exists w0, q2. intuition auto. reflexivity.
-    eapply H4; eauto. econstructor. split; eauto.
-Qed.
-
-
-(** Idea: first try to compose all C level passes? Clight -> LTL *)
-
-(** Idea: Since we have totally the same incoming and outgoing lemmas. The [inj] is useless? *)
-(* inj *)
-
-Local Instance world_inj : World inj_world :=
-  {
-    w_state := inj_world;
-    w_lens := lens_id;
-    w_acci := inj_incr;
-    w_acce := inj_incr;
-  }.
-
-Program Definition c_inj : callconv li_c li_c :=
-  {|
-    ccworld := inj_world;
-    ccworld_world := world_inj;
-    match_senv w := inj_stbls w;
-    match_query w := cc_c_query inj w;
-    match_reply w := cc_c_reply inj w;
-  |}.
-
-
-
-(** 4.1 The self-simulation mechniasm? *)  
-(** 4.Modify the proofs of each pass *)
-(** 5.Compose the compiler *)
-
-  
-
+Coercion cc_unit_world : LanguageInterface.callconv >-> callconv.

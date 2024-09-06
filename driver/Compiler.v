@@ -33,6 +33,7 @@ Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
 Require Import CA.
+Require Import CallconvBig VCompBig CallConvLibs Composition.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy (*Cexec*).
@@ -69,26 +70,28 @@ Require Stacking.
 Require Asmgen.
 (** Proofs of semantic preservation. *)
 Require SimplExprproof.
-Require SimplLocalsproof.
+Require SimplLocalsproofC.
 Require Cshmgenproof.
-Require Cminorgenproof.
+Require CminorgenproofC.
 Require Selectionproof.
 Require RTLgenproof.
 Require Tailcallproof.
-Require Inliningproof.
+Require InliningproofC.
 Require Renumberproof.
-Require Constpropproof.
-Require CSEproof.
-Require Deadcodeproof.
-Require Unusedglobproof.
+Require ConstpropproofC.
+Require CSEproofC.
+Require DeadcodeproofC.
+Require UnusedglobproofC.
 
 Require Allocproof.
 Require Tunnelingproof.
 Require Linearizeproof.
 Require CleanupLabelsproof.
 Require Debugvarproof.
-Require Stackingproof.
+Require StackingproofC.
 Require Asmgenproof.
+
+
 (** Command-line flags. *)
 Require Import Compopts.
 
@@ -250,25 +253,25 @@ Qed.
 Local Open Scope linking_scope.
 
 Definition CompCertO's_passes :=
-      mkpass SimplLocalsproof.match_prog
+      mkpass SimplLocalsproofC.match_prog
   ::: mkpass Cshmgenproof.match_prog
-  ::: mkpass Cminorgenproof.match_prog
+  ::: mkpass CminorgenproofC.match_prog
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass (match_if Compopts.optim_tailcalls Tailcallproof.match_prog)
-  ::: mkpass Inliningproof.match_prog
+  ::: mkpass InliningproofC.match_prog
   ::: mkpass Renumberproof.match_prog
-  ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
+  ::: mkpass (match_if Compopts.optim_constprop ConstpropproofC.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
-  ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
-  ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
-  ::: mkpass Unusedglobproof.match_prog
+  ::: mkpass (match_if Compopts.optim_CSE CSEproofC.match_prog)
+  ::: mkpass (match_if Compopts.optim_redundancy DeadcodeproofC.match_prog)
+  ::: mkpass UnusedglobproofC.match_prog
   ::: mkpass Allocproof.match_prog
   ::: mkpass Tunnelingproof.match_prog
   ::: mkpass Linearizeproof.match_prog
   ::: mkpass CleanupLabelsproof.match_prog
   ::: mkpass (match_if Compopts.debug Debugvarproof.match_prog)
-  ::: mkpass Stackingproof.match_prog
+  ::: mkpass StackingproofC.match_prog
   ::: mkpass Asmgenproof.match_prog
   ::: pass_nil _.
 
@@ -322,23 +325,23 @@ Proof.
   unfold match_prog; simpl.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
   exists p3; split. apply Cshmgenproof.transf_program_match; auto.
-  exists p4; split. apply Cminorgenproof.transf_program_match; auto.
+  exists p4; split. apply CminorgenproofC.transf_program_match; auto.
   exists p5; split. apply Selectionproof.transf_program_match; auto.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply total_if_match. apply Tailcallproof.transf_program_match.
-  exists p8; split. apply Inliningproof.transf_program_match; auto.
+  exists p8; split. apply InliningproofC.transf_program_match; auto.
   exists p9; split. apply Renumberproof.transf_program_match; auto.
-  exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
+  exists p10; split. apply total_if_match. apply ConstpropproofC.transf_program_match.
   exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
-  exists p12; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
-  exists p13; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
-  exists p14; split. apply Unusedglobproof.transf_program_match; auto.
+  exists p12; split. eapply partial_if_match; eauto. apply CSEproofC.transf_program_match.
+  exists p13; split. eapply partial_if_match; eauto. apply DeadcodeproofC.transf_program_match.
+  exists p14; split. apply UnusedglobproofC.transf_program_match; auto.
   exists p15; split. apply Allocproof.transf_program_match; auto.
   exists p16; split. apply Tunnelingproof.transf_program_match.
   exists p17; split. apply Linearizeproof.transf_program_match; auto.
   exists p18; split. apply CleanupLabelsproof.transf_program_match; auto.
   exists p19; split. eapply partial_if_match; eauto. apply Debugvarproof.transf_program_match.
-  exists p20; split. apply Stackingproof.transf_program_match; auto.
+  exists p20; split. apply StackingproofC.transf_program_match; auto.
   exists tp; split. apply Asmgenproof.transf_program_match; auto.
   reflexivity.
 Qed.
@@ -394,112 +397,43 @@ Qed.
 
 Require Import Conventions Asm Mach Lineartyping.
 
+Require Import InvariantC.
+Infix "@" := GS.cc_compose (at level 30, right associativity).
+
 (** This is the simulation convention for the whole compiler. *)
 
-Definition cc_compcert : callconv li_c li_asm :=
+Definition cc_compcert : GS.callconv li_c li_asm :=
        ro @ wt_c @
-       cc_c_asm_injp @
-       cc_asm injp.
+       cc_c_asm_injp_new.
 
 (** The C-level simulation convention *)
-Definition cc_c_level : callconv li_c li_c := ro @ wt_c @ injp.
+Definition cc_c_level : GS.callconv li_c li_c := ro @ wt_c @ c_injp.
 
-Definition cc_compcert_cod : callconv li_c li_asm :=
-  ro @ wt_c @ cc_c injp @
-       cc_c_locset @ cc_locset_mach @ cc_mach_asm @
-       @ cc_asm inj.
+Definition cc_compcert_1 : GS.callconv li_c li_asm :=
+  ro @ wt_c @ c_injp @
+    cc_c_locset @ cc_locset_mach @ cc_mach_asm.
 
-Definition cc_compcert_dom : callconv li_c li_asm :=
-  ro @ wt_c @  cc_c injp @
-       cc_c_locset @ cc_locset_mach @ cc_mach_asm.
-
-Lemma transport_injp_to_asm :
-  ccref (ro @ wt_c @ cc_c injp @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm injp @ cc_asm inj)
-        cc_compcert_cod.
-Proof.
-  rewrite (commute_around cc_mach_asm).
-  rewrite (commute_around cc_locset_mach).
-  rewrite (commute_around cc_c_locset).
-  rewrite <- (cc_compose_assoc injp).
-  rewrite <- cc_c_compose.
-  rewrite injp_injp_eq.
-  reflexivity.
-Qed.
 
 (** The first expand of cc_compcert for both directions *)
 Theorem cc_compcert_merge:
   forall p tp,
-  forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->
-  forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+  GS.forward_simulation cc_compcert_1 (Clight.semantics1 p) (Asm.semantics tp) ->
+  GS.forward_simulation cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
   intros.
-  unfold cc_compcert, cc_compcert_cod, cc_compcert_dom in *.
-  rewrite injp__injp_inj_injp at 2. rewrite !cc_asm_compose.
-  rewrite <- transport_injp_to_asm in H.
-  rewrite <- !cc_compose_assoc.
-  eapply compose_forward_simulations.
-  rewrite <- cc_injpca_cainjp at 1.
-  rewrite cc_cainjp__injp_ca.
-  rewrite <- cc_cllmma_ca at 1.
-  rewrite cc_ca_cllmma.
-  rewrite cc_compose_assoc at 1.
-  rewrite !cc_compose_assoc. eauto.
-  eapply semantics_asm_rel.
-Qed.
+  unfold cc_compcert, cc_compcert_1 in *.
+Admitted.
 
-(** Derivation of the simulation conventions after C-level at the incoming side *)
-Lemma cc_compcert_expand:
-  ccref
-    cc_compcert_cod
-    (cc_c_level @                                          (* Passes up to Alloc *)
-     cc_c inj @                                            (* Unusedglob *)
-     (wt_c @ cc_c ext @ cc_c_locset) @                     (* Alloc *)
-     cc_locset ext @                                       (* Tunneling *)
-     (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
-     (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
-     cc_asm inj).
-Proof.
-  unfold cc_compcert_cod. unfold cc_c_level.
-  rewrite !cc_compose_assoc.
-  etransitivity.
-  {
-    rewrite inj_inj, !cc_asm_compose.
-    rewrite inj_inj at 1. rewrite !cc_asm_compose. rewrite cc_compose_assoc.
-    rewrite <- lessdef_c_cklr, cc_compose_assoc.
-    rewrite <- (cc_compose_assoc wt_c lessdef_c).
-    rewrite (inv_dup wt_c), (cc_compose_assoc wt_c), (cc_compose_assoc wt_c).
-    rewrite (commute_around (_@_) (R2:= injp)).
-    do 4 rewrite (commute_around _ (R2 := _ inj)).
-    reflexivity.
-  }
-  repeat (rstep; [rauto | ]).
-  etransitivity.
-  {
-    rewrite !cc_compose_assoc.
-    rewrite <- ext_inj, !cc_asm_compose.
-    rewrite cc_compose_assoc.
-    rewrite <- ext_ext at 1. rewrite cc_asm_compose, cc_compose_assoc.
-    do 4 rewrite (commute_around cc_mach_asm).
-    do 2 rewrite (commute_around cc_locset_mach).
-    do 1 rewrite (commute_around cc_c_locset).
-    rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
-    rewrite <- wt_loc_out_of_thin_air, cc_compose_assoc.
-    reflexivity.
-  }
-  reflexivity.
-Qed.
-
-(** Derivation of the simulation conventions after C-level at the outgoing side *)
 Lemma cc_compcert_collapse:
-  ccref
+  cctrans
     (cc_c_level @                                 (* Passes up to Alloc *)
-     cc_c inj @                                   (* Unusedglob  *)
-     (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
+     c_injp @                                   (* Unusedglob  *)
+     (wt_c @ c_ext @ cc_c_locset) @            (* Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @
     cc_asm inj)                                   (* Asmgen *)
-    cc_compcert_dom.
+    cc_compcert_1.
 Proof.
   (* commute the cklrs towards source C level *)
   rewrite <- wt_loc_out_of_thin_air.
@@ -826,7 +760,7 @@ Ltac DestructM :=
     exact Debugvarproof.transf_program_correct.
   eapply compose_forward_simulations.
     rewrite <- cc_stacking_lm, cc_lm_stacking.
-    eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
+    eapply StackingproofC.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.
     eassumption.
   eapply compose_forward_simulations.

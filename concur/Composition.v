@@ -5,7 +5,7 @@ Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
-Require Import CallconvBig VCompBig.
+Require Import CallconvBig VCompBig CallConvLibs.
 
 Unset Program Cases.
 
@@ -29,10 +29,17 @@ Unset Program Cases.
     Constprop : option (ro @ injp)
     CSE      : option (ro @ injp)
     Deadcode  : option (ro @ injp)
-    Unusedglob : injp (currently inj)
+    Unusedglob : injp 
     
+
     ?
     Alloc : wt_c @ ext @ CL
+    Tunneling : cc_locset ext
+    Linearize : id
+    Cleanuplabels : id 
+    Debugvar : id
+    Stacking : wt_loc @ cc_stacking_injp
+    Asmgen : cc_mach ext @ MA
  *)
 
 (**  step1 : injp @ injp @ wt_c @ ext @ ext @ ext @ injp @ id ==========> wt_c @ injp *)
@@ -44,108 +51,6 @@ Unset Program Cases.
 
 (** lemmas about [wt_c] *)
 
-Program Coercion cc_inv {li : language_interface} (I : invariant li) : GS.callconv li li :=
-  {|
-    GS.ccworld := inv_world I;
-    GS.ccworld_world := world_unit;
-    GS.match_senv := fun w => rel_inv (symtbl_inv I w);
-    GS.match_query := fun w => rel_inv (query_inv I w);
-    GS.match_reply := fun w => rel_inv (reply_inv I w)
-  |}.
-Next Obligation.
-  inv H. reflexivity.
-Qed.
-Next Obligation.
-  inv H. auto.
-Qed.
-(*
-Section RESTRICT.
-  Context {li} (L: semantics li li).
-  Context (I: invariant li).
-  Context (IS: inv_world I -> state L -> Prop).
-
-  Definition restrict_lts se :=
-    {|
-      step ge s t s' :=
-        step (L se) ge s t s' /\
-        exists w,
-          symtbl_inv I w se /\
-          IS w s /\
-          IS w s';
-      valid_query q :=
-        valid_query (L se) q;
-      initial_state q s :=
-        initial_state (L se) q s /\
-        exists w,
-          symtbl_inv I w se /\
-          query_inv I w q /\
-          IS w s;
-      final_state s r :=
-        final_state (L se) s r /\
-        exists w,
-          symtbl_inv I w se /\
-          IS w s /\
-          reply_inv I w r;
-      at_external s q :=
-        at_external (L se) s q /\
-        exists w wA,
-          symtbl_inv I w se /\
-          IS w s /\
-          query_inv I wA q;
-      after_external s r s' :=
-        after_external (L se) s r s' /\
-        exists w wA q,
-          symtbl_inv I w se /\
-          at_external (L se) s q /\
-          IS w s /\
-          query_inv I wA q /\
-          reply_inv I wA r /\
-          IS w s';
-    globalenv :=
-      globalenv (L se);
-  |}.
-
-  Definition restrict :=
-    {|
-      skel := skel L;
-      state := state L;
-      (* memory_of_state := memory_of_state L; *)
-      activate se := restrict_lts se;
-    |}.
-
-  Lemma restrict_fsim:
-    preserves L I IS ->
-    GS.forward_simulation (cc_inv I) L restrict.
-  Proof.
-    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
-          destruct Hse; subst); cbn; auto.
-    - destruct 1. reflexivity.
-    - intros q _ s [Hq] Hs. exists s.
-      assert (IS w s) by (eapply preserves_initial_state; eauto).
-      eauto 10 using rel_inv_intro.
-    - intros s _ r [Hs] Hr. exists r.
-      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
-      eauto 10 using rel_inv_intro.
-    - intros s _ q [Hs] Hx.
-      edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
-      eexists wA, q. intuition eauto 10 using rel_inv_intro.
-      destruct H0. exists s1'. intuition eauto 20 using rel_inv_intro.
-    - intros s t s' STEP _ [Hs].
-      assert (IS w s') by (eapply preserves_step; eauto).
-      exists s'. eauto 10 using rel_inv_intro.
-  Qed.
-
-  Lemma restrict_determinate:
-    determinate L ->
-    determinate restrict.
-  Proof.
-    intros HL se. specialize (HL se) as [ ].
-    split; unfold nostep, not, single_events in *; cbn; intros;
-    repeat (lazymatch goal with H : _ /\ _ |- _ => destruct H as [H _] end);
-    eauto.
-  Qed.
-End RESTRICT.
- *)
 (*
 Lemma restrict_fsim {li} (L :semantics li li) IA IS:
     preserves L IA IA IS ->
