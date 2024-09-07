@@ -504,6 +504,35 @@ End FORWARD_SIMU_DIAGRAMS.
 
 End GS.
 
+(** Transform the old callconv into new callconv with [world_unit], therefore new fsim is essentially the same as old one *)
+
+Import GS.
+
+Local Instance world_unit {T: Type} : World T :=
+  {
+    w_state := unit;
+    w_lens := lens_unit;
+    w_acci := fun _ _ => True;
+    w_acce := fun _ _ => True;
+  }.
+
+Program Definition cc_unit_world {li1 li2} (cc: LanguageInterface.callconv li1 li2) : callconv li1 li2 :=
+    {|
+      ccworld := LanguageInterface.ccworld cc;
+      ccworld_world := world_unit;
+      match_senv w := LanguageInterface.match_senv cc w;
+      match_query w := LanguageInterface.match_query cc w;
+      match_reply w := LanguageInterface.match_reply cc w;
+    |}.
+Next Obligation.
+  eapply LanguageInterface.match_senv_public_preserved; eauto.
+Qed.
+Next Obligation.
+  eapply LanguageInterface.match_senv_valid_for; eauto.
+Qed.
+
+Coercion cc_unit_world : LanguageInterface.callconv >-> callconv.
+
 
 
 

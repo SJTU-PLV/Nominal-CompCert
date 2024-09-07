@@ -199,7 +199,7 @@ CLOSE=SmallstepClosed.v
 
 CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        CallconvBig.v MultiSimBig.v \
-       HCompBig.v \
+       HCompBig.v CallConvAlgebra.v \
        InjpAccoComp.v VCompBig.v CallConvLibs.v \
        SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
        InvariantC.v StackingproofC.v \

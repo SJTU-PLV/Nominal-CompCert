@@ -5,7 +5,7 @@ Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
-Require Import CallconvBig VCompBig.
+Require Import CallconvBig CallConvAlgebra VCompBig.
 Require Import StackingproofC CallConv.
 Import GS.
 
@@ -696,7 +696,7 @@ Proof.
   - red. intros [se' [wp sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in sg. inv Hse2. inv Hse1. inv Hq2. inv Hq1. inv H9.
     cbn in H7, H8.
-    Compute (ccworld (cc_c_locset @ locset_injp)).
+    (* Compute (ccworld (cc_c_locset @ locset_injp)). *)
     exists (se1,(sg,(sg,(injpw f m0 m Hm)))). repeat apply conj; eauto.
     + constructor; eauto. constructor; eauto. constructor; eauto.
     + generalize (loc_arguments_always_one sg). intro Hone.

@@ -37,10 +37,11 @@ Qed.
 
 (** With this, an invariant preservation proof can itself be lifted
   into a self-simulation by the invariant calling conventions. *)
+Import GS.
 
 Lemma preserves_fsim {li} (L: semantics li li) I IS:
   preserves L I I IS ->
-  GS.forward_simulation (cc_inv I) L L.
+  forward_simulation (cc_inv I) L L.
 Proof.
   intros MATCH. constructor.
   eapply GS.Forward_simulation; eauto.

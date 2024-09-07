@@ -607,7 +607,16 @@ Proof. Admitted.
 Lemma cctrans_split_1 : forall {A B C} (cc : GS.callconv A B) (cc1 cc2: GS.callconv B C),
     cctrans cc1 cc2 ->
     cctrans (cc @ cc1) (cc @ cc2).
-Proof. Admitted.
+Proof.
+  intros. inv X.
+  econstructor. instantiate (1:= fun w1 w2 => fst w1 = fst w2 /\ match12 (snd w1) (snd w2)).
+  - red. intros. destruct w2 as [se [w w2]].
+    inv H. destruct H0 as [q1' [Hq1 Hq2]].
+    exploit big_step_incoming; eauto.
+    intros (w1 & Hse & Hq & MATCH & HR).
+    exists (se, (w,w1)). 
+
+Admitted.
 
 Lemma callconv_compose_para : forall {li1 li2 li3}
                                 (cc1: callconv li1 li2) (cc2: callconv li2 li3),

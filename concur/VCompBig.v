@@ -11,7 +11,7 @@ Require Import Integers.
 Require Import Values.
 Require Import Memory.
 
-Require Import CallconvBig InjpAccoComp.
+Require Import CallconvBig InjpAccoComp CallConvAlgebra.
 
 Require Import RelClasses.
 
@@ -141,141 +141,6 @@ Solve All Obligations with
 
 Notation "1" := cc_id : gs_cc_scope.
 *)
-
-(** Algebraic structures on calling conventions. *)
-
-(** * Refinement and equivalence *)
-
-(** ** Definition *)
-
-(** The following relation asserts that the calling convention [cc] is
-  refined by the calling convention [cc'], meaning that any
-  [cc']-simulation is also a [cc]-simulation. *)
-
-(** cc1: internal, i.e. injp ⋅ injp
-    cc2: external, i.e. injp  *)
-
-(*
-Inductive wf_mem {li1 li2 : language_interface} {cc : callconv li1 li2} : gworld cc -> Prop :=
-|wf_q : forall w wp q1 q2, match_query cc w q1 q2 -> get w = wp -> wf_mem wp
-|wf_r : forall w wp r1 r2, match_reply cc w r1 r2 -> get w = wp -> wf_mem wp.
-                                                                   
-Inductive same_mem {li1 li2: language_interface} {cc1 cc2: callconv li1 li2} : gworld cc1 -> gworld cc2 -> Prop :=
-|match_query_mem : forall w1 w2 q1 q2 wp1 wp2,
-    match_query cc1 w1 q1 q2 -> match_query cc2 w2 q1 q2 ->
-    get w1 = wp1 -> get w2 = wp2 ->
-    same_mem wp1 wp2
-|match_reply_mem : forall w1 w2 r1 r2 wp1 wp2,
-    match_reply cc1 w1 r1 r2 -> match_reply cc2 w2 r1 r2 ->
-    get w1 = wp1 -> get w2 = wp2 ->
-    same_mem wp1 wp2.
-
-Definition ACCI_12 {li1 li2} {cc1 cc2: callconv li1 li2} (wp1 : gworld cc1) (wp2 : gworld cc2) :=
-  forall wp1' wp2', wp1 *-> wp1' -> same_mem wp1' wp2' -> wp2 *-> wp2'.
- *)
-
-(** We are trying to define the ccref_outgoing with respect to the "living wp1, however,
-    to show from [wp1 *-> (get w1)] we can construct w2 and show [wp2 *-> (get w2)], we still
-    have to show that wp1 and wp2 are recording the same injected memories. Such relation has to be **defined**
-    in some way "*)
-
-
-Definition ccref_outgoing {li1 li2} (cc1 cc2: callconv li1 li2) (match12 : gworld cc1 -> gworld cc2 -> Prop) :=
-  forall wp1 wp2 w1 se1 se2 q1 q2,
-    match_senv cc1 w1 se1 se2 ->
-    match_query cc1 w1 q1 q2 ->
-    wp1 *-> (get w1) ->
-    match12 wp1 wp2 ->
-    exists w2,
-      wp2 *-> (get w2) /\
-      match_senv cc2 w2 se1 se2 /\
-      match_query cc2 w2 q1 q2 /\
-      forall r1 r2 (wp2': gworld cc2),
-        get w2 o-> wp2' ->
-        match_reply cc2 (set w2 wp2') r1 r2 ->
-        exists (wp1' : gworld cc1),
-        get w1 o-> wp1' /\
-        match_reply cc1 (set w1 wp1') r1 r2 /\
-        match12 wp1' wp2'.            
-
-Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) (match12 : gworld cc1 -> gworld cc2 -> Prop):=
-  forall w2 se1 se2 q1 q2,
-    match_senv cc2 w2 se1 se2 ->
-    match_query cc2 w2 q1 q2 ->
-    exists (w1: ccworld cc1) ,
-      match_senv cc1 w1 se1 se2 /\
-      match_query cc1 w1 q1 q2 /\
-      match12 (get w1) (get w2) /\
-        (forall r1 r2 wp1 wp2 wp1',
-        match12 wp1 wp2 ->    
-        get w1 o-> wp1' -> wp1 *-> wp1' ->
-        match_reply cc1 (set w1 wp1') r1 r2 ->
-        exists (wp2' : gworld cc2),
-        (* match12 wp1' wp2' ->*)
-        get w2 o-> wp2' /\ wp2 *-> wp2' /\
-        match_reply cc2 (set w2 wp2') r1 r2).
-
-(* Lemma same_mem_trans_OK {li1 li2} (cc1 cc2: callconv li1 li2) :=
-  forall wp1 wp2,
-    wf_mem wp1 -> trans12 wp1 = wp2 ->
- *)
-
-Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
-  Callconv_Trans{
-        match12 : gworld cc1 -> gworld cc2 -> Prop;
-        big_step_incoming : ccref_incoming cc1 cc2 match12;
-        big_step_outgoing : ccref_outgoing cc1 cc2 match12;
-      }.
-
-  
-  Lemma open_fsim_cctrans {li1 li2: language_interface}:
-  forall (cc1 cc2: callconv li1 li2) L1 L2,
-    forward_simulation cc1 L1 L2 ->
-    cctrans cc1 cc2 ->
-    forward_simulation cc2 L1 L2.
-  (*cc1 : injp @ injp cc2: injp*)
-Proof.
-  intros.
-  destruct X as [match12 INCOM OUTGO].
-  inv H.
-  destruct X as [index order match_states SKEL PROP WF].
-  constructor.
-    set (ms se1 se2 (w2 : ccworld cc2) (wp2: gworld cc2) idx s1 s2 :=
-         exists w1 (wp1 : gworld cc1),
-           match_states se1 se2 w1 wp1 idx s1 s2 /\
-             match_senv cc1 w1 se1 se2 /\
-             match12 (get w1) (get w2) /\
-             match12 wp1 wp2 /\
-             (forall r1 r2 wp1 wp2 wp1', match12 wp1 wp2 -> (get w1) o-> wp1' -> wp1 *-> wp1' -> match_reply cc1 (set w1 wp1') r1 r2 ->
-            exists (wp2' : gworld cc2), (get w2) o-> wp2' /\ wp2 *-> wp2' /\ match_reply cc2 (set w2 wp2') r1 r2)).
-  eapply Forward_simulation with order ms; auto.
-  intros se1 se2 wB' Hse' Hse1.
-  split.
-  - intros q1 q2 Hq'.
-    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    eapply fsim_match_valid_query; eauto.
-  - intros q1 q2 s1 Hq' Hs1 Ho.
-    destruct (INCOM wB' se1 se2 q1 q2) as (wB & Hse & Hq & Htrans & Hf); auto.
-    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2. split; auto. red. exists wB,(get wB). repeat apply conj; eauto.
-  - intros gw i s1 s2 r1 (wB & gw' & Hs & Hse & HmB & Hm & Hf) Hr1.
-    edestruct @fsim_match_final_states as (r2 & gw1 & Hr2 & ACCO1 & ACCI1 & Hr); eauto.
-    exploit Hf; eauto. intros (gw2 &  ACCO2 & Hr2'). exists r2.
-    exists gw2. intuition auto.
-  - (*the most tricky part*)
-    intros gw2 i s1 s2 qA1 (wB & gw1 & Hs & Hse & HmB & Hm & Hf) HqA1.
-    edestruct @fsim_match_external as (wA & qA2 & Hacc1 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct OUTGO as (wA' & Hm' & HseA' & HqA' & Hr); eauto.
-    exists wA', qA2. intuition auto.
-    exploit Hr; eauto. intros (wp1' & ACCO1 & MR1 & Hm'').
-    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto. exists wB. exists wp1'.
-    intuition auto.
-  - intros s1 t s1' Hs1' gw2 i s2 (wB & gw1 & Hs & Hse & Hr').
-   edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
-    exists i', s2'. split; auto.
-    econstructor; eauto.
-Qed.
 
 
 Require Import Inject InjectFootprint.
@@ -667,34 +532,3 @@ Proof.
   eapply open_fsim_cctrans; eauto.
   apply cctrans_injp_comp.
 Qed.
-
-Local Instance world_unit {T: Type} : World T :=
-  {
-    w_state := unit;
-    w_lens := lens_unit;
-    w_acci := fun _ _ => True;
-    w_acce := fun _ _ => True;
-  }.
-
-(** Parametrize the upper lemmas : 
-    Smallstep.forward_simulation cc cc L1 L2 ->
-    GS.forward_simulation cc' L1 L2.
-    where cc' contains a unit world.
-*)
-
-Program Definition cc_unit_world {li1 li2} (cc: LanguageInterface.callconv li1 li2) : callconv li1 li2 :=
-  {|
-    ccworld := LanguageInterface.ccworld cc;
-    ccworld_world := world_unit;
-    match_senv w := LanguageInterface.match_senv cc w;
-    match_query w := LanguageInterface.match_query cc w;
-    match_reply w := LanguageInterface.match_reply cc w;
-  |}.
-Next Obligation.
-  eapply LanguageInterface.match_senv_public_preserved; eauto.
-Qed.
-Next Obligation.
-  eapply LanguageInterface.match_senv_valid_for; eauto.
-Qed.
-
-Coercion cc_unit_world : LanguageInterface.callconv >-> callconv.

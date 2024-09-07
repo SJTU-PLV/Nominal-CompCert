@@ -5,7 +5,7 @@ Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
-Require Import CallconvBig VCompBig CallConvLibs.
+Require Import CallconvBig CallConvAlgebra VCompBig CallConvLibs.
 
 Unset Program Cases.
 
