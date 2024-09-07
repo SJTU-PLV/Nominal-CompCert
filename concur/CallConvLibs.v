@@ -35,6 +35,8 @@ Section TRANS.
   Qed.
 
 End TRANS.
+
+
 (*    
 Program Definition cc_id {li : language_interface} : callconv li li :=
   {|
@@ -292,9 +294,9 @@ Proof.
     -- simpl. admit. (** match should contain [args_removed] *)
     -- intros. inv H3. simpl in H5, H11.
        exists (wp1', tt). simpl. repeat apply conj; eauto.
-       ++ admit. (** todo*)
-       ++ admit. (** todo*)
-       ++ admit. (** todo*)
+       ++ admit. (** todo *)
+       ++ admit. (** todo *)
+       ++ admit. (** todo *)
   - red. intros. simpl in wp1, wp2, w1.
     inv H0. inv H. cbn in H1. inv H2.
     (* Compute ccworld (locset_injp @ cc_locset_mach). *)
@@ -317,8 +319,27 @@ Proof.
 Admitted.
 (** Seems can be proved? *)
 
+Definition mach_ext := cc_mach ext.
 Definition l_ext := cc_locset ext.
 
+(** We have to change cc_locset_mach. But the problem is how? *)
+Lemma LM_trans_ext : cctrans (cc_locset_mach @ mach_ext) (l_ext @ cc_locset_mach).
+Proof.
+  econstructor.
+  - red. intros [se' [[sg a] [sg' rs]]] se1 se2 q1 q2.
+    intros [Hse1 Hse2] [q1' [Hq1 Hq2]].
+    simpl in a. inv Hse1. inv Hse2. inv Hq1. inv Hq2.
+    simpl in H1, H, H0.
+    (* Compute (ccworld (cc_locset_mach @ mach_ext)). *)
+    exists (se2,((lmw sg rs lmw_m vf2),tt)).
+    repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor.
+    + Abort.
+
+(** Lemmas about CL cc_c_locset *)
+
+
+(** Ad-hoc locmap constructions for CL transformations *)
 Definition Locmap_set_list (rs : Locmap.t) (vals: list val) (pairs : list (rpair loc)) := rs.
 
 Definition set (l : loc) (v : val) (m: Locmap.t) (p: loc):=
@@ -364,6 +385,136 @@ Proof.
   - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
 Qed.
 
+Lemma notin_loc_arguments_win64_y : forall l x y1 y2 t,
+    y1 < y2 ->
+    ~ In (One (S Outgoing y1 t)) (loc_arguments_win64 l x y2).
+Proof.
+  induction l; intros.
+  - simpl. auto.
+  - simpl. repeat destr.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+Qed.
+
+Lemma notin_loc_arguments_win64_x_int : forall tys r1 r2 ireg y,
+    list_nth_z int_param_regs_win64 r1 = Some ireg ->
+    r1 < r2 ->
+    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+Proof.
+  induction tys; intros.
+  - simpl. auto.
+  - simpl. repeat destr.
+    ++ intros [A|B]. inv A. simpl in H.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       simpl in H.
+       repeat destr_in H; repeat destr_in Heqo; try extlia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 2).
+       reflexivity. lia.
+    ++ intros [A|B]. inv A.
+       simpl in H. repeat destr_in H; repeat destr_in Heqo; try extlia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 2).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 3).
+       reflexivity. lia.
+    ++ (*same , to be automized by a Ltac*)
+Admitted.
+
+Lemma notin_loc_arguments_win64_x_float : forall tys r1 r2 ireg y,
+    list_nth_z float_param_regs_win64 r1 = Some ireg ->
+    r1 < r2 ->
+    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+Proof.
+Admitted.
+(*
+Lemma notin_loc_arguments_elf64_y : forall l x y1 y2 z t,
+    y1 < y2 ->
+    ~ In (One (S Outgoing y1 t)) (loc_arguments_elf64 l x y2 z).
+Proof.
+  induction l; intros.
+  - simpl. auto.
+  - simpl. repeat destr.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. eapply IHl. 2: eauto. lia.
+    + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
+Qed.
+
+Lemma notin_loc_arguments_win64_x_int : forall tys r1 r2 ireg y,
+    list_nth_z int_param_regs_win64 r1 = Some ireg ->
+    r1 < r2 ->
+    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+Proof.
+  induction tys; intros.
+  - simpl. auto.
+  - simpl. repeat destr.
+    ++ intros [A|B]. inv A. simpl in H.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       simpl in H.
+       repeat destr_in H; repeat destr_in Heqo; try extlia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 2).
+       reflexivity. lia.
+    ++ intros [A|B]. inv A.
+       simpl in H. repeat destr_in H; repeat destr_in Heqo; try extlia.
+       eapply IHtys. 3: eauto. instantiate (1:= 0).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 1).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 2).
+       reflexivity. lia.
+       eapply IHtys. 3: eauto. instantiate (1:= 3).
+       reflexivity. lia.
+    ++ (*same , to be automized by a Ltac*)
+Admitted.
+
+Lemma notin_loc_arguments_win64_x_float : forall tys r1 r2 ireg y,
+    list_nth_z float_param_regs_win64 r1 = Some ireg ->
+    r1 < r2 ->
+    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+Proof.
+Admitted.
+*)
 Lemma loc_arguments_norepet sg:
   list_norepet (loc_arguments sg).
 Proof.
@@ -371,16 +522,22 @@ Proof.
   destruct Archi.win64.
 * cut (forall x y, list_norepet (loc_arguments_win64 (sig_args sg) x y)).
   - eauto.
-  - induction (sig_args sg); cbn.
+  - induction (sig_args sg); cbn -[list_nth_z].
     + constructor.
     + intros x y.
-      destruct a, (if zeq x _ then _ else _) eqn: Hz; cbn; admit.
+      destruct a, (list_nth_z) eqn: Hz;
+        cbn; constructor; eauto;
+        try (apply notin_loc_arguments_win64_y; lia);
+        try (eapply notin_loc_arguments_win64_x_int; try apply Hz; lia);
+      try (eapply notin_loc_arguments_win64_x_float; try apply Hz; lia).
 * cut (forall x y z, list_norepet (loc_arguments_elf64 (sig_args sg) x y z)).
   - intros. apply (H 0 0 0).
   - induction sig_args; cbn -[list_nth_z].
     + constructor.
     + intros x y z.
-      destruct a, list_nth_z; cbn; admit.
+      destruct a, list_nth_z; cbn; constructor; eauto.
+      
+      admit.
 Admitted. (** Obviously true, however dirty to prove.. *)
 
 Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
@@ -460,36 +617,95 @@ Proof.
       destruct a. destruct b. reflexivity.
 Qed.
 
+Lemma CL_trans_injp : cctrans (cc_c_locset @ locset_injp) (c_injp @ cc_c_locset).
+Proof.
+  econstructor. instantiate (1:= fun w1 w2 => snd w1 = fst w2).
+  - red. intros [se' [wp sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
+    simpl in sg. inv Hse2. inv Hse1. inv Hq2. inv Hq1. inv H9.
+    cbn in H7, H8.
+    Compute (ccworld (cc_c_locset @ locset_injp)).
+    exists (se1,(sg,(sg,(injpw f m0 m Hm)))). repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor; eauto.
+    + generalize (loc_arguments_always_one sg). intro Hone.
+      generalize (loc_arguments_norepet sg). intro Hnorepet.
+      assert (exists rs1, (fun p : rpair loc => Locmap.getpair p rs1) ## (loc_arguments sg) = vargs1 /\
+                       forall l : loc, loc_external sg l -> Val.inject f (rs1 l) (rs l)).
+      { generalize dependent vargs1.
+        induction loc_arguments; cbn; intros.
+        - inv H8. exists (Locmap.init Vundef).
+          split. auto. intros. constructor.
+        - inv H8. exploit IHl; eauto. intros.
+          exploit Hone. right. eauto. auto.
+          inv Hnorepet. auto.
+          exploit Hone. left. reflexivity. intros [la Hla].
+          intros [rs1 [A B]].
+          exists (setpairloc a v rs1). split.
+          + simpl. f_equal.  rewrite Hla.
+          erewrite setpairloc_gsspair; eauto.
+          rewrite <- A.
+          apply map_ext_in. intros. exploit Hone; eauto.
+          right. eauto. intros [la0 Hla0]. rewrite Hla0.
+          erewrite setpairloc_gso1; eauto. rewrite Hla. reflexivity.
+          inv Hnorepet. congruence.
+          + intros. rewrite Hla.
+            destruct (Loc.eq la l0).
+            * subst. erewrite setpairloc_gss; eauto.
+            * erewrite setpairloc_gso. 2: eauto. eauto. auto.
+      }
+      destruct H2 as [rs1 [A B]].
+      exists (lq vf1 sg rs1 m0). split. econstructor; eauto.
+      constructor; eauto. constructor.
+    + intros. destruct wp1 as [a wp1]. simpl in a, wp1.
+      destruct wp2 as [wp2 b]. simpl in b, wp2. inv H2.
+      destruct wp1' as [a' wp1']. simpl in H6. subst wp2.
+      destruct H3. simpl in H2,H3. destruct H4. simpl in H4,H6.
+      exists (wp1',tt). split. simpl. split. auto. auto. split.
+      destruct b. split; auto.
+      destruct H5 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H13.
+      simpl in H5, H11. subst wp1'. simpl in *.
+      eexists. simpl. split. 
+      constructor; simpl; eauto.
+      2: {constructor. reflexivity. }
+      red in H11. simpl.
+      destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr in *. cbn in *.
+      apply H11. auto.
+  - red. intros [? ?] [? ?] [se [sg [sg' t]]]. simpl in w,w0,w1,w2,sg,sg',t.
+    intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2.  inv Hse1. inv Hse2. inv A2. destruct A1. simpl in H4, H5, H2. inv H3. simpl in H6.
+    inv H6.
+    inv Hq1. inv Hq2. inv H11. simpl in H8, H10.
+    (* Compute (ccworld (c_injp @ cc_c_locset)). *)
+    exists (se2,((injpw f m m3 Hm),sg)). repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor; eauto.
+    + eexists. split. econstructor; eauto.
+      2: { econstructor. }
+      2: { econstructor. reflexivity. }
+      simpl. red in H10.
+      pose proof (loc_arguments_external sg).
+      induction loc_arguments; cbn in *; auto.
+      constructor; auto.
+      apply locmap_getpair_inject.
+      assert (forall_rpair (loc_external sg) a) by eauto.
+      destruct a; cbn in *; intuition auto.
+    + intros r1 r2 [a b] AC1 Hr. simpl in AC1. destruct AC1.
+      simpl in H2, H3. clear H3.
+      destruct Hr as [r1' [Hr1 Hr2]].
+      inv Hr1. inv Hr2. simpl in H6. inv H6. simpl in H3.
+      exists (tt,(injpw f0 m1' m2' Hm4)). split. split; auto.
+      simpl. inv H2. constructor; auto. split. simpl.
+      set (rs'' := Locmap.setpair (loc_result sg) vres1 (rs')).
+      exists (lr rs'' m1'). split.
+      econstructor. 
+      unfold rs''. simpl.
+      destruct (loc_result_always_one sg) as [r ->].
+      cbn. rewrite Locmap.gss. reflexivity.
+      econstructor. simpl.
+      red. intros.  unfold rs''.
+      destruct (loc_result_always_one sg) as [r' Hr]. rewrite Hr in *. cbn in *.
+      intuition subst. rewrite Locmap.gss. auto.
+      constructor. reflexivity.
+Qed.
 
-(** Idea: first try to compose all C level passes? Clight -> LTL *)
-
-(** Idea: Since we have totally the same incoming and outgoing lemmas. The [inj] is useless? *)
-(* inj *)
-(*
-Local Instance world_inj : World inj_world :=
-  {
-    w_state := inj_world;
-    w_lens := lens_id;
-    w_acci := inj_incr;
-    w_acce := inj_incr;
-  }.
-
-Program Definition c_inj : callconv li_c li_c :=
-  {|
-    ccworld := inj_world;
-    ccworld_world := world_inj;
-    match_senv w := inj_stbls w;
-    match_query w := cc_c_query inj w;
-    match_reply w := cc_c_reply inj w;
-  |}.
-
-*)
-
-(** 4.1 The self-simulation mechniasm? *)  
-(** 4.Modify the proofs of each pass *)
-(** 5.Compose the compiler *)
-
-  
+(** TODO: wt_loc through CL *)
 
 
-(** *)
+
