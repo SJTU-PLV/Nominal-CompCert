@@ -341,7 +341,7 @@ Lemma analyze_successor: forall f initMap uninitMap mayinit1 mayinit2 mayuninit1
 .
 Proof.  (* use fixpoint_solution *)
   unfold analyze; intros. 
-  monadInv AN.
+  Errors.monadInv AN.
   rewrite EQ1 in CFG. inv CFG.
   set (params_init := (fold_right (add_place x)
                (PTree.map

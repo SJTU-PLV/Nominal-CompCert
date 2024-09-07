@@ -207,6 +207,91 @@ Definition handle_error {A: Type} (f g: mon A) : mon A :=
     | Err _ => g s
     end.
 
+(** monadInv for this error monad *)
+
+Remark bind_inversion:
+  forall (A B: Type) (f: mon A) (g: A -> mon B)
+         (y: B) (s1 s3: generator) (i: state_incr s1 s3),
+  bind f g s1 = Res y s3 i ->
+  exists x, exists s2, exists i1, exists i2,
+  f s1 = Res x s2 i1 /\ g x s2 = Res y s3 i2.
+Proof.
+  intros until i. unfold bind. destruct (f s1); intros.
+  discriminate.
+  exists a; exists s'; exists s.
+  destruct (g a s'); inv H.
+  exists s0; auto.
+Qed.
+
+Remark bind2_inversion:
+  forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C)
+         (z: C) (s1 s3: generator) (i: state_incr s1 s3),
+  bind2 f g s1 = Res z s3 i ->
+  exists x, exists y, exists s2, exists i1, exists i2,
+  f s1 = Res (x, y) s2 i1 /\ g x y s2 = Res z s3 i2.
+Proof.
+  unfold bind2; intros.
+  exploit bind_inversion; eauto.
+  intros [[x y] [s2 [i1 [i2 [P Q]]]]]. simpl in Q.
+  exists x; exists y; exists s2; exists i1; exists i2; auto.
+Qed.
+
+Ltac monadInv1 H :=
+  match type of H with
+  | (Res _ _ _ = Res _ _ _) =>
+      inversion H; clear H; try subst
+  | (Err _ = Res _ _ _) =>
+      discriminate
+  | (@ret _ _ _ = Res _ _ _) =>
+      inversion H; clear H; try subst
+  | (@error _ _ _ = Res _ _ _) =>
+      discriminate
+  | (bind ?F ?G ?S = Res ?X ?S' ?I) =>
+      let x := fresh "x" in (
+      let s := fresh "s" in (
+      let i1 := fresh "INCR" in (
+      let i2 := fresh "INCR" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion _ _ F G X S S' I H) as [x [s [i1 [i2 [EQ1 EQ2]]]]];
+      clear H;
+      try (monadInv1 EQ2)))))))
+  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) =>
+      let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+      let s := fresh "s" in (
+      let i1 := fresh "INCR" in (
+      let i2 := fresh "INCR" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion _ _ _ F G X S S' I H) as [x1 [x2 [s [i1 [i2 [EQ1 EQ2]]]]]];
+      clear H;
+      try (monadInv1 EQ2))))))))
+  end.
+
+Ltac monadInv H :=
+  match type of H with
+  | (@ret _ _ _ = Res _ _ _) => monadInv1 H
+  | (@error _ _ _ = Res _ _ _) => monadInv1 H
+  | (bind ?F ?G ?S = Res ?X ?S' ?I) => monadInv1 H
+  | (bind2 ?F ?G ?S = Res ?X ?S' ?I) => monadInv1 H
+  | (?F _ _ _ _ _ _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ = Res _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  end.
 
 
 (** ** Operations on generator *)
@@ -514,7 +599,8 @@ Proof.
   unfold generate_cfg in GEN.
   destruct (generate_cfg' (fn_body f) init_state) eqn: GCFG; try congruence.
   inv GEN. unfold generate_cfg' in GCFG.
-  (** TODO: copy some monadInv from RTLgenspec.v *)
+  monadInv GCFG.
+  
 Admitted.
 
 

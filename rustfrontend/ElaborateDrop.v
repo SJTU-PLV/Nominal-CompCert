@@ -211,52 +211,11 @@ Definition elaborate_stmt (an: PathsMap.t * PathsMap.t * PathsMap.t) (stmt: stat
 
 End ELABORATE.
 
-(* (* elaborate the leaf statement in [body] *) *)
-(* Definition elaborate_leaf_stmt (ce: composite_env) (f: function) (body: Errors.res statement) (pc: node) (instr: instruction) : Errors.res statement := *)
-(*   do body <- body; *)
-(*   match instr with *)
-(*   | Isel sel _ => *)
-(*       let mayinit := maybeInit!!pc in *)
-(*       let mayuninit := maybeUninit!!pc in *)
-(*       (**TODO: The following translation is specific to this pass, so we can use a framework to implement translation and plug in the following translation step to implement drop elaboration *) *)
-(*       match select_stmt f.(fn_body) sel with *)
-(*       | Some stmt => *)
-(*           match stmt with *)
-(*           | Sdrop p => *)
-(*               do drop <- elaborate_drop_for mayinit mayuninit universe ce m p; *)
-(*               set_stmt pc body sel drop *)
-(*           | Sassign p e *)
-(*           | Sassign_variant p _ _ e *)
-(*           | Sbox p e => *)
-(*               let deinit := moved_place e in *)
-(*               let stmt1 := add_dropflag_option deinit false in *)
-(*               let stmt2 := add_dropflag p true in *)
-(*               set_stmt pc body sel (makeseq (stmt1 :: stmt2 :: stmt :: nil)) *)
-(*           | Scall p e el => *)
-(*               let mvpaths := moved_place_list el in *)
-(*               let stmt1 := add_dropflag_list mvpaths false in *)
-(*               let stmt2 := add_dropflag p true in *)
-(*               set_stmt pc body sel (makeseq (stmt1 :: stmt :: stmt2 :: nil)) *)
-(*           | _ => OK body *)
-(*           end *)
-(*       | None => Error [CTX pc; MSG " select_stmt error in elaborate_stmt"] *)
-(*       end *)
-(*   | _ => OK body *)
-(*   end. *)
-
-
-(* (* Collect the to-drop places and its drop flag from a statement, meanwhile updating the statement *) *)
-
-(* Definition elaborate_stmt (ce: composite_env) (f: function) (cfg: rustcfg) : Errors.res statement := *)
-(*   PTree.fold (elaborate_leaf_stmt ce f) cfg (OK f.(fn_body)). *)
-
-(* End ELABORATE. *)
-
 
 Local Open Scope error_monad_scope.
 
 Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: place * ident) : statement :=
-  let (p, flag) := elt in
+  let (p, flag) := elt in    
   let id := local_of_place p in
   match mayinit!id, mayuninit!id with
   | Some init, Some uninit =>
