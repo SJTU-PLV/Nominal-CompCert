@@ -410,7 +410,7 @@ Definition cc_compcert : GS.callconv li_c li_asm :=
 Definition cc_c_level : GS.callconv li_c li_c := ro @ wt_c @ c_injp.
 
 Definition cc_compcert_1 : GS.callconv li_c li_asm :=
-  ro @ wt_c @ c_injp @
+    cc_c_level @
     cc_c_locset @ cc_locset_mach @ cc_mach_asm.
 
 
@@ -422,8 +422,8 @@ Theorem cc_compcert_merge:
 Proof.
   intros.
   unfold cc_compcert, cc_compcert_1 in *.
-Admitted.
-
+Admitted. (** TODO1: basically cctrans (c_injp @ CL @ LM @ MA) (CAinjp) *) 
+(*
 Lemma cc_compcert_collapse:
   cctrans
     (cc_c_level @                                 (* Passes up to Alloc *)
@@ -435,6 +435,9 @@ Lemma cc_compcert_collapse:
     cc_asm inj)                                   (* Asmgen *)
     cc_compcert_1.
 Proof.
+Admitted.
+*)
+(*
   (* commute the cklrs towards source C level *)
   rewrite <- wt_loc_out_of_thin_air.
   rewrite <- (cc_compose_assoc wt_loc) at 1.
@@ -481,61 +484,12 @@ Proof.
   rewrite injp_inj.
   reflexivity.
 Qed.
-
-(** Derivation of the simulation conventions for C-level at the incoming side *)
-Lemma cc_c_level_expand:
-  ccref cc_c_level
-        ( ro @ cc_c injp @ 
-              cc_c inj@
-              (wt_c @ cc_c ext) @ cc_c ext @
-              cc_c inj @
-              cc_c ext @ cc_c inj @ cc_c injp @
-              (ro @ injp) @ (ro @ injp) @ (ro @ injp)).
-Proof.
-  unfold cc_c_level.
-  (*p j e e j e j p*)
-  etransitivity.
-  (*prepare for ro*)
-  rewrite <- cc_compose_assoc at 1.
-  rewrite inv_commute_ref.
-  rewrite cc_compose_assoc.
-  rewrite (trans_injp_inv_incoming ro).
-  rewrite (trans_injp_inv_incoming ro).
-  rewrite ! cc_compose_assoc.
-  rewrite <- cc_compose_assoc.
-  rewrite inv_commute_ref.
-  rewrite cc_compose_assoc.
-  reflexivity. rstep. rauto.
-  
-  (*prepare for other C optimizations *)
-  etransitivity.
-  rewrite injp__injp_inj_injp, !cc_c_compose at 1.
-  rewrite inj_inj, cc_c_compose, cc_compose_assoc.
-  rewrite inj_inj, cc_c_compose, cc_compose_assoc at 1.
-  rewrite <- inj_ext, cc_c_compose, cc_compose_assoc at 1.
-  rewrite <- inj_ext, cc_c_compose, cc_compose_assoc at 1.
-  rewrite <- inj_ext at 2. rewrite cc_c_compose, cc_compose_assoc.
-  rewrite <- (lessdef_c_cklr injp) at 1. rewrite cc_compose_assoc.
-  rewrite <- (cc_compose_assoc wt_c).
-  rewrite <- cc_compose_assoc.
-  assert (HINJP: ccref ((wt_c @ lessdef_c) @ injp) (injp @ wt_c @ lessdef_c)).
-  apply commut_wt_c.
-  rewrite HINJP.
-  rewrite !cc_compose_assoc.
-  rewrite <- (cc_compose_assoc wt_c).
-  rewrite <- (cc_compose_assoc (_@_)).
-  assert (HINJ: ccref ((wt_c @ lessdef_c) @ inj) (inj @ wt_c @ lessdef_c)).
-  apply commut_wt_c.
-  rewrite HINJ.
-  rewrite !cc_compose_assoc. rewrite <- (cc_compose_assoc lessdef_c).
-  rewrite lessdef_c_cklr. reflexivity.
-  rewrite !cc_compose_assoc.
-  repeat rstep.
-Qed.
+*)
 
 (** Derivation of the simulation conventions for C-level at the outgoing side *)
+(*
 Lemma cc_c_level_collapse:
-  ccref (ro @ cc_c injp @ cc_c injp @
+  cctrans (ro @ cc_c injp @ cc_c injp @
               (wt_c @ cc_c ext) @ cc_c ext @
               cc_c inj @
               cc_c ext @
@@ -545,6 +499,9 @@ Lemma cc_c_level_collapse:
         )
         cc_c_level.
 Proof.
+Admitted.
+*)
+(*
   rewrite <- (cc_compose_assoc injp), <- cc_c_compose. rewrite injp_injp_eq.
   rewrite <- (lessdef_c_cklr ext) at 1. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc wt_c).
@@ -569,129 +526,123 @@ Proof.
   rewrite <- cc_c_compose. rewrite injp_injp_eq. reflexivity.
   rewrite !(trans_injp_ro_outgoing); eauto. reflexivity.
 Qed.
-
-(** Unification of the incoming side *)
-Lemma cc_expand :
-  ccref 
-    cc_compcert_cod
-    (
-      ro @
-      cc_c injp @ 
-      cc_c inj @
-      (wt_c @ cc_c ext) @ cc_c ext @
-      cc_c inj @
-      cc_c ext @ cc_c inj @ cc_c injp @
-      (ro @ injp) @ (ro @ injp) @ (ro @ injp) @
-    cc_c inj @                                   (* Unusedglob *)
-    (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
-    cc_locset ext @                              (* Tunneling *)
-    (wt_loc @ cc_locset_mach @ cc_mach inj ) @   (* Stacking *)
-    (cc_mach ext @ cc_mach_asm) @
-    cc_asm inj
-    ).
-Proof.
-  unfold cc_compcert_cod. rewrite cc_compcert_expand.
-  rewrite cc_c_level_expand. rewrite !cc_compose_assoc.
-  reflexivity.
-Qed.
+ *)
 
 (** Unification of the outgoing side *)
 Lemma cc_collapse :
-  ccref
-    ( ro @ cc_c injp @ 
-      cc_c injp @
+  cctrans
+    ( ro @ c_injp @ 
+      c_injp @
       (wt_c @ cc_c ext) @ cc_c ext @
-      cc_c inj @
-      cc_c ext @ cc_c injp @ cc_c injp @
-      (ro @ injp) @ (ro @ injp) @ (ro @ injp) @
-      cc_c inj @                                   (* Unusedglob *)
+      c_injp @
+      cc_c ext @ c_injp @ c_injp @
+      (ro @ c_injp) @ (ro @ c_injp) @ (ro @ c_injp) @
+      c_injp @                                   (* Unusedglob *)
       (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
       cc_locset ext @                              (* Tunneling *)
-      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
-      (cc_mach ext @ cc_mach_asm) @
-      cc_asm inj
+      (wt_loc @ locset_injp @ cc_locset_mach) @ (* Stacking *)
+      (cc_mach ext @ cc_mach_asm)
     )
-    cc_compcert_dom.
+    cc_compcert_1.
 Proof.
-  rewrite <- cc_compcert_collapse.
-  rewrite <- cc_c_level_collapse.
-  rewrite ! cc_compose_assoc.
-  reflexivity.
-Qed.
+  unfold cc_compcert_1. fold cc_c_level.
+Admitted. (** TODO2: injp ext wt composition and transport lower callconvs to C level *)
 
-Lemma injp_pass: forall p tp,
-    let sem := RTL.semantics p in
-    let tsem := RTL.semantics tp in
-  forward_simulation (cc_c injp) (cc_c inj) sem tsem ->
-  forward_simulation (cc_c injp) (cc_c injp) sem tsem.
-Proof.
-  intros.
-  rewrite injp__injp_inj_injp at 2.
-  rewrite <- injp_injp2,  !cc_c_compose at 1.
-  rewrite <- injp_injp2,  !cc_c_compose at 1.
-  rewrite cc_compose_assoc.
-  eapply compose_forward_simulations.
-  eapply RTLrel.semantics_rel.
-  eapply compose_forward_simulations. eauto.
-  eapply RTLrel.semantics_rel.
-Qed.
 
-Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
+Lemma compose_identity_pass {li1 li2} cc sem bsem tsem:
   forward_simulation 1 1 sem bsem ->
-  forward_simulation ccA ccB bsem tsem ->
-  @forward_simulation liA1 liA2 ccA liB1 liB2 ccB sem tsem.
+  GS.forward_simulation cc bsem tsem ->
+  @GS.forward_simulation li1 li2 cc sem tsem.
 Proof.
   intros.
-  rewrite <- (cc_compose_id_left ccA).
-  rewrite <- (cc_compose_id_left ccB).
-  eapply compose_forward_simulations; eauto.
+  eapply open_fsim_cctrans. 2: apply cctrans_id_1.
+  eapply st_fsim_vcomp; eauto.
+  eapply NEWSIM. auto.
 Qed.
 
-Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB' sem}:
+Lemma compose_identity_pass' {li1 li2} cc sem bsem tsem:
+  GS.forward_simulation cc_id sem bsem ->
+  GS.forward_simulation cc bsem tsem ->
+  @GS.forward_simulation li1 li2 cc sem tsem.
+Proof.
+  intros.
+  eapply open_fsim_cctrans. 2: apply cctrans_id_1.
+  eapply st_fsim_vcomp; eauto.
+Qed.
+
+Lemma compose_optional_pass {A li1 li2 cc cc' sem}:
   (forall prog tprog tsem,
-      forward_simulation ccA ccB (sem prog) (sem tprog) ->
-      forward_simulation ccA' ccB' (sem tprog) tsem ->
-      @forward_simulation liA1 liA2 ccA' liB1 liB2 ccB' (sem prog) tsem) ->
+      GS.forward_simulation cc (sem prog) (sem tprog) ->
+      GS.forward_simulation cc' (sem tprog) tsem ->
+      @GS.forward_simulation li1 li2 cc' (sem prog) tsem) ->
   forall flag transf prog tprog tsem,
     @match_if A flag transf prog tprog ->
-    (forall p tp, transf p tp -> forward_simulation ccA ccB (sem p) (sem tp)) ->
-    forward_simulation ccA' ccB' (sem tprog) tsem ->
-    forward_simulation ccA' ccB' (sem prog) tsem.
+    (forall p tp, transf p tp -> GS.forward_simulation cc (sem p) (sem tp)) ->
+    GS.forward_simulation cc' (sem tprog) tsem ->
+    GS.forward_simulation cc' (sem prog) tsem.
 Proof.
   intros. unfold match_if in *.
   destruct (flag tt); subst; eauto.
 Qed.
 
+(** TODO3: self_simulations , high possibility to be true *)
 Lemma va_interface_selfsim: forall (prog: RTL.program),
-  forward_simulation (ro @ injp) (ro @ injp) (RTL.semantics prog) (RTL.semantics prog).
+  GS.forward_simulation (ro @ c_injp) (RTL.semantics prog) (RTL.semantics prog).
+Proof.
+Admitted.
+
+Lemma RTL_injp_selfsim : forall (prog: RTL.program),
+    GS.forward_simulation c_injp (RTL.semantics prog) (RTL.semantics prog).
+Admitted.
+
+Lemma RTL_ro_injp_selfsim : forall (prog : RTL.program),
+    GS.forward_simulation (ro @ c_injp) (RTL.semantics prog) (RTL.semantics prog).
+Admitted.
+
+Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : callconv C D),
+    cctrans (cc_compose cc1 (cc_compose cc2 cc3))
+      (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
+Proof. Admitted.
+
+Lemma cctrans_split_1 : forall {A B C} (cc : GS.callconv A B) (cc1 cc2: GS.callconv B C),
+    cctrans cc1 cc2 ->
+    cctrans (cc @ cc1) (cc @ cc2).
+Proof. Admitted.
+
+Lemma callconv_compose_para : forall {li1 li2 li3}
+                                (cc1: callconv li1 li2) (cc2: callconv li2 li3),
+    cctrans 
+     (cc_compose cc1 cc2)
+      (GS.cc_compose cc1 cc2).
 Proof.
   intros.
-  eapply compose_forward_simulations.
-  eapply preserves_fsim. eapply ValueAnalysis.RTL_ro_preserves.
-  eapply RTLrel.semantics_rel.
+  econstructor. instantiate (1:= fun _ _ => True).
+  - red. intros. destruct w2 as [se [w1 w2]].
+    inv H. destruct H0 as [q1' [Hq1 Hq2]].
+    (* Compute ( GS.ccworld (cc1 @ cc2)%cc). *)
+    exists (se, w1, w2). repeat apply conj; eauto.
+    + constructor; eauto.
+    + econstructor; eauto.
+    + intros. simpl in H0, wp1, wp1'.
+      exists (tt, tt). split. reflexivity.
+      split. destruct wp2. split; reflexivity.
+      destruct H4 as [r1' [A B]].
+      econstructor; eauto.
+  - red. intros. destruct w1 as [[se w1] w2].
+    exists (se, (w1, w2)). repeat apply conj; eauto.
+    + intros. simpl in H0, wp1, wp2'. destruct wp2'.
+      exists (tt). split. reflexivity.
+      destruct H4 as [r1' [A B]]. split.
+      econstructor; eauto. auto.
 Qed.
 
-Lemma deadcode_va_correct : forall (p tp:  RTL.program),
-    let sem1 := RTL.semantics p in
-    let sem2 := RTL.semantics tp in
-    forward_simulation (ro @ injp) (ro @ inj) sem1 sem2 ->
-    forward_simulation (ro @ injp) (ro @ injp) sem1 sem2.
-Proof.
-  intros. rewrite (ro_injp_inj_I_incoming ro) at 2.
-  rewrite <- Deadcode_ext_out at 1.
-  eapply compose_forward_simulations.
-  eapply va_interface_selfsim; eauto.
-  eapply compose_forward_simulations. eauto.
-  apply RTLrel.semantics_rel.
-Qed.
-  
 (** ** Composition of passes *)
 
 Theorem clight_semantic_preservation:
   forall p tp,
   match_prog p tp ->
-  forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
-  /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+  GS.forward_simulation cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+  (* /\ GS.backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp). *)
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -701,78 +652,88 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p20)).
+  assert (F: GS.forward_simulation cc_compcert (Clight.semantics1 p) (Asm.semantics p20)).
   {
   eapply cc_compcert_merge; eauto.
-  rewrite cc_expand. rewrite <- cc_collapse at 1.
-  eapply compose_forward_simulations.
+  eapply open_fsim_cctrans. 2: apply cc_collapse.
+  eapply st_fsim_vcomp. apply NEWSIM.
     eapply top_ro_selfsim; eassumption.
-  eapply compose_forward_simulations.
-    eapply SimplLocalsproof.transf_program_correct'; eassumption.
+  eapply st_fsim_vcomp.
+    eapply SimplLocalsproofC.transf_program_correct'; eassumption.
   eapply compose_identity_pass.
     eapply Cshmgenproof.transl_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply Cminorgenproof.transl_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
+    eapply CminorgenproofC.transl_program_correct; eassumption.
+  eapply st_fsim_vcomp.
+    eapply  open_fsim_cctrans. 2: apply callconv_compose_para.
+    eapply NEWSIM.
     eapply Selectionproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
+    eapply NEWSIM.
     eapply RTLgenproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply RTLrel.semantics_rel.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
+    eapply RTL_injp_selfsim.
+  eapply st_fsim_vcomp.
     unfold match_if in M4. destruct (optim_tailcalls tt).
+    eapply NEWSIM.
     eapply Tailcallproof.transf_program_correct; eauto.
-    subst. eapply RTLrel.semantics_rel.
-  eapply compose_forward_simulations.
-    eapply Inliningproof.transf_program_correct; eassumption.
+    subst. eapply NEWSIM. eapply RTLrel.semantics_rel.
+  eapply st_fsim_vcomp.
+    eapply InliningproofC.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply Renumberproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply RTLrel.semantics_rel.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
+    eapply RTL_injp_selfsim.
+  eapply st_fsim_vcomp.
   { unfold match_if in M7. destruct (optim_constprop tt).
-    eapply Constpropproof.transf_program_correct; eassumption.
+    eapply ConstpropproofC.transf_program_correct; eassumption.
     subst. apply va_interface_selfsim. }
   eapply compose_identity_pass. 
     unfold match_if in M8. destruct (optim_constprop tt).
     eapply Renumberproof.transf_program_correct; eassumption.
     subst. eapply identity_forward_simulation.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
   { unfold match_if in M9. destruct (optim_CSE tt).
-    eapply CSEproof.transf_program_correct; eassumption.
+    eapply CSEproofC.transf_program_correct; eassumption.
     subst. apply va_interface_selfsim. }
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
   { unfold match_if in M10. destruct (optim_redundancy tt).
-    eapply deadcode_va_correct.
-    eapply Deadcodeproof.transf_program_correct'; eassumption.
+    eapply DeadcodeproofC.transf_program_correct; eassumption.
     subst. apply va_interface_selfsim. }
-  eapply compose_forward_simulations.
-    eapply Unusedglobproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply st_fsim_vcomp.
+    eapply UnusedglobproofC.transf_program_correct; eassumption.
+  eapply st_fsim_vcomp.
+    eapply open_fsim_cctrans.
+    apply NEWSIM.
     eapply Allocproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+    apply callconv_compose_para3.
+  eapply st_fsim_vcomp.
+    apply NEWSIM.
     eapply Tunnelingproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply Linearizeproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply CleanupLabelsproof.transf_program_correct; eassumption.
-  eapply compose_optional_pass; eauto using compose_identity_pass.
-    exact Debugvarproof.transf_program_correct.
-  eapply compose_forward_simulations.
-    rewrite <- cc_stacking_lm, cc_lm_stacking.
+  eapply compose_optional_pass; eauto using compose_identity_pass'.
+  intros. eapply NEWSIM.
+    eapply Debugvarproof.transf_program_correct; eassumption.
+  eapply st_fsim_vcomp.
+    eapply open_fsim_cctrans.
     eapply StackingproofC.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.
     eassumption.
-  eapply compose_forward_simulations.
+    apply cctrans_split_1. apply Stackingtrans.
+    eapply open_fsim_cctrans. apply NEWSIM.
     eapply Asmgenproof.transf_program_correct; eassumption.
-  apply semantics_asm_rel.
+    apply callconv_compose_para.
   }
-  split. auto.
+  auto.
+  (*split. auto.
   apply forward_to_backward_simulation. auto.
   apply Clight.semantics_receptive.
-  apply Asm.semantics_determinate.
+  apply Asm.semantics_determinate. *)
 Qed.
-
+(*
 Theorem c_semantic_preservation:
   forall p tp,
   match_c_prog p tp ->
@@ -797,7 +758,7 @@ Proof.
     + apply Asm.semantics_determinate.
   - intros. eapply sd_traces. apply Asm.semantics_determinate.
 Qed.
-
+*)
 (** * Correctness of the CompCert compiler *)
 
 (** Combining the results above, we obtain semantic preservation for two
@@ -810,6 +771,7 @@ Qed.
   exists a backward simulation of the dynamic semantics of [p]
   by the dynamic semantics of [tp]. *)
 
+(*
 Theorem transf_c_program_correct:
   forall p tp,
   transf_c_program p = OK tp ->
@@ -817,6 +779,7 @@ Theorem transf_c_program_correct:
 Proof.
   intros. apply c_semantic_preservation. apply transf_c_program_match; auto.
 Qed.
+ *)
 
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
@@ -854,23 +817,31 @@ Qed.
 
 Require Import SmallstepLinking.
 Require Import AsmLinking.
+Require Import HCompBig.
 
+(** TODO: prove asmlinking based on [HCompbig] instead of [SmallstepLinking]*)
+Lemma asm_linking : forall p1 p2 p,
+    link p1 p2 = Some p ->
+    GS.forward_simulation cc_id
+      (semantics (fun i : bool => Asm.semantics ((fun i0 : bool => if i0 then p1 else p2) i))
+         (erase_program p)) (Asm.semantics p).
+Admitted.
+      
 Lemma compose_transf_c_program_correct:
   forall p1 p2 spec tp1 tp2 tp,
     compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->
     transf_clight_program p1 = OK tp1 ->
     transf_clight_program p2 = OK tp2 ->
     link tp1 tp2 = Some tp ->
-    forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+    GS.forward_simulation cc_compcert spec (Asm.semantics tp).
 Proof.
-  intros.
-  rewrite <- (cc_compose_id_right cc_compcert) at 1.
-  rewrite <- (cc_compose_id_right cc_compcert) at 2.
-  eapply compose_forward_simulations.
+  intros. 
+  eapply open_fsim_cctrans. 2: apply cctrans_id_2.
+  eapply st_fsim_vcomp.
   2: { unfold compose in H.
        destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
        cbn in *. inv H.
-       eapply AsmLinking.asm_linking; eauto. }
+       eapply asm_linking; eauto. }
   eapply compose_simulation; eauto.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.

@@ -235,7 +235,7 @@ Inductive match12_stacking : injp_world -> (injp_world * unit) -> Prop :=
 |match12_stacking_intro : forall f m1 m2 Hm Hm' t,
     match12_stacking (injpw f m1 m2 Hm) ((injpw f m1 m2 Hm'),t).
 
-Lemma Asmtrans : cctrans (cc_stacking_injp) (locset_injp @ cc_locset_mach).
+Lemma Stackingtrans : cctrans (cc_stacking_injp) (locset_injp @ cc_locset_mach).
 Proof.
   simpl. econstructor. instantiate (1:= match12_stacking).
   - red. intros w2 se1 se2 q1 q2 Hse Hq.
@@ -336,7 +336,7 @@ Proof.
     + constructor; eauto. constructor; eauto. constructor.
     + Abort.
 
-(** Lemmas about CL cc_c_locset *)
+(** * Lemmas about CL cc_c_locset *)
 
 
 (** Ad-hoc locmap constructions for CL transformations *)
@@ -385,6 +385,7 @@ Proof.
   - simpl in *. subst m'. unfold set. rewrite pred_dec_false; auto.
 Qed.
 
+(**  Prove that the locations  [loc_arguments sg] is norepet *)
 Lemma notin_loc_arguments_win64_y : forall l x y1 y2 t,
     y1 < y2 ->
     ~ In (One (S Outgoing y1 t)) (loc_arguments_win64 l x y2).
@@ -621,8 +622,7 @@ Proof.
     cbn in H4, H5, H6.
     exists (se2,(sg,(sg,tt))). repeat apply conj; eauto.
     + constructor; eauto. constructor. constructor.
-    + Search loc_arguments.
-      generalize (loc_arguments_always_one sg). intro Hone.
+    + generalize (loc_arguments_always_one sg). intro Hone.
       generalize (loc_arguments_norepet sg). intro Hnorepet.
       assert (exists rs1, (fun p : rpair loc => Locmap.getpair p rs1) ## (loc_arguments sg) = vargs1 /\
                        forall l : loc, loc_external sg l -> Val.inject inject_id (rs1 l) (rs l)).

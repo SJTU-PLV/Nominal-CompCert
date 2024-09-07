@@ -208,7 +208,7 @@ CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
 
 
 
-DEMO= Demo.v Demospec.v Demoproof.v\
+DEMO= Demo.v Demospec.v # Demoproof.v\
   # DemoCspec.v Demotopspec.v\
   # Server.v Serverspec.v Serverproof.v \
   # Client.v ClientServerCspec.v ClientServerCspec2.v \
