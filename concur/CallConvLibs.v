@@ -413,46 +413,82 @@ Lemma notin_loc_arguments_win64_x_int : forall tys r1 r2 ireg y,
 Proof.
   induction tys; intros.
   - simpl. auto.
-  - simpl. repeat destr.
-    ++ intros [A|B]. inv A. simpl in H.
+  - cbn -[list_nth_z]. repeat destr.
+    ++ intros [A|B]. inv A. simpl in *.
        repeat destr_in H; repeat destr_in Heqo; extlia.
-       simpl in H.
-       repeat destr_in H; repeat destr_in Heqo; try extlia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 2).
-       reflexivity. lia.
+       eapply IHtys. 3: eauto. eauto. lia.
     ++ intros [A|B]. inv A.
-       simpl in H. repeat destr_in H; repeat destr_in Heqo; try extlia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 2).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 3).
-       reflexivity. lia.
-    ++ (*same , to be automized by a Ltac*)
-Admitted.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+Qed.
 
 Lemma notin_loc_arguments_win64_x_float : forall tys r1 r2 ireg y,
     list_nth_z float_param_regs_win64 r1 = Some ireg ->
     r1 < r2 ->
     ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
 Proof.
-Admitted.
-(*
-Lemma notin_loc_arguments_elf64_y : forall l x y1 y2 z t,
-    y1 < y2 ->
-    ~ In (One (S Outgoing y1 t)) (loc_arguments_elf64 l x y2 z).
+    induction tys; intros.
+  - simpl. auto.
+  - cbn -[list_nth_z]. repeat destr.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+Qed.
+
+Lemma notin_loc_arguments_elf64_y : forall l x y z1 z2 t,
+    z1 < z2 ->
+    ~ In (One (S Outgoing z1 t)) (loc_arguments_elf64 l x y z2).
 Proof.
   induction l; intros.
   - simpl. auto.
@@ -471,50 +507,86 @@ Proof.
     + intros [A|B]. inv A. extlia. eapply IHl. 2: eauto. lia.
 Qed.
 
-Lemma notin_loc_arguments_win64_x_int : forall tys r1 r2 ireg y,
-    list_nth_z int_param_regs_win64 r1 = Some ireg ->
+Lemma notin_loc_arguments_elf64_x_int : forall tys r1 r2 ireg y z,
+    list_nth_z int_param_regs_elf64 r1 = Some ireg ->
     r1 < r2 ->
-    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+    ~ In (One (R ireg)) (loc_arguments_elf64 tys r2 y z).
 Proof.
   induction tys; intros.
   - simpl. auto.
-  - simpl. repeat destr.
-    ++ intros [A|B]. inv A. simpl in H.
+  - cbn -[list_nth_z]. repeat destr.
+    ++ intros [A|B]. inv A. simpl in *.
        repeat destr_in H; repeat destr_in Heqo; extlia.
-       simpl in H.
-       repeat destr_in H; repeat destr_in Heqo; try extlia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 2).
-       reflexivity. lia.
+       eapply IHtys. 3: eauto. eauto. lia.
     ++ intros [A|B]. inv A.
-       simpl in H. repeat destr_in H; repeat destr_in Heqo; try extlia.
-       eapply IHtys. 3: eauto. instantiate (1:= 0).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 1).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 2).
-       reflexivity. lia.
-       eapply IHtys. 3: eauto. instantiate (1:= 3).
-       reflexivity. lia.
-    ++ (*same , to be automized by a Ltac*)
-Admitted.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+Qed.
 
-Lemma notin_loc_arguments_win64_x_float : forall tys r1 r2 ireg y,
-    list_nth_z float_param_regs_win64 r1 = Some ireg ->
+Lemma notin_loc_arguments_elf64_y_float : forall tys r1 r2 ireg x z,
+    list_nth_z float_param_regs_elf64 r1 = Some ireg ->
     r1 < r2 ->
-    ~ In (One (R ireg)) (loc_arguments_win64 tys r2 y).
+    ~ In (One (R ireg)) (loc_arguments_elf64 tys x r2 z).
 Proof.
-Admitted.
-*)
+   induction tys; intros.
+  - simpl. auto.
+  - cbn -[list_nth_z]. repeat destr.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A. simpl in *.
+       repeat destr_in H; repeat destr_in Heqo; extlia.
+       eapply IHtys. 3: eauto. eauto. lia.
+    ++ intros [A|B]. inv A.
+       eapply IHtys. 3: eauto. eauto. lia.
+Qed.
+
 Lemma loc_arguments_norepet sg:
   list_norepet (loc_arguments sg).
 Proof.
@@ -535,10 +607,11 @@ Proof.
   - induction sig_args; cbn -[list_nth_z].
     + constructor.
     + intros x y z.
-      destruct a, list_nth_z; cbn; constructor; eauto.
-      
-      admit.
-Admitted. (** Obviously true, however dirty to prove.. *)
+      destruct a, list_nth_z eqn: Hz; cbn; constructor; eauto;
+        try (apply notin_loc_arguments_elf64_y; lia);
+        try (eapply notin_loc_arguments_elf64_x_int; try apply Hz; lia);
+      try (eapply notin_loc_arguments_elf64_y_float; try apply Hz; lia).
+Qed.
 
 Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
 Proof.
