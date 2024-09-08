@@ -104,6 +104,9 @@ Section PRESERVATION.
 Variable prog: program.
 Variable tprog: program.
 
+Hypothesis TRANSL: match_prog prog tprog.
+Variable w: injp_world.
+
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 (* Variable dropflags: PTree.t (list (place * ident)). *)
@@ -119,102 +122,128 @@ Definition FM : Type := PTree.t (list (place * ident)).
 Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce).
 
 (* relation between source env and target env including the own_env
-and invariant of flags map *)
-Record match_env_flagm (j: meminj) (own: own_env) (e te: env) (m tm: mem) (flagm: FM) : Type :=
-  { wf_flagm: forall p id,
+and invariant of flags map. [(t)lo] is caller stack blocks and [t(hi)]
+is callee stack blocks (including heap blocks), so [(t)lo] ⊆
+[(t)[hi]] *)
+Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (flagm: FM) (tm: mem) (tlo thi: Mem.sup) : Type :=
+  { me_wf_flagm: forall p id,
       get_dropflag_temp flagm p = Some id ->
       exists tb v, te ! id = Some (tb, type_bool)
+              /\ e ! id = None    
               /\ Mem.load Mint8unsigned tm tb 0 = Some (Vint v)
               (* TODO: add a rust bool_val *)
               /\ negb (Int.eq v Int.zero) = is_owned own p
               (* protection *)
-              /\ (forall ofs, loc_out_of_reach j m tb ofs)
-              /\ e ! id = None;
+              /\ (forall ofs, loc_out_of_reach j m tb ofs);
 
-    match_vars: forall id b ty,
+    me_vars: forall id b ty,
       e ! id = Some (b, ty) ->
       exists tb, te ! id = Some (tb, ty)
             /\ j b = Some (tb, 0);
+
+    me_range: forall id b ty,
+      e ! id = Some (b, ty) ->
+      ~ In b lo /\ In b hi;
     
+    me_trange: forall id b ty,
+      te ! id = Some (b, ty) ->
+      ~ In b tlo /\ In b thi;
+
+    me_incr:
+      Mem.sup_include lo hi;
+    me_tincr:
+      Mem.sup_include tlo thi;    
   }.
     
 
-Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> Prop :=
-| match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret
+Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
+| match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret m tm bound tbound
     (MSTMT: match_stmt an flagm body cfg s ts pc next cont brk nret)
-    (MCONT: match_cont j an flagm body cfg k tk next cont brk nret),
-    match_cont j an flagm body cfg (Kseq s k) (RustIRsem.Kseq ts tk) pc cont brk nret
-| match_Kstop: forall an flagm body cfg nret
+    (MCONT: match_cont j an flagm body cfg k tk next cont brk nret m tm bound tbound),
+    match_cont j an flagm body cfg (Kseq s k) (RustIRsem.Kseq ts tk) pc cont brk nret m tm bound tbound
+| match_Kstop: forall an flagm body cfg nret m tm bound tbound
     (RET: cfg ! nret = Some Iend),
-    match_cont j an flagm body cfg Kstop RustIRsem.Kstop nret None None nret
-| match_Kloop: forall an flagm body cfg s ts k tk body_start loop_jump_node exit_loop nret contn brk
+    match_cont j an flagm body cfg Kstop RustIRsem.Kstop nret None None nret m tm bound tbound
+| match_Kloop: forall an flagm body cfg s ts k tk body_start loop_jump_node exit_loop nret contn brk m tm bound tbound
     (START: cfg ! loop_jump_node = Some (Inop body_start))
     (MSTMT: match_stmt an flagm body cfg s ts body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
-    (MCONT: match_cont j an flagm body cfg k tk exit_loop contn brk nret),
-    match_cont j an flagm body cfg (Kloop s k) (RustIRsem.Kloop ts tk) loop_jump_node (Some loop_jump_node) (Some exit_loop) nret
-| match_Kcall: forall an flagm body cfg k tk nret f tf le tle own p
-    (MSTK: match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk))
+    (MCONT: match_cont j an flagm body cfg k tk exit_loop contn brk nret m tm bound tbound),
+    match_cont j an flagm body cfg (Kloop s k) (RustIRsem.Kloop ts tk) loop_jump_node (Some loop_jump_node) (Some exit_loop) nret m tm bound tbound
+| match_Kcall: forall an flagm body cfg k tk nret f tf le tle own p m tm bound tbound
+    (MSTK: match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) m tm bound tbound)
     (RET: cfg ! nret = Some Iend),
     (* in the end of a function. an and body are not important, those
     in match_stacks are important *)
-    match_cont j an flagm body cfg (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) nret None None nret
-| match_Kdropcall: forall an flagm body cfg k tk pc cont brk nret st membs b tb ofs tofs id
+    match_cont j an flagm body cfg (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) nret None None nret m tm bound tbound
+| match_Kdropcall: forall an flagm body cfg k tk pc cont brk nret st membs b tb ofs tofs id m tm bound tbound
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
-    (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret),
-    match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret
-| match_Kdropplace: forall an f tf st l k tk e te own flagm cfg nret cont brk pc ts1 ts2
+    (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
+    match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret m tm bound tbound
+| match_Kdropplace: forall an f tf st l k tk e te own flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi
     (** Do we need match_stacks here?  *)
     (TRFUN: tr_fun f nret cfg)
     (AN: analyze ce f = OK an)
-    (MSTK: match_cont j an flagm f.(fn_body) cfg k tk pc cont brk nret)    
+    (MSTK: match_cont j an flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
+    (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own l ts2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
-    match_cont j an flagm f.(fn_body) cfg (Kdropplace f st l e own k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret 
-               
-with match_stacks (j: meminj) : cont -> RustIRsem.cont -> Prop :=
-| match_stacks_stop: match_stacks j Kstop (RustIRsem.Kstop)
-| match_stacks_call: forall an flagm f tf nret cfg pc contn brk k tk own p le tle
+    match_cont j an flagm f.(fn_body) cfg (Kdropplace f st l e own k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
+
+with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
+| match_stacks_stop: forall m tm bound tbound,
+    match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
+| match_stacks_call: forall an flagm f tf nret cfg pc contn brk k tk own p le tle m tm lo tlo hi thi
     (TRFUN: tr_fun f nret cfg)
-    (AN: analyze ce f = OK an)
-    (** TODO: added constraint to flagm *)
-    (MCONT: match_cont j an flagm f.(fn_body) cfg k tk pc contn brk nret),
-    match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk)
+    (AN: analyze ce f = OK an)   
+    (* callee use stacks hi and thi, so caller f uses lo and tlo*)
+    (MCONT: match_cont j an flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
+    (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
+    match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
 .
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
-  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc
+  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi
     (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
     (TRFUN: tr_fun f nret cfg)
     (MSTMT: match_stmt (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg s ts pc next cont brk nret)
-    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret)
-    (MINJ: Mem.inject j m tm)
+    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
+    (MINJ: injp_acc w (injpw j m tm Hm))
     (* well-formedness of the flag map *)
-    (WFFM: wf_flagm own te tm flagm),
+    (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (BOUND: Mem.sup_include hi (Mem.support m))
+    (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
-| match_drppplace: forall f tf st l k tk e te own m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2
-    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret)    
+| match_drppplace: forall f tf st l k tk e te own m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
+    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)    
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own l ts2)
-    (MINJ: Mem.inject j m tm),
+    (MINJ: injp_acc w (injpw j m tm Hm))
+    (* maybe difficult: transition of own is small step! *)
+    (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (BOUND: Mem.sup_include hi (Mem.support m))
+    (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (Dropplace f st l k e own m) (RustIRsem.State tf ts1 (RustIRsem.Kseq ts2 tk) te tm)
-| match_dropstate: forall k tk m tm j flagm maybeInit maybeUninit universe body cfg nret cont brk next b ofs tb tofs st membs id
-    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm body cfg k tk next cont brk nret)
-    (MINJ: Mem.inject j m tm)
-    (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)),
+| match_dropstate: forall k tk m tm j flagm maybeInit maybeUninit universe body cfg nret cont brk next b ofs tb tofs st membs id lo tlo Hm
+    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm body cfg k tk next cont brk nret m tm lo tlo)
+    (MINJ: injp_acc w (injpw j m tm Hm))
+    (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
+    (* no new stacks block in dropstate *)
+    (BOUND: Mem.sup_include lo (Mem.support m))
+    (TBOUND: Mem.sup_include tlo (Mem.support tm)),
     match_states (Dropstate id (Vptr b ofs) st membs k m) (RustIRsem.Dropstate id (Vptr tb tofs) st membs tk tm)
 | match_callstate: forall j vf tvf m tm vargs tvargs k tk
     (VINJ: Val.inject j vf tvf)
     (MINJ: Mem.inject j m tm)
     (AINJ: Val.inject_list j vargs tvargs)
-    (MCONT: match_stacks j k tk),
+    (MCONT: match_stacks j k tk m tm (Mem.support m) (Mem.support tm)),
     match_states (Callstate vf vargs k m) (RustIRsem.Callstate tvf tvargs tk tm)
 | match_returnstate: forall j v tv m tm k tk
     (VINJ: Val.inject j v tv)
     (MINJ: Mem.inject j m tm)
-    (MCONT: match_stacks j k tk),
+    (MCONT: match_stacks j k tk m tm (Mem.support m) (Mem.support tm)),
     match_states (Returnstate v k m) (RustIRsem.Returnstate tv tk tm)
 . 
 
