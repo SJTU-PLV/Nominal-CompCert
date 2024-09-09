@@ -51,55 +51,6 @@ Unset Program Cases.
 
 (** lemmas about [wt_c] *)
 
-(*
-Lemma restrict_fsim {li} (L :semantics li li) IA IS:
-    preserves L IA IA IS ->
-    GS.forward_simulation (cc_inv IA) L (restrict L IA IA IS).
-  Proof.
-    fsim (apply GS.forward_simulation_step with (match_states := rel_inv (IS w));
-          destruct Hse; subst); cbn; auto.
-    - destruct 1. reflexivity.
-    - intros q _ s [Hq] Hs. exists s.
-      assert (IS w s) by (eapply preserves_initial_state; eauto).
-      eauto 10 using rel_inv_intro.
-    - intros s _ r [Hs] Hr. exists r.
-      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
-      eauto 10 using rel_inv_intro.
-    - intros s _ q [Hs] Hx.
-      edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
-      eexists wA, q. intuition eauto 10 using rel_inv_intro.
-      destruct H0. exists s1'. intuition eauto 20 using rel_inv_intro.
-    - intros s t s' STEP _ [Hs].
-      assert (IS w s') by (eapply preserves_step; eauto).
-      exists s'. eauto 10 using rel_inv_intro.
-  Qed.
-  
-
-Section METHODS.
-  Context {li1 li2} {cc: GS.callconv li1 li2}.
-  Context (L1: semantics li1 li1) (L2: semantics li2 li2).
-
-  Lemma source_invariant_fsim I IS:
-    preserves L1 I I IS ->
-    GS.forward_simulation cc (restrict L1 I I IS) L2 ->
-    GS.forward_simulation (I @ cc) L1 L2.
-  Proof.
-    intros HL1 HL.
-    eapply st_fsim_vcomp; eauto.
-    apply restrict_fsim; auto.
-  Qed.
-
-  Lemma target_invariant_fsim IA IB IS:
-    preserves L2 IA IB IS ->
-    forward_simulation ccA ccB L1 (expand L2 IA IB IS) ->
-    forward_simulation (ccA @ IA) (ccB @ IB) L1 L2.
-  Proof.
-    intros HL2 HL.
-    eapply compose_forward_simulations; eauto.
-    apply expand_fsim; auto.
-  Qed.
-End METHODS.
-*)
 Infix "@" := GS.cc_compose (at level 30, right associativity).
 
 
@@ -257,9 +208,104 @@ Proof.
     constructor.
 Qed.
 
+Require Import InjpAccoComp.
+
+Inductive match_injp_ext_comp_world : injp_world -> injp_world -> injp_world -> Prop :=
+|world_comp_intro:
+  forall m1 m2 m3 m4 j12 j23 j13 Hm12 Hm34 Hm14,
+    j13 = compose_meminj j12 j23 ->
+    Mem.extends m2 m3 ->
+    match_injp_ext_comp_world (injpw j12 m1 m2 Hm12) (injpw j23 m3 m4 Hm34) (injpw j13 m1 m4 Hm14).
+
+Definition injp_ext_cctrans : injp_world * (unit * injp_world) -> injp_world -> Prop :=
+  fun wjxj w =>
+    let w1 := fst wjxj in let w2 := snd (snd wjxj) in
+    match_injp_ext_comp_world w1 w2 w /\ external_mid_hidden w1 w2.
+
 Lemma cctrans_injp_ext:
   cctrans (c_injp @ c_ext @ c_injp) c_injp.
 Proof.
+  constructor. econstructor. instantiate (1:= injp_ext_cctrans).
+  (* Compute (GS.gworld (c_injp @ c_ext @ c_injp)). *)
+  - red. intros w2 se1 se2 q1 q2 Hse Hq. inv Hse. inv Hq.
+    inv H4. clear Hm1 Hm2 Hm3. simpl in H2, H3.
+    rename m0 into m1. rename m3 into m2.
+    (* Compute (GS.ccworld (c_injp @ c_ext @ c_injp)). *)
+    exists (se1,((injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm)),(se1,(tt,(injpw f m1 m2 Hm))))).
+    repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. eapply match_stbls_dom; eauto.
+      constructor. constructor. constructor; eauto.
+    + exists (cq vf1 sg vargs1 m1). split. constructor; simpl; eauto.
+      eapply val_inject_dom; eauto. eapply val_inject_list_dom; eauto.
+      exists (cq vf1 sg vargs1 m1). split. constructor; simpl; eauto.
+      reflexivity. generalize dependent vargs1.
+      induction 1. constructor. constructor. reflexivity. auto.
+      apply Mem.extends_refl.
+      econstructor; eauto. constructor.
+    + constructor. rewrite meminj_dom_compose. auto. apply Mem.extends_refl.
+    + constructor. intros. unfold meminj_dom in H6.
+      destr_in H6.
+      intros. eexists. eexists. split. eauto.
+      unfold meminj_dom. rewrite H7. do 2 f_equal. lia.
+    + intros r1 r4 [wpa [t wpb]] wp2 [wpa' [t' wpb']] MS.
+      intros [ACE1 [X ACE2]] [ACI1 [Y ACI2]] [r2 [Hr1 [r3 [Hr2 Hr3]]]].
+      simpl in *. destruct Hr2 as [z [Z Hr2]]. clear X Y Z.
+      destruct wpa' as [j12 m1' m2' Hm1']. destruct wpb' as [j23 m2'_ m3' Hm2'].
+      inv Hr1. inv Hr2. inv Hr3. simpl in *. inv H6. inv H13.
+      clear Hm1 Hm2 Hm3 Hm4 Hm5 Hm6. rename m1'0 into m1'.
+      rename m2'0 into m2'. rename m2'1 into m3'. rename m2'2 into m4'.
+      assert (Hm': Mem.inject (compose_meminj j12 j23) m1' m4').
+      eapply Mem.inject_compose. eauto.
+      eapply Mem.extends_inject_compose. eauto. eauto.
+      exists (injpw (compose_meminj j12 j23) m1' m4' Hm').
+      repeat apply conj.
+      * eapply injp_comp_acce. 3: apply ACE1.
+        3 : apply ACE2.
+        constructor. admit.
+      * admit.
+      * econstructor; simpl; eauto.
+        eapply val_inject_compose. eauto.
+        rewrite <- (compose_meminj_id_left j23).
+        eapply val_inject_compose. eauto. eauto.
+  - red. intros [wpa [x wpb]] wp2 [se2 [w1 [se2' [y w2]]]].
+    intros se1 se3 q1 q3 [Hs1 [Hs2 Hs3]] [q2 [Hq1 [q2' [Hq2 Hq3]]]].
+    intros [ACI1 [X ACI2]]. simpl in ACI1, ACI2. clear X. simpl in x,y.
+    intros MS. inv MS. simpl in H, H0.
+    destruct w1 as [j12' m1' m2' Hm12'].
+    destruct w2 as [j34' m3' m4' Hm34'].
+    inv H.
+    assert (Hm14' : Mem.inject (compose_meminj j12' j34') m1' m4').
+    eapply Mem.inject_compose; eauto. eapply Mem.extends_inject_compose; eauto.
+    inv Hq1. inv Hq2. inv Hq3. inv H3. inv H16. auto.
+    exists (injpw (compose_meminj j12' j34') m1' m4' Hm14').
+    repeat apply conj.
+    + admit.
+    + inv Hs1. inv Hs2. inv Hs3.
+      constructor; eauto. eapply Genv.match_stbls_compose; eauto.
+    + inv Hq1. inv H3. inv Hq2. inv Hq3. inv H15.
+      econstructor; simpl; eauto. eapply val_inject_compose. eauto.
+      rewrite <- (compose_meminj_id_left j34').
+      eapply val_inject_compose. eauto. eauto.
+      eapply CKLRAlgebra.val_inject_list_compose. econstructor.
+      split. eauto. rewrite <- (compose_meminj_id_left j34').
+      simpl in H10.
+      eapply CKLRAlgebra.val_inject_list_compose; eauto.
+    +  intros r1 r3 wp2' ACCO1 MR. simpl in ACCO1. inv MR. simpl in H,H1.
+       destruct wp2' as [j13'' m1'' m3'' Hm13'].
+       simpl in H, H1.
+       assert (Hhidden: external_mid_hidden (injpw j12' m1' m2' Hm12') (injpw j34' m3' m4' Hm34')).
+Admitted.
+   (*    exploit injp_acce_outgoing_constr; eauto. apply Hhidden.
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
+      intros r1 r2 wp2' ACO Hr. *)
+      
+        
+    
+    
+    
+    
+    
+  
   (** TODO: in 1 step or two steps, not sure yet*)
   Abort.
 
