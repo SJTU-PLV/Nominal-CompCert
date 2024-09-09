@@ -76,7 +76,7 @@ Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
       }.
 
   
-  Lemma open_fsim_cctrans {li1 li2: language_interface}:
+Lemma open_fsim_cctrans {li1 li2: language_interface}:
   forall (cc1 cc2: callconv li1 li2) L1 L2,
     forward_simulation cc1 L1 L2 ->
     cctrans cc1 cc2 ->
@@ -124,6 +124,35 @@ Proof.
     exists i', s2'. split; auto.
     econstructor; eauto.
 Qed.
+
+Definition cctrans' {li1 li2} cc1 cc2 :=
+  inhabited (@cctrans li1 li2 cc1 cc2).
+(*
+Global Instance cctrans_preo li1 li2 :
+  PreOrder (@cctrans' li1 li2).
+Proof.
+  constructor.
+  - constructor. econstructor. instantiate (1:= eq).
+    econstructor; eauto. repeat apply conj; eauto.
+    intros. subst. eexists. eauto.
+    econstructor; eauto. repeat apply conj; eauto.
+    subst. auto.
+  - red. intros L1 L2 L3 [X] [Y]. inv X. inv Y.
+    rename match13 into match12. rename match14 into match23.
+    constructor. econstructor.
+    instantiate (1:= fun w1 w3 => exists w2, match12 w1 w2 /\ match23 w2 w3).
+    + red. intros w3 se1 se2 q1 q2 Hs3 Hq3.
+      exploit big_step_incoming1; eauto.
+      intros (w2 & Hs2 & Hq2 & M23 & Hr2).
+      exploit big_step_incoming0; eauto.
+      intros (w1 & Hs1 & Hq1 & M12 & Hr1).
+      exists w1. repeat apply conj; eauto.
+    intros. subst. eexists. eauto.
+                                               
+    
+*)
+  
+
 
 
 

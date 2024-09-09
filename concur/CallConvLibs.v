@@ -130,6 +130,9 @@ Proof.
   eapply cctrans_id_2.
 Qed.
 
+(** Algebratic properties *)
+
+
 Require Import Extends.
 
 (** c_ext cannot be defined using cc_unit_world because [cc_c] uses <> diamond constructer for match_reply*)

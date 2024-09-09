@@ -6,7 +6,7 @@ Require Import Memory.
 Require Import LanguageInterface.
 Require Import Smallstep.
 Require Import Linking.
-Require Import SmallstepLinking.
+Require Import HCompBig.
 Require Import Values.
 Require Import Asmgenproof0.
 Require Import Asm.
@@ -370,7 +370,7 @@ Section ASM_LINKING.
 
   Lemma asm_linking:
     forward_simulation cc_id cc_id
-      (SmallstepLinking.semantics L (erase_program p))
+      (HCompBig.semantics L (erase_program p))
       (semantics p).
   Proof.
     constructor.

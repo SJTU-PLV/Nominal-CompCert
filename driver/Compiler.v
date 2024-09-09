@@ -33,7 +33,7 @@ Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
 Require Import CA.
-Require Import CallconvBig VCompBig CallConvLibs Composition.
+Require Import CallconvBig VCompBig CallConvAlgebra CallConvLibs Composition.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy (*Cexec*).
@@ -599,6 +599,8 @@ Lemma RTL_ro_injp_selfsim : forall (prog : RTL.program),
     GS.forward_simulation (ro @ c_injp) (RTL.semantics prog) (RTL.semantics prog).
 Admitted.
 
+
+(** TODO4 : some basic algebratic properties of cctrans *)
 Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : callconv C D),
     cctrans (cc_compose cc1 (cc_compose cc2 cc3))
       (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
@@ -615,7 +617,6 @@ Proof.
     exploit big_step_incoming; eauto.
     intros (w1 & Hse & Hq & MATCH & HR).
     exists (se, (w,w1)). 
-
 Admitted.
 
 Lemma callconv_compose_para : forall {li1 li2 li3}
@@ -825,16 +826,20 @@ Qed.
   and assembly linking proofs can be used together. *)
 
 Require Import SmallstepLinking.
-Require Import AsmLinking.
 Require Import HCompBig.
+Require Import AsmLinking.
 
-(** TODO: prove asmlinking based on [HCompbig] instead of [SmallstepLinking]*)
+
+(** TODO5: prove asmlinking based on [HCompbig] instead of [SmallstepLinking]*)
 Lemma asm_linking : forall p1 p2 p,
     link p1 p2 = Some p ->
     GS.forward_simulation cc_id
       (semantics (fun i : bool => Asm.semantics ((fun i0 : bool => if i0 then p1 else p2) i))
          (erase_program p)) (Asm.semantics p).
-Admitted.
+Proof.
+  intros.
+  apply NEWSIM. apply AsmLinking.asm_linking. auto.
+Qed.
       
 Lemma compose_transf_c_program_correct:
   forall p1 p2 spec tp1 tp2 tp,
