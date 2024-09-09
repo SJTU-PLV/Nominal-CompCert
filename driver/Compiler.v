@@ -435,7 +435,6 @@ Lemma cc_compcert_collapse:
     cc_asm inj)                                   (* Asmgen *)
     cc_compcert_1.
 Proof.
-Admitted.
 *)
 (*
   (* commute the cklrs towards source C level *)
@@ -499,7 +498,6 @@ Lemma cc_c_level_collapse:
         )
         cc_c_level.
 Proof.
-Admitted.
 *)
 (*
   rewrite <- (cc_compose_assoc injp), <- cc_c_compose. rewrite injp_injp_eq.
@@ -593,16 +591,8 @@ Lemma RTL_injp_selfsim : forall (prog: RTL.program),
     GS.forward_simulation c_injp (RTL.semantics prog) (RTL.semantics prog).
 Admitted.
 
-Lemma RTL_ro_injp_selfsim : forall (prog : RTL.program),
-    GS.forward_simulation (ro @ c_injp) (RTL.semantics prog) (RTL.semantics prog).
-Admitted.
-
 
 (** TODO4 : some basic algebratic properties of cctrans *)
-Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : callconv C D),
-    cctrans (cc_compose cc1 (cc_compose cc2 cc3))
-      (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
-Proof. Admitted.
 
 Lemma callconv_compose_para : forall {li1 li2 li3}
                                 (cc1: callconv li1 li2) (cc2: callconv li2 li3),
@@ -629,6 +619,14 @@ Proof.
       exists (tt). split. reflexivity.
       destruct H4 as [r1' [A B]]. split.
       econstructor; eauto. auto.
+Qed.
+
+Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : callconv C D),
+    cctrans (cc_compose cc1 (cc_compose cc2 cc3))
+      (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
+Proof.
+  intros. rewrite callconv_compose_para.
+  rewrite callconv_compose_para. reflexivity.
 Qed.
 
 (** ** Composition of passes *)
