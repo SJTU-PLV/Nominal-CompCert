@@ -17,7 +17,8 @@ Require Import InitDomain RustIR.
 
 Import ListNotations.
 
-(** ** Definition of selector. It is the program pointer in AST-like program.  *)
+(** ** Definition of selector. It is the program pointer in AST-like 
+program.  *)
 
 Inductive select_kind : Type :=
 | Selseqleft: select_kind
@@ -29,7 +30,8 @@ Inductive select_kind : Type :=
 Definition selector := list select_kind.
 
 
-Definition select_stmt_aux (sel: select_kind) (stmt: option statement) : option statement :=
+Definition select_stmt_aux (sel: select_kind) (stmt: option statement) 
+: option statement :=
   match sel, stmt with
   | Selseqleft, Some (Ssequence s1 s2) => Some s1
   | Selseqright, Some (Ssequence s1 s2) => Some s2
@@ -42,6 +44,8 @@ Definition select_stmt_aux (sel: select_kind) (stmt: option statement) : option 
 Definition select_stmt (stmt: statement) (sel: selector) : option statement :=
   fold_right select_stmt_aux (Some stmt) sel.
 
+Compute select_stmt (Ssequence (Ssequence Sskip Sbreak) Scontinue) 
+[SelseqrightSelseqleft].
 (* (** Maybe we can use fold_right to implement select_stmt and reverse *)
 (* the selectors to simplify the proof *) *)
 (* Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement := *)
@@ -126,7 +130,7 @@ Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option stateme
   end.
 
 
-(** ** Genenrate CFG from a statement *)
+(** ** Generate CFG from a statement *)
 
 (** * Translation state *)
 
@@ -178,7 +182,8 @@ Definition ret {A: Type} (x: A) : mon A :=
   fun (s: generator) => Res x s (state_incr_refl s).
 
 
-Definition error {A: Type} (msg: Errors.errmsg) : mon A := fun (s: generator) => Err msg.
+Definition error {A: Type} (msg: Errors.errmsg) : mon A := 
+  fun (s: generator) => Err msg.
 
 Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
   fun (s: generator) =>
@@ -321,11 +326,12 @@ Qed.
 
 Remark add_instr_incr:
   forall s i,
-  let n := s.(st_nextnode) in
+  let n := s.(st_nextnode) in                                
   state_incr s (mkstate (Pos.succ n)
                   (PTree.set n i s.(st_code))
                   (add_instr_wf s i)).
 Proof.
+intros.
   constructor; simpl.
   apply Ple_succ.
   intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto.
@@ -425,7 +431,9 @@ Variable (ce: composite_env).
 
 Import ListNotations.
 
-Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: node) (cont: option node) (brk: option node) {struct stmt} : mon node :=
+Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) 
+(succ: node) (cont: option node) (brk: option node) {struct stmt} 
+: mon node :=
   let transl_stmt := transl_stmt end_node in
   match stmt with
   | Sskip =>
@@ -581,14 +589,69 @@ Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
     (RET: cfg ! nret = Some Iend),
     tr_fun f nret cfg.
 
+Lemma nextnode_n:
+    forall sel succ n s s' R, add_instr (Isel sel succ) s = Res n s' R
+    -> n = succ.
+Proof.
+  intros. inversion H. Admitted.
+
+Lemma find_n:
+    forall sel succ n s s' R, add_instr (Isel sel succ) s = Res n s' R ->
+    (st_code s') ! n = Some (Isel sel succ).
+Proof.
+  Admitted.
+
+Lemma ret_n:
+  forall (succ:positive) n s s' R, ret succ s = Res n s' R ->
+  n = succ.
+Proof.
+Admitted.
+
+Lemma select_stmt_sequence_first :
+  forall body sel stmt1 stmt2,
+    select_stmt body sel = Some (Ssequence stmt1 stmt2) ->
+    select_stmt body (Selseqleft :: sel) = Some stmt1.
+Proof.
+  Admitted.
+
+Lemma select_stmt_sequence_second :
+  forall body sel stmt1 stmt2,
+    select_stmt body sel = Some (Ssequence stmt1 stmt2) ->
+    select_stmt body (Selseqright :: sel) = Some stmt2.
+Proof.
+  Admitted.
 
 (* tr_stmt matches transl_stmt *)
 Lemma transl_stmt_charact: forall body sel stmt nret succ cont brk s s' n R,
     select_stmt body sel = Some stmt ->
     transl_stmt nret stmt sel succ cont brk s = Res n s' R ->
     tr_stmt body s'.(st_code) stmt n succ cont brk nret.
+Proof.
+intros until stmt. generalize dependent sel.
+induction stmt; intros; simpl in H0.
+(* Sskip *)
+apply ret_n in H0. subst. constructor.
+(* Sassign *)
+econstructor. eapply find_n. eauto. eauto.
+(* Sassign_variant *)
+econstructor. eapply find_n. eauto. eauto.
+(* Sbox *)
+econstructor. eapply find_n. eauto. eauto.
+(* Sstoragelive *)
+econstructor. eapply find_n. eauto. eauto.
+(* Sstoragedead *)
+econstructor. eapply find_n. eauto. eauto.
+(* Sdrop *)
+econstructor. eapply find_n. eauto. eauto.
+(* Scall *)
+econstructor. eapply find_n. eauto. eauto.
+(* Ssequence *)
+monadInv H0. econstructor. 
+eapply IHstmt1. eapply select_stmt_sequence_first. eauto. eauto.
+eapply IHstmt2. eapply select_stmt_sequence_second. eauto. admit.
+(* Sifthenelse *)
+monadInv H0. econstructor. eapply IHstmt1.   
 Admitted.
-
 
 Lemma generate_cfg_charact: forall f entry cfg,
     generate_cfg f.(fn_body) = OK (entry, cfg) ->
@@ -599,8 +662,8 @@ Proof.
   unfold generate_cfg in GEN.
   destruct (generate_cfg' (fn_body f) init_state) eqn: GCFG; try congruence.
   inv GEN. unfold generate_cfg' in GCFG.
-  monadInv GCFG.
-  
+  (** TODO: copy some monadInv from RTLgenspec.v *)
+
 Admitted.
 
 

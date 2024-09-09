@@ -1,0 +1,91 @@
+
+** Conflict (shift/reduce) in state 82.
+** Token involved: LPAREN
+** This state is reached from prog_eof after reading:
+
+FN ID generic_origins LPAREN composite_fields RPAREN origin_relations LBRACE ID COLON2 ID
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog_eof 
+prog EOF 
+fn 
+FN ID generic_origins LPAREN composite_fields RPAREN origin_relations LBRACE stmt RBRACE 
+                                                                             stmt_item 
+                                                                             expr 
+                                                                             (?)
+
+** In state 82, looking ahead at LPAREN, shifting is permitted
+** because of the following sub-derivation:
+
+ID COLON2 ID . LPAREN expr RPAREN 
+
+** In state 82, looking ahead at LPAREN, reducing production
+** path_expr -> ID COLON2 ID
+** is permitted because of the following sub-derivation:
+
+expr LPAREN args_expr RPAREN // lookahead token appears
+path_expr // lookahead token is inherited
+ID COLON2 ID . 
+
+** Conflict (shift/reduce) in state 52.
+** Token involved: WHERE
+** This state is reached from prog_eof after reading:
+
+FN ID generic_origins LPAREN composite_fields RPAREN RARROW FN generic_origins LPAREN params_ty RPAREN RARROW ty
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog_eof 
+prog EOF 
+fn 
+(?)
+
+** In state 52, looking ahead at WHERE, reducing production
+** origin_relations ->
+** is permitted because of the following sub-derivation:
+
+FN ID generic_origins LPAREN composite_fields RPAREN RARROW ty origin_relations LBRACE stmt RBRACE // lookahead token appears because origin_relations can begin with WHERE
+                                                            FN generic_origins LPAREN params_ty RPAREN RARROW ty origin_relations // lookahead token is inherited
+                                                                                                                 . 
+
+** In state 52, looking ahead at WHERE, shifting is permitted
+** because of the following sub-derivation:
+
+FN ID generic_origins LPAREN composite_fields RPAREN RARROW ty origin_relations LBRACE stmt RBRACE 
+                                                            FN generic_origins LPAREN params_ty RPAREN RARROW ty origin_relations 
+                                                                                                                 . WHERE origin_relations_ 
+
+** Conflict (shift/reduce) in state 13.
+** Token involved: COMMA
+** This state is reached from prog_eof after reading:
+
+FN ID generic_origins LPAREN ID COLON FN generic_origins LPAREN params_ty RPAREN RARROW ty WHERE ORIGIN COLON ORIGIN
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog_eof 
+prog EOF 
+fn 
+FN ID generic_origins LPAREN composite_fields RPAREN origin_relations LBRACE stmt RBRACE 
+                             (?)
+
+** In state 13, looking ahead at COMMA, reducing production
+** origin_relations_ -> ORIGIN COLON ORIGIN
+** is permitted because of the following sub-derivation:
+
+ID COLON ty COMMA composite_fields // lookahead token appears
+         FN generic_origins LPAREN params_ty RPAREN RARROW ty origin_relations // lookahead token is inherited
+                                                              WHERE origin_relations_ // lookahead token is inherited
+                                                                    ORIGIN COLON ORIGIN . 
+
+** In state 13, looking ahead at COMMA, shifting is permitted
+** because of the following sub-derivation:
+
+ID COLON ty 
+         FN generic_origins LPAREN params_ty RPAREN RARROW ty origin_relations 
+                                                              WHERE origin_relations_ 
+                                                                    ORIGIN COLON ORIGIN . COMMA origin_relations_ 
