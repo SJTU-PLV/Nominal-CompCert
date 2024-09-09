@@ -68,7 +68,7 @@ Definition ccref_incoming {li1 li2} (cc1 cc2: callconv li1 li2) (match12 : gworl
         match_reply cc2 (set w2 wp2') r1 r2).
 
 
-Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
+Record cctrans' {li1 li2} (cc1 cc2: callconv li1 li2) :=
   Callconv_Trans{
         match12 : gworld cc1 -> gworld cc2 -> Prop;
         big_step_incoming : ccref_incoming cc1 cc2 match12;
@@ -76,10 +76,10 @@ Record cctrans {li1 li2} (cc1 cc2: callconv li1 li2) :=
       }.
 
   
-Lemma open_fsim_cctrans {li1 li2: language_interface}:
+Lemma open_fsim_cctrans' {li1 li2: language_interface}:
   forall (cc1 cc2: callconv li1 li2) L1 L2,
     forward_simulation cc1 L1 L2 ->
-    cctrans cc1 cc2 ->
+    cctrans' cc1 cc2 ->
     forward_simulation cc2 L1 L2.
   (*cc1 : injp @ injp cc2: injp*)
 Proof.
@@ -125,11 +125,11 @@ Proof.
     econstructor; eauto.
 Qed.
 
-Definition cctrans' {li1 li2} cc1 cc2 :=
-  inhabited (@cctrans li1 li2 cc1 cc2).
-(*
+Definition cctrans {li1 li2} cc1 cc2 :=
+  inhabited (@cctrans' li1 li2 cc1 cc2).
+
 Global Instance cctrans_preo li1 li2 :
-  PreOrder (@cctrans' li1 li2).
+  PreOrder (@cctrans li1 li2).
 Proof.
   constructor.
   - constructor. econstructor. instantiate (1:= eq).
@@ -147,11 +147,74 @@ Proof.
       exploit big_step_incoming0; eauto.
       intros (w1 & Hs1 & Hq1 & M12 & Hr1).
       exists w1. repeat apply conj; eauto.
-    intros. subst. eexists. eauto.
-                                               
-    
-*)
-  
+      intros r1 r2 wp1 wp3 wp1' [wp2 [Ms12 Ms23]] ACE1 ACI1 Hr1'.
+      exploit Hr1; eauto. intros (wp2' & ACE2 & ACI2 & Hr2').
+      exploit Hr2; eauto.
+    + red. intros wp1 wp3 w1 se1 se2 q1 q2 Hs1 Hq1 ACI1 [wp2 [Ms12 Ms23]].
+      exploit big_step_outgoing0; eauto.
+      intros (w2 & ACI2 & Hs2 & Hq2 & Hr2).
+      exploit big_step_outgoing1; eauto.
+      intros (w3 & ACI3 & Hs3 & Hq3 & Hr3).
+      exists w3. repeat apply conj; eauto.
+      intros r1 r2 wp3' ACO3 Hr3'.
+      exploit Hr3; eauto. intros (wp2' & ACE2 & Hr2' & Hsq23).
+      exploit Hr2; eauto. intros (wp1' & ACE1 & Hr1' & Hsq12).
+      exists wp1'. repeat apply conj; eauto.
+Qed.
+
+Global Instance open_fsim_cctrans:
+  Monotonic
+    (@GS.forward_simulation)
+    (forallr - @ liA1, forallr - @ liA2, cctrans ++>
+     subrel).
+Proof.
+  intros li1 li2 cc1 cc2 [Ht] sem1 sem2 L1.
+  eapply open_fsim_cctrans'; eauto.
+Qed.
+
+Global Instance cc_compose_ref li1 li2 li3:
+  Proper (cctrans ++> cctrans ++> cctrans) (@cc_compose li1 li2 li3).
+Proof.
+  intros cca cca' [[matcha Hia Hoa]] ccb ccb' [[matchb Hib Hob]].
+  constructor. econstructor. instantiate (1:= fun w w' => matcha (fst w) (fst w') /\
+                                                          matchb (snd w) (snd w')).
+  - red. intros [se2 [wa' wb']] se1 se3 q1 q3 [Hsa' Hsb'] [q2 [Hqa' Hqb']].
+    exploit Hia; eauto. intros (wa & Hsa & Hqa & Msa & Hra).
+    edestruct Hib as (wb & Hsb & Hqb & Msb & Hrb); eauto.
+    exists (se2, (wa, wb)). repeat apply conj; eauto.
+    constructor; eauto. econstructor; eauto.
+    intros r1 r3 [wpa wpb] [wpa' wpb'] [wpa1 wpb1]
+      [Msa1 Msb1] [ACEa ACEb] [ACIa ACIb] [r2 [Hra' Hrb']].
+    simpl in *.
+    edestruct Hra as (wpa2' & ACEa' & ACIa' & Hra2'); eauto.
+    edestruct Hrb as (wpb2' & ACEb' & ACIb' & Hrb2'); eauto.
+    exists (wpa2', wpb2'). intuition auto. simpl.
+    split; eauto. split; eauto.
+    exists r2. split; auto.
+  - red. intros [wpa wpb] [wpa' wpb'] [se2 [wa wb]] se1 se3 q1 q3
+           [Hsa' Hsb'] [q2 [Hqa' Hqb']] [ACIa ACIb] [Msa Msb].
+    cbn in ACIa, ACIb, Msa, Msb.
+    exploit Hoa; eauto. intros (wa' & ACIa' & Msa' & Mqa' & Hra').
+    exploit Hob; eauto. intros (wb' & ACIb' & Msb' & Mqb' & Hrb').
+    exists (se2, (wa', wb')). repeat apply conj; eauto.
+    constructor; eauto. econstructor; eauto.
+    intros r1 r3 [wpa2' wpb2'] [ACEa ACEb] [r2 [Hra Hrb]].
+    simpl in ACEa, ACEb, Hra, Hrb.
+    edestruct Hra' as (wpa2 & ACEa1 & Hra2 & Msa1); eauto.
+    edestruct Hrb' as (wpb2 & ACEb1 & Hrb2 & Msb1); eauto.
+    exists (wpa2, wpb2). intuition auto. simpl.
+    split; eauto.
+    exists r2. split; auto.
+Qed.
+
+Infix "@" := GS.cc_compose (at level 30, right associativity).
+
+Lemma cctrans_split_1 : forall {A B C} (cc : GS.callconv B C) (cc1 cc2: GS.callconv A B),
+    cctrans cc1 cc2 ->
+    cctrans (cc1 @ cc) (cc2 @ cc).
+Proof.
+  intros. rewrite H. reflexivity.
+Qed.
 
 
 

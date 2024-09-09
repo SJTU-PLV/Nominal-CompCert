@@ -554,8 +554,7 @@ Lemma compose_identity_pass {li1 li2} cc sem bsem tsem:
   GS.forward_simulation cc bsem tsem ->
   @GS.forward_simulation li1 li2 cc sem tsem.
 Proof.
-  intros.
-  eapply open_fsim_cctrans. 2: apply cctrans_id_1.
+  intros. rewrite <- cctrans_id_1.
   eapply st_fsim_vcomp; eauto.
   eapply NEWSIM. auto.
 Qed.
@@ -565,8 +564,7 @@ Lemma compose_identity_pass' {li1 li2} cc sem bsem tsem:
   GS.forward_simulation cc bsem tsem ->
   @GS.forward_simulation li1 li2 cc sem tsem.
 Proof.
-  intros.
-  eapply open_fsim_cctrans. 2: apply cctrans_id_1.
+  intros. rewrite <- cctrans_id_1.
   eapply st_fsim_vcomp; eauto.
 Qed.
 
@@ -606,26 +604,13 @@ Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : c
       (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
 Proof. Admitted.
 
-Lemma cctrans_split_1 : forall {A B C} (cc : GS.callconv A B) (cc1 cc2: GS.callconv B C),
-    cctrans cc1 cc2 ->
-    cctrans (cc @ cc1) (cc @ cc2).
-Proof.
-  intros. inv X.
-  econstructor. instantiate (1:= fun w1 w2 => fst w1 = fst w2 /\ match12 (snd w1) (snd w2)).
-  - red. intros. destruct w2 as [se [w w2]].
-    inv H. destruct H0 as [q1' [Hq1 Hq2]].
-    exploit big_step_incoming; eauto.
-    intros (w1 & Hse & Hq & MATCH & HR).
-    exists (se, (w,w1)). 
-Admitted.
-
 Lemma callconv_compose_para : forall {li1 li2 li3}
                                 (cc1: callconv li1 li2) (cc2: callconv li2 li3),
     cctrans 
      (cc_compose cc1 cc2)
       (GS.cc_compose cc1 cc2).
 Proof.
-  intros.
+  intros. constructor.
   econstructor. instantiate (1:= fun _ _ => True).
   - red. intros. destruct w2 as [se [w1 w2]].
     inv H. destruct H0 as [q1' [Hq1 Hq2]].
@@ -664,8 +649,8 @@ Ltac DestructM :=
   repeat DestructM. subst tp.
   assert (F: GS.forward_simulation cc_compcert (Clight.semantics1 p) (Asm.semantics p20)).
   {
-  eapply cc_compcert_merge; eauto.
-  eapply open_fsim_cctrans. 2: apply cc_collapse.
+    eapply cc_compcert_merge; eauto.
+    rewrite <- cc_collapse.
   eapply st_fsim_vcomp. apply NEWSIM.
     eapply top_ro_selfsim; eassumption.
   eapply st_fsim_vcomp.
@@ -675,7 +660,7 @@ Ltac DestructM :=
   eapply st_fsim_vcomp.
     eapply CminorgenproofC.transl_program_correct; eassumption.
   eapply st_fsim_vcomp.
-    eapply  open_fsim_cctrans. 2: apply callconv_compose_para.
+    rewrite <- callconv_compose_para.
     eapply NEWSIM.
     eapply Selectionproof.transf_program_correct; eassumption.
   eapply st_fsim_vcomp.
@@ -713,10 +698,9 @@ Ltac DestructM :=
   eapply st_fsim_vcomp.
     eapply UnusedglobproofC.transf_program_correct; eassumption.
   eapply st_fsim_vcomp.
-    eapply open_fsim_cctrans.
+    rewrite <- callconv_compose_para3.
     apply NEWSIM.
     eapply Allocproof.transf_program_correct; eassumption.
-    apply callconv_compose_para3.
   eapply st_fsim_vcomp.
     apply NEWSIM.
     eapply Tunnelingproof.transf_program_correct; eassumption.
@@ -729,13 +713,12 @@ Ltac DestructM :=
     eapply Debugvarproof.transf_program_correct; eassumption.
   eapply st_fsim_vcomp.
     eapply open_fsim_cctrans.
+    rewrite <- Stackingtrans. reflexivity.
     eapply StackingproofC.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
-    exact Asmgenproof.return_address_exists.
-    eassumption.
-    apply cctrans_split_1. apply Stackingtrans.
-    eapply open_fsim_cctrans. apply NEWSIM.
+    exact Asmgenproof.return_address_exists. eassumption.
+    rewrite <- callconv_compose_para.
+    apply NEWSIM.
     eapply Asmgenproof.transf_program_correct; eassumption.
-    apply callconv_compose_para.
   }
   auto.
   (*split. auto.
@@ -849,8 +832,7 @@ Lemma compose_transf_c_program_correct:
     link tp1 tp2 = Some tp ->
     GS.forward_simulation cc_compcert spec (Asm.semantics tp).
 Proof.
-  intros. 
-  eapply open_fsim_cctrans. 2: apply cctrans_id_2.
+  intros. rewrite <- cctrans_id_2.
   eapply st_fsim_vcomp.
   2: { unfold compose in H.
        destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.

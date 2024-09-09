@@ -449,7 +449,7 @@ Qed.
 
 Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
 Proof.
-  econstructor. instantiate (1:= match_12_cctrans).
+  constructor. econstructor. instantiate (1:= match_12_cctrans).
   - (*incoming construction*)
     red. intros. inv H0. inv H3. simpl in H2, H1.
     inv H.

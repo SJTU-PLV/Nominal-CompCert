@@ -110,6 +110,7 @@ Inductive match_wt_1 : (injp_world * (unit * injp_world)) -> (unit * (injp_world
 
 Lemma move_wt_injp : cctrans (c_injp @ wt_c @ c_injp) (wt_c @ c_injp @ c_injp).
 Proof.
+  constructor.
   econstructor. instantiate (1:= match_wt_1).
   - red. intros. rename se2 into se3. rename q2 into q3.
     simpl in w2. destruct w2 as [se1'1 [ [se1'2 sig] [se2 [w1 w2]]]].
@@ -173,6 +174,7 @@ Lemma cc_compose_assoc_1 {A B C D}:
   forall (cc1 : GS.callconv A B) (cc2 : GS.callconv B C) (cc3 : GS.callconv C D),
     cctrans (cc1 @ cc2 @ cc3) ((cc1 @ cc2) @ cc3).
 Proof.
+  constructor.
   econstructor. instantiate (1:= match_assoc_1).
   - red.
     intros [sec [[seb [w1 w2]] w3]] sea sed qa qd.
@@ -218,6 +220,7 @@ Lemma cc_compose_assoc_2 {A B C D}:
   forall (cc1 : GS.callconv A B) (cc2 : GS.callconv B C) (cc3 : GS.callconv C D),
     cctrans ((cc1 @ cc2) @ cc3) (cc1 @ cc2 @ cc3).
 Proof.
+  constructor.
   econstructor. instantiate (1:= match_assoc_2).
   - red.
     intros [seb [w1 [sec [w2 w3]]]]

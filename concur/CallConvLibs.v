@@ -51,6 +51,7 @@ Program Definition cc_id {li : language_interface} : callconv li li :=
 Lemma cctrans_id_1 {li1 li2 : language_interface} : forall (cc: callconv li1 li2),
     cctrans (cc_compose cc_id cc) cc.
 Proof.
+  constructor.
   econstructor. instantiate (1:= fun w1 w => eq (snd w1) w).
   - econstructor. repeat apply conj; eauto.
     + instantiate (1:= (se1,(tt,w2))). econstructor; eauto. reflexivity.
@@ -73,6 +74,7 @@ Qed.
 Lemma cctrans_id_2 {li1 li2 : language_interface} : forall (cc: callconv li1 li2),
     cctrans (cc_compose cc cc_id) cc.
 Proof.
+  constructor.
   econstructor. instantiate (1:= fun w1 w => eq (fst w1) w).
   - econstructor. repeat apply conj; eauto.
     + instantiate (1:= (se2,(w2,tt))). econstructor; eauto. reflexivity.
@@ -115,9 +117,9 @@ Lemma compose_id_new_injp_1 {li1 li2: language_interface} : forall (cc: callconv
     forward_simulation cc L2 L3 ->
     forward_simulation cc L1 L3.
 Proof.
-  intros. eapply open_fsim_cctrans.
+  intros.
+  rewrite <- cctrans_id_1.
   eapply st_fsim_vcomp; eauto. eapply oldfsim_newfsim_ccid; eauto.
-  eapply cctrans_id_1.
 Qed.
 
 Lemma compose_id_new_injp_2 {li1 li2: language_interface} : forall (cc: callconv li1 li2) L1 L2 L3,
@@ -125,9 +127,8 @@ Lemma compose_id_new_injp_2 {li1 li2: language_interface} : forall (cc: callconv
     Smallstep.forward_simulation 1 1 L2 L3 ->
     forward_simulation cc L1 L3.
 Proof.
-  intros. eapply open_fsim_cctrans.
+  intros. rewrite <- cctrans_id_2.
   eapply st_fsim_vcomp; eauto. eapply oldfsim_newfsim_ccid; eauto.
-  eapply cctrans_id_2.
 Qed.
 
 (** Algebratic properties *)
@@ -147,6 +148,7 @@ Program Definition c_ext : callconv li_c li_c := cc_c ext.
 *)
 Lemma cctrans_ext_comp : cctrans (cc_compose c_ext c_ext) c_ext.
 Proof.
+  constructor.
   econstructor. instantiate (1:= fun _ _ => True).
   - red. intros. inv H.  inv H0. simpl in H, H1, H2.
     exists (se2, (tt,tt)). intuition auto. econstructor; eauto. reflexivity. reflexivity.
@@ -240,7 +242,8 @@ Inductive match12_stacking : injp_world -> (injp_world * unit) -> Prop :=
 
 Lemma Stackingtrans : cctrans (cc_stacking_injp) (locset_injp @ cc_locset_mach).
 Proof.
-  simpl. econstructor. instantiate (1:= match12_stacking).
+  constructor.
+  econstructor. instantiate (1:= match12_stacking).
   - red. intros w2 se1 se2 q1 q2 Hse Hq.
     destruct w2 as [se [[sig wx] [sig' rs]]].
     destruct Hse as [Hse1 Hse2]. simpl in Hse1, Hse2. inv Hse2.
@@ -328,7 +331,7 @@ Definition l_ext := cc_locset ext.
 (** We have to change cc_locset_mach. But the problem is how? *)
 Lemma LM_trans_ext : cctrans (cc_locset_mach @ mach_ext) (l_ext @ cc_locset_mach).
 Proof.
-  econstructor.
+  constructor. econstructor.
   - red. intros [se' [[sg a] [sg' rs]]] se1 se2 q1 q2.
     intros [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in a. inv Hse1. inv Hse2. inv Hq1. inv Hq2.
@@ -619,6 +622,7 @@ Qed.
 
 Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
 Proof.
+  constructor.
   econstructor. instantiate (1:= eq).
   - red. intros [se' [x sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in x,sg. destruct x. inv Hse2. inv Hse1. inv Hq2. inv Hq1.
@@ -695,6 +699,7 @@ Qed.
 
 Lemma CL_trans_injp : cctrans (cc_c_locset @ locset_injp) (c_injp @ cc_c_locset).
 Proof.
+  constructor.
   econstructor. instantiate (1:= fun w1 w2 => snd w1 = fst w2).
   - red. intros [se' [wp sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in sg. inv Hse2. inv Hse1. inv Hq2. inv Hq1. inv H9.
