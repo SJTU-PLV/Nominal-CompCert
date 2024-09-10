@@ -26,9 +26,14 @@ Definition safe {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
 the original safe/partial_safe is identical to the composed
 safe/partial_safe *)
 
-Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: _ -> S -> Prop) wI :=
+(** TODO: essence behind the rechable predicate? i.e., how to prove
+lts_safe using lts_preserve in Invariant.v. TODO: try to define a
+proper rechable predicate to prove that lts_preserve /\ rechable ->
+sound_state *)
+Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: _ -> S -> Prop) (wI: inv_world IB) :=
   {
     step_safe s t s' (REACH: reachable L s):
+    (* SI may be stronger than safe, but how to preserve the stronger part *)
       (* SI L s -> *)
       Step L s t s' ->
       SI L s';
@@ -232,33 +237,33 @@ Proof.
 Qed.
 
 
-(* Similar to ccref *)
-Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
-  { inv_incoming:
-    forall w2 se1 se2 ccw q2,
-      symtbl_inv I2 w2 se2 ->
-      match_senv cc ccw se1 se2 ->
-      query_inv I2 w2 q2 ->
-      exists w1 q1, symtbl_inv I1 w1 se1 /\
-                 query_inv I1 w1 q1 /\
-                 match_query cc ccw q1 q2 /\
-                 forall r1,
-                   reply_inv I1 w1 r1 ->
-                   exists r2, reply_inv I2 w2 r2;
+(* similar to ccref *)
+(* Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type := *)
+(*   { inv_incoming: *)
+(*     forall w2 se1 se2 ccw q2, *)
+(*       symtbl_inv I2 w2 se2 -> *)
+(*       match_senv cc ccw se1 se2 -> *)
+(*       query_inv I2 w2 q2 -> *)
+(*       exists w1 q1, symtbl_inv I1 w1 se1 /\ *)
+(*                  query_inv I1 w1 q1 /\ *)
+(*                  match_query cc ccw q1 q2 /\ *)
+(*                  forall r1, *)
+(*                    reply_inv I1 w1 r1 -> *)
+(*                    exists r2, reply_inv I2 w2 r2; *)
 
-    inv_outgoing:
-    forall w1 se1 se2 ccw q1,
-      symtbl_inv I1 w1 se1 ->
-      match_senv cc ccw se1 se2 ->
-      query_inv I1 w1 q1 ->
-      exists w2 q2, symtbl_inv I2 w2 se2 /\
-                 query_inv I2 w2 q2 /\
-                 match_query cc ccw q1 q2 /\
-                 forall r2,
-                   reply_inv I2 w2 r2 ->
-                   exists r1, reply_inv I1 w1 r1;
+(*     inv_outgoing: *)
+(*     forall w1 se1 se2 ccw q1, *)
+(*       symtbl_inv I1 w1 se1 -> *)
+(*       match_senv cc ccw se1 se2 -> *)
+(*       query_inv I1 w1 q1 -> *)
+(*       exists w2 q2, symtbl_inv I2 w2 se2 /\ *)
+(*                  query_inv I2 w2 q2 /\ *)
+(*                  match_query cc ccw q1 q2 /\ *)
+(*                  forall r2, *)
+(*                    reply_inv I2 w2 r2 -> *)
+(*                    exists r1, reply_inv I1 w1 r1; *)
    
-    }.
+(*     }. *)
 
 
 (* Relation between two semantics invariants *)
@@ -329,6 +334,30 @@ Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: 
 
 (* End LTS_SAFETY_PRESERVATION. *)
 
+Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
+  { inv_initial: forall w2 se1 se2 ccw q2, 
+      symtbl_inv I2 w2 se2 ->
+      match_senv cc ccw se1 se2 ->
+      query_inv I2 w2 q2 ->
+      exists w1 q1, symtbl_inv I1 w1 se1
+               /\ query_inv I1 w1 q1
+               /\ match_query cc ccw q1 q2;               
+    inv_external: forall w1 se1 se2 ccw q1 q2, 
+      symtbl_inv I1 w1 se1 ->
+      match_senv cc ccw se1 se2 ->
+      query_inv I1 w1 q1 ->
+      match_query cc ccw q1 q2 ->
+      exists w2, symtbl_inv I2 w2 se2
+            /\ query_inv I2 w2 q2
+            /\ (forall r2, reply_inv I2 w2 r2 ->
+                     exists r1, reply_inv I1 w1 r1
+                           /\ match_reply cc ccw r1 r2);
+    inv_final: forall w1 ccw r1 r2, 
+      reply_inv I1 w1 r1 ->
+      match_reply cc ccw r1 r2 ->
+      exists w2, reply_inv I2 w2 r2;
+}.
+
 
 (** Safety Preservation Under Backward Simulation *)
 
@@ -351,23 +380,22 @@ Proof.
   intros MSENV SAFE [BSIM].
   destruct BSIM as [index order match_states SKEL PROP WF].
   red. intros w2 VSE2 SINV2.
-  set (safe' (l: lts li2 li2 (state L2)) s :=
-         exists w1: inv_world I1,
-           safe l s /\
-           symtbl_inv I1 w1 se1 /\
-           forall r1,
-             reply_inv I1 w1 r1 ->
-             exists r2, reply_inv I2 w2 r2).
+  (* set (safe' (l: lts li2 li2 (state L2)) s := *)
+  (*        exists w1: inv_world I1, *)
+  (*          safe l s /\ *)
+  (*          symtbl_inv I1 w1 se1 /\ *)
+  (*          forall r1, *)
+  (*            reply_inv I1 w1 r1 -> *)
+  (*            exists r2, reply_inv I2 w2 r2). *)
 
-  cut (lts_safe se2 (L2 se2) I2 I2 safe' w2).
-  (** TODO: safe' implies safe *)
-  admit.
+  (* cut (lts_safe se2 (L2 se2) I2 I2 safe' w2). *)
   split.
   - admit.
+  (* initial_safe *)
   - intros q2 VQ2 QINV2.
-    destruct (inv_incoming _ _ _ BSIM_INV w2 se1 se2 ccw q2 SINV2 MSENV QINV2) as (w1 & q1 & SINV1 & QINV1 & MQ & Hr).
+    destruct (inv_initial _ _ _ BSIM_INV w2 se1 se2 ccw q2 SINV2 MSENV QINV2) as (w1 & q1 & SINV1 & QINV1 & MQ).
     assert (VSE1: Genv.valid_for (skel L1) se1).
-    (** TODO: we need the inevert of match_senv_valid_for  *)
+    (** TODO: we need the invert of match_senv_valid_for  *)
     admit.
     assert (VQ1: valid_query (L1 se1) q1 = true).
     { erewrite <- bsim_match_valid_query. eauto.
@@ -378,17 +406,14 @@ Proof.
     split.
     + eapply EXIST. eauto.
     + intros s2 INIT2.
-      red. exists w1.
-      split; auto.
       (** use bsim_progress *)
       exploit MATCH; eauto.
       intros (s1' & INIT1'' & (idx & MST)).
       (* show s1' is safe *)
       exploit INIT1'. eapply INIT1''. intros SAFES1'.
-      (** TODO: how to prove safe s1 implies safe s2?  *)
-      (* eapply bsim_progress; eauto. red.  *)
+      (** TODO: use safe s1' and step_safe to prove smallstep.safe s1' *)
+      eapply bsim_progress; eauto.
       admit.
-
   - intros s2 q2 REACH2 EXTERN2.
     (** TODO: how to prove there is a reachable state s1 and s1 simulates s2*)
     assert (A: exists s1 idx, reachable (L1 se1) s1 /\ match_states se1 se2 ccw idx s1 s2).

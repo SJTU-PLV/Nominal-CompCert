@@ -5,11 +5,11 @@ Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import AST Linking.
 Require Import Rusttypes.
-Require Import Errors.
 Require Import LanguageInterface CKLR Inject InjectFootprint.
 Require Import InitDomain InitAnalysis ElaborateDrop.
 Require Import Rustlight Rustlightown RustIR RustOp.
 Require Import RustIRsem RustIRown RustIRcfg.
+Require Import Errors.
 
 Import ListNotations.
 Local Open Scope list_scope.
@@ -234,26 +234,38 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (BOUND: Mem.sup_include lo (Mem.support m))
     (TBOUND: Mem.sup_include tlo (Mem.support tm)),
     match_states (Dropstate id (Vptr b ofs) st membs k m) (RustIRsem.Dropstate id (Vptr tb tofs) st membs tk tm)
-| match_callstate: forall j vf tvf m tm vargs tvargs k tk
+| match_callstate: forall j vf tvf m tm vargs tvargs k tk Hm
     (VINJ: Val.inject j vf tvf)
-    (MINJ: Mem.inject j m tm)
+    (MINJ: injp_acc w (injpw j m tm Hm))
     (AINJ: Val.inject_list j vargs tvargs)
     (MCONT: match_stacks j k tk m tm (Mem.support m) (Mem.support tm)),
     match_states (Callstate vf vargs k m) (RustIRsem.Callstate tvf tvargs tk tm)
-| match_returnstate: forall j v tv m tm k tk
+| match_returnstate: forall j v tv m tm k tk Hm
     (VINJ: Val.inject j v tv)
-    (MINJ: Mem.inject j m tm)
+    (MINJ: injp_acc w (injpw j m tm Hm))
     (MCONT: match_stacks j k tk m tm (Mem.support m) (Mem.support tm)),
     match_states (Returnstate v k m) (RustIRsem.Returnstate tv tk tm)
 . 
 
 
+(* difficult part is establish simulation when entering dropplace
+state *)
+Lemma step_dropplace_simulation:
+  forall S1 t S2, step_dropplace ge S1 t S2 ->
+   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
+Proof.
+  induction 1; intros; inv MS.
+  - 
+  
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
 Proof. 
-  induction 1; intros; inv MS. 
-  - eexists. split. eapply plus_one. 
+  induction 1; intros; inv MS.
+  (* step_assign *)
+  - inv MSTMT.
+    simpl in TR. 
+    
 Admitted. 
 
 Lemma transf_initial_states q:
