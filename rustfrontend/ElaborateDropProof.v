@@ -27,8 +27,9 @@ Record match_prog (p tp: RustIR.program) : Prop := {
     tp.(prog_public) = p.(prog_public);
   match_prog_skel:
     erase_program tp = erase_program p;
-  match_prog_defs:
-    list_norepet (prog_defs_names p)
+  match_prog_comp_env:
+    prog_comp_env p = prog_comp_env tp;
+  match_prog_dropm: generate_dropm p = generate_dropm tp;
 }.
 
 Lemma match_transf_program: forall p tp,
@@ -86,7 +87,7 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
     match_split_drop_places flagm own nil Sskip
 | match_sdp_cons_flag: forall p flag own l ts full
     (FLAG: get_dropflag_temp flagm p = Some flag)
-    (SPLIT: match_split_drop_places flagm (move_place own p) l ts),
+    (SPLIT: match_split_drop_places flagm (if is_owned own p then move_place own p else own) l ts),
     (* how to ensure that p is owned in own_env *)    
     match_split_drop_places flagm own ((p,full)::l) (Ssequence (generate_drop p full (Some flag)) ts)
 | match_sdp_cons_must_init: forall p own l ts full
@@ -97,7 +98,7 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
     match_split_drop_places flagm own ((p,full)::l) (Ssequence (generate_drop p full None) ts)
 | match_sdp_cons_must_uninit: forall p own l ts full
     (FLAG: get_dropflag_temp flagm p = None)
-    (SPLIT: match_split_drop_places flagm (move_place own p) l ts)
+    (SPLIT: match_split_drop_places flagm own l ts)
     (OWN: is_owned own p = false),
     (* how to ensure that p is owned in own_env *)
     match_split_drop_places flagm own ((p,full)::l) (Ssequence Sskip ts)
@@ -174,7 +175,16 @@ Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem
     me_tincr:
       Mem.sup_include tlo thi;    
   }.
-    
+
+(** Properties of match_envs_flagm *)
+Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi Hm1 Hm2,
+    match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi ->
+    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
+    Mem.sup_include hi (Mem.support m1) ->
+    Mem.sup_include thi (Mem.support tm1) ->
+    match_envs_flagm j2 own le m2 lo hi tle flagm tm2 tlo thi.
+Admitted.
+
 
 Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
 | match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret m tm bound tbound
@@ -212,7 +222,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (MOVESPLIT: move_split_places own1 l own2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
-    match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own1 k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
+    match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own1 k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq ts1 (RustIRsem.Kseq ts2 tk))) pc cont brk nret m tm hi thi
 
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
@@ -232,6 +242,18 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
     match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
 .
 
+(** Properties of match_cont  *)
+
+Lemma match_cont_injp_acc: forall j1 j2 an fm body cfg k tk pc cont brk nret m1 m2 tm1 tm2 lo tlo Hm1 Hm2,
+    match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo ->
+    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
+    Mem.sup_include lo (Mem.support m1) ->
+    Mem.sup_include tlo (Mem.support tm1) ->
+    match_cont j2 an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
+Admitted.
+
+
+
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
   forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi
@@ -250,7 +272,9 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
-| match_drppplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
+| match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
+    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
+    (TRFUN: tr_fun f nret cfg)    
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
@@ -292,15 +316,15 @@ Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_en
     wf_split_drop_places flagm init uninit universe own nil
 | wf_sdp_flag: forall own b id l p
     (FLAG: get_dropflag_temp flagm p = Some id)
-    (WF: wf_split_drop_places flagm init uninit universe (move_place own p) l),
+    (WF: wf_split_drop_places flagm init uninit universe (if is_owned own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 | wf_sdp_must: forall own b l p
     (FLAG: get_dropflag_temp flagm p = None)
     (OWN: must_owned init uninit universe p = is_owned own p)
-    (WF: wf_split_drop_places flagm init uninit universe (move_place own p) l),
+    (WF: wf_split_drop_places flagm init uninit universe (if is_owned own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 .
-    
+
 Lemma elaborate_drop_match_drop_places:
   forall drops flagm own init uninit universe
     (** we need some restriction on drops!! *)
@@ -317,11 +341,29 @@ Proof.
   - inv WFDROPS. congruence.
     destruct (must_owned init uninit universe p) eqn: MUST.
     (* must_owned = true *)
-    + econstructor; auto.
+    + rewrite <- OWN in WF.
+      econstructor; auto.      
     (* must_owned = false *)
-    + econstructor; auto.
-Qed.    
+    + rewrite <- OWN in WF.
+      econstructor; auto.
+Qed.
+
+(** eval_place inject  *)
+Lemma eval_place_inject: forall le tle m tm p b ofs j own lo hi tlo thi flagm,
+    eval_place ge le m p b ofs ->
+    Mem.inject j m tm ->
+    match_envs_flagm j own le m lo hi tle flagm tm tlo thi ->
+    exists b' ofs', eval_place tge tle tm p b' ofs' /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
+Admitted.
+
+Lemma deref_loc_inject: forall ty m b ofs v tm j tb tofs,
+    deref_loc ty m b ofs v ->
+    Mem.inject j m tm ->
+    Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
+    exists tv, deref_loc ty tm tb tofs tv /\ Val.inject j v tv.
+Admitted.
     
+
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
 Lemma step_dropplace_simulation:
@@ -340,9 +382,133 @@ Proof.
       simpl.
       eexists. split.
       (* step in target *)
-      * 
-              
-    admit.
+      * admit.
+      * admit.
+    + congruence.
+    (* no drop flag, must_unowned *)
+    + eexists. split.
+      econstructor. eapply RustIRsem.step_skip_seq.
+      eapply star_step. econstructor.
+      eapply star_refl. auto. auto.
+      (* match_states *)
+      econstructor; eauto.
+      econstructor; eauto.
+      inv MOVESPLIT. rewrite NOTOWN in MSPLIT. auto.
+  (* step_dropplace_init2 *)
+  - inv MDPS. inv MSPLIT.
+    (* there is a drop flag *)
+    + exploit me_wf_flagm; eauto.
+      intros (tb & v & TE & LE & LOAD & ISOWN & OUTREACH).
+      simpl.
+      eexists. split.
+      (* step in target *)
+      * admit.
+      * admit.
+    (* must_owned *)
+    + eexists. split.
+      econstructor. eapply RustIRsem.step_skip_seq.
+      eapply star_step. econstructor.
+      eapply star_refl. 1-2: eauto.
+      (* match_states *)
+      econstructor; eauto.
+      (** TODO: match_drop_place_state and gen_drop_place_state *)
+      admit.
+      (** TODO: move out a place which does not have drop flag has no
+      effect on match_envs_flagm *)
+      admit.
+      inv MOVESPLIT. rewrite OWN1 in MSPLIT. auto.
+    + congruence.
+  (* step_dropplace_box *)
+  - inv MDPS. simpl.
+    (* hypotheses of step_drop_box *)
+    exploit eval_place_inject; eauto.
+    intros (tb & tofs & EVALP & VINJ1).
+    exploit deref_loc_inject; eauto.
+    intros (tv & TDEREF & VINJ2). inv VINJ2.
+    exploit extcall_free_injp; eauto.
+    instantiate (1 := Hm). instantiate (1 := tge).
+    intros (tm1 & Hm1 & TFREE & MINJ1).
+    eexists. split.
+    (* step *)
+    econstructor. econstructor.
+    (* step_drop_box *)
+    eapply star_step. eapply RustIRsem.step_drop_box; eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_refl.
+    1-3: eauto.
+    (* match_states *)
+    eapply match_dropplace with (hi:=hi) (thi:=thi).
+    eauto. eauto.
+    (* match_cont_injp_acc *)
+    eapply match_cont_injp_acc. eapply MCONT.
+    eauto.
+    eapply Mem.sup_include_trans. eapply me_incr; eauto. auto.
+    eapply Mem.sup_include_trans. eapply me_tincr; eauto. auto.
+    (* match_drop_place_state *)
+    econstructor.
+    eauto. etransitivity; eauto.
+    (* match_envs_flagm *)
+    eapply match_envs_flagm_injp_acc; eauto.
+    auto. eauto. auto.
+    (* sup include *)
+    inv MINJ1. inv H10. inv H11.
+    eapply Mem.sup_include_trans; eauto.
+    inv MINJ1. inv H10. inv H11.
+    eapply Mem.sup_include_trans; eauto.
+  (* step_dropplace_struct *)
+  - inv MDPS.
+    exploit eval_place_inject; eauto.
+    intros (tb & tofs & EVALP & VINJ1).
+    eexists. split.
+    (* step_drop_struct *)
+    econstructor. econstructor.
+    eapply star_step. eapply RustIRsem.step_drop_struct; eauto.
+    simpl. simpl in SCO. erewrite <- match_prog_comp_env; eauto.
+    eapply star_refl.
+    1-2: eauto.
+    (* match_states *)
+    econstructor; eauto.
+    econstructor; eauto.
+    (* match_drop_place_state *)
+    econstructor.
+  (* step_dropplace_enum *)
+  - inv MDPS.
+    exploit eval_place_inject; eauto.
+    intros (tb & tofs & EVALP & VINJ1).
+    (* load tag inject *)
+    inv VINJ1.
+    exploit Mem.load_inject; eauto.
+    intros (v2 & TLOAD & VINJ2). inv VINJ2.
+    eexists. split.
+    (* step_drop_struct *)
+    econstructor. econstructor.
+    eapply star_step. eapply RustIRsem.step_drop_enum; eauto.
+    simpl. simpl in SCO. erewrite <- match_prog_comp_env; eauto.
+    (* use address_inject due with overflow *)
+    assert (PERM: Mem.perm m b (Ptrofs.unsigned ofs) Cur Nonempty).
+    { exploit Mem.load_valid_access. eapply TAG.
+      intros (A & B). eapply Mem.perm_implies.
+      eapply A. simpl. lia. econstructor. }
+    simpl. exploit Mem.address_inject; eauto.
+    intros A. rewrite A. auto.    
+    eapply star_refl.
+    1-2: eauto.
+    (* match_states *)
+    assert (MSTEQ: type_to_drop_member_state ge fid fty = type_to_drop_member_state tge fid fty).
+    { unfold ge, tge. unfold globalenv. unfold type_to_drop_member_state.
+      simpl. erewrite match_prog_comp_env; eauto.
+      replace (generate_dropm tprog) with (generate_dropm prog). auto.
+      eapply match_prog_dropm. auto. }
+    rewrite MSTEQ.
+    econstructor; eauto.
+    (* match_cont *)
+    econstructor; eauto.
+    (* match_drop_place_state *)
+    econstructor.
+  (* step_dropplace_next *)
+  - admit.
+  (* step_dropplace_return *)
+  - admit.
 Admitted.
 
 (** REMOVE IT: This lemma is impossible to prove: because the
@@ -414,9 +580,13 @@ Proof.
     eapply elaborate_drop_match_drop_places.
     (** IMPORTANT TODO: wf_split_drop_places *)
     admit.
+    (** TODO: move_split_places *)
+    admit.
+    (** TODO: sound_own  *)
+    admit.
   (* step_in_dropplace *)
-  - admit.
-
+  - eapply step_dropplace_simulation. eauto.
+    econstructor; eauto.
 
     
 Lemma transf_initial_states q:

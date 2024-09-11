@@ -88,23 +88,11 @@ Definition type_of_fundef (f: fundef) : type :=
 
 (* some helper function *)
 
-Fixpoint makeseq_rec (s: statement) (l: list statement) : statement :=
+Fixpoint makeseq (l: list statement) : statement :=
   match l with
-  | nil => s
-  | s' :: l' =>
-      match s' with
-      | Sskip => makeseq_rec s l'
-      | _ =>
-          makeseq_rec (Ssequence s s') l'
-      end
-  end.
-
-(* optimized version. But we do not consider the difficulty of simulation proof *)
-Definition makeseq (l: list statement) : statement :=
-  let s := makeseq_rec Sskip l in
-  match s with
-  | Ssequence Sskip s' => s'
-  | _ => s
+  (* To ensure that target program must move at least one step *)
+  | nil => (Ssequence Sskip Sskip)
+  | s :: l' => Ssequence s (makeseq l')
   end.
 
 Local Open Scope error_monad_scope.

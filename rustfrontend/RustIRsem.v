@@ -617,3 +617,50 @@ End SEMANTICS.
 
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
+
+Require Import InjectFootprint.
+
+(** Where to put? A useful lemma for extcall_free_sem *)
+
+Lemma extcall_free_injp: forall se tse v tv m m' tm t j Hm,
+    extcall_free_sem se (v::nil) m t Vundef m' ->
+    Val.inject j v tv ->
+    exists tm' Hm',
+      extcall_free_sem tse (tv::nil) tm t Vundef tm'
+      /\ injp_acc (injpw j m tm Hm) (injpw j m' tm' Hm').
+Proof.
+  intros until Hm.
+  intros FREE VINJ.
+  inv FREE. inv VINJ.
+  exploit Mem.load_inject; eauto.
+  intros (v2 & LOAD & VINJ).
+  exploit Mem.free_parallel_inject; eauto.
+  intros (m2' & TFREE & MINJ).
+  assert (P: Mem.range_perm m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable).
+    eapply Mem.free_range_perm; eauto.
+  (* refer the proof of extcall_free in Event: use address_inject *)  
+  exploit Mem.address_inject. eapply Hm.
+  apply Mem.perm_implies with Freeable; auto with mem.
+  apply P. instantiate (1 := lo).
+  generalize (size_chunk_pos Mptr); lia. eauto.
+  intros EQ.
+  assert (injp_acc (injpw j m tm Hm) (injpw j m' m2' MINJ)).
+  replace (Ptrofs.unsigned lo + Ptrofs.unsigned sz) with ((Ptrofs.unsigned lo - size_chunk Mptr) + (size_chunk Mptr + Ptrofs.unsigned sz)) in * by lia.
+  exploit injp_acc_free; eauto. 
+  assert (v2 = Vptrofs sz).
+  { unfold Vptrofs in *; destruct Archi.ptr64; inv VINJ; auto. }
+  subst.
+  exists m2', MINJ. split; auto.  
+  econstructor. erewrite <- LOAD. f_equal. lia.
+  auto. 
+  rewrite ! EQ. rewrite <- TFREE. f_equal; lia.
+  auto.
+  (* case 2 *)
+  exists tm, Hm. split.
+  replace tv with Vnullptr.
+  econstructor.
+  unfold Vnullptr in *.
+  destruct (Archi.ptr64); inv VINJ; auto.
+  reflexivity.
+Qed.  
+  
