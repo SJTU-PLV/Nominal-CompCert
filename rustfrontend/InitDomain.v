@@ -273,7 +273,7 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
         | co_none _ => Error[CTX id; MSG ": Unfound struct id in composite_env or wrong recursive data: split_drop_place"]
         end
   | Tvariant _ id =>
-      if Paths.mem p universe then
+       if Paths.mem p universe then
         OK [(p, true)]
       else
         (* we must ensure that no p's children in universe? *)
@@ -298,8 +298,46 @@ End SPLIT.
 
 Require Import Wfsimpl.
 
-Definition split_drop_place (ce: composite_env) (universe: Paths.t) : place -> type -> res (list (place * bool)) :=
-  Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce.
+(* To ensure the soundness of init analysis which uses big step
+analysis in Sdrop *)
+Definition check_drops_complete (universe: Paths.t) (p: place) (drops: list place) : bool :=
+  (* all places in the universe which are children of p must in drops *)
+  Paths.for_all (fun p1 => in_dec place_eq p drops) (Paths.filter (fun p1 => is_prefix p p1) universe).
+
+Definition split_drop_place (ce: composite_env) (universe: Paths.t) (p: place) (ty: type) : res (list (place * bool)) :=
+  do drops <- Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce p ty;
+  if check_drops_complete universe p (fst (split drops)) then
+    OK drops
+  else Error (msg "there is some place in universe but not in the split places (split_drop_place) ").
+
+(** Specification of split_drop_place  *)
+
+(* similar to sound_split_drop_place in BorrowCheckSafe.v *)
+Inductive split_places_ordered : list place -> Prop :=
+| split_places_ordered_nil: split_places_ordered []
+| split_places_ordered_cons: forall p l,
+    (* all remaining places are not children of p *)
+    Forall (fun p1 => is_prefix p p1 = false) l ->
+    split_places_ordered l ->
+    split_places_ordered (p :: l)
+.
+
+
+Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : Prop :=
+  { split_sound: forall p, In p (fst (split drops)) -> Paths.In p universe;
+    split_complete: forall p, Paths.In p universe -> In p (fst (split drops));
+    split_ordered: split_places_ordered (fst (split drops));
+    (** TODO: current implementation does not guarantee this property.*)
+    split_correct_full: forall p,
+      In (p,true) drops ->
+      (* no p's children in universe if p is full *)
+      Paths.For_all (fun p1 => is_prefix_strict p p1 = false) universe;
+  }.
+            
+Lemma split_drop_place_meet_spec: forall ce universe p drops,
+    split_drop_place ce universe p (typeof_place p) = OK drops ->
+    split_drop_place_spec universe p drops.
+Admitted.
 
 (** Properties of split_drop_place *)
 

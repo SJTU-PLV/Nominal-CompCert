@@ -186,14 +186,12 @@ Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
 (** ** Semantic invariant *)
 
 (* relation of moveing split places *)
-Inductive move_split_places : own_env -> list (place * bool) -> own_env -> Prop :=
-| move_split_places_nil: forall own,
-    move_split_places own nil own
-| move_split_places_cons: forall own1 own2 own3 p full l
-    (MOVE: own2 = if is_owned own1 p then move_place own1 p else own1)
-    (MSPLIT: move_split_places own2 l own3),
-    move_split_places own1 ((p,full) :: l) own3
-.
+Fixpoint move_split_places (own :own_env) (l: list (place * bool)) : own_env :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      move_split_places (if is_owned own p then move_place own p else own) l'
+  end.
   
 
 Section SOUNDNESS.
@@ -240,7 +238,7 @@ Inductive sound_cont: cont -> Prop :=
     (TRFUN: tr_fun f nret cfg)
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (OWN: sound_own own2 mayinit mayuninit universe)
-    (MOVESPLIT: move_split_places own1 l own2)
+    (MOVESPLIT: move_split_places own1 l = own2)
     (CONT: sound_cont k),
     sound_cont (Kdropplace f st l le own1 k)
 | sound_cont_dropcall: forall id b ofs st membs k,
@@ -280,7 +278,7 @@ Inductive sound_state: state -> Prop :=
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (* small-step move_place to simulate big-step move_place in
     transfer. maybe difficult to prove *)
-    (MOVESPLIT: move_split_places own1 l own2)
+    (MOVESPLIT: move_split_places own1 l = own2)
     (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
     sound_state (Dropplace f st l k le own1 m)
@@ -431,21 +429,20 @@ Lemma sound_step_dropplace: forall s t s',
 Proof.
   intros s t s' STEP SOUND.
   inv STEP; inv SOUND.
-  - inv MOVESPLIT.
-    econstructor; eauto.
-    rewrite NOTOWN in MSPLIT. auto.
-  - inv MOVESPLIT.
-    econstructor; eauto.
-    rewrite OWN in MSPLIT. auto.
   - econstructor; eauto.
-  - econstructor; eauto.
+    simpl in OWN.
+    rewrite NOTOWN in OWN. auto.
+  - simpl in OWN0.
     econstructor; eauto.
+    rewrite OWN in OWN0. auto.
+  - econstructor; eauto.
   - econstructor; eauto.
     econstructor; eauto.
   - econstructor; eauto.
+    econstructor; eauto.
   - econstructor; eauto.
-    econstructor. inv MOVESPLIT.
-    auto.
+  - econstructor; eauto.
+    econstructor. 
 Qed.
 
 Lemma sound_step_dropstate: forall s t s',
@@ -511,7 +508,7 @@ Proof.
   - eapply sound_dropplace; eauto.
   (** Difficult part: prove split_drop_place small-step simulates the
   analysis *)
-    admit. admit.    
+    admit.
   (* step_in_dropplace *)
   - eapply sound_step_dropplace; eauto.
     econstructor; eauto.

@@ -219,7 +219,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
     (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
-    (MOVESPLIT: move_split_places own1 l own2),
+    (MOVESPLIT: move_split_places own1 l = own2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
     match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own1 k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq ts1 (RustIRsem.Kseq ts2 tk))) pc cont brk nret m tm hi thi
@@ -284,7 +284,7 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* small-step move_place to simulate big-step move_place in
     transfer. maybe difficult to prove *)
-    (MOVESPLIT: move_split_places own1 l own2)
+    (MOVESPLIT: move_split_places own1 l = own2)
     (OWN: sound_own own2 maybeInit!!next maybeUninit!!next universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
@@ -324,6 +324,21 @@ Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_en
     (WF: wf_split_drop_places flagm init uninit universe (if is_owned own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 .
+
+(** IMPORTANT TODO  *)
+Lemma ordered_split_drop_places_wf:
+  forall drops own init uninit universe flagm
+    (ORDER: split_places_ordered (fst (split drops)))
+    (OWN: forall p full, In (p, full) drops ->
+                    must_owned init uninit universe p = true ->
+                    is_owned own p = true)
+    (UNI: PathsMap.eq universe (own_universe own))
+    (FLAG: forall p, get_dropflag_temp flagm p = None ->
+                must_owned init uninit universe p = true
+                \/ may_owned init uninit universe p = false),
+    wf_split_drop_places flagm init uninit universe own drops.
+Admitted.
+
 
 Lemma elaborate_drop_match_drop_places:
   forall drops flagm own init uninit universe
@@ -393,7 +408,8 @@ Proof.
       (* match_states *)
       econstructor; eauto.
       econstructor; eauto.
-      inv MOVESPLIT. rewrite NOTOWN in MSPLIT. auto.
+      simpl in OWN.
+      rewrite NOTOWN in OWN. auto.
   (* step_dropplace_init2 *)
   - inv MDPS. inv MSPLIT.
     (* there is a drop flag *)
@@ -416,7 +432,8 @@ Proof.
       (** TODO: move out a place which does not have drop flag has no
       effect on match_envs_flagm *)
       admit.
-      inv MOVESPLIT. rewrite OWN1 in MSPLIT. auto.
+      simpl in OWN0.
+      rewrite OWN1 in OWN0. auto.
     + congruence.
   (* step_dropplace_box *)
   - inv MDPS. simpl.
@@ -579,10 +596,20 @@ Proof.
     (* match_split_drop_places *)
     eapply elaborate_drop_match_drop_places.
     (** IMPORTANT TODO: wf_split_drop_places *)
+    assert (INITOWN: forall p full, In (p, full) drops ->
+                      must_owned maybeInit !! pc maybeUninit !! pc universe0 p = true ->
+                      is_owned own p = true).
+    (* prove by sound_own *)
     admit.
-    (** TODO: move_split_places *)
-    admit.
+    eapply ordered_split_drop_places_wf.
+    (* TODO *)
+    1-4 :admit.
+        
     (** TODO: sound_own  *)
+    assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0).
+    (* how to use sound and complete of drops to prove this lemma? *)
+    admit.
+    (* use analyze_succ *)
     admit.
   (* step_in_dropplace *)
   - eapply step_dropplace_simulation. eauto.
