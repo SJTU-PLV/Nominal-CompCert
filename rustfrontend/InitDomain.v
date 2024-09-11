@@ -300,3 +300,11 @@ Require Import Wfsimpl.
 
 Definition split_drop_place (ce: composite_env) (universe: Paths.t) : place -> type -> res (list (place * bool)) :=
   Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce.
+
+(** Properties of split_drop_place *)
+
+Lemma split_drop_place_eq_universe: forall ce u1 u2 p ty,
+    Paths.Equal u1 u2 ->
+    split_drop_place ce u1 p ty = split_drop_place ce u2 p ty.
+Admitted.
+

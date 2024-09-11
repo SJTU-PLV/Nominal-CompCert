@@ -15,6 +15,11 @@ Import ListNotations.
 Local Open Scope list_scope.
 Local Open Scope error_monad_scope.
 
+(* analysis result and flag map types *)
+Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
+Definition FM : Type := PTree.t (list (place * ident)).
+
+
 Record match_prog (p tp: RustIR.program) : Prop := {
   match_prog_main:
     tp.(prog_main) = p.(prog_main);
@@ -98,7 +103,23 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
     match_split_drop_places flagm own ((p,full)::l) (Ssequence Sskip ts)
 .
 
- 
+
+(* Invariant of generate_drop_flags *)
+
+Definition sound_flagm (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit: PMap.t PathsMap.t) (universe: PathsMap.t) :=
+  forall pc next p sel,
+    cfg ! pc = Some (Isel sel next) ->
+    select_stmt body sel = Some (Sdrop p) ->
+    get_dropflag_temp flagm p = None ->
+    may_owned init!!pc uninit!!pc universe p = false.
+
+Lemma generate_drop_flags_inv: forall init uninit universe f cfg ce flags entry
+  (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
+  (GEN: generate_drop_flags init uninit universe ce f cfg = OK flags),
+  sound_flagm f.(fn_body) cfg (generate_place_map flags) init uninit universe.
+Admitted.
+
+
 Section PRESERVATION.
 
 Variable prog: program.
@@ -114,10 +135,6 @@ Variable tse: Genv.symtbl.
 Let ge := globalenv se prog.
 Let tge := globalenv tse tprog.
 Let ce := ge.(genv_cenv).
-
-(* analysis result and flag map types *)
-Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
-Definition FM : Type := PTree.t (list (place * ident)).
 
 Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce).
 
@@ -179,27 +196,29 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
     match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret m tm bound tbound
-| match_Kdropplace: forall an f tf st l k tk e te own flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi
+| match_Kdropplace: forall f tf st l k tk e te own flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe
     (** Do we need match_stacks here?  *)
     (TRFUN: tr_fun f nret cfg)
-    (AN: analyze ce f = OK an)
-    (MSTK: match_cont j an flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
+    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
+    (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own l ts2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
-    match_cont j an flagm f.(fn_body) cfg (Kdropplace f st l e own k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
+    match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
 
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
-| match_stacks_call: forall an flagm f tf nret cfg pc contn brk k tk own p le tle m tm lo tlo hi thi
+| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own p le tle m tm lo tlo hi thi maybeInit maybeUninit universe
     (TRFUN: tr_fun f nret cfg)
-    (AN: analyze ce f = OK an)   
+    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))   
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
-    (MCONT: match_cont j an flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
-    (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
+    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
+    (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi)
+    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe),
     match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
 .
 
@@ -213,6 +232,8 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (MINJ: injp_acc w (injpw j m tm Hm))
     (* well-formedness of the flag map *)
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (* property of flagm when encounting drop statement *)
+    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
@@ -223,6 +244,7 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (MINJ: injp_acc w (injpw j m tm Hm))
     (* maybe difficult: transition of own is small step! *)
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (Dropplace f st l k e own m) (RustIRsem.State tf ts1 (RustIRsem.Kseq ts2 tk) te tm)
@@ -248,26 +270,67 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
 . 
 
 
-(* difficult part is establish simulation when entering dropplace
-state *)
+Lemma elaborate_drop_match_drop_places:
+  forall drops flagm own init uninit universe        
+    (SOUND: sound_own own init uninit universe),
+    (** we need some restriction on drops!! *)
+    match_split_drop_places flagm own drops (elaborate_drop_for_splits init uninit universe flagm drops).
+Proof.
+  induction drops; intros.
+  econstructor.
+  simpl. destruct a.
+Admitted.
+
+
+(* difficult part is establish simulation (match_split_drop_places)
+when entering dropplace state *)
 Lemma step_dropplace_simulation:
   forall S1 t S2, step_dropplace ge S1 t S2 ->
    forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros; inv MS.
-  - 
+  (* step_dropplace_init1 *)
+  - inv MDPS.
+    (** Two cases of skipping this drop: one is must uninit and the
+    other is drop flag is false *)
+    admit.
+Admitted.
+
   
 Lemma step_simulation:
-  forall S1 t S2, step ge S1 t S2 ->
-  forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
+  forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
+    exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
 Proof. 
   induction 1; intros; inv MS.
   (* step_assign *)
   - inv MSTMT.
     simpl in TR. 
+    admit.
+  (* step_assign_variant *)
+  - admit.
+  (* step_box *)
+  - admit.
+  (* step_to_dropplace *)
+  - inv MSTMT. simpl in TR.
+    unfold elaborate_drop_for in TR.
+    (** sound_own property *)
+    assert (UNIEQ: PathsMap.eq (own_universe own) universe0) by admit.
+    erewrite split_drop_place_eq_universe in TR.
+    unfold ce in TR. erewrite SPLIT in TR.
+    2: { symmetry. eapply UNIEQ. }
+    inv TR.
+    (* end of getting ts *)
+    (* how to prevent stuttering? *)
+    eexists. split.
+    (* step *)
+    econstructor. econstructor.
+    eapply star_refl. eauto.
+    (* match_states *)
+    econstructor; eauto.
+    econstructor.
+    (** match_split_drop_places *)
+    admit.
     
-Admitted. 
-
 Lemma transf_initial_states q:
   forall S1, initial_state ge q S1 ->
   exists S2, RustIRsem.initial_state tge q S2 /\ match_states S1 S2.

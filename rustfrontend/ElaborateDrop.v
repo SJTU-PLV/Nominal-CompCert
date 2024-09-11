@@ -102,6 +102,34 @@ End INIT_UNINIT.
 
 (** Step 2: elaborate the statement in the AST by iterating the CFG *)
 
+Definition get_dropflag_temp (m: PTree.t (list (place * ident))) (p: place) : option ident :=
+  let id := local_of_place p in
+  match m!id with
+  | Some l =>
+      match find (fun elt => place_eq p (fst elt)) l with
+      | Some (_, fid) => Some fid
+      | _ => None
+      end
+  | _ => None
+  end.
+
+(* Some functions of setting drop flags  *)
+
+Definition Ibool (b: bool) := Epure (Econst_int (if b then Int.one else Int.zero) type_bool).
+
+Definition set_dropflag (id: ident) (flag: bool) : statement :=
+  Sassign (Plocal id type_bool) (Ibool flag).
+
+Definition set_dropflag_option (id: option ident) (flag: bool) : statement :=
+  match id with
+  | Some id =>
+      set_dropflag id flag
+  | None => Sskip
+  end.
+
+
+(* generate drop statements *)
+
 Definition drop_fully_own (p: place) :=
   makeseq (map (fun p => Sdrop p) (Rustlightown.split_fully_own_place p (typeof_place p))).
 
@@ -112,19 +140,9 @@ Definition generate_drop (p: place) (full: bool) (flag: option ident) : statemen
               else Sdrop p in
   match flag with
   | Some id =>
-      Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) drop Sskip
+      let set_flag := set_dropflag id false in
+      Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) (Ssequence set_flag drop) Sskip
   | None => drop
-  end.
-
-Definition get_dropflag_temp (m: PTree.t (list (place * ident))) (p: place) : option ident :=
-  let id := local_of_place p in
-  match m!id with
-  | Some l =>
-      match find (fun elt => place_eq p (fst elt)) l with
-      | Some (_, fid) => Some fid
-      | _ => None
-      end
-  | _ => None
   end.
 
 
@@ -147,8 +165,8 @@ Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: c
   let universe := PathsMap.get (local_of_place p) universemap in
   match split_drop_place ce universe p (typeof_place p) with
   | OK drop_places =>      
-      (** may be we should check the disjointness of drop flags *)
-      OK (elaborate_drop_for_splits mayinit mayuninit universemap flagm drop_places)
+      (** may be we should check the disjointness of drop flags. Use a skip to simulate source step_to_dropplace *)
+      OK (Ssequence Sskip (elaborate_drop_for_splits mayinit mayuninit universemap flagm drop_places))
   (* The error case is considerer in elaboration step *)
   | Error msg =>
       Error msg
@@ -160,18 +178,6 @@ Section ELABORATE.
 (* map from place to its drop flag *)
 Variable m: PTree.t (list (place * ident)).
 Variable ce: composite_env.
-
-Definition Ibool (b: bool) := Epure (Econst_int (if b then Int.one else Int.zero) type_bool).
-
-Definition set_dropflag (id: ident) (flag: bool) : statement :=
-  Sassign (Plocal id type_bool) (Ibool flag).
-
-Definition set_dropflag_option (id: option ident) (flag: bool) : statement :=
-  match id with
-  | Some id =>
-      set_dropflag id flag
-  | None => Sskip
-  end.
 
 Definition add_dropflag (p: place) (flag: bool) : statement :=
   set_dropflag_option (get_dropflag_temp m p) flag.
@@ -186,6 +192,7 @@ Definition add_dropflag_option (p: option place) (flag: bool) : statement :=
 Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
   let stmts := fold_right (fun elt acc => add_dropflag elt flag :: acc) nil l in
   makeseq stmts.
+
 
 (* Instance of transl_stmt in the transl_on_cfg. [an] is (mayinit,
 mayuninit, universe) *)

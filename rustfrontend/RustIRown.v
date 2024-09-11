@@ -417,7 +417,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 (** dynamic drop semantics: simulate the drop elaboration *)
 | step_to_dropplace: forall f p le own m drops k universe
-    (UNI: own.(own_universe) ! (local_of_place p) = Some universe)
+    (UNI: PathsMap.get (local_of_place p) own.(own_universe) = universe)
     (SPLIT: split_drop_place ge universe p (typeof_place p) = OK drops),
     (* get the owned place to drop *)
     step (State f (Sdrop p) k le own m) E0
