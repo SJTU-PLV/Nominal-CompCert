@@ -151,14 +151,18 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
   | nil => Sskip
   | (p, full) :: l' =>
       let stmt := elaborate_drop_for_splits mayinit mayuninit universe flagm l' in
-      if must_owned mayinit mayuninit universe p then
-        (Ssequence (generate_drop p full None) stmt)
-      else if may_owned mayinit mayuninit universe p then
-        (* need drop flag *)
-        (Ssequence (generate_drop p full (get_dropflag_temp flagm p)) stmt)
-      else
-        (* this place must be uninit, no need to drop *)
-        (Ssequence Sskip stmt)
+      (* use flagm to decide whether insert drop flag or not *)
+      match get_dropflag_temp flagm p with
+      | Some id =>
+          (* need drop flag *)
+          (Ssequence (generate_drop p full (Some id)) stmt)
+      | None =>
+          if must_owned mayinit mayuninit universe p then
+            (Ssequence (generate_drop p full None) stmt)
+          else
+            (* this place must be uninit, no need to drop *)
+            (Ssequence Sskip stmt)
+      end
   end.
 
 Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (flagm: PTree.t (list (place * ident))) (p: place) : Errors.res statement :=

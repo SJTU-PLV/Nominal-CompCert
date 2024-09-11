@@ -99,7 +99,7 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
     (FLAG: get_dropflag_temp flagm p = None)
     (SPLIT: match_split_drop_places flagm (move_place own p) l ts)
     (OWN: is_owned own p = false),
-    (* how to ensure that p is owned in own_env *)    
+    (* how to ensure that p is owned in own_env *)
     match_split_drop_places flagm own ((p,full)::l) (Ssequence Sskip ts)
 .
 
@@ -111,7 +111,10 @@ Definition sound_flagm (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit
     cfg ! pc = Some (Isel sel next) ->
     select_stmt body sel = Some (Sdrop p) ->
     get_dropflag_temp flagm p = None ->
-    may_owned init!!pc uninit!!pc universe p = false.
+    (* must owned *)
+    (must_owned init!!pc uninit!!pc universe p = true \/
+       (* must unowned *)
+       may_owned init!!pc uninit!!pc universe p = false).
 
 Lemma generate_drop_flags_inv: forall init uninit universe f cfg ce flags entry
   (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
@@ -196,30 +199,37 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
     match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret m tm bound tbound
-| match_Kdropplace: forall f tf st l k tk e te own flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe
+| match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe
     (** Do we need match_stacks here?  *)
     (TRFUN: tr_fun f nret cfg)
     (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
     (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
-    (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
     (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (MDPS: match_drop_place_state st ts1)
-    (MSPLIT: match_split_drop_places flagm own l ts2),
+    (MSPLIT: match_split_drop_places flagm own1 l ts2)
+    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
+    (MOVESPLIT: move_split_places own1 l own2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
-    match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
+    match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg (Kdropplace f st l e own1 k) (RustIRsem.Kcall None tf te (RustIRsem.Kseq (Ssequence ts1 ts2) tk)) pc cont brk nret m tm hi thi
 
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
-| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own p le tle m tm lo tlo hi thi maybeInit maybeUninit universe
+| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe
     (TRFUN: tr_fun f nret cfg)
     (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))   
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
-    (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi)
-    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe),
-    match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
+    (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
+    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (* own2 is built after the function call *)
+    (AFTER: own2 = match p with
+                   | Some p => move_place own1 p
+                   | None => own1 end)
+    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe),
+    match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
 .
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
@@ -234,20 +244,27 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
     (* property of flagm when encounting drop statement *)
     (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (* Put sound_own here which may be inevitable due to the
+    flow-insensitiveness of RustIR semantics.*)
+    (SOUNDOWN: sound_own own maybeInit!!pc maybeUninit!!pc universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
-| match_drppplace: forall f tf st l k tk e te own m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
-    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)    
+| match_drppplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
+    (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MDPS: match_drop_place_state st ts1)
-    (MSPLIT: match_split_drop_places flagm own l ts2)
+    (MSPLIT: match_split_drop_places flagm own1 l ts2)
     (MINJ: injp_acc w (injpw j m tm Hm))
     (* maybe difficult: transition of own is small step! *)
-    (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
+    (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
     (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (* small-step move_place to simulate big-step move_place in
+    transfer. maybe difficult to prove *)
+    (MOVESPLIT: move_split_places own1 l own2)
+    (OWN: sound_own own2 maybeInit!!next maybeUninit!!next universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
-    match_states (Dropplace f st l k e own m) (RustIRsem.State tf ts1 (RustIRsem.Kseq ts2 tk) te tm)
+    match_states (Dropplace f st l k e own1 m) (RustIRsem.State tf ts1 (RustIRsem.Kseq ts2 tk) te tm)
 | match_dropstate: forall k tk m tm j flagm maybeInit maybeUninit universe body cfg nret cont brk next b ofs tb tofs st membs id lo tlo Hm
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm body cfg k tk next cont brk nret m tm lo tlo)
     (MINJ: injp_acc w (injpw j m tm Hm))
@@ -269,19 +286,42 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     match_states (Returnstate v k m) (RustIRsem.Returnstate tv tk tm)
 . 
 
-
+(** This property is difficult to prove! *)
+Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_env -> list (place * bool) -> Prop :=
+| wf_sdp_nil: forall own,
+    wf_split_drop_places flagm init uninit universe own nil
+| wf_sdp_flag: forall own b id l p
+    (FLAG: get_dropflag_temp flagm p = Some id)
+    (WF: wf_split_drop_places flagm init uninit universe (move_place own p) l),
+    wf_split_drop_places flagm init uninit universe own ((p,b)::l)
+| wf_sdp_must: forall own b l p
+    (FLAG: get_dropflag_temp flagm p = None)
+    (OWN: must_owned init uninit universe p = is_owned own p)
+    (WF: wf_split_drop_places flagm init uninit universe (move_place own p) l),
+    wf_split_drop_places flagm init uninit universe own ((p,b)::l)
+.
+    
 Lemma elaborate_drop_match_drop_places:
-  forall drops flagm own init uninit universe        
-    (SOUND: sound_own own init uninit universe),
+  forall drops flagm own init uninit universe
     (** we need some restriction on drops!! *)
+    (WFDROPS: wf_split_drop_places flagm init uninit universe own drops),
     match_split_drop_places flagm own drops (elaborate_drop_for_splits init uninit universe flagm drops).
 Proof.
   induction drops; intros.
   econstructor.
   simpl. destruct a.
-Admitted.
-
-
+  destruct (get_dropflag_temp flagm p) eqn: FLAG.
+  - econstructor. auto.
+    eapply IHdrops. inv WFDROPS.
+    auto. congruence.
+  - inv WFDROPS. congruence.
+    destruct (must_owned init uninit universe p) eqn: MUST.
+    (* must_owned = true *)
+    + econstructor; auto.
+    (* must_owned = false *)
+    + econstructor; auto.
+Qed.    
+    
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
 Lemma step_dropplace_simulation:
@@ -293,10 +333,52 @@ Proof.
   - inv MDPS.
     (** Two cases of skipping this drop: one is must uninit and the
     other is drop flag is false *)
+    inv MSPLIT.
+    (* there is drop flag and the value of drop flag is false *)
+    + exploit me_wf_flagm; eauto.
+      intros (tb & v & TE & LE & LOAD & ISOWN & OUTREACH).
+      simpl.
+      eexists. split.
+      (* step in target *)
+      * 
+              
     admit.
 Admitted.
 
-  
+(** REMOVE IT: This lemma is impossible to prove: because the
+semantics is flow-insensitive so that we do not know whether or not s
+in match_stmt locates in the same branch as the s in tr_stmt. So pc1 =
+pc2 is impossible. *)
+Lemma match_stmt_cont_unique: forall k tk an fm body cfg s ts pc1 next1 cont1 brk1 nret j m tm lo tlo pc2 next2 cont2 brk2,
+    match_stmt an fm body cfg s ts pc1 next1 cont1 brk1 nret ->
+    match_cont j an fm body cfg k tk next1 cont1 brk1 nret m tm lo tlo ->
+    tr_stmt body cfg s pc2 next2 cont2 brk2 nret ->
+    tr_cont body cfg k next2 cont2 brk2 nret ->
+    pc1 = pc2 /\ next1 = next2 /\ cont1 = cont2 /\ brk1 = brk2.
+Proof.
+  induction k; intros until brk2; intros MSTMT MCONT TRSTMT TRCONT.
+  (* Sskip *)
+  - inv MCONT. inv TRCONT.
+    (* how to prove pc1 = pc2: match_stmt and tr_stmt with same next
+    node have the same pc *)
+    admit.
+  (* Kseq *)
+  - inv MCONT. inv TRCONT.
+    assert (MSTMT1: match_stmt an fm body cfg (Ssequence s0 s) (Ssequence ts ts0) pc1 next cont1 brk1 nret).
+    { econstructor; eauto. }
+    assert (TRSTMT1: tr_stmt body cfg (Ssequence s0 s) pc2 next0 cont2 brk2 nret).
+    { econstructor; eauto. }
+    exploit IHk.
+    eapply MSTMT1. eauto.
+    eapply TRSTMT1. eauto. intros (A & B & C & D).
+    subst.
+    repeat split; eauto.
+    (* how to prove pc1 = pc2: match_stmt and tr_stmt with same next
+    node have the same pc *)
+    admit.
+Abort.
+
+    
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
     exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
@@ -328,8 +410,14 @@ Proof.
     (* match_states *)
     econstructor; eauto.
     econstructor.
-    (** match_split_drop_places *)
+    (* match_split_drop_places *)
+    eapply elaborate_drop_match_drop_places.
+    (** IMPORTANT TODO: wf_split_drop_places *)
     admit.
+  (* step_in_dropplace *)
+  - admit.
+
+
     
 Lemma transf_initial_states q:
   forall S1, initial_state ge q S1 ->
