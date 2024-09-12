@@ -15,6 +15,20 @@ Import ListNotations.
 Local Open Scope list_scope.
 Local Open Scope error_monad_scope.
 
+(* auxilary functions for own_env *)
+Fixpoint collect_children_in (s: PathsMap.t) (l: list place) : Paths.t :=
+  match l with
+  | nil => Paths.empty
+  | p :: l' =>            
+      let id := local_of_place p in
+      let ps := PathsMap.get id s in
+      Paths.union (Paths.filter (fun elt => is_prefix p elt) ps) (collect_children_in s l')
+  end.
+
+Definition remove_paths_in (s: PathsMap.t) (id: ident) (ps: Paths.t) :=
+  let l := PathsMap.get id s in
+  PathsMap.set id (Paths.diff l ps) s.
+
 (* analysis result and flag map types *)
 Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
 Definition FM : Type := PTree.t (list (place * ident)).
@@ -606,9 +620,22 @@ Proof.
     1-4 :admit.
         
     (** TODO: sound_own  *)
-    assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0).
-    (* how to use sound and complete of drops to prove this lemma? *)
-    admit.
+    assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0). 
+    { constructor.
+      (* step1 *)
+      assert (DRM: PathsMap.eq (fold_left (fun acc p => remove_place p acc) (fst (split drops)) own.(own_init)) (own_init (move_split_places own drops))). admit.      
+      eapply PathsMap.ge_trans. 2: eapply PathsMap.ge_refl;eapply DRM.
+      (* step2 *)
+      assert (RMALL: PathsMap.eq (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init) (fst (split drops)))) (fold_left (fun (acc : PathsMap.t) (p0 : place) => remove_place p0 acc) (fst (split drops)) (own_init own))). admit.
+      eapply PathsMap.ge_trans. 2: eapply PathsMap.ge_refl;eapply RMALL.
+      (* step3 *)
+      admit.
+
+      (* uninit part: maybe easy? because there are less places to be
+      added in own_env side *)
+      admit.
+      (* universe equal *)
+      admit. }
     (* use analyze_succ *)
     admit.
   (* step_in_dropplace *)

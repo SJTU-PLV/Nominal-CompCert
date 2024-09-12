@@ -429,7 +429,7 @@ Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: 
       query_inv I2 w2 q2 ->
       exists w1 q1, symtbl_inv I1 w1 se1
                /\ query_inv I1 w1 q1
-               (* used to establish simulation *)
+               (* used to establish simulation in initial states *)
                /\ match_query cc ccw q1 q2;
     inv_external: forall w1 se1 se2 ccw q1 q2, 
       symtbl_inv I1 w1 se1 ->
