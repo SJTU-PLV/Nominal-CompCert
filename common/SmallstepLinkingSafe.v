@@ -15,12 +15,88 @@ Definition safe {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
   \/ (exists q, at_external L s q)
   \/ (exists t, exists s', Step L s t s').
 
+Definition not_stuck {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
+  (exists r, final_state L s r)
+  \/ (exists q, at_external L s q)
+  \/ (exists t, exists s', Step L s t s').
+
+
 (* Definition partial_safe {liA liB st} mem_error (L: lts liA liB st) (s: st) : Prop := *)
 (*   (exists r, final_state L s r) *)
 (*   \/ (exists q, at_external L s q) *)
 (*   \/ (exists t, exists s', Step L s t s') *)
 (*   \/ (mem_error liA liB st L s). *)
 
+(* well-formed reachable state in module requires some restriction on
+incoming query and reply *)
+(* Inductive reachable {liA liB st} (IA: invariant liA) (IB: invariant liB) (L: lts liA liB st) (wI: inv_world IB) (s: st) : Prop := *)
+(* | initial_reach: forall q s0 t *)
+(*     (WT: query_inv IB wI q)     *)
+(*     (INIT: initial_state L q s0) *)
+(*     (STEP: Star L s0 t s), *)
+(*     reachable IA IB L wI s *)
+(* | external_reach: forall q r s1 s2 t w *)
+(*     (* s1 also must be reachable. TODO: s1 should be in at_external? *)
+(*     Otherwise we cannot prove reachable state is sound *)    *)
+(*     (REACH: reachable IA IB L wI s1) *)
+(*     (ATEXT: at_external L s1 q) *)
+(*     (WTQ: query_inv IA w q) *)
+(*     (WTR: reply_inv IA w r) *)
+(*     (AFEXT: after_external L s1 r s2) *)
+(*     (STEP: Star L s2 t s), *)
+(*     reachable IA IB L wI s. *)
+
+(* Lemma reachable_implies liA liB st: forall IA IB (L: lts liA liB st) wI s, *)
+(*     reachable IA IB L wI s -> *)
+(*     SmallstepLinking.reachable L s. *)
+(* Proof. *)
+(*   induction 1. *)
+(*   try econstructor; eauto. *)
+(*   eapply SmallstepLinking.external_reach; eauto. *)
+(* Qed. *)
+
+(* Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: _ -> S -> Prop) (wI: inv_world IB) := *)
+(*   { *)
+(*     rechable_safe: forall s, *)
+(*       reachable IA IB L wI s -> *)
+(*       SI L s; *)
+    
+(*     (* compatable properties *) *)
+(*     initial_progress: forall q, *)
+(*       valid_query L q = true -> *)
+(*       query_inv IB wI q -> *)
+(*       (exists s, initial_state L q s); *)
+    
+(*     external_progress: forall s q, *)
+(*       reachable IA IB L wI s -> *)
+(*       at_external L s q -> *)
+(*       exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\ *)
+(*               forall r, reply_inv IA wA r -> *)
+(*                    (* after external progress *) *)
+(*                    (exists s', after_external L s r s'); *)
+
+(*     final_progress: forall s r, *)
+(*       reachable IA IB L wI s -> *)
+(*       final_state L s r -> *)
+(*       reply_inv IB wI r; *)
+    
+(*   }. *)
+
+(** Proof of lts_safe by the method of preservation and progress *)
+
+(* Record invariant_preserves {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (IS: _ -> S -> Prop) (wI: inv_world IB) := *)
+(*   { *)
+(*     initial_preserves: forall q s, *)
+(*       query_inv IB wI q -> *)
+(*       initial_state L q s -> *)
+(*       IS wI s; *)
+
+(*     step_preserves: forall s t s', *)
+(*       IS wI s -> *)
+      
+      
+(*   } . *)
+    
 
 (** TODO: generalize safe/partial_safe to module linking and show that
 the original safe/partial_safe is identical to the composed
@@ -238,32 +314,44 @@ Qed.
 
 
 (* similar to ccref *)
-(* Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type := *)
-(*   { inv_incoming: *)
-(*     forall w2 se1 se2 ccw q2, *)
-(*       symtbl_inv I2 w2 se2 -> *)
-(*       match_senv cc ccw se1 se2 -> *)
-(*       query_inv I2 w2 q2 -> *)
-(*       exists w1 q1, symtbl_inv I1 w1 se1 /\ *)
-(*                  query_inv I1 w1 q1 /\ *)
-(*                  match_query cc ccw q1 q2 /\ *)
-(*                  forall r1, *)
-(*                    reply_inv I1 w1 r1 -> *)
-(*                    exists r2, reply_inv I2 w2 r2; *)
+Record bsim_invariant_new {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
+  {
+    (* incoming_query2 and outgoing_query2 are used to establish
+    match_states between rechable states *)
+    incoming_query2: forall w2 se1 se2 ccw q2,
+      symtbl_inv I2 w2 se2 ->
+      match_senv cc ccw se1 se2 ->
+      query_inv I2 w2 q2 ->
+      exists w1 q1, symtbl_inv I1 w1 se1 /\
+                 query_inv I1 w1 q1 /\
+                 match_query cc ccw q1 q2 /\
+                 (* outgoing_reply1 is embedded here because it is
+                 stated in w2. It is used to establish progress
+                 properties *)
+                 forall r1 r2, reply_inv I1 w1 r1 ->
+                          match_reply cc ccw r1 r2 ->
+                          reply_inv I2 w2 r2;
 
-(*     inv_outgoing: *)
-(*     forall w1 se1 se2 ccw q1, *)
-(*       symtbl_inv I1 w1 se1 -> *)
-(*       match_senv cc ccw se1 se2 -> *)
-(*       query_inv I1 w1 q1 -> *)
-(*       exists w2 q2, symtbl_inv I2 w2 se2 /\ *)
-(*                  query_inv I2 w2 q2 /\ *)
-(*                  match_query cc ccw q1 q2 /\ *)
-(*                  forall r2, *)
-(*                    reply_inv I2 w2 r2 -> *)
-(*                    exists r1, reply_inv I1 w1 r1; *)
-   
-(*     }. *)
+    outgoing_query2: forall w2 ccw q1 q2,
+      query_inv I2 w2 q2 ->
+      match_query cc ccw q1 q2 ->
+      exists w1, query_inv I1 w1 q1 /\
+              (* incoming_reply2 is embedded here *)
+              forall r2, reply_inv I2 w2 r2 ->
+                    exists r1, reply_inv I1 w1 r1 /\
+                            match_reply cc ccw r1 r2;
+    
+    (* outgoing_query1 and outgoing_reply1 are used to establish
+    progress properties *)
+    outgoing_query1: forall w1 ccw q1 q2,
+      query_inv I1 w1 q1 ->
+      match_query cc ccw q1 q2 ->
+      exists w2, query_inv I2 w2 q2 /\
+              (* incoming_reply1 is embedded here *)
+              forall r1, reply_inv I1 w1 r1 ->
+                    exists r2, reply_inv I2 w2 r2 /\
+                            match_reply cc ccw r1 r2;    
+  }.
 
 
 (* Relation between two semantics invariants *)
@@ -341,7 +429,8 @@ Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: 
       query_inv I2 w2 q2 ->
       exists w1 q1, symtbl_inv I1 w1 se1
                /\ query_inv I1 w1 q1
-               /\ match_query cc ccw q1 q2;               
+               (* used to establish simulation *)
+               /\ match_query cc ccw q1 q2;
     inv_external: forall w1 se1 se2 ccw q1 q2, 
       symtbl_inv I1 w1 se1 ->
       match_senv cc ccw se1 se2 ->
