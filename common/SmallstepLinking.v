@@ -19,32 +19,6 @@ Ltac subst_dep :=
       idtac
   end.
 
-Inductive reachable {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
-| initial_reach: forall q s0 t,
-    initial_state L q s0 ->
-    Star L s0 t s ->
-    reachable L s
-| external_reach: forall r s1 s2 t,
-    (* s1 also must be reachable. TODO: s1 should be in at_external? Otherwise we cannot prove reachable state is sound *)
-    reachable L s1 ->
-    after_external L s1 r s2 ->
-    Star L s2 t s ->
-    reachable L s.
-
-Lemma step_reachable {liA liB st} (L: lts liA liB st) s1 t s2:
-  Step L s1 t s2 ->
-  reachable L s1 ->
-  reachable L s2.
-Proof.
-  intros STEP REA.
-  inv REA.
-  - eapply initial_reach; eauto.
-    eapply star_right; eauto.
-  - eapply external_reach; eauto.
-    eapply star_right; eauto.
-Qed.
-
-
 Section LINK.
   Context {li} (L: bool -> semantics li li).
   Let I := bool.
@@ -57,22 +31,6 @@ Section LINK.
     Variant frame := st (i: I) (s: Smallstep.state (L i)).
     Notation state := (list frame).
 
-    (** * Well formedness of frame used in module safety *)
-
-    (* Well formedness of frames *)
-    Inductive wf_frame : frame -> Prop :=
-    | wf_frame_intro: forall i s q,
-        at_external (L i se) s q ->
-        reachable (L i se) s ->
-        wf_frame (st i s).
-
-    Inductive wf_state : state -> Prop :=
-    | wf_state_nil: wf_state nil
-    | wf_state_cons: forall i s k,
-        reachable (L i se) s ->
-        Forall wf_frame k ->
-        wf_state (st i s :: k).      
-    
     Inductive step: state -> trace -> state -> Prop :=
       | step_internal i s t s' k :
           Step (L i se) s t s' ->
@@ -146,71 +104,6 @@ Section LINK.
     plus (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
   Proof.
     destruct 1; econstructor; eauto using step_internal, star_internal.
-  Qed.
-
-  (** Continuation of reachable state is well formed *)
-
-  
-  Lemma step_wf_state se s1 t s2:
-    Step (semantics se) s1 t s2 ->
-    wf_state se s1 ->
-    wf_state se s2.
-  Proof.
-    intros STEP WF.
-    inv STEP.
-    - inv WF. subst_dep.
-      econstructor; auto.
-      eapply step_reachable; eauto.
-    - econstructor; eauto.
-      eapply initial_reach; eauto.
-      econstructor; eauto.
-      inv WF. subst_dep.
-      econstructor; eauto.
-      econstructor; eauto.
-    - inv WF. subst_dep. inv H5.
-      econstructor; eauto.
-      eapply external_reach; eauto.
-      inv H4. subst_dep. auto.
-      eapply star_refl.
-  Qed.
-  
-  Lemma star_wf_state se s1 t s2:
-      Star (semantics se) s1 t s2 ->
-      wf_state se s1 ->
-      wf_state se s2.
-  Proof.
-    induction 1; auto.
-    intros WF. eapply IHstar.
-    inv H.
-    - eapply step_wf_state.
-      eapply step_internal. eauto.
-      auto.
-    - simpl. constructor.
-      econstructor; eauto.
-      eapply star_refl.
-      inv WF. subst_dep.
-      econstructor; eauto.
-      econstructor; eauto.
-    - simpl in *. inv WF. subst_dep.
-      inv H6.
-      econstructor; eauto.
-      inv H5. subst_dep.
-      eapply external_reach; eauto.
-      eapply star_refl.
-  Qed.
-  
-  Lemma reachable_wf_state: forall se (s: list frame),
-      reachable (semantics se) s ->
-      wf_state se s.
-  Proof.
-    induction 1.
-    - inv H. eapply star_wf_state; eauto.
-      constructor. eapply initial_reach; eauto. eapply star_refl.
-      constructor.
-    - eapply star_wf_state; eauto.
-      inv H0. inv IHreachable. subst_dep.
-      econstructor; eauto. eapply external_reach; eauto.
-      eapply star_refl.
   Qed.
         
   (** * Receptiveness and determinacy *)
