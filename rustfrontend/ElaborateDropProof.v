@@ -25,9 +25,196 @@ Fixpoint collect_children_in (s: PathsMap.t) (l: list place) : Paths.t :=
       Paths.union (Paths.filter (fun elt => is_prefix p elt) ps) (collect_children_in s l')
   end.
 
+Lemma collect_children_in_exists: forall l own p,
+    Paths.In p (collect_children_in own l) ->
+    exists p', In p' l /\ is_prefix p' p = true.
+Admitted.
+
+Lemma collect_children_in_implies: forall l p1 p2 own,
+    In p1 l ->
+    is_prefix p1 p2 = true ->
+    Paths.In p2 (collect_children_in own l).
+Admitted.
+
 Definition remove_paths_in (s: PathsMap.t) (id: ident) (ps: Paths.t) :=
   let l := PathsMap.get id s in
   PathsMap.set id (Paths.diff l ps) s.
+
+(* just update PathsMap *)
+Fixpoint move_split_places_uncheck (own: PathsMap.t) (l: list (place * bool)) : PathsMap.t :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      move_split_places_uncheck (remove_place p own) l'
+  end.
+
+Fixpoint add_split_places_uncheck (universe: PathsMap.t) (uninit: PathsMap.t) (l: list (place * bool)) : PathsMap.t :=
+  match l with
+  | nil => uninit
+  | (p,_) :: l' =>
+      add_split_places_uncheck universe (add_place universe p uninit) l'
+  end.
+
+(* update Paths.t *)
+Fixpoint filter_split_places_uncheck (own: Paths.t) (l: list (place * bool)) : Paths.t :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      filter_split_places_uncheck (Paths.filter (fun elt => negb (is_prefix p elt)) own) l'
+  end.
+
+Lemma filter_split_places_uncheck_unchange: forall l p own,
+    Paths.In p (filter_split_places_uncheck own l) ->
+    Paths.In p own.
+Admitted.
+
+Lemma move_split_places_uncheck_more: forall l u1 u2,
+    PathsMap.ge u1 u2 ->
+    PathsMap.ge (move_split_places_uncheck u1 l) (move_split_places_uncheck u2 l).
+Proof.
+  induction l; intros; simpl; auto.
+  destruct a. eapply IHl.
+  red. intros id.
+  unfold remove_place.
+  red. do 2 rewrite PathsMap.gsspec.
+  destruct (peq id (local_of_place p)); subst.
+  - red. intros a A.
+    eapply Paths.filter_3. red. solve_proper.
+    apply H.
+    eapply Paths.filter_1; eauto. red. solve_proper.
+    eapply Paths.filter_2 in A. auto.
+    red. solve_proper.
+  - eapply H.
+Qed.
+  
+Lemma add_split_places_uncheck_more: forall l w u1 u2,
+    PathsMap.ge u1 u2 ->
+    PathsMap.ge (add_split_places_uncheck w u1 l) (add_split_places_uncheck w u2 l).
+Proof.
+  induction l; intros; simpl; auto.
+  destruct a. eapply IHl.
+  red. intros id.
+  unfold add_place.
+  red. do 2 rewrite PathsMap.gsspec.
+  destruct (peq id (local_of_place p)); subst.
+  - red. intros a A.
+    eapply Paths.union_1 in A.
+    destruct A.
+    eapply Paths.union_2. eapply H. auto.
+    eapply Paths.union_3. auto.
+  - eapply H.
+Qed.
+
+Lemma move_split_places_uncheck_sound: forall drops own own',
+    move_split_places own drops = own' ->
+    PathsMap.ge (move_split_places_uncheck (own_init own) drops) (own_init own')
+    /\ PathsMap.ge (add_split_places_uncheck (own_universe own) (own_uninit own) drops) (own_uninit own')
+    /\ PathsMap.eq (own_universe own) (own_universe own').
+Proof.
+  induction drops; intros; subst; simpl.
+  - split. apply PathsMap.ge_refl. eapply PathsMap.eq_refl.
+    split. apply PathsMap.ge_refl. eapply PathsMap.eq_refl.
+    apply PathsMap.eq_refl.
+  - destruct a.
+    destruct (is_owned own p) eqn: OWN.
+    + exploit (IHdrops (move_place own p)); eauto.
+    (* p is not owned, so remove it has no effect *)
+    + exploit (IHdrops own); eauto.
+      intros (A & B & C).
+      split; try split. 3: auto.
+      2: { eapply PathsMap.ge_trans; eauto.
+           eapply add_split_places_uncheck_more.
+           red. intros id. unfold add_place.
+           red. rewrite PathsMap.gsspec.
+           destruct (peq id (local_of_place p)); subst.
+           + red. intros a D. eapply Paths.union_2. auto.
+           + eapply LPaths.ge_refl. apply LPaths.eq_refl. }
+      (* core proof *)
+      eapply PathsMap.ge_trans; eauto.
+      assert (CORE: PathsMap.ge (remove_place p (own_init own)) (own_init own)).
+      { red. intros id. unfold remove_place. red.
+        rewrite PathsMap.gsspec.
+        destruct (peq id (local_of_place p)); subst.
+        + red. intros a IN.
+          eapply Paths.filter_3. red. solve_proper.
+          auto.
+          (* key to prove: a is not a child of p. From opposite side,
+          if a is a children of p, then is_owned p = true. This can be
+          proved by own_wf_init *)
+          eapply negb_true_iff in OWN.
+          apply Is_true_eq_true. apply Is_true_eq_left in OWN.           
+          apply negb_prop_intro. apply negb_prop_elim in OWN.
+          intro PRE. apply OWN. apply Is_true_eq_true in PRE.
+          apply Is_true_eq_left.
+          (* prove p is owned *)
+          unfold is_owned. eapply Paths.for_all_1.
+          red. solve_proper.
+          red. intros p1 IN1. eapply Paths.filter_2 in IN1 as IN2.
+          eapply Paths.filter_1 in IN1 as IN3.
+          exploit (own_wf_init own (local_of_place p) a IN p1). auto.
+          erewrite is_prefix_trans; eauto.
+          red. solve_proper.
+          red. solve_proper.          
+        + eapply LPaths.ge_refl. apply LPaths.eq_refl. }
+      eapply move_split_places_uncheck_more; eauto.
+Qed.
+
+
+Lemma filter_split_places_uncheck_more: forall l u1 u2,
+    LPaths.ge u1 u2 ->
+    LPaths.ge (filter_split_places_uncheck u1 l) (filter_split_places_uncheck u2 l).
+Proof.
+  induction l; simpl; auto.
+  intros u1 u2 GE.
+  destruct a. eapply IHl.
+  red. red. intros a IN.
+  eapply Paths.filter_3.
+  red. solve_proper.
+  eapply GE.
+  eapply Paths.filter_1; eauto.
+  red. solve_proper.
+  eapply Paths.filter_2 in IN; auto.
+  red. solve_proper.
+Qed.
+
+  
+(* equivalent (just ge for now because it is enough) between
+get-filter-set and get-set-get-set ... -get-set mode *)
+Lemma filter_move_split_places_ge: forall l id init
+    (NAME: forall p b, In (p, b) l -> local_of_place p = id),
+    PathsMap.ge (PathsMap.set id (filter_split_places_uncheck (PathsMap.get id init) l) init) (move_split_places_uncheck init l).
+Proof.
+  induction l; simpl; intros.
+  red. intros p. red. rewrite PathsMap.gsspec.
+  destruct (peq p id); subst. apply LPaths.ge_refl.
+  apply LPaths.eq_refl.
+  apply LPaths.ge_refl. apply LPaths.eq_refl.
+  destruct a.
+  generalize (IHl id (remove_place p init)).
+  intros GE.
+  eapply PathsMap.ge_trans.
+  2: eauto.
+  red. intros p1. red.
+  do 2 rewrite PathsMap.gsspec.
+  destruct (peq p1 id); subst.
+  - eapply filter_split_places_uncheck_more.
+    (* core of proof *)
+    red. red. erewrite <- NAME; eauto.
+    unfold remove_place.
+    intros a IN. rewrite PathsMap.gsspec in IN.
+    destruct (peq (local_of_place p) (local_of_place p)); try congruence.
+  - red. unfold remove_place.
+    intros a IN. rewrite PathsMap.gsspec in IN.
+    destruct (peq p1 (local_of_place p)); subst.
+    eapply Paths.filter_1; eauto. red. solve_proper.
+    auto.
+Qed.
+
+Lemma filter_split_places_subset_collect_children: forall l p1 p2 own,
+    Paths.In p1 (filter_split_places_uncheck own l) ->
+    In p2 (fst (split l)) ->
+    is_prefix p2 p1 =false.
+Admitted.
 
 (* analysis result and flag map types *)
 Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
@@ -621,16 +808,71 @@ Proof.
         
     (** TODO: sound_own  *)
     assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0). 
-    { constructor.
-      (* step1 *)
-      assert (DRM: PathsMap.eq (fold_left (fun acc p => remove_place p acc) (fst (split drops)) own.(own_init)) (own_init (move_split_places own drops))). admit.      
-      eapply PathsMap.ge_trans. 2: eapply PathsMap.ge_refl;eapply DRM.
-      (* step2 *)
-      assert (RMALL: PathsMap.eq (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init) (fst (split drops)))) (fold_left (fun (acc : PathsMap.t) (p0 : place) => remove_place p0 acc) (fst (split drops)) (own_init own))). admit.
-      eapply PathsMap.ge_trans. 2: eapply PathsMap.ge_refl;eapply RMALL.
+    { exploit split_drop_place_meet_spec; eauto.
+      intros SPLIT_SPEC.
+      exploit (move_split_places_uncheck_sound drops own); eauto.
+      intros (INITGE & UNINITGE & UNIEQ1).      
+      constructor.
+      + (* step1 *)
+        assert (STEP1: PathsMap.ge (move_split_places_uncheck own.(own_init) drops) (own_init (move_split_places own drops))) by auto.
+        eapply PathsMap.ge_trans. 2: eapply STEP1.
+        (* step2: one-time remove and recursively remove *)
+        assert (STEP2: PathsMap.ge (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init) (fst (split drops)))) (move_split_places_uncheck (own_init own) drops)).
+        { red. intros id.
+          unfold remove_paths_in.
+          (* reduce the steps of PathsMap.set in move_split_places_uncheck *)
+          assert (A: PathsMap.ge (PathsMap.set (local_of_place p) (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops) (own_init own)) (move_split_places_uncheck (own_init own) drops)).
+          { (* require that all places in drops are children of p *)
+            eapply filter_move_split_places_ge.
+            intros. symmetry. eapply is_prefix_same_local.
+            eapply split_sound; eauto. eapply in_split_l in H. simpl in H.
+             auto. }
+          eapply LPaths.ge_trans.
+          2 : eapply A.
+          assert (CORE: LPaths.ge (Paths.diff (PathsMap.get (local_of_place p) (own_init own))
+                                     (collect_children_in (own_init own) (fst (split drops))))
+                          (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops)).
+          { (* any place in filter_split_places_uncheck is not a child of any place in drops (can be proved by induction), so this place is not in the collect_children_in. *)
+            red. red. intros a IN.
+            eapply Paths.diff_3.
+            eapply filter_split_places_uncheck_unchange; eauto.
+            (* prove by contradiction *)
+            intros IN1.
+            exploit collect_children_in_exists; eauto.
+            intros (p' & IN' & PRE).                      
+            exploit (filter_split_places_subset_collect_children drops a p'); eauto.
+            intros. congruence. }
+          (* unable to use setoid_rewrite *)
+          red. do 2 rewrite PathsMap.gsspec.
+          destruct (peq id (local_of_place p)); subst. auto.
+          apply LPaths.ge_refl. apply LPaths.eq_refl.
+        }
+        
+        eapply PathsMap.ge_trans. 2: eapply STEP2.
       (* step3 *)
-      admit.
-
+      { red. intros id. unfold remove_paths_in, remove_place.
+        assert (CORE: LPaths.ge (Paths.filter (fun elt : Paths.elt => negb (is_prefix p elt))
+             (PathsMap.get (local_of_place p) maybeInit !! pc)) (Paths.diff (PathsMap.get (local_of_place p) (own_init own)) (collect_children_in (own_init own) (fst (split drops)))) ).
+        { red. red. intros a.
+          intros IN.
+          eapply Paths.diff_1 in IN as IN1.
+          eapply Paths.diff_2 in IN as IN2.
+          eapply Paths.filter_3. red. solve_proper.
+          eapply sound_own_init; eauto.
+          (* key of proof: [a] is not a children of p *)
+          apply Is_true_eq_true. apply negb_prop_intro.
+          red. intros ISPRE. eapply IN2. clear IN2.
+          eapply Is_true_eq_true in ISPRE.
+          (** TODO: show that a is in the universe and use
+          split_drop_complete to show a ∈ drops *)
+          eapply Paths.union_2 in IN1.
+          eapply own_consistent in IN1; eauto.
+          exploit split_complete; eauto. intros IN2.
+          eapply collect_children_in_implies. eauto.
+          apply is_prefix_refl. }
+        red. do 2 rewrite PathsMap.gsspec.
+        destruct (peq id (local_of_place p)); subst. auto.
+        eapply sound_own_init; eauto. }
       (* uninit part: maybe easy? because there are less places to be
       added in own_env side *)
       admit.
@@ -682,4 +924,4 @@ Proof.
     - intros. exploit transf_final_states; eauto. 
     - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
     - eauto using step_simulation.
-Admitted. 
+Admitted.

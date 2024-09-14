@@ -245,6 +245,11 @@ Fixpoint local_of_place (p: place) :=
   | Pdowncast p' _ _ => local_of_place p'
   end.
 
+Lemma is_prefix_same_local: forall p1 p2,
+    is_prefix p1 p2 = true ->
+    local_of_place p1 = local_of_place p2.
+Admitted.
+
 Definition is_sibling (p1 p2: place) : bool :=
   Pos.eqb (local_of_place p1) (local_of_place p2)
   && negb (is_prefix p1 p2 && is_prefix p2 p1).

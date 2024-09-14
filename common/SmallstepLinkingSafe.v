@@ -60,7 +60,7 @@ Proof.
 Qed.
 
 
-Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: _ -> S -> Prop) (wI: inv_world IB) :=
+Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB S -> S -> Prop) (wI: inv_world IB) :=
   {
     reachable_safe: forall s,
       reachable IA IB L wI s ->

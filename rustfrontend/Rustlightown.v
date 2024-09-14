@@ -84,24 +84,23 @@ Record own_env :=
             LPaths.eq (Paths.union (PathsMap.get id own_init) (PathsMap.get id own_uninit)) (PathsMap.get id own_universe);
           own_disjoint: forall id,
             LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_uninit)) Paths.empty;
-          (* ∀ p ∈ W, p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
-          own_wf_init: forall (p: place),
-            let id := local_of_place p in
+          (* ∀ p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
+          own_wf_init: forall id,
             let init := PathsMap.get id own_init in
             let universe := PathsMap.get id own_universe in
-            Paths.For_all (fun p => if Paths.mem p init
-                                 then Paths.For_all (fun p' => if is_prefix p' p then Paths.mem p' init = true else True) universe
-                                 else True) universe;
+            Paths.For_all (fun p => Paths.For_all
+                                   (fun p' => if is_prefix p' p
+                                           then Paths.mem p' init = true
+                                           else True) universe) init;
 
-          (* ∀ p ∈ W, p ∈ U → ∀ p' ∈ W, is_prefix p p' → p' ∈ U *)
-          own_wf_uninit: forall (p: place),
-            let id := local_of_place p in
+          (* ∀ p ∈ U → ∀ p' ∈ W, is_prefix p p' → p' ∈ U *)
+          own_wf_uninit: forall id,
             let uninit := PathsMap.get id own_uninit in
             let universe := PathsMap.get id own_universe in
-            Paths.For_all (fun p => if Paths.mem p uninit
-                                 then Paths.For_all (fun p' => if is_prefix p p' then Paths.mem p' uninit = true else True) universe
-                                 else True) universe;
-
+            Paths.For_all (fun p => Paths.For_all
+                                   (fun p' => if is_prefix p p'
+                                           then Paths.mem p' uninit = true
+                                           else True) universe) uninit;
     }.
 
 Definition is_owned (own: own_env) (p: place): bool :=
