@@ -182,7 +182,22 @@ Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
 
     sound_own_universe: PathsMap.eq universe own.(own_universe) }.
 
-    
+(* Properties of sound_own *)
+
+Lemma must_owned_sound (own: own_env) (init uninit universe: PathsMap.t) p:
+    sound_own own init uninit universe ->
+    must_owned init uninit universe p = true ->
+    is_owned own p = true.
+Admitted.
+
+Lemma must_not_owned_sound (own: own_env) (init uninit universe: PathsMap.t) p:
+    sound_own own init uninit universe ->
+    must_owned init uninit universe p = false ->
+    may_owned init uninit universe p = false ->
+    is_owned own p = false.
+Admitted.
+
+
 (** ** Semantic invariant *)
 
 (* relation of moveing split places *)
@@ -201,14 +216,6 @@ Variable se: Genv.symtbl.
 
 Let ge := RustIR.globalenv se prog.
 Let ce := ge.(genv_cenv).
-
-(* We can generate cfg for all analyzed functions. This property is
-guaranteed by the compilation pass which actually uses the analyze
-function *)
-Hypothesis function_analyzed: forall (v : val) (f: function),
-    Genv.find_funct ge v = Some (Internal f) ->
-    exists initMap uninitMap universe,
-      analyze ce f = OK (initMap, uninitMap, universe).
 
 Inductive sound_cont: cont -> Prop :=
 | sound_cont_stop: sound_cont Kstop
@@ -463,6 +470,15 @@ Proof.
   - econstructor; eauto.
     inv CONT. auto.
 Qed.
+
+(** TODO: where to put it *)
+(* We can generate cfg for all analyzed functions. This property is
+guaranteed by the compilation pass which actually uses the analyze
+function *)
+Hypothesis function_analyzed: forall (v : val) (f: function),
+    Genv.find_funct ge v = Some (Internal f) ->
+    exists initMap uninitMap universe,
+      analyze ce f = OK (initMap, uninitMap, universe).
 
 
 Theorem sound_step: forall s t s',

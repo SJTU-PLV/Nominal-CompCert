@@ -86,6 +86,69 @@ Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invar
       reply_inv IB wI r;    
   }.
 
+(* Definition lts_safe_triple {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) : Prop := *)
+(*   forall q, valid_query L q = true -> *)
+(*        query_inv IB wI q ->        *)
+(*        (* initial progress *) *)
+(*        (exists s, initial_state L q s) *)
+(*        (* safe *) *)
+(*        /\ (forall s, reachable IA IB L wI s -> *)
+(*                not_stuck L s) *)
+(*        (* correct *) *)
+(*        /\ (forall s r, reachable IA IB L wI s -> *)
+(*                  final_state L s r -> *)
+(*                  reply_inv IB wI r) *)
+(*        (* external call (not suppored in standard Hoare triple) *) *)
+(*        /\ (forall s q ,reachable IA IB L wI s -> *)
+(*                  at_external L s q -> *)
+(*                  exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\ *)
+(*                          forall r, reply_inv IA wA r -> *)
+(*                               (exists s', after_external L s r s')). *)
+
+
+(* state s can be reachable from state s0 *)
+Inductive reachable_from {liA liB st} (IA: invariant liA) (IB: invariant liB) (L: lts liA liB st) (wI: inv_world IB) (s0 s: st) : Prop :=
+| internal_reach_from: forall t
+    (STEP: Star L s0 t s),
+    reachable_from IA IB L wI s0 s
+| external_reach_from: forall q r s1 s2 t w
+    (REACH: reachable_from IA IB L wI s0 s1)
+    (ATEXT: at_external L s1 q)
+    (WTQ: query_inv IA w q)
+    (WTR: reply_inv IA w r)
+    (AFEXT: after_external L s1 r s2)
+    (STEP: Star L s2 t s),
+    reachable_from IA IB L wI s0 s.
+
+
+Definition lts_safe_triple' {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) (s0: S) : Prop :=
+  (* safe *)
+  (forall s, reachable_from IA IB L wI s0 s ->
+        not_stuck L s)
+  (* correct *)
+  /\ (forall s r, reachable_from IA IB L wI s0 s ->
+            final_state L s r ->
+            reply_inv IB wI r)
+  (* external call (not suppored in standard Hoare triple) *)
+  /\ (forall s q ,reachable_from IA IB L wI s0 s ->
+            at_external L s q ->
+            exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\
+                    forall r, reply_inv IA wA r ->
+                         (exists s', after_external L s r s')).
+
+
+(* assume that SI in lts_safe is instantiated with not_stuck *)
+Definition lts_safe_triple {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) : Prop :=
+  forall q, valid_query L q = true ->
+       query_inv IB wI q ->
+       (* initial progress *)
+       (exists s, initial_state L q s)
+       (* safe, correct and external progress *)
+       /\ (forall s, initial_state L q s ->
+               lts_safe_triple' se L IA IB wI s).
+        
+         
+
 Definition module_safe_se {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI se :=
   forall w,
     symtbl_inv IB w se ->

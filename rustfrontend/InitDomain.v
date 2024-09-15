@@ -324,9 +324,9 @@ Inductive split_places_ordered : list place -> Prop :=
 
 
 Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : Prop :=
-  { split_sound: forall p, In p (fst (split drops)) -> Paths.In p universe /\ is_prefix r p = true;
-    split_complete: forall p, Paths.In p universe -> is_prefix r p = true -> In p (fst (split drops));
-    split_ordered: split_places_ordered (fst (split drops));
+  { split_sound: forall p, In p (map fst drops) -> Paths.In p universe /\ is_prefix r p = true;
+    split_complete: forall p, Paths.In p universe -> is_prefix r p = true -> In p (map fst drops);
+    split_ordered: split_places_ordered  (map fst drops);
     (** TODO: current implementation does not guarantee this property.*)
     split_correct_full: forall p,
       In (p,true) drops ->

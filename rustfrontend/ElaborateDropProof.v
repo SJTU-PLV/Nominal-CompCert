@@ -28,13 +28,33 @@ Fixpoint collect_children_in (s: PathsMap.t) (l: list place) : Paths.t :=
 Lemma collect_children_in_exists: forall l own p,
     Paths.In p (collect_children_in own l) ->
     exists p', In p' l /\ is_prefix p' p = true.
-Admitted.
+Proof.
+  induction l; intros own p IN; simpl in *.
+  exfalso. eapply Paths.empty_1. eauto.
+  eapply Paths.union_1 in IN. destruct IN as [IN1|IN2].
+  - eapply Paths.filter_2 in IN1. exists a. auto.
+    red. solve_proper.
+  - eapply IHl in IN2.
+    destruct IN2 as (p' & IN1 & PRE).
+    eauto.
+Qed.
 
 Lemma collect_children_in_implies: forall l p1 p2 own,
     In p1 l ->
     is_prefix p1 p2 = true ->
+    Paths.In p2 (PathsMap.get (local_of_place p2) own) ->
     Paths.In p2 (collect_children_in own l).
-Admitted.
+Proof.
+  induction l; intros p1 p2 own IN1 PRE IN2; simpl in *.
+  contradiction.
+  destruct IN1; subst.
+  - eapply Paths.union_2.
+    eapply Paths.filter_3. red. solve_proper.
+    erewrite is_prefix_same_local; eauto.
+    auto.
+  - eapply Paths.union_3.
+    eapply IHl; eauto.
+Qed.
 
 Definition remove_paths_in (s: PathsMap.t) (id: ident) (ps: Paths.t) :=
   let l := PathsMap.get id s in
@@ -63,11 +83,38 @@ Fixpoint filter_split_places_uncheck (own: Paths.t) (l: list (place * bool)) : P
       filter_split_places_uncheck (Paths.filter (fun elt => negb (is_prefix p elt)) own) l'
   end.
 
+Lemma filter_split_places_uncheck_more: forall l u1 u2,
+    LPaths.ge u1 u2 ->
+    LPaths.ge (filter_split_places_uncheck u1 l) (filter_split_places_uncheck u2 l).
+Proof.
+  induction l; simpl; auto.
+  intros u1 u2 GE. destruct a.
+  eapply IHl.
+  red. red. intros a IN.
+  eapply Paths.filter_3.
+  red. solve_proper.
+  eapply GE. eapply Paths.filter_1; eauto.
+  red. solve_proper.
+  eapply Paths.filter_2 in IN.
+  auto.
+  red. solve_proper.
+Qed.
+
 Lemma filter_split_places_uncheck_unchange: forall l p own,
     Paths.In p (filter_split_places_uncheck own l) ->
     Paths.In p own.
-Admitted.
+Proof.
+  induction l; simpl; auto.
+  intros p own IN. destruct a.
+  eapply IHl. 
+  eapply filter_split_places_uncheck_more; eauto.
+  red. red.
+  intros a IN1.
+  eapply Paths.filter_1; eauto.
+  red. solve_proper.
+Qed.
 
+  
 Lemma move_split_places_uncheck_more: forall l u1 u2,
     PathsMap.ge u1 u2 ->
     PathsMap.ge (move_split_places_uncheck u1 l) (move_split_places_uncheck u2 l).
@@ -159,24 +206,6 @@ Proof.
       eapply move_split_places_uncheck_more; eauto.
 Qed.
 
-
-Lemma filter_split_places_uncheck_more: forall l u1 u2,
-    LPaths.ge u1 u2 ->
-    LPaths.ge (filter_split_places_uncheck u1 l) (filter_split_places_uncheck u2 l).
-Proof.
-  induction l; simpl; auto.
-  intros u1 u2 GE.
-  destruct a. eapply IHl.
-  red. red. intros a IN.
-  eapply Paths.filter_3.
-  red. solve_proper.
-  eapply GE.
-  eapply Paths.filter_1; eauto.
-  red. solve_proper.
-  eapply Paths.filter_2 in IN; auto.
-  red. solve_proper.
-Qed.
-
   
 (* equivalent (just ge for now because it is enough) between
 get-filter-set and get-set-get-set ... -get-set mode *)
@@ -212,9 +241,20 @@ Qed.
 
 Lemma filter_split_places_subset_collect_children: forall l p1 p2 own,
     Paths.In p1 (filter_split_places_uncheck own l) ->
-    In p2 (fst (split l)) ->
-    is_prefix p2 p1 =false.
-Admitted.
+    In p2 (map fst l) ->
+    is_prefix p2 p1 = false.
+Proof.
+  induction l; simpl; intros p1 p2 own IN1 IN2.
+  contradiction.
+  destruct a. 
+  destruct (split l) eqn: SPLIT. simpl in *.
+  destruct IN2; subst.
+  - eapply filter_split_places_uncheck_unchange in IN1.
+    eapply Paths.filter_2 in IN1.
+    eapply negb_true_iff; auto.
+    red. solve_proper.
+  - eapply IHl; eauto.
+Qed.
 
 (* analysis result and flag map types *)
 Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
@@ -308,20 +348,22 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
 
 (* Invariant of generate_drop_flags *)
 
-Definition sound_flagm (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit: PMap.t PathsMap.t) (universe: PathsMap.t) :=
-  forall pc next p sel,
+Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit: PMap.t PathsMap.t) (universe: PathsMap.t) :=
+  forall pc next p p1 sel drops,
     cfg ! pc = Some (Isel sel next) ->
     select_stmt body sel = Some (Sdrop p) ->
-    get_dropflag_temp flagm p = None ->
+    split_drop_place ce (PathsMap.get (local_of_place p) universe) p (typeof_place p) = OK drops ->
+    In p1 (map fst drops) ->
+    get_dropflag_temp flagm p1 = None ->
     (* must owned *)
-    (must_owned init!!pc uninit!!pc universe p = true \/
+    (must_owned init!!pc uninit!!pc universe p1 = true \/
        (* must unowned *)
-       may_owned init!!pc uninit!!pc universe p = false).
+       may_owned init!!pc uninit!!pc universe p1 = false).
 
 Lemma generate_drop_flags_inv: forall init uninit universe f cfg ce flags entry
   (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
   (GEN: generate_drop_flags init uninit universe ce f cfg = OK flags),
-  sound_flagm f.(fn_body) cfg (generate_place_map flags) init uninit universe.
+  sound_flagm ce f.(fn_body) cfg (generate_place_map flags) init uninit universe.
 Admitted.
 
 
@@ -416,7 +458,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
     (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
-    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
     (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
@@ -434,7 +476,7 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
-    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* own2 is built after the function call *)
     (AFTER: own2 = match p with
                    | Some p => move_place own1 p
@@ -466,7 +508,7 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (* well-formedness of the flag map *)
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
     (* property of flagm when encounting drop statement *)
-    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* Put sound_own here which may be inevitable due to the
     flow-insensitiveness of RustIR semantics.*)
     (SOUNDOWN: sound_own own maybeInit!!pc maybeUninit!!pc universe)
@@ -482,7 +524,7 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (MINJ: injp_acc w (injpw j m tm Hm))
     (* maybe difficult: transition of own is small step! *)
     (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
-    (SFLAGM: sound_flagm f.(fn_body) cfg flagm maybeInit maybeUninit universe)
+    (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* small-step move_place to simulate big-step move_place in
     transfer. maybe difficult to prove *)
     (MOVESPLIT: move_split_places own1 l = own2)
@@ -526,21 +568,75 @@ Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_en
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 .
 
+Lemma move_place_still_not_owned: forall p1 p2 own,
+    is_owned own p1 = false ->
+    is_owned (move_place own p2) p1 = false.
+  Admitted.
+
+Lemma move_irrelavent_place_still_owned: forall p1 p2 own,
+    is_owned own p1 = true ->
+    is_prefix p2 p1 = false ->
+    is_owned (move_place own p2) p1 = true.
+Admitted.
+
 (** IMPORTANT TODO  *)
 Lemma ordered_split_drop_places_wf:
   forall drops own init uninit universe flagm
-    (ORDER: split_places_ordered (fst (split drops)))
+    (ORDER: split_places_ordered (map fst drops))
     (OWN: forall p full, In (p, full) drops ->
                     must_owned init uninit universe p = true ->
                     is_owned own p = true)
+    (NOTOWN: forall p, must_owned init uninit universe p = false ->
+                  may_owned init uninit universe p = false ->
+                  is_owned own p = false)
     (UNI: PathsMap.eq universe (own_universe own))
-    (FLAG: forall p, get_dropflag_temp flagm p = None ->
-                must_owned init uninit universe p = true
-                \/ may_owned init uninit universe p = false),
+    (FLAG: forall p full,
+        In (p, full) drops ->
+        get_dropflag_temp flagm p = None ->
+        must_owned init uninit universe p = true
+        \/ may_owned init uninit universe p = false),
     wf_split_drop_places flagm init uninit universe own drops.
-Admitted.
+Proof.
+  induction drops; simpl; intros.
+  constructor.
+  destruct a.
+  assert (A: wf_split_drop_places flagm init uninit universe
+               (if is_owned own p then move_place own p else own) drops).
+  { inv ORDER.
+    eapply IHdrops. eauto.
+    (* prove own *)
+    + intros p1 full1 IN1 MUSTOWN1. 
+      (* show that p1 is still owned after removing p which is not a
+    pare nt of p1 from the own_env *)
+      exploit OWN. right. eauto. auto. intros POWN1.
+      destruct (is_owned own p) eqn: POWN; auto.
+      eapply Forall_forall with (x:= p1) in H1; auto.
+      (* use H1 POWN1 to prove this goal *)
+      eapply move_irrelavent_place_still_owned; eauto.
+      eapply in_map_iff. exists (p1, full1). auto.
+    + intros p1 MUSTOWN1 MAYOWN1.
+      exploit NOTOWN. eauto. eauto.
+      intros NOTOWNP1.
+      destruct (is_owned own p) eqn: POWN; auto.
+      apply move_place_still_not_owned; auto.      
+    + eapply PathsMap.eq_trans; eauto.
+      unfold move_place. destruct (is_owned own p) eqn: POWN; apply PathsMap.eq_refl.
+    + intros. eapply FLAG; eauto. }
+  
+  (* p has drop flag or not *)
+  destruct (get_dropflag_temp flagm p) eqn: PFLAG.
+  - econstructor; eauto.
+  - exploit FLAG. left; eauto.
+    auto. intros MOWN.
+    eapply wf_sdp_must. eauto. 2: auto.
+    destruct (must_owned init uninit universe p) eqn: MUSTOWN.
+    + symmetry. eapply OWN; eauto.
+    + destruct MOWN. congruence.
+      symmetry. eapply NOTOWN.
+      auto. auto.
+Qed.      
 
-
+    
 Lemma elaborate_drop_match_drop_places:
   forall drops flagm own init uninit universe
     (** we need some restriction on drops!! *)
@@ -797,16 +893,19 @@ Proof.
     (* match_split_drop_places *)
     eapply elaborate_drop_match_drop_places.
     (** IMPORTANT TODO: wf_split_drop_places *)
-    assert (INITOWN: forall p full, In (p, full) drops ->
-                      must_owned maybeInit !! pc maybeUninit !! pc universe0 p = true ->
-                      is_owned own p = true).
-    (* prove by sound_own *)
-    admit.
+    
     eapply ordered_split_drop_places_wf.
-    (* TODO *)
-    1-4 :admit.
-        
-    (** TODO: sound_own  *)
+    eapply split_ordered. eapply split_drop_place_meet_spec; eauto.
+    (* use sound_own properties *)
+    intros. eapply must_owned_sound; eauto.
+    intros. eapply must_not_owned_sound; eauto.
+    eapply sound_own_universe; eauto.
+    intros. eapply SFLAGM; eauto.
+    erewrite split_drop_place_eq_universe; eauto.
+    eapply sound_own_universe; eauto.
+    eapply in_map_iff. exists (p0, full). auto.
+    
+    (** sound_own: this proof is important. Make it a lemma!  *)
     assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0). 
     { exploit split_drop_place_meet_spec; eauto.
       intros SPLIT_SPEC.
@@ -817,7 +916,7 @@ Proof.
         assert (STEP1: PathsMap.ge (move_split_places_uncheck own.(own_init) drops) (own_init (move_split_places own drops))) by auto.
         eapply PathsMap.ge_trans. 2: eapply STEP1.
         (* step2: one-time remove and recursively remove *)
-        assert (STEP2: PathsMap.ge (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init) (fst (split drops)))) (move_split_places_uncheck (own_init own) drops)).
+        assert (STEP2: PathsMap.ge (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init)  (map fst drops))) (move_split_places_uncheck (own_init own) drops)).
         { red. intros id.
           unfold remove_paths_in.
           (* reduce the steps of PathsMap.set in move_split_places_uncheck *)
@@ -825,12 +924,11 @@ Proof.
           { (* require that all places in drops are children of p *)
             eapply filter_move_split_places_ge.
             intros. symmetry. eapply is_prefix_same_local.
-            eapply split_sound; eauto. eapply in_split_l in H. simpl in H.
-             auto. }
+            eapply split_sound; eauto. eapply in_map_iff. exists (p0,b). auto. }
           eapply LPaths.ge_trans.
           2 : eapply A.
           assert (CORE: LPaths.ge (Paths.diff (PathsMap.get (local_of_place p) (own_init own))
-                                     (collect_children_in (own_init own) (fst (split drops))))
+                                     (collect_children_in (own_init own)  (map fst drops)))
                           (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops)).
           { (* any place in filter_split_places_uncheck is not a child of any place in drops (can be proved by induction), so this place is not in the collect_children_in. *)
             red. red. intros a IN.
@@ -841,6 +939,7 @@ Proof.
             exploit collect_children_in_exists; eauto.
             intros (p' & IN' & PRE).                      
             exploit (filter_split_places_subset_collect_children drops a p'); eauto.
+            
             intros. congruence. }
           (* unable to use setoid_rewrite *)
           red. do 2 rewrite PathsMap.gsspec.
@@ -852,7 +951,7 @@ Proof.
       (* step3 *)
       { red. intros id. unfold remove_paths_in, remove_place.
         assert (CORE: LPaths.ge (Paths.filter (fun elt : Paths.elt => negb (is_prefix p elt))
-             (PathsMap.get (local_of_place p) maybeInit !! pc)) (Paths.diff (PathsMap.get (local_of_place p) (own_init own)) (collect_children_in (own_init own) (fst (split drops)))) ).
+             (PathsMap.get (local_of_place p) maybeInit !! pc)) (Paths.diff (PathsMap.get (local_of_place p) (own_init own)) (collect_children_in (own_init own) (map fst drops))) ).
         { red. red. intros a.
           intros IN.
           eapply Paths.diff_1 in IN as IN1.
@@ -869,17 +968,23 @@ Proof.
           eapply own_consistent in IN1; eauto.
           exploit split_complete; eauto. intros IN2.
           eapply collect_children_in_implies. eauto.
-          apply is_prefix_refl. }
+          apply is_prefix_refl.
+          eapply Paths.diff_1. erewrite <- is_prefix_same_local; eauto. }
         red. do 2 rewrite PathsMap.gsspec.
         destruct (peq id (local_of_place p)); subst. auto.
         eapply sound_own_init; eauto. }
       (* uninit part: maybe easy? because there are less places to be
       added in own_env side *)
-      admit.
+      + admit.
       (* universe equal *)
-      admit. }
+      + eapply PathsMap.eq_trans; eauto. eapply sound_own_universe; eauto. }
     (* use analyze_succ *)
-    admit.
+    inv TRFUN. clear STMT0 RET.
+    exploit analyze_succ; eauto. simpl. eauto.
+    instantiate (1 := (move_split_places own drops)).
+    unfold transfer. rewrite SEL. rewrite STMT. auto.
+    intros (mayinit3 & mayuninit3 & A & B & C). subst.
+    auto.
   (* step_in_dropplace *)
   - eapply step_dropplace_simulation. eauto.
     econstructor; eauto.
