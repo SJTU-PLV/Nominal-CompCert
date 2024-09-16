@@ -52,7 +52,7 @@ Definition generate_drop_flags_for (mayinit mayuninit universemap: PathsMap.t) (
   match split_drop_place ce universe p (typeof_place p) with
   | OK drop_places =>      
       (** may be we should check the disjointness of drop flags *)
-      generate_drop_flags_for_splits mayinit mayuninit universemap (fst (split drop_places))
+      generate_drop_flags_for_splits mayinit mayuninit universemap (map fst drop_places)
   (* The error case is considerer in elaboration step *)
   | Error msg =>
       []
@@ -87,9 +87,9 @@ Definition generate_drop_flags_at (ce: composite_env) (f: function) (pc: node) (
   end.
 
 Definition generate_drop_flags (ce: composite_env) (f: function) (cfg: rustcfg) : Errors.res (list (place * ident)) :=
-  let flags := concat (snd (split (PTree.elements (PTree.map (generate_drop_flags_at ce f) cfg)))) in
-  if list_norepet_dec place_eq (fst (split flags)) then
-    if list_norepet_dec ident_eq (snd (split flags)) then
+  let flags := concat (map snd (PTree.elements (PTree.map (generate_drop_flags_at ce f) cfg))) in
+  if list_norepet_dec place_eq (map fst flags) then
+    if list_norepet_dec ident_eq (map snd flags) then
       OK flags
     else
       Error (msg "Repeated drop flags in generate_drop_flags")
@@ -245,10 +245,10 @@ Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.
   (mayinit!!pc, mayuninit!!pc, universe).
 
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
-  do analysis_res <- analyze ce f;
+  do (entry, cfg) <- generate_cfg f.(fn_body);
+  do analysis_res <- analyze ce f cfg entry;
   let '(mayinit, mayuninit, universe) := analysis_res in
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
-  do (entry, cfg) <- generate_cfg f.(fn_body);
   (** step 1: generate drop flags *)
   do flags <- generate_drop_flags mayinit mayuninit universe ce f cfg;
   let flagm := generate_place_map flags in
@@ -260,7 +260,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let entry_uninit := mayuninit!!entry in
   (* init drop flags: if no flags, it would be a Sskip *)
   let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit) flags) in
-  let flag_vars := combine (snd (split flags)) (repeat type_bool (length flags)) in
+  let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
   Errors.OK (mkfunction f.(fn_generic_origins)
                         f.(fn_origins_relation)
                         f.(fn_drop_glue)

@@ -580,12 +580,12 @@ should matches the AST *)
     tr_stmt body cfg (Sreturn e) pc succ cont brk endn
 .
 
-Inductive tr_fun (f: function) (nret: node) : rustcfg -> Prop :=
+Inductive tr_fun (f: function) (nret: node) : node -> rustcfg -> Prop :=
 | tr_fun_intro: forall entry cfg
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (STMT: tr_stmt f.(fn_body) cfg f.(fn_body) entry nret None None nret)
     (RET: cfg ! nret = Some Iend),
-    tr_fun f nret cfg.
+    tr_fun f nret entry cfg.
 
 Lemma add_instr_at:
     forall i n s s' R, add_instr i s = Res n s' R ->
@@ -725,7 +725,7 @@ Qed.
 
 Lemma generate_cfg_charact: forall f entry cfg,
     generate_cfg f.(fn_body) = OK (entry, cfg) ->
-    exists nret, tr_fun f nret cfg.
+    exists nret, tr_fun f nret entry cfg.
 Proof.
   intros f entry cfg GEN.
   generalize GEN. intros GEN'.

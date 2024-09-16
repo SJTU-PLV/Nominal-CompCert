@@ -260,18 +260,30 @@ Qed.
 Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
 Definition FM : Type := PTree.t (list (place * ident)).
 
+Definition match_glob (ctx: composite_env) (gd tgd: globdef fundef type) : Prop :=
+  match gd, tgd with
+  | Gvar v1, Gvar v2 =>
+      match_globvar eq v1 v2
+  | Gfun fd1, Gfun fd2 =>
+      transf_fundef ctx fd1 = OK fd2
+  | _, _ => False
+  end.
 
-Record match_prog (p tp: RustIR.program) : Prop := {
-  match_prog_main:
+(* We do not want to introduce link_order in match_states so we do not
+use match_program_gen *)
+Record match_prog (p tp: RustIR.program) : Prop :=
+  {
+    match_prog_main:
     tp.(prog_main) = p.(prog_main);
-  match_prog_public:
+    match_prog_public:
     tp.(prog_public) = p.(prog_public);
-  match_prog_skel:
+    match_prog_types:
+    tp.(prog_types) = p.(prog_types);
+    match_prog_def:
+    forall id, Coqlib.option_rel (match_glob p.(prog_comp_env)) ((prog_defmap p)!id) ((prog_defmap tp)!id);
+    match_prog_skel:
     erase_program tp = erase_program p;
-  match_prog_comp_env:
-    prog_comp_env p = prog_comp_env tp;
-  match_prog_dropm: generate_dropm p = generate_dropm tp;
-}.
+  }.
 
 Lemma match_transf_program: forall p tp,
     transl_program p = OK tp ->
@@ -281,8 +293,10 @@ Proof.
   destruct p. simpl in *. unfold transform_partial_program2 in EQ. 
 Admitted. 
 
+(* Prove match_genv for this specific match_prog *)
 
 Section MATCH_PROGRAMS.
+
 Variable p: program.
 Variable tp: program.
 Hypothesis TRANSL: match_prog p tp.
@@ -294,19 +308,109 @@ Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Hypothesis sematch: Genv.match_stbls j se tse.
 
-Theorem is_internal_match:
-  forall v tv (f tf: RustIR.fundef),
-  fundef_is_internal tf = fundef_is_internal f ->
+Let ce := prog_comp_env p.
+
+Lemma globalenvs_match:
+  Genv.match_genvs j (match_glob ce) (Genv.globalenv se p) (Genv.globalenv tse tp).
+Proof.
+  intros. split; auto. intros. cbn [Genv.globalenv Genv.genv_defs NMap.get].
+  assert (Hd:forall i, Coqlib.option_rel (match_glob ce) (prog_defmap p)!i (prog_defmap tp)!i).
+  {
+    intro. apply TRANSL.
+  }
+  rewrite !PTree.fold_spec.
+  apply PTree.elements_canonical_order' in Hd. revert Hd.
+  generalize (prog_defmap p), (prog_defmap tp). intros d1 d2 Hd.
+  (*   cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2). *)
+  cut (Coqlib.option_rel (match_glob ce)
+         (NMap.get _ b1 (NMap.init (option (globdef (Rusttypes.fundef function) type)) None))
+         (NMap.get _ b2 (NMap.init (option (globdef (Rusttypes.fundef function) type)) None ))).
+  (* adhoc generalize because types are the same *)
+  - generalize (NMap.init (option (globdef (Rusttypes.fundef function) type)) None) at 1 3.
+    generalize (NMap.init (option (globdef (Rusttypes.fundef function) type)) None).
+    induction Hd as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
+    intros t1 t2 Ht. eapply IH. eauto. rewrite Hi.
+    eapply Genv.add_globdef_match; eauto.
+  - unfold NMap.get. rewrite !NMap.gi. constructor.
+Qed.
+
+Theorem find_def_match:
+  forall b tb delta g,
+  Genv.find_def (Genv.globalenv se p) b = Some g ->
+  j b = Some (tb, delta) ->
+  exists tg,
+  Genv.find_def (Genv.globalenv tse tp) tb = Some tg /\
+  match_glob ce g tg /\
+  delta = 0.
+Proof.
+  apply Genv.find_def_match_genvs, globalenvs_match.
+Qed.
+
+Theorem find_funct_match:
+  forall v tv f,
+  Genv.find_funct (Genv.globalenv se p) v = Some f ->
+  Val.inject j v tv ->
+  exists tf,
+  Genv.find_funct (Genv.globalenv tse tp) tv = Some tf /\ transf_fundef ce f = OK tf.
+Proof.
+  intros. exploit Genv.find_funct_inv; eauto. intros [b EQ]. subst v. inv H0.
+  rewrite Genv.find_funct_find_funct_ptr in H. unfold Genv.find_funct_ptr in H.
+  destruct Genv.find_def as [[|]|] eqn:Hf; try congruence. inv H.
+  edestruct find_def_match as (tg & ? & ? & ?); eauto. subst.
+  simpl in H0. destruct tg.
+  rewrite Genv.find_funct_find_funct_ptr. unfold Genv.find_funct_ptr. rewrite H. eauto.
+  contradiction.
+Qed.
+
+
+Theorem find_funct_none:
+  forall v tv,
+  Genv.find_funct (globalenv se p) v = None ->
   Val.inject j v tv ->
   v <> Vundef ->
-  Genv.is_internal (globalenv tse tp) tv = Genv.is_internal (globalenv se p) v.
+  Genv.find_funct (globalenv tse tp) tv = None.
 Proof.
-Admitted. 
-   
-  
+  intros v tv Hf1 INJ Hv. destruct INJ; auto; try congruence.
+  destruct (Mem.sup_dec b1 se.(Genv.genv_sup)).
+  - edestruct Genv.mge_dom; eauto. rewrite H1 in H. inv H.
+    rewrite Ptrofs.add_zero. revert Hf1.
+    unfold Genv.find_funct, Genv.find_funct_ptr, Genv.find_def.
+    destruct Ptrofs.eq_dec; auto.
+    generalize (Genv.mge_defs globalenvs_match b1 H1). intros REL. simpl.
+    inv REL. auto.
+    destruct x. congruence. simpl in H2.
+    destruct y. contradiction. auto.    
+  - unfold Genv.find_funct, Genv.find_funct_ptr, Genv.find_def.
+    destruct Ptrofs.eq_dec; auto.
+    destruct NMap.get as [[|]|] eqn:Hdef; auto. exfalso.
+    apply Genv.genv_defs_range in Hdef.
+    eapply Genv.mge_separated in H; eauto. cbn in *.
+    apply n,H,Hdef.
+Qed.
+
+Theorem is_internal_match :
+  (forall f tf, transf_fundef ce f = OK tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v tv,
+    Val.inject j v tv ->
+    v <> Vundef ->
+    Genv.is_internal (globalenv tse tp) tv = Genv.is_internal (globalenv se p) v.
+Proof.
+  intros Hmatch v tv INJ DEF. unfold Genv.is_internal.
+  destruct (Genv.find_funct _ v) eqn:Hf.
+  - edestruct find_funct_match as (tf & Htf & ?); try eassumption.
+    unfold fundef.
+    simpl. rewrite Htf. eauto.
+  - erewrite find_funct_none; eauto.
+Qed.
+
+
 End INJECT.
+
 End MATCH_PROGRAMS.
 
+
+(* Definitions used in match_cont and match_states *)
 
 Inductive match_drop_place_state : option drop_place_state -> statement -> Prop :=
 | match_dps_none:
@@ -383,7 +487,37 @@ Let ge := globalenv se prog.
 Let tge := globalenv tse tprog.
 Let ce := ge.(genv_cenv).
 
+Hypothesis GE: match_stbls injp w se tse.
+
 Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce).
+
+
+Lemma comp_env_preserved:
+  genv_cenv tge = genv_cenv ge.
+Proof.
+  unfold tge, ge. destruct prog, tprog; simpl. inv TRANSL. simpl in *.
+  congruence.
+Qed.
+
+Lemma dropm_preserved:
+  genv_dropm tge = genv_dropm ge.
+Proof.
+  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSL as [_ EQ]. simpl in EQ.
+  unfold generate_dropm. simpl.
+Admitted.
+
+
+Lemma type_of_fundef_preserved:
+  forall fd tfd,
+  transf_fundef ce fd = OK tfd -> type_of_fundef tfd = type_of_fundef fd.
+Proof.
+  intros. destruct fd; monadInv H; auto.
+  monadInv EQ. destruct x2. destruct p.
+  monadInv EQ2.
+  simpl; unfold type_of_function; simpl. auto.
+Qed.
+
+
 
 (* relation between source env and target env including the own_env
 and invariant of flags map. [(t)lo] is caller stack blocks and [t(hi)]
@@ -452,10 +586,9 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
     match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret m tm bound tbound
-| match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe
+| match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe entry
     (** Do we need match_stacks here?  *)
-    (TRFUN: tr_fun f nret cfg)
-    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
@@ -470,9 +603,8 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
-| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe
-    (TRFUN: tr_fun f nret cfg)
-    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))   
+| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
@@ -499,9 +631,8 @@ Admitted.
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
-  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi
-    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
-    (TRFUN: tr_fun f nret cfg)
+  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi entry
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MSTMT: match_stmt (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg s ts pc next cont brk nret)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MINJ: injp_acc w (injpw j m tm Hm))
@@ -515,9 +646,8 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
-| match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi
-    (AN: analyze ce f = OK (maybeInit, maybeUninit, universe))
-    (TRFUN: tr_fun f nret cfg)    
+| match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi entry
+    (AN: analyze ce f cfg entry= OK (maybeInit, maybeUninit, universe))
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
@@ -674,7 +804,43 @@ Lemma deref_loc_inject: forall ty m b ofs v tm j tb tofs,
     Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
     exists tv, deref_loc ty tm tb tofs tv /\ Val.inject j v tv.
 Admitted.
-    
+
+Lemma deref_loc_rec_inject: forall j m tm b ofs tb tofs tyl v,
+        Mem.inject j m tm ->
+        Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
+        deref_loc_rec m b ofs tyl v ->
+        exists tv, deref_loc_rec tm tb tofs tyl tv /\ Val.inject j v tv.
+Admitted.
+  
+Lemma drop_box_rec_injp_acc: forall m1 m2 tm1 j Hm b ofs tb tofs tyl ge tge
+        (DROP: drop_box_rec ge b ofs m1 tyl m2)
+        (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)),
+      exists tj tm2 tHm,
+        drop_box_rec tge tb tofs tm1 tyl tm2
+        /\ injp_acc (injpw j m1 tm1 Hm) (injpw tj m2 tm2 tHm).
+Admitted.
+
+Lemma eval_expr_inject: forall le m e v tm tle own lo hi flagm tlo thi j
+        (EVAL: eval_expr ge le m e v)
+        (MINJ: Mem.inject j m tm)
+        (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
+        exists tv, eval_expr tge tle tm e tv /\ Val.inject j v tv.
+Admitted.
+
+Lemma eval_exprlist_inject: forall le m args vl tm tle own lo hi flagm tlo thi j tyl
+        (EVAL: eval_exprlist ge le m args tyl vl)
+        (MINJ: Mem.inject j m tm)
+        (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
+        exists tvl, eval_exprlist tge tle tm args tyl tvl /\ Val.inject_list j vl tvl.
+Admitted.
+
+Lemma type_to_drop_member_state_eq: forall id ty,
+    type_to_drop_member_state ge id ty = type_to_drop_member_state tge id ty.
+Proof.
+  intros. unfold type_to_drop_member_state.
+  erewrite comp_env_preserved; eauto. auto.
+  erewrite dropm_preserved; eauto.
+Qed.
 
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
@@ -777,7 +943,7 @@ Proof.
     (* step_drop_struct *)
     econstructor. econstructor.
     eapply star_step. eapply RustIRsem.step_drop_struct; eauto.
-    simpl. simpl in SCO. erewrite <- match_prog_comp_env; eauto.
+    erewrite comp_env_preserved; eauto.
     eapply star_refl.
     1-2: eauto.
     (* match_states *)
@@ -797,7 +963,7 @@ Proof.
     (* step_drop_struct *)
     econstructor. econstructor.
     eapply star_step. eapply RustIRsem.step_drop_enum; eauto.
-    simpl. simpl in SCO. erewrite <- match_prog_comp_env; eauto.
+    erewrite comp_env_preserved; eauto.
     (* use address_inject due with overflow *)
     assert (PERM: Mem.perm m b (Ptrofs.unsigned ofs) Cur Nonempty).
     { exploit Mem.load_valid_access. eapply TAG.
@@ -808,12 +974,7 @@ Proof.
     eapply star_refl.
     1-2: eauto.
     (* match_states *)
-    assert (MSTEQ: type_to_drop_member_state ge fid fty = type_to_drop_member_state tge fid fty).
-    { unfold ge, tge. unfold globalenv. unfold type_to_drop_member_state.
-      simpl. erewrite match_prog_comp_env; eauto.
-      replace (generate_dropm tprog) with (generate_dropm prog). auto.
-      eapply match_prog_dropm. auto. }
-    rewrite MSTEQ.
+    rewrite type_to_drop_member_state_eq.
     econstructor; eauto.
     (* match_cont *)
     econstructor; eauto.
@@ -858,7 +1019,89 @@ Proof.
     admit.
 Abort.
 
-    
+Lemma step_dropstate_simulation:
+  forall S1 t S2, step_drop ge S1 t S2 ->
+   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
+Proof.
+  induction 1; intros; inv MS.
+  (* step_dropstate_init *)
+  - eexists. split.
+    econstructor. econstructor.
+    eapply RustIRsem.step_dropstate_init.
+    eapply star_refl.
+    auto.
+    erewrite type_to_drop_member_state_eq; eauto.
+    econstructor; eauto.
+  (* step_dropstate_struct *)
+  - inv VINJ.
+    exploit deref_loc_rec_inject. eauto.
+    2: eauto. econstructor; eauto.
+    intros (tv & DEREF1 & VINJ1). inv VINJ1.
+    erewrite <- comp_env_preserved in *; eauto.
+    eexists. split.
+    econstructor. econstructor. econstructor; eauto.
+    replace (Ptrofs.add (Ptrofs.add ofs1 (Ptrofs.repr delta)) (Ptrofs.repr fofs)) with (Ptrofs.add (Ptrofs.add ofs1 (Ptrofs.repr fofs)) (Ptrofs.repr delta)).
+    eauto.
+    repeat rewrite Ptrofs.add_assoc. f_equal.
+    apply Ptrofs.add_commut.
+    eapply star_refl.
+    auto.
+    (* match_states *)
+    econstructor. econstructor.
+    econstructor; eauto.
+    eauto. eauto.
+    econstructor; eauto.
+    auto. auto.
+  (* step_dropstate_enum *)
+  - admit.
+  (* step_dropstate_box *)
+  - inv VINJ.
+    exploit (drop_box_rec_injp_acc m m' tm); eauto.
+    instantiate (1:= Hm). instantiate (1 := tge).
+    intros (tj & tm2 & tHm & TDROP & INJP1).
+    erewrite <- comp_env_preserved in *; eauto.
+    eexists. split.
+    (* step *)
+    econstructor. econstructor. econstructor; eauto.
+    replace (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr delta)) (Ptrofs.repr fofs)) with (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr fofs)) (Ptrofs.repr delta)).
+    eauto.
+    repeat rewrite Ptrofs.add_assoc. f_equal.
+    apply Ptrofs.add_commut.
+    eapply star_refl.
+    auto.
+    (* match_states *)
+    generalize INJP1. intros INJP2.
+    inv INJP2.
+    assert (BOUND1: Mem.sup_include lo (Mem.support m')).
+    eapply Mem.sup_include_trans. eauto.
+    eapply Mem.unchanged_on_support; eauto.
+    assert (TBOUND1: Mem.sup_include tlo (Mem.support tm2)).
+    eapply Mem.sup_include_trans. eauto.
+    eapply Mem.unchanged_on_support; eauto.
+    (* match_cont_injp_acc *)
+    exploit match_cont_injp_acc; eauto.
+    intros MCONT1.        
+    econstructor; eauto.
+    etransitivity. eauto. eauto.
+  (* step_dropstate_return1 *)
+  - inv MCONT.
+    eexists. split.
+    econstructor. econstructor. econstructor.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_refl.
+    1-2: eauto.
+    (* match_states *)
+    econstructor; eauto.
+  (* step_dropstate_return2 *)
+  - inv MCONT.
+    eexists. split.
+    econstructor. econstructor. econstructor.
+    eapply star_refl.
+    eauto.
+    (* match_states *)
+    econstructor; eauto.
+Admitted.
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
     exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
@@ -979,7 +1222,6 @@ Proof.
       (* universe equal *)
       + eapply PathsMap.eq_trans; eauto. eapply sound_own_universe; eauto. }
     (* use analyze_succ *)
-    inv TRFUN. clear STMT0 RET.
     exploit analyze_succ; eauto. simpl. eauto.
     instantiate (1 := (move_split_places own drops)).
     unfold transfer. rewrite SEL. rewrite STMT. auto.
@@ -988,7 +1230,25 @@ Proof.
   (* step_in_dropplace *)
   - eapply step_dropplace_simulation. eauto.
     econstructor; eauto.
-
+  (* step_dropstate *)
+  - eapply step_dropstate_simulation. eauto.
+    econstructor; eauto.
+  (* step_storagelive *)
+  - admit.
+  (* step_storagedead *)
+  - admit.
+  (* step_call *)
+  - exploit eval_expr_inject; eauto.
+    intros (tv & TEXPR & VINJ1).
+    exploit eval_exprlist_inject; eauto.
+    intros (tvl & TARGS & VINJ2).
+    assert (GE1: Genv.match_stbls j se tse).
+    { replace j with (mi injp (injpw j m tm Hm)) by auto.
+      eapply match_stbls_proj.
+      eapply match_stbls_acc; eauto. }
+    exploit find_funct_match; eauto.
+    intros (tf1 & FINDFUN1 & TRANSF).
+    
     
 Lemma transf_initial_states q:
   forall S1, initial_state ge q S1 ->
