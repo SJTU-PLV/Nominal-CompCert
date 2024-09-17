@@ -233,7 +233,7 @@ Inductive sound_cont: cont -> Prop :=
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (* own2 is built after the function call *)
     (AFTER: own2 = match p with
-                   | Some p => move_place own1 p
+                   | Some p => init_place own1 p
                    | None => own1 end)
     (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
@@ -539,13 +539,14 @@ Proof.
     (* prove sound_own *)
     unfold transfer. rewrite SEL. rewrite STMT.
     auto.
+  (* step_call *)
   - inv TRSTMT. econstructor.
     inv TRFUN.
     econstructor; eauto.
     exploit analyze_succ. 1-3: eauto. eapply SEL.
     instantiate (1 :=next). simpl. auto. eauto. eauto.
     (* prove sound_own *)
-    instantiate (1 := move_place own2 p). admit.
+    instantiate (1 := (init_place (own_transfer_exprlist own1 al) p)). admit.
     intros (mayinit3 & mayuninit3 & A & B & C). subst. auto.
     econstructor; eauto.
   (* step_internal_function *)
@@ -578,13 +579,14 @@ Proof.
     apply sound_call_cont; auto.
     eapply tr_stacks_call_cont; eauto.
   (* step_returnstate *)
-  - inv TRSTK. inv CONT.
-    inv TRFUN.
-    rewrite CFG in CFG0. inv CFG0.
-    clear TRCONT0.
-    econstructor; eauto.         
-    econstructor; eauto.
-    econstructor.
+  - (** TODO: problem between the nodes in tr_stacks and sound_cont *)
+    (* inv TRSTK. inv CONT. *)
+    (* inv TRFUN. *)
+    (* rewrite CFG in CFG0. inv CFG0. *)
+    (* clear TRCONT. *)
+    (* econstructor; eauto. *)
+    (* econstructor; eauto. *)
+    (* econstructor. *)
     (* prove sound_own *)
     admit.
   (* step_seq *)
@@ -609,10 +611,9 @@ Proof.
   (* step_ifthenelse *)
   - inv TRSTMT.
     econstructor; eauto.
-    instantiate (1 := if b then n1 else n2).
     destruct b; auto.
     (** TODO: ifthenelse must use pure expression *)
-    admit.
+    admit. admit.
   (* step_loop *)
   - inv TRSTMT.
     econstructor; eauto.

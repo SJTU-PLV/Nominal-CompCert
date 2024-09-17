@@ -268,37 +268,43 @@ Next Obligation.
 Admitted.
 Next Obligation.
 Admitted.
-  
+
+(* ownership transfer of an expression *)
+Definition own_transfer_expr (own: own_env) (e: expr) : own_env :=
+  match e with
+  | Emoveplace p ty =>
+      let p := valid_owner p in
+      move_place own p
+  | Epure pe =>
+      own
+  end.
+
+
 (* Move to Rustlight: Check the ownership of expression *)
-Definition own_check_expr (own: own_env) (e: expr) : option own_env :=
+Definition own_check_expr (own: own_env) (e: expr) : bool :=
   match e with
   | Emoveplace p ty =>
       (** FIXME: when to use valid_owner? *)
+      (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
+         partial owned *)
+      (* remove p from init and add p and its children to uninit *)      
       let p := valid_owner p in
-      if check_movable own p then
-        (* consider [a: Box<Box<Box<i32>>>] and we move [*a]. [a] becomes
-        partial owned *)
-        (* remove p from init and add p and its children to uninit *)
-        Some (move_place own p)
-      else
-        (* Error! We must move a movable place! *)
-        None
+      check_movable own p
   | Epure pe =>
-      if own_check_pexpr own pe then
-        Some own
-      else None
+      true
   end.
 
-Fixpoint own_check_exprlist (own: own_env) (l: list expr) : option own_env :=
+Fixpoint own_transfer_exprlist (own: own_env) (l: list expr) : own_env :=
   match l with
-  | nil => Some own
+  | nil => own
   | e :: l' =>
-      match own_check_expr own e with
-      | Some own1 =>
-          own_check_exprlist own1 l'
-      | None => None
-      end
+      own_transfer_exprlist (own_transfer_expr own e) l'
   end.
+
+
+Definition own_check_exprlist (own: own_env) (l: list expr) : bool :=
+  forallb (own_check_expr own) l.
+
 
 (* The dominator of a place [p]: the place's demonator decide the
 location of this place *)
@@ -342,17 +348,16 @@ Admitted.
 Next Obligation.
 Admitted.
 
+Definition own_check_assign (own: own_env) (p: place) : bool :=
+  (* check that the dominator of p is owned (initialized) because we
+  need to compute the address of [p] *)
+  place_dominator_own own p.
 
 (* Update the ownership environment when assigning to p. We must
 ensure that p is not deeply owned because p must be dropped before
 this assignment. *)
-Definition own_check_assign (own: own_env) (p: place) : option own_env :=
-  (* check that the dominator of p is owned (initialized) because we
-  need to compute the address of [p] *)
-  if place_dominator_own own p then
-    Some (init_place own p)
-  else
-    None.             
+Definition own_transfer_assign (own: own_env) (p: place) : own_env :=  
+  init_place own p.
      
 (** Deference a location based on the type  *)
 
@@ -1235,8 +1240,10 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
       (Dropplace f None drops (Kdropinsert l dk k) le own m)
 | step_dropinsert_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
-    (CHKEXPR: own_check_expr own1 e = Some own2)
-    (CHKASSIGN: own_check_assign own2 p = Some own3)
+    (CHKEXPR: own_check_expr own1 e = true)
+    (TFEXPR: own_transfer_expr own1 e = own2)
+    (CHKASSIGN: own_check_assign own2 p = true)
+    (TFASSIGN: own_transfer_assign own2 p = own3)
     (TYP: forall orgs id, typeof_place p <> Tvariant orgs id),
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
@@ -1250,8 +1257,10 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
                     (State f Sskip k le own3 m2)
 | step_dropinsert_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
     (* check ownership *)
-    (CHKEXPR: own_check_expr own1 e = Some own2)
-    (CHKASSIGN: own_check_assign own2 p = Some own3)
+    (CHKEXPR: own_check_expr own1 e = true)
+    (TFEXPR: own_transfer_expr own1 e = own2)
+    (CHKASSIGN: own_check_assign own2 p = true)
+    (TFASSIGN: own_transfer_assign own2 p = own3)
     (* necessary for clightgen simulation *)
     (TYP: typeof_place p = Tvariant orgs enum_id)
     (CO: ge.(genv_cenv) ! enum_id = Some co)
@@ -1313,8 +1322,10 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sassign_variant p enum_id fid e) k le own m) E0 (Dropinsert f drops (Dassign_variant p enum_id fid e) k le own m)         
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
     (* check ownership *)
-    (CHKEXPR: own_check_expr own1 e = Some own2)
-    (CHKASSIGN: own_check_assign own2 p = Some own3),
+    (CHKEXPR: own_check_expr own1 e = true)
+    (TFEXPR: own_transfer_expr own1 e = own2)
+    (CHKASSIGN: own_check_assign own2 p = true)
+    (TFASSIGN: own_transfer_assign own2 p = own3),
     typeof_place p = Tbox ty ->
     (* Simulate malloc semantics to allocate the memory block *)
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
@@ -1348,7 +1359,8 @@ Inductive step : state -> trace -> state -> Prop :=
     step (Dropstate id v s membs k m) E S
 
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
-    (CHKEXPRLIST: own_check_exprlist own1 al = Some own2),    
+    (CHKEXPRLIST: own_check_exprlist own1 al = true)
+    (TFEXPRLIST: own_transfer_exprlist own1 al = own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -1376,7 +1388,8 @@ Inductive step : state -> trace -> state -> Prop :=
     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
     step (State f (Sreturn None) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
 | step_return_1: forall le a v v1 m f k own1 own2 drops param_drops
-    (CHKEXPR: own_check_expr own1 a = Some own2)
+    (CHKEXPR: own_check_expr own1 a = true)
+    (TFEXPR: own_transfer_expr own1 a = own2)
     (EXPR: eval_expr ge le m a v)
     (* sem_cast to the return type *)
     (CAST: sem_cast v (typeof a) f.(fn_return) = Some v1)
@@ -1392,7 +1405,8 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
 
 | step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
-    (CHKASSIGN: own_check_assign own1 p = Some own2),
+    (CHKASSIGN: own_check_assign own1 p = true)
+    (TFASSIGN: own_transfer_assign own1 p = own2),
     eval_place ge e m1 p b ofs ->
     assign_loc ge ty m1 b ofs v m2 ->    
     step (Returnstate v (Kcall (Some p) f e own1 k) m1) E0 (State f Sskip k e own2 m2)
@@ -1414,14 +1428,14 @@ Inductive step : state -> trace -> state -> Prop :=
     (DROPS: drops = vars_to_drops ge (hd nil (cont_vars k))),
     step (State f Sbreak k e own m)
       E0 (Dropinsert f drops Dbreak k e own m)
-| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1 own2
-    (CHKEXPR: own_check_expr own1 a = Some own2),
+| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1
+    (CHKEXPR: own_check_expr own1 a = true),
     (* there is no receiver for the moved place, so it must be None *)
     eval_expr ge e m a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e own1 m)
-      E0 (State f (if b then s1 else s2) k e own2 m)
+      E0 (State f (if b then s1 else s2) k e own1 m)
 | step_loop: forall f s k e m own,
     step (State f (Sloop s) k e own m)
       E0 (State f s (Kloop s k) e own m)
