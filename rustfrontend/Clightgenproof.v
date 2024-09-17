@@ -821,6 +821,17 @@ Proof.
     + eauto.
 Qed. 
 
+Lemma sem_binary_op_trans: forall op tv1 ty1 tv2 ty2 m v cenv,
+  Cop.sem_binary_operation_rust op tv1 ty1 tv2 ty2 m = Some v ->
+  Cop.sem_binary_operation cenv op tv1 ty1 tv2 ty2 m = Some v.  
+Proof. 
+  intros. unfold Cop.sem_binary_operation_rust in H. unfold Cop.sem_binary_operation. 
+  destruct op; eauto. unfold Cop.sem_add_rust in H. unfold Cop.sem_add.
+  destruct (classify_add ty1 ty2); inv H; eauto.
+  unfold Cop.sem_sub_rust in H. unfold Cop.sem_sub. 
+  destruct (classify_sub ty1 ty2); inv H; eauto. 
+Qed. 
+
 Lemma eval_expr_inject: forall e te j a a' m tm v le,
     eval_expr ce e m a v ->
     expr_to_cexpr ce tce a = OK a' ->
@@ -975,8 +986,8 @@ Proof.
       exploit  pexpr_to_cexpr_types.  eapply EQ. 
       intros Htpx. rewrite <- Htpx.
       exploit pexpr_to_cexpr_types. eapply EQ1. 
-      intros Htpx0. rewrite <- Htpx0. 
-      eauto. eauto.
+      intros Htpx0. rewrite <- Htpx0. eapply sem_binary_op_trans. eauto. 
+      eauto. 
 Qed. 
 
 Lemma alignof_blockcopy_1248: forall ty ofs,

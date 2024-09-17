@@ -794,27 +794,70 @@ Proof.
       econstructor; auto.
 Qed.
 
-(** eval_place inject  *)
-Lemma eval_place_inject: forall le tle m tm p b ofs j own lo hi tlo thi flagm,
-    eval_place ge le m p b ofs ->
-    Mem.inject j m tm ->
-    match_envs_flagm j own le m lo hi tle flagm tm tlo thi ->
-    exists b' ofs', eval_place tge tle tm p b' ofs' /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
-Admitted.
-
 Lemma deref_loc_inject: forall ty m b ofs v tm j tb tofs,
     deref_loc ty m b ofs v ->
     Mem.inject j m tm ->
     Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
     exists tv, deref_loc ty tm tb tofs tv /\ Val.inject j v tv.
-Admitted.
+Proof.
+    intros. inv H. 
+    - (*by value*)
+      exploit Mem.loadv_inject; eauto. intros [tv [A B]].
+      exists tv. split. econstructor. 
+      instantiate (1:= chunk). 
+      destruct ty; simpl in *; congruence.
+      auto. auto.
+    - (* by ref*)
+      exists ((Vptr tb tofs)). split. 
+      eapply deref_loc_reference. 
+      destruct ty; simpl in *; congruence.
+      auto. 
+    - (*by copy*)
+      exists (Vptr tb tofs). split. eapply deref_loc_copy.
+      destruct ty; simpl in *; congruence.
+      auto.
+  Qed. 
+
+Lemma eval_place_inject: forall le tle m tm p b ofs j own lo hi tlo thi flagm,
+    eval_place ge le m p b ofs ->
+    Mem.inject j m tm ->
+    match_envs_flagm j own le m lo hi tle flagm tm tlo thi ->
+    exists b' ofs', eval_place tge tle tm p b' ofs' /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
+Proof. 
+  induction 1; intros. 
+  - exploit me_vars; eauto. intros (tb & TE & J). eexists. eexists. split. eapply eval_Plocal; eauto. 
+    eapply Val.inject_ptr; eauto.
+  - exploit IHeval_place; eauto. intros (b' & ofs' & EV & INJ).  
+    rewrite comp_env_preserved in *. 
+    inv INJ. eexists. eexists. split. econstructor; eauto.
+    eapply Val.inject_ptr; eauto.  
+    repeat rewrite Ptrofs.add_assoc. f_equal.  
+    rewrite Ptrofs.add_commut. eauto. 
+  - exploit IHeval_place; eauto. intros (b' & ofs' & EV & INJ). 
+    exploit Mem.loadv_inject; eauto. intros [v' [A B]]. inv B.
+    rewrite comp_env_preserved in *. 
+    eexists. eexists. split. econstructor; eauto. 
+    inv INJ. econstructor; eauto. 
+    repeat rewrite Ptrofs.add_assoc. f_equal.  
+    rewrite Ptrofs.add_commut. eauto. 
+  - exploit IHeval_place; eauto. 
+    intros (b' & ofs'0 & EV & INJ). 
+    exploit deref_loc_inject; eauto. intros [v' [A B]]. inv B. 
+    eexists. eexists. split. econstructor; eauto. econstructor; eauto. 
+Qed. 
 
 Lemma deref_loc_rec_inject: forall j m tm b ofs tb tofs tyl v,
-        Mem.inject j m tm ->
-        Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
-        deref_loc_rec m b ofs tyl v ->
-        exists tv, deref_loc_rec tm tb tofs tyl tv /\ Val.inject j v tv.
-Admitted.
+    deref_loc_rec m b ofs tyl v ->
+    Mem.inject j m tm ->
+    Val.inject j (Vptr b ofs) (Vptr tb tofs) ->
+    exists tv, deref_loc_rec tm tb tofs tyl tv /\ Val.inject j v tv.
+Proof. 
+  induction 1. 
+  - intros. eexists. split. econstructor. auto. 
+  - intros A B. exploit IHderef_loc_rec; eauto. intros (tv & C & D).
+    inv D. exploit deref_loc_inject; eauto. intros (tv' & E & F). 
+    eexists. split. econstructor; eauto. auto.
+Qed. 
   
 Lemma drop_box_rec_injp_acc: forall m1 m2 tm1 j Hm b ofs tb tofs tyl ge tge
         (DROP: drop_box_rec ge b ofs m1 tyl m2)
@@ -822,14 +865,61 @@ Lemma drop_box_rec_injp_acc: forall m1 m2 tm1 j Hm b ofs tb tofs tyl ge tge
       exists tj tm2 tHm,
         drop_box_rec tge tb tofs tm1 tyl tm2
         /\ injp_acc (injpw j m1 tm1 Hm) (injpw tj m2 tm2 tHm).
-Admitted.
+Proof. 
+  
+Admitted. 
 
-Lemma eval_expr_inject: forall le m e v tm tle own lo hi flagm tlo thi j
+
+
+Lemma eval_pexpr_inject:
+  forall e le m v tm tle own lo hi flagm tlo thi j
+    (EVAL: eval_pexpr ge le m e v)
+    (MINJ: Mem.inject j m tm)
+    (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
+    exists tv, eval_pexpr tge tle tm e tv /\ Val.inject j v tv.
+Proof. 
+  induction 1; intros. 
+  - eexists. split. econstructor. eauto. 
+  - eexists. split. econstructor. eauto. 
+  - eexists. split. econstructor. eauto. 
+  - eexists. split. econstructor. eauto. 
+  - eexists. split. econstructor. eauto. 
+  - exploit IHEVAL; eauto. intros (tv & A & B).
+    exploit Cop.sem_unary_operation_inject; eauto. intros (tv' & C & D). 
+    eexists. split. 
+    econstructor; eauto. eauto. 
+  - exploit IHEVAL1; eauto. intros (tv1 & A1 & B1).
+    exploit IHEVAL2; eauto. intros (tv2 & A2 & B2).
+    exploit Cop.sem_binary_operation_rust_inject; eauto. intros (tv' & C & D). 
+    eexists. split. 
+    econstructor; eauto. unfold Cop.sem_binary_operation_rust. 
+    destruct op; eauto.
+  - exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ).  
+    exploit deref_loc_inject; eauto. intros (tv & TDEREF & VINJ).
+    eexists. split. econstructor; eauto. auto. 
+  - exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ).  
+    inv INJ. exploit Mem.loadv_inject; eauto. intros (tv & A & B). inv B. 
+    eexists. split. econstructor; eauto. 
+    rewrite comp_env_preserved; auto. 
+    destruct (Int.eq tag (Int.repr tagz)); simpl; econstructor. 
+  - exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ).  
+    eexists. split. econstructor; eauto. auto.
+Qed. 
+
+
+Lemma eval_expr_inject: forall e le m v tm tle own lo hi flagm tlo thi j
         (EVAL: eval_expr ge le m e v)
         (MINJ: Mem.inject j m tm)
         (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
         exists tv, eval_expr tge tle tm e tv /\ Val.inject j v tv.
-Admitted.
+Proof. 
+  destruct e; intros. 
+  - inv EVAL. inv H2. exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ). 
+    exploit deref_loc_inject; eauto. intros (tv & TDEREF & VINJ). 
+    eexists. split. econstructor. eapply eval_Eplace; eauto. eauto. 
+  - inv EVAL. exploit eval_pexpr_inject; eauto. intros (tv & A & B). 
+    eexists. split. econstructor. eauto. auto. 
+Qed.
 
 Lemma eval_exprlist_inject: forall le m args vl tm tle own lo hi flagm tlo thi j tyl
         (EVAL: eval_exprlist ge le m args tyl vl)

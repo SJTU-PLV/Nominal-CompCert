@@ -1474,10 +1474,10 @@ Proof.
 Qed.
 
 Lemma sem_binary_operation_rust_inj:
-  forall op v1 ty1 v2 ty2 v tv1 tv2 cenv,
+  forall op v1 ty1 v2 ty2 v tv1 tv2,
   sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
   Val.inject f v1 tv1 -> Val.inject f v2 tv2 ->
-  exists tv, sem_binary_operation cenv op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
+  exists tv, sem_binary_operation_rust op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
   Proof.
     unfold sem_binary_operation_rust; unfold sem_binary_operation; intros; destruct op.
     - (* add *)
@@ -1569,11 +1569,11 @@ Proof.
 Qed.
 
 Lemma sem_binary_operation_rust_inject:
-  forall f m m' op v1 ty1 v2 ty2 v tv1 tv2 cenv,
+  forall f m m' op v1 ty1 v2 ty2 v tv1 tv2,
   sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
   Val.inject f v1 tv1 -> Val.inject f v2 tv2 ->
   Mem.inject f m m' ->
-  exists tv, sem_binary_operation cenv op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
+  exists tv, sem_binary_operation_rust op tv1 ty1 tv2 ty2 m' = Some tv /\ Val.inject f v tv.
 Proof.
   intros. eapply sem_binary_operation_rust_inj; eauto.
   intros; eapply Mem.valid_pointer_inject_val; eauto.
