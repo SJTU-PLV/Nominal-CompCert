@@ -211,12 +211,12 @@ Definition elaborate_stmt (an: PathsMap.t * PathsMap.t * PathsMap.t) (stmt: stat
       let deinit := moved_place e in
       let stmt1 := add_dropflag_option deinit false in
       let stmt2 := add_dropflag p true in
-      OK (makeseq (stmt1 :: stmt2 :: stmt :: nil))
+      OK (Ssequence stmt1 (Ssequence stmt2 stmt))
   | Scall p e el =>
       let mvpaths := moved_place_list el in
       let stmt1 := add_dropflag_list mvpaths false in
       let stmt2 := add_dropflag p true in
-      OK (makeseq (stmt1 :: stmt :: stmt2 :: nil))
+      OK (Ssequence (Ssequence stmt1 stmt) stmt2)
   | _ => OK stmt
   end.
 

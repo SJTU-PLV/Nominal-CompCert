@@ -52,7 +52,7 @@ Inductive cont : Type :=
 | Kstop: cont
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
-| Kcall: option place -> function -> env -> own_env -> cont -> cont
+| Kcall: place -> function -> env -> own_env -> cont -> cont
 (* used to record Dropplace state *)
 | Kdropplace: function -> option drop_place_state -> list (place * bool) -> env -> own_env -> cont -> cont
 | Kdropcall: ident -> val -> option drop_member_state -> members -> cont -> cont
@@ -143,14 +143,6 @@ Admitted.
 Next Obligation.
 Admitted.
 
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
-| function_entry_intro: forall m1 
-    (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
-    (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
-    (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2)
-    (* initialize own_env *)
-    (INITOWN: init_own_env ge f = OK own),
-    function_entry ge f vargs m e m2 own.
 
 Section SMALLSTEP.
 
@@ -450,12 +442,14 @@ Inductive step : state -> trace -> state -> Prop :=
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     (* Cannot call drop glue *)
     (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
-    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le own2 k) m)
+    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 
 | step_internal_function: forall vf f vargs k m e m' init_own
     (FIND: Genv.find_funct ge vf = Some (Internal f))
     (NORMAL: f.(fn_drop_glue) = None)
-    (ENTRY: function_entry ge f vargs m e m' init_own),
+    (* initialize own_env *)
+    (INITOWN: init_own_env ge f = OK init_own)
+    (ENTRY: function_entry ge f vargs m e m'),
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e init_own m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
@@ -493,7 +487,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (TFASSIGN: own_transfer_assign own1 p = own2),
     eval_place ge e m1 p b ofs ->
     assign_loc ge ty m1 b ofs v m2 ->    
-    step (Returnstate v (Kcall (Some p) f e own1 k) m1) E0 (State f Sskip k e own2 m2)
+    step (Returnstate v (Kcall p f e own1 k) m1) E0 (State f Sskip k e own2 m2)
 
 (* Control flow statements *)
 | step_seq:  forall f s1 s2 k e m own,
@@ -733,12 +727,12 @@ Inductive step_mem_error : state -> Prop :=
     step_mem_error (State f Sskip k le own m)
 | step_returnstate_error1: forall p v m f k e own,
     eval_place_mem_error ge e m p ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e own k) m)
+    step_mem_error (Returnstate v (Kcall p f e own k) m)
 | step_returnstate_error2: forall p v m f k e b ofs ty own,
     ty = typeof_place p ->
     eval_place ge e m p b ofs ->
     assign_loc_mem_error ge ty m b ofs v ->
-    step_mem_error (Returnstate v (Kcall (Some p) f e own k) m)
+    step_mem_error (Returnstate v (Kcall p f e own k) m)
 | step_ifthenelse_error:  forall f a s1 s2 k e m own,
     eval_expr_mem_error ge e m a ->
     step_mem_error (State f (Sifthenelse a s1 s2) k e own m)

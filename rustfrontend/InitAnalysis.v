@@ -232,9 +232,7 @@ Inductive sound_cont: cont -> Prop :=
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (TRCONT: tr_cont f.(fn_body) cfg k pc cont brk nret)
     (* own2 is built after the function call *)
-    (AFTER: own2 = match p with
-                   | Some p => init_place own1 p
-                   | None => own1 end)
+    (AFTER: own2 = init_place own1 p)                   
     (OWN: sound_own own2 mayinit mayuninit universe)
     (CONT: sound_cont k),
     sound_cont (Kcall p f le own1 k)
@@ -294,13 +292,31 @@ Inductive sound_state: state -> Prop :=
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
 .
     
-(* soundness of function entry *)
+(* soundness of function entry: use fixpoint_entry to prove it *)
 Lemma sound_function_entry: forall f initMap uninitMap universe entry cfg own
     (AN: analyze ce f cfg entry = OK (initMap, uninitMap, universe))
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
     (FENTRY: init_own_env ce f = OK own),
     sound_own own initMap!!entry uninitMap!!entry universe.
-Admitted.
+Proof.
+  intros. unfold analyze in AN. unfold init_own_env in FENTRY.
+  Errors.monadInv FENTRY.
+  rewrite EQ in AN. simpl in AN.
+  set (initParams := fold_right (add_place x)
+                  (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)
+                  (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))) in *.  
+  set (uninitVars := fold_right (add_place x)
+                    (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)
+                    (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f))) in *.
+  destruct (DS.fixpoint cfg successors_instr (transfer x true f cfg) entry initParams) eqn: initAN; try congruence.
+  destruct (DS.fixpoint cfg successors_instr (transfer x false f cfg) entry uninitVars) eqn: uninitAN; try congruence.
+  inv AN.
+  eapply DS.fixpoint_entry in initAN.
+  eapply DS.fixpoint_entry in uninitAN.
+  constructor; auto.
+  simpl. eapply PathsMap.eq_refl.
+Qed.
+
 
 (* Some properties of call_cont *)
 Lemma sound_call_cont: forall k,

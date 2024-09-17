@@ -79,14 +79,7 @@ Inductive state: Type :=
     (ds: option drop_member_state)
     (ms: members)
     (k: cont)
-    (m: mem): state.              
-
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
-| function_entry_intro: forall m1,
-    list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
-    alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-    bind_parameters ge e m1 f.(fn_params) vargs m' ->
-    function_entry ge f vargs m e m'.
+    (m: mem): state.
 
 Section SMALLSTEP.
 

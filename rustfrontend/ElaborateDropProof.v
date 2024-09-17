@@ -562,6 +562,12 @@ Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 t
     match_envs_flagm j2 own le m2 lo hi tle flagm tm2 tlo thi.
 Admitted.
 
+Lemma match_envs_flagm_incr: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 thi2
+   (MENV: match_envs_flagm j own le m lo hi1 tle flagm tm tlo thi1)
+   (INCR: Mem.sup_include hi1 hi2)
+   (TINCR: Mem.sup_include thi1 thi2),
+    match_envs_flagm j own le m lo hi2 tle flagm tm tlo thi2.
+Admitted.
 
 Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
 | match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret m tm bound tbound
@@ -577,11 +583,11 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (MCONT: match_cont j an flagm body cfg k tk exit_loop contn brk nret m tm bound tbound),
     match_cont j an flagm body cfg (Kloop s k) (RustIRsem.Kloop ts tk) loop_jump_node (Some loop_jump_node) (Some exit_loop) nret m tm bound tbound
 | match_Kcall: forall an flagm body cfg k tk nret f tf le tle own p m tm bound tbound
-    (MSTK: match_stacks j (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) m tm bound tbound)
+    (MSTK: match_stacks j (Kcall p f le own k) (RustIRsem.Kcall (Some p) tf tle tk) m tm bound tbound)
     (RET: cfg ! nret = Some Iend),
     (* in the end of a function. an and body are not important, those
     in match_stacks are important *)
-    match_cont j an flagm body cfg (Kcall p f le own k) (RustIRsem.Kcall p tf tle tk) nret None None nret m tm bound tbound
+    match_cont j an flagm body cfg (Kcall p f le own k) (RustIRsem.Kcall (Some p) tf tle tk) nret None None nret m tm bound tbound
 | match_Kdropcall: forall an flagm body cfg k tk pc cont brk nret st membs b tb ofs tofs id m tm bound tbound
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
@@ -610,11 +616,9 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* own2 is built after the function call *)
-    (AFTER: own2 = match p with
-                   | Some p => move_place own1 p
-                   | None => own1 end)
+    (AFTER: own2 = init_place own1 p)                  
     (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe),
-    match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall p tf tle tk) m tm hi thi
+    match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall (Some p) tf tle (RustIRsem.Kseq (add_dropflag flagm p true) tk)) m tm hi thi
 .
 
 (** Properties of match_cont  *)
@@ -834,6 +838,7 @@ Lemma eval_exprlist_inject: forall le m args vl tm tle own lo hi flagm tlo thi j
         exists tvl, eval_exprlist tge tle tm args tyl tvl /\ Val.inject_list j vl tvl.
 Admitted.
 
+
 Lemma type_to_drop_member_state_eq: forall id ty,
     type_to_drop_member_state ge id ty = type_to_drop_member_state tge id ty.
 Proof.
@@ -842,6 +847,25 @@ Proof.
   erewrite dropm_preserved; eauto.
 Qed.
 
+(** IMPORTANT TODO *)
+Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 (flag: bool) p tk tf
+  (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
+  (OWN: own2 = if flag then init_place own1 p else move_place own1 p),
+  exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag flagm p flag) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)         
+         /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+         /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2).
+Admitted.
+
+(* only consider move_place *)
+Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 tk tf
+    (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
+    (OWN: own2 = own_transfer_exprlist own1 al),
+    exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag_list flagm (moved_place_list al) false) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+               /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+               /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) .
+Admitted.
+
+  
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
 Lemma step_dropplace_simulation:
@@ -1238,7 +1262,12 @@ Proof.
   (* step_storagedead *)
   - admit.
   (* step_call *)
-  - exploit eval_expr_inject; eauto.
+  - (* evaluate drop flag list of arguments *)
+    exploit eval_dropflag_list_match; eauto.
+    instantiate (1 := Hm). instantiate (1:= al).
+    instantiate (2 := tf).
+    intros (tm1 & Hm1 & EVAL1 & MENV1 & MINJ1).
+    exploit eval_expr_inject; eauto.
     intros (tv & TEXPR & VINJ1).
     exploit eval_exprlist_inject; eauto.
     intros (tvl & TARGS & VINJ2).
@@ -1248,6 +1277,72 @@ Proof.
       eapply match_stbls_acc; eauto. }
     exploit find_funct_match; eauto.
     intros (tf1 & FINDFUN1 & TRANSF).
+    inv MSTMT. simpl in TR. inv TR.
+    (* match_cont injp_acc *)
+    exploit match_cont_injp_acc. eauto.
+    eauto.
+    eapply Mem.sup_include_trans.
+    eapply me_incr. eauto. auto.
+    eapply Mem.sup_include_trans.
+    eapply me_tincr. eauto. auto.
+    intros MCONT1.    
+    eexists. split.
+    (* step *)
+    econstructor. econstructor.
+    eapply star_step. econstructor.
+    eapply plus_star. eapply plus_trans.
+    eapply EVAL1.
+    econstructor. eapply RustIRsem.step_skip_seq.
+    eapply star_step.
+    (* eval function call *)
+    econstructor; eauto.
+    erewrite type_of_fundef_preserved; eauto.
+    (** TODO: add good_function in RustIRown *)
+    admit.
+    eapply star_refl.
+    1-5: eauto.
+    (* match_states *)
+    econstructor; eauto.
+    etransitivity; eauto.
+    (* match_stacks *)
+    econstructor; eauto.
+    (* match_envs_flagm *)
+    eapply match_envs_flagm_incr. eapply MENV1.
+    auto.
+    inv MINJ1. eapply Mem.sup_include_trans.
+    eauto. eapply Mem.unchanged_on_support. eauto.
+    (** sound_own *)
+    exploit analyze_succ; eauto.
+    simpl. eauto.
+    instantiate (1 := (init_place (own_transfer_exprlist own1 al) p)).
+    2: { intros (mayinit3 & mayuninit3 & A & B & C). subst. auto. }
+    unfold transfer. rewrite SEL.
+    rewrite STMT.
+    (** IMPORTANT TODO: sound_own in call *)
+    admit.
+  (** DIFFICULT: step_internal_function *)
+  - simpl in  FIND.
+    assert (GE1: Genv.match_stbls j se tse).
+    { replace j with (mi injp (injpw j m tm Hm)) by auto.
+      eapply match_stbls_proj.
+      eapply match_stbls_acc; eauto. }    
+    exploit find_funct_match; eauto.
+    intros (tf & TFIND & TRFUN).
+    (* destruct tf *)
+    unfold transf_fundef in TRFUN.
+    monadInv TRFUN. unfold transf_function in EQ.
+    monadInv EQ. destruct x2 as [[mayinitMap mayuninitMap] universe].
+    monadInv EQ2.
+    (* use transl_on_cfg_meet_spec to get match_stmt in fuction entry *)
+    exploit (@transl_on_cfg_meet_spec AN); eauto.
+    intros (nret & MSTMT).
+    (* own_env in function entry is sound *)
+    exploit sound_function_entry. simpl. eauto.
+    eauto. eauto. intros OWNENTRY.
+    (** TODO: construct function entry in target program *)
+    eexists. split.
+    (* step *)
+    econstructor. econstructor; eauto.
     
     
 Lemma transf_initial_states q:

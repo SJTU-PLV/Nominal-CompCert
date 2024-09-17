@@ -173,6 +173,13 @@ Inductive bind_parameters (ce: composite_env) (e: env):
       bind_parameters ce e m1 params vl m2 ->
       bind_parameters ce e m ((id, ty) :: params) (v1 :: vl) m2.
 
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
+| function_entry_intro: forall m1,
+    list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
+    alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+    bind_parameters ge e m1 f.(fn_params) vargs m' ->
+    function_entry ge f vargs m e m'.
+
 End SEMANTICS.
 
 (* Used in RustIRown and InitAnalysis *)
