@@ -519,22 +519,8 @@ Qed.
 
 
 
-(* relation between source env and target env including the own_env
-and invariant of flags map. [(t)lo] is caller stack blocks and [t(hi)]
-is callee stack blocks (including heap blocks), so [(t)lo] ⊆
-[(t)[hi]] *)
-Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (flagm: FM) (tm: mem) (tlo thi: Mem.sup) : Type :=
-  { me_wf_flagm: forall p id,
-      get_dropflag_temp flagm p = Some id ->
-      exists tb v, te ! id = Some (tb, type_bool)
-              /\ e ! id = None    
-              /\ Mem.load Mint8unsigned tm tb 0 = Some (Vint v)
-              (* TODO: add a rust bool_val *)
-              /\ negb (Int.eq v Int.zero) = is_owned own p
-              (* protection *)
-              /\ (forall ofs, loc_out_of_reach j m tb ofs);
-
-    me_vars: forall id b ty,
+Record match_envs (j: meminj) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (tm: mem) (tlo thi: Mem.sup) : Type :=
+  { me_vars: forall id b ty,
       e ! id = Some (b, ty) ->
       exists tb, te ! id = Some (tb, ty)
             /\ j b = Some (tb, 0);
@@ -550,9 +536,49 @@ Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem
     me_incr:
       Mem.sup_include lo hi;
     me_tincr:
-      Mem.sup_include tlo thi;    
+      Mem.sup_include tlo thi;
+    
+    (* use out_of_reach to protect the drop flags *)
+    me_protect: forall id b ty,
+      e ! id = None ->
+      te ! id = Some (b, ty) ->
+      (* used in free_list *)
+      Mem.range_perm tm b 0 (size_chunk Mint8unsigned) Cur Freeable
+      /\ (forall ofs, loc_out_of_reach j m b ofs);  
   }.
 
+(* relation between source env and target env including the own_env
+and invariant of flags map. [(t)lo] is caller stack blocks and [t(hi)]
+is callee stack blocks (including heap blocks), so [(t)lo] ⊆
+[(t)[hi]] *)
+Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (flagm: FM) (tm: mem) (tlo thi: Mem.sup) : Type :=
+  { me_wf_flagm: forall p id,
+      get_dropflag_temp flagm p = Some id ->
+      exists tb v, te ! id = Some (tb, type_bool)
+              /\ e ! id = None
+              /\ Mem.load Mint8unsigned tm tb 0 = Some (Vint v)
+              (* TODO: add a rust bool_val *)
+              /\ negb (Int.eq v Int.zero) = is_owned own p;
+    
+    me_envs: match_envs j e m lo hi te tm tlo thi;
+  }.
+
+
+(* empty env match *)
+Lemma match_empty_envs: forall j m tm lo hi tlo thi,
+    Mem.sup_include lo hi ->
+    Mem.sup_include tlo thi ->
+    match_envs j empty_env m lo hi empty_env tm tlo thi.
+Proof.
+  intros.
+  constructor; intros.
+  erewrite PTree.gempty in *. congruence.
+  erewrite PTree.gempty in *. congruence.
+  erewrite PTree.gempty in *. congruence.
+  auto. auto.
+  erewrite PTree.gempty in *. congruence.
+Qed.
+  
 (** Properties of match_envs_flagm *)
 Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi Hm1 Hm2,
     match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi ->
@@ -567,6 +593,57 @@ Lemma match_envs_flagm_incr: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 
    (INCR: Mem.sup_include hi1 hi2)
    (TINCR: Mem.sup_include thi1 thi2),
     match_envs_flagm j own le m lo hi2 tle flagm tm tlo thi2.
+Admitted.
+
+Lemma match_envs_flagm_bound_unchanged: forall j own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi ,
+    match_envs_flagm j own le m1 lo hi tle flagm tm1 tlo thi ->
+    Mem.unchanged_on (fun b _ => ~ In b hi) m1 m2 ->
+    Mem.unchanged_on (fun b _ => ~ In b thi) tm1 tm2 ->
+    match_envs_flagm j own le m2 lo hi tle flagm tm2 tlo thi.
+Proof.
+Admitted.
+
+(* establish match_envs after the allocation of the drop flags in the
+target programs *)
+Lemma alloc_drop_flags_match: forall j1 m1 tm1 e1 lo hi te1 tlo thi flags Hm1
+    (MENV: match_envs j1 e1 m1 lo hi te1 tm1 tlo thi)
+    (SINCR: Mem.sup_include thi (Mem.support tm1))
+    (TYS: forall id ty, In (id, ty) flags -> ty = type_bool)
+    (DISJOINT: forall id ty, In (id, ty) flags -> e1 ! id = None),
+  exists te2 tm2 Hm2,
+    alloc_variables tge te1 tm1 flags te2 tm2
+    /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j1 m1 tm2 Hm2)
+    (* wf_dropm *)
+    /\ (forall id, In id (map fst flags) ->
+             exists b, te2 ! id = Some (b, type_bool)
+                  /\ e1 ! id = None)
+    /\ match_envs j1 e1 m1 lo hi te2 tm2 tlo (Mem.support tm2).
+Admitted.
+
+(* allocate the same variables inject *)
+Lemma alloc_variables_match: forall e1 te1 m1 tm1 vars e2 m2 lo hi tlo thi j1 Hm1
+    (ALLOC: alloc_variables ge e1 m1 vars e2 m2)
+    (MENV: match_envs j1 e1 m1 lo hi te1 tm1 tlo thi)
+    (INCL: Mem.sup_include hi (Mem.support m1))
+    (TINCL: Mem.sup_include thi (Mem.support tm1)),
+  exists j2 tm2 Hm2 te2,
+    alloc_variables tge te1 tm1 vars te2 tm2
+    /\ match_envs j2 e2 m2 lo (Mem.support m2) te2 tm2 tlo (Mem.support tm2)
+    /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2).
+Admitted.
+
+Lemma alloc_variables_app: forall ce m1 m2 m3 l1 l2 e1 e2 e3,
+    alloc_variables ce e1 m1 l1 e2 m2 ->
+    alloc_variables ce e2 m2 l2 e3 m3 ->
+    alloc_variables ce e1 m1 (l1 ++ l2) e3 m3.
+Admitted.
+
+Lemma bind_parameters_injp_acc: forall params e te m1 m2 vl j lo hi tlo thi tm1 Hm1
+    (STORE: bind_parameters ge e m1 params vl m2)
+    (MENV: match_envs j e m1 lo hi te tm1 tlo thi),
+  exists tm2 Hm2,
+    bind_parameters tge te tm1 params vl tm2
+    /\ injp_acc (injpw j m1 tm1 Hm1) (injpw j m2 tm2 Hm2).
 Admitted.
 
 Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
@@ -631,7 +708,16 @@ Lemma match_cont_injp_acc: forall j1 j2 an fm body cfg k tk pc cont brk nret m1 
     match_cont j2 an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
 Admitted.
 
-
+(* how to establish match_cont when modifying the drop flags in the
+current stacks? We should use match_envs_flagm_unchanged to prove
+it *)
+Lemma match_cont_bound_unchanged: forall j an fm body cfg k tk pc cont brk nret m1 m2 tm1 tm2 lo tlo,
+    match_cont j an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo ->
+    Mem.unchanged_on (fun b _ => ~ In b lo) m1 m2 ->
+    Mem.unchanged_on (fun b _ => ~ In b tlo) tm1 tm2 ->
+    match_cont j an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
+Proof.
+Admitted.
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
@@ -825,7 +911,8 @@ Lemma eval_place_inject: forall le tle m tm p b ofs j own lo hi tlo thi flagm,
     exists b' ofs', eval_place tge tle tm p b' ofs' /\ Val.inject j (Vptr b ofs) (Vptr b' ofs').
 Proof. 
   induction 1; intros. 
-  - exploit me_vars; eauto. intros (tb & TE & J). eexists. eexists. split. eapply eval_Plocal; eauto. 
+  - exploit me_vars; eauto. eapply me_envs; eauto.
+    intros (tb & TE & J). eexists. eexists. split. eapply eval_Plocal; eauto. 
     eapply Val.inject_ptr; eauto.
   - exploit IHeval_place; eauto. intros (b' & ofs' & EV & INJ).  
     rewrite comp_env_preserved in *. 
@@ -955,6 +1042,12 @@ Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm
                /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) .
 Admitted.
 
+(** IMPORTANT TODO  *)
+Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
+    (GEN: generate_drop_flags mayinitMap mayuninitMap universe ce f cfg = OK flags),
+    sound_flagm ce f.(fn_body) cfg (generate_place_map flags) mayinitMap mayuninitMap universe.
+Admitted.
+
   
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
@@ -970,7 +1063,7 @@ Proof.
     inv MSPLIT.
     (* there is drop flag and the value of drop flag is false *)
     + exploit me_wf_flagm; eauto.
-      intros (tb & v & TE & LE & LOAD & ISOWN & OUTREACH).
+      intros (tb & v & TE & LOAD & ISOWN).
       simpl.
       eexists. split.
       (* step in target *)
@@ -991,7 +1084,7 @@ Proof.
   - inv MDPS. inv MSPLIT.
     (* there is a drop flag *)
     + exploit me_wf_flagm; eauto.
-      intros (tb & v & TE & LE & LOAD & ISOWN & OUTREACH).
+      intros (tb & v & TE  & LOAD & ISOWN & OUTREACH).
       simpl.
       eexists. split.
       (* step in target *)
@@ -1036,8 +1129,8 @@ Proof.
     (* match_cont_injp_acc *)
     eapply match_cont_injp_acc. eapply MCONT.
     eauto.
-    eapply Mem.sup_include_trans. eapply me_incr; eauto. auto.
-    eapply Mem.sup_include_trans. eapply me_tincr; eauto. auto.
+    eapply Mem.sup_include_trans. eapply me_incr; eapply me_envs; eauto. auto.
+    eapply Mem.sup_include_trans. eapply me_tincr; eapply me_envs; eauto. auto.
     (* match_drop_place_state *)
     econstructor.
     eauto. etransitivity; eauto.
@@ -1148,8 +1241,7 @@ Proof.
     econstructor; eauto.
   (* step_dropstate_struct *)
   - inv VINJ.
-    exploit deref_loc_rec_inject. eauto.
-    2: eauto. econstructor; eauto.
+    exploit deref_loc_rec_inject; eauto.
     intros (tv & DEREF1 & VINJ1). inv VINJ1.
     erewrite <- comp_env_preserved in *; eauto.
     eexists. split.
@@ -1372,9 +1464,9 @@ Proof.
     exploit match_cont_injp_acc. eauto.
     eauto.
     eapply Mem.sup_include_trans.
-    eapply me_incr. eauto. auto.
+    eapply me_incr. eapply me_envs. eauto. auto.
     eapply Mem.sup_include_trans.
-    eapply me_tincr. eauto. auto.
+    eapply me_tincr. eapply me_envs. eauto. auto.
     intros MCONT1.    
     eexists. split.
     (* step *)
@@ -1428,8 +1520,30 @@ Proof.
     intros (nret & MSTMT).
     (* own_env in function entry is sound *)
     exploit sound_function_entry. simpl. eauto.
-    eauto. eauto. intros OWNENTRY.
+    eauto. eauto. intros OWNENTRY.        
     (** TODO: construct function entry in target program *)
+    inv ENTRY.
+    (* alloc the same variables and parameters in source and target *)
+    exploit alloc_variables_match; eauto.
+    eapply match_empty_envs.
+    eapply Mem.sup_include_refl.
+    instantiate (1 := tm). eapply Mem.sup_include_refl.
+    instantiate (1 := Hm).
+    intros (j1 & tm1 & Hm1 & te1 & ALLOC1 & MENV1 & INJP1).
+    (* alloc drop flag in the target program *)
+    set (flags := combine (map snd x2) (repeat type_bool (Datatypes.length x2))) in *.
+    exploit alloc_drop_flags_match; eauto.    
+    instantiate (1 := flags).
+    (* easy: all types of drop flag is bool *)
+    admit.
+    (* easy: added a norepet check in target program to ensure that
+    source env does not contains identities of drop flags *)
+    admit.
+    instantiate (1 := Hm1).
+    intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & MENV2).
+
+    
+    
     eexists. split.
     (* step *)
     econstructor. econstructor; eauto.
