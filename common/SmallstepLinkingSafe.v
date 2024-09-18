@@ -86,25 +86,8 @@ Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invar
       reply_inv IB wI r;    
   }.
 
-(* Definition lts_safe_triple {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) : Prop := *)
-(*   forall q, valid_query L q = true -> *)
-(*        query_inv IB wI q ->        *)
-(*        (* initial progress *) *)
-(*        (exists s, initial_state L q s) *)
-(*        (* safe *) *)
-(*        /\ (forall s, reachable IA IB L wI s -> *)
-(*                not_stuck L s) *)
-(*        (* correct *) *)
-(*        /\ (forall s r, reachable IA IB L wI s -> *)
-(*                  final_state L s r -> *)
-(*                  reply_inv IB wI r) *)
-(*        (* external call (not suppored in standard Hoare triple) *) *)
-(*        /\ (forall s q ,reachable IA IB L wI s -> *)
-(*                  at_external L s q -> *)
-(*                  exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\ *)
-(*                          forall r, reply_inv IA wA r -> *)
-(*                               (exists s', after_external L s r s')). *)
-
+(** lts_safe_triple is hoare-triple representation of lts_safe, but it
+is unused for now *)
 
 (* state s can be reachable from state s0 *)
 Inductive reachable_from {liA liB st} (IA: invariant liA) (IB: invariant liB) (L: lts liA liB st) (wI: inv_world IB) (s0 s: st) : Prop :=
@@ -121,7 +104,7 @@ Inductive reachable_from {liA liB st} (IA: invariant liA) (IB: invariant liB) (L
     reachable_from IA IB L wI s0 s.
 
 
-Definition lts_safe_triple' {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) (s0: S) : Prop :=
+Definition lts_safe_triple_body {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (wI: inv_world IB) (s0: S) : Prop :=
   (* safe *)
   (forall s, reachable_from IA IB L wI s0 s ->
         not_stuck L s)
@@ -145,9 +128,10 @@ Definition lts_safe_triple {liA liB S} se (L: lts liA liB S) (IA: invariant liA)
        (exists s, initial_state L q s)
        (* safe, correct and external progress *)
        /\ (forall s, initial_state L q s ->
-               lts_safe_triple' se L IA IB wI s).
-        
-         
+               lts_safe_triple_body se L IA IB wI s).
+
+
+(** Definition of module safety  *)
 
 Definition module_safe_se {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI se :=
   forall w,
@@ -367,8 +351,8 @@ End SAFE.
 
 End REACH.
 
-(** Proof of compositionality of module safe *)
 
+  
 Lemma compose_safety {li} (I: invariant li) L1 L2 L:
   module_safe L1 I I not_stuck ->
   module_safe L2 I I not_stuck ->
@@ -471,6 +455,97 @@ Proof.
     inv WFS.
     exploit (@final_progress li); eauto. eapply SAFE; eauto.
 Qed.
+
+(** Unfinished: The following code is a more general module_safety
+property which supports different invariant in incoming side and
+outgoing side *)
+
+Definition compose_invariant {li} (incoming: bool) (Ia Ib: invariant li) :=
+  {| inv_world := (inv_world Ia * inv_world Ib);
+    symtbl_inv '(wa, wb) se := symtbl_inv Ia wa se /\ symtbl_inv Ib wb se;
+    query_inv '(wa, wb) q := if incoming then (query_inv Ia wa q /\ query_inv Ib wb q)
+                             else (query_inv Ia wa q \/ query_inv Ib wb q);
+    reply_inv '(wa, wb) r := if incoming then (reply_inv Ia wa r \/ reply_inv Ib wb r)
+                             else (reply_inv Ia wa r \/ reply_inv Ib wb r); |}.
+
+(* The starting world of a frame, defined by sum type *)
+Variant frame_world {li} (I: bool -> invariant li) := fw (i: bool) (w: inv_world (I i)).
+
+(* Propeties of reachable state in composed semantics *)
+Section REACH.
+
+Context {li} (I1 I2: invariant li) (L: bool -> semantics li li). 
+Context (se: Genv.symtbl).
+Context (w: inv_world I1 * inv_world I2).
+
+Let Iin := fun i:bool => if i then I1 else I2.
+Let Iout := fun i:bool => if i then I2 else I1.
+
+Definition getw (i: bool) (w: inv_world I1 * inv_world I2) : inv_world (Iin i) :=
+  match i with
+  | true => (fst w)
+  | false => (snd w)
+  end.
+
+
+Definition setw (i: bool) (w1: inv_world I1 * inv_world I2) : inv_world (Iout i) -> inv_world I1 * inv_world I2 :=
+  match i with 
+  | true => fun w2 => (fst w1, w2)
+  | false => fun w2 => (w2, snd w1)
+  end.
+
+(* A generalized wf_state specifying rechable property and invariant world in the frame *)
+
+(* Inductive wf_frames : list (frame L) -> (inv_world I1 * inv_world I2) -> Prop := *)
+(* | wf_frames_nil: wf_frames nil w *)
+(* | wf_frames_cons: forall i s q w1 w2 fms *)
+(*     (WF: wf_frames fms w1) *)
+(*     (VSE1: symtbl_inv (Iin i) (getw i w1) se) *)
+(*     (FREACH: reachable (Iout i) (Iin i) (L i se) (getw i w1) s) *)
+(*     (EXT: at_external (L i se) s q) *)
+(*     (WTQ: query_inv (Iout i) w2 q) *)
+(*     (PGS: forall r, reply_inv (Iout i) w2 r -> *)
+(*                exists s', after_external (L i se) s r s'), *)
+(*     wf_frames ((st L i s) :: fms) (setw i w1 w2). *)
+
+
+(* Inductive wf_state : list (frame L) -> Prop := *)
+(* | wf_state_cons: forall i s k w1 *)
+(*     (WFS: wf_frames k w1) *)
+(*     (VSE: symtbl_inv (Iin i) (getw i w1) se) *)
+(*     (SREACH: reachable (Iout i) (Iin i) (L i se) (getw i w1) s),                    *)
+(*     wf_state (st L i s :: k). *)
+
+End REACH.
+
+(** Proof of compositionality of module safe *)
+
+Lemma compose_safety_general {li} (I1 I2: invariant li) L1 L2 L:
+  module_safe L1 I2 I1 not_stuck ->
+  module_safe L2 I1 I2 not_stuck ->
+  compose L1 L2 = Some L ->
+  module_safe L (compose_invariant false I1 I2) (compose_invariant true I1 I2) not_stuck.
+Proof.
+  intros SAFE1 SAFE2 COMP. unfold compose in *. unfold option_map in *.
+  destruct (link (skel L1) (skel L2)) as [sk|] eqn:Hsk; try discriminate. inv COMP.
+  set (L := fun i:bool => if i then L1 else L2).
+  set (Iin := fun i:bool => if i then I1 else I2).
+  set (Iout := fun i:bool => if i then I2 else I1).
+  red. intros se VALID w INV.
+  assert (VALIDSE: forall i, Genv.valid_for (skel (L i)) se).
+  destruct i.
+  eapply Genv.valid_for_linkorder.
+  eapply (link_linkorder _ _ _ Hsk). eauto.
+  eapply Genv.valid_for_linkorder.
+  eapply (link_linkorder _ _ _ Hsk). eauto.
+  assert (SAFE: forall i, module_safe_se (L i) (Iout i) (Iin i) not_stuck se).
+  { intros i. generalize (VALIDSE i). intros VSE.
+    destruct i; simpl; auto. }
+  constructor.
+  (* rechable not stuck *)
+Admitted.
+
+(** End of this general compose_safety  *)
 
 
 (* similar to ccref *)
