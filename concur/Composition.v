@@ -324,16 +324,17 @@ Proof.
     destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
     destruct (j34 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
     red in H18. specialize (H18 _ _ _ _ Hj12 H0 H1 H2) as Hp2'.
-    eapply Mem.perm_inject in H1 as Hp2. 3: eauto. 2: eauto.
-    red in H27. inv Hm14. inv mi_thread. inv Hms. rewrite H3 in H0.
-    red in Hjs. erewrite Hjs in H0; eauto.
+    eapply Mem.perm_inject in H1 as Hp3. 3: eauto. 2: eauto.
+    red in H27. assert (H0': fst b2 <> Mem.tid (Mem.support m3)).
+    erewrite <- inject_block_tid. 3: eauto. 2: eauto.
+    erewrite <- inject_tid; eauto.
     assert (Hp3' : ~ Mem.perm m3' b2 (ofs1 + d) Max Nonempty).
     (** We cannot prove this because [ext] doens not enforce [free_preserved]
      *)
-    intro. apply Hp2'.
-    specialize (H27 _ _ _ _ Hj23 H0 Hp2 Hp2') as Hp3.
+    admit.
+    specialize (H27 _ _ _ _ Hj23 H0' Hp3 Hp3') as Hp4.
     rewrite Z.add_assoc. auto.
-Qed.
+Admitted.
 
 (** Is this correct? do we have to enforce internal [ro] and [mpd]
     properties for c_ext (and prove them in passes) to absorb it? *)
@@ -409,20 +410,9 @@ Proof.
        destruct wp2' as [j13'' m1'' m3'' Hm13'].
        simpl in H, H1.
        assert (Hhidden: external_mid_hidden (injpw j12' m1' m2' Hm12') (injpw j34' m3' m4' Hm34')).
+       admit.
+       admit.
 Admitted.
-   (*    exploit injp_acce_outgoing_constr; eauto. apply Hhidden.
-      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
-      intros r1 r2 wp2' ACO Hr. *)
-      
-        
-    
-    
-    
-    
-    
-  
-  (** TODO: in 1 step or two steps, not sure yet*)
-  Abort.
 
 
 
