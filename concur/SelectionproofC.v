@@ -634,9 +634,39 @@ Lemma eval_unop_lessdef:
   exists v', eval_unop op v1' = Some v' /\ Val.inject j v v'.
 Proof.
   intros until v; intros EV LD. inv LD.
-  exists v; auto.
+  -
+  exists v; auto;
   destruct op; simpl in *; inv EV; TrivialExists; 
-    split; auto. eexists; split; eauto.
+    split; auto.
+  -
+  exists v; auto;
+  destruct op; simpl in *; inv EV; TrivialExists; 
+    split; auto.
+  -
+  exists v; auto;
+  destruct op; simpl in *; inv EV; TrivialExists; 
+    split; auto;
+    unfold option_map in H0; destr_in H0; inv H0; auto.
+    -
+  exists v; auto;
+  destruct op; simpl in *; inv EV; TrivialExists; 
+    split; auto;
+    unfold option_map in H0; destr_in H0; inv H0; auto.
+    -
+  exists v; auto;
+  destruct op; simpl in *; inv EV; TrivialExists; 
+    split; auto;
+    unfold option_map in H0; destr_in H0; inv H0; auto.
+  - destruct op
+  exists v; auto;
+  destruct op; simpl in *; inv EV; TrivialExists.
+    split; auto;
+  unfold option_map in H0; destr_in H0; inv H0; auto.
+  - destruct op; simpl in *; inv EV; TrivialExists;
+    unfold option_map in H0. destr_in H0. inv H0. auto.
+  unfold option_map in H0. destr_in H0. inv H0. auto.
+  unfold option_map in H0. destr_in H0. inv H0. auto.
+  - destruct op; simpl in *; inv EV; TrivialExists.
   split; auto. split; auto.
   split; auto. split; auto. split; auto.
   split; auto.

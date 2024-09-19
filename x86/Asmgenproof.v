@@ -1047,7 +1047,7 @@ End WITH_WORLD.
 Let cc : callconv li_mach li_asm := cc_mach ext @ cc_mach_asm.
 
 Lemma transf_initial_states:
-  forall rs0 nb0 q1 q2 st1, match_query cc (se, tt, (rs0, nb0)) q1 q2 -> Mach.initial_state ge q1 st1 ->
+  forall w rs0 nb0 q1 q2 st1, match_query cc (se, w, (rs0, nb0)) q1 q2 -> Mach.initial_state ge q1 st1 ->
   exists st2, Asm.initial_state tge q2 st2 /\ match_states rs0 nb0 st1 st2.
 Proof.
   intros. destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv H0.
@@ -1063,6 +1063,7 @@ Proof.
     rewrite <- H9. eauto.
   - constructor; cbn; eauto.
     + constructor; eauto.
+    + inv H7. auto.
     + split; auto.
       setoid_rewrite <- H18; eauto.
 Qed.
@@ -1076,7 +1077,7 @@ Proof.
   intros rs0 nb0 st1 st2 q1 Hst Hq1. inv Hq1. inv Hst.
   edestruct functions_translated as (fb & tf & TFIND & Htf & ?); eauto.
   subst. inv ATPC. monadInv Htf.
-  eexists (se, tt, (rs1, Mem.support m')), (rs1, m'). intuition idtac.
+  eexists (se, (extw m m' MEXT), (rs1, Mem.support m')), (rs1, m'). intuition idtac.
   - econstructor.
     rewrite <- H2. cbn. destruct Ptrofs.eq_dec; try congruence. eauto.
   - eexists (mq _ _ _ (fun r => rs1 (preg_of r)) m'). split.
@@ -1085,6 +1086,7 @@ Proof.
       * eapply agree_sp_def; eauto.
       * eapply parent_ra_def; eauto.
       * eapply agree_mregs; eauto.
+      * constructor.
     + rewrite H2. rewrite <- ATLR. erewrite <- (agree_sp _ _ _ AG).
       constructor; auto.
       * congruence.
@@ -1101,6 +1103,7 @@ Proof.
       eexists. unfold inner_sp. eauto.
     eexists. split; econstructor; eauto.
     + eapply match_stack_incr_bound; eauto.
+    + inv H10. auto.
     + setoid_rewrite ext_lessdef in H8. split; auto.
       * rewrite H0. eapply agree_sp; eauto.
       * eapply agree_sp_def; eauto.
@@ -1110,16 +1113,16 @@ Qed.
 
 Lemma transf_final_states:
   forall rs0 nb0 st1 st2 r1, match_states rs0 nb0 st1 st2 -> Mach.final_state st1 r1 ->
-  exists r2, Asm.final_state st2 r2 /\ match_reply cc (se, tt, (rs0, nb0)) r1 r2.
+  exists w r2, Asm.final_state st2 r2 /\ match_reply cc (se, w, (rs0, nb0)) r1 r2.
 Proof.
   intros. inv H0. inv H. cbn in *.
   inv STACKS. erewrite agree_sp in LIVE; eauto.
   destruct live. { destruct H4; cbn in *. destruct Mem.sup_dec; congruence. }
-  exists (rs1, m'). split.
+  exists (extw m m' MEXT). exists (rs1, m'). split.
   - constructor.
   - exists (mr (fun r => rs1 (preg_of r)) m'). split.
-    + exists tt. split; [rauto | ]. constructor; intros; uncklr; eauto.
-      eapply agree_mregs; eauto.
+    + exists (extw m m' MEXT). split; [rauto | ]. constructor; intros; uncklr; eauto.
+      eapply agree_mregs; eauto. constructor.
     + constructor; eauto.
       eapply agree_sp; eauto.
 Qed.
@@ -1132,7 +1135,7 @@ Theorem transf_program_correct prog tprog:
     (Mach.semantics return_address_offset prog)
     (Asm.semantics tprog).
 Proof.
-  set (ms := fun '(se, tt, (rs0, nb0)) s1 '(nb, s2) =>
+  set (ms := fun '(se, (extw m1 m2 Hm), (rs0, nb0)) s1 '(nb, s2) =>
                match_states prog se rs0 nb0 s1 s2 /\ nb = nb0). 
   fsim eapply forward_simulation_star with
       (match_states := ms w)
@@ -1148,7 +1151,7 @@ Proof.
     exists (Mem.support (snd q2), s2). cbn. intuition auto.
     destruct H as (? & ? & ?). destruct H1. auto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
-    edestruct transf_final_states as (? & ? & ?); cbn; eauto.
+    edestruct transf_final_states as (? & ? & ? & ?); cbn; eauto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
     edestruct transf_external_states as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
     exists wA, q2. intuition auto.

@@ -786,7 +786,7 @@ Class Mixable (R : cklr) :=
       Mem.unchanged_on (loc_init_args sz sp1) m1 m1' /\
       Mem.unchanged_on (not_init_args sz sp1) m1'_ m1' /\
       Mem.support m1' = Mem.support m1'_.
-
+(*
 Instance ext_mixable:
   Mixable ext.
 Proof.
@@ -831,7 +831,7 @@ Proof.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.
-
+*)
 Instance inj_mixable:
   Mixable inj.
 Proof.

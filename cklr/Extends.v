@@ -73,12 +73,18 @@ Qed.
 
 (** ** Definition *)
 
+Inductive ext_world := extw (m1 m2 : mem) (Hm: Mem.extends m1 m2).
+
+Inductive ext_match_mem: ext_world -> relation mem :=
+  ext_match_mem_intro m1 m2 Hm:
+    ext_match_mem (extw m1 m2 Hm) m1 m2.
+
 Program Definition ext: cklr :=
   {|
-    world := unit;
+    world := ext_world;
     wacc := ⊤;
     mi w := inject_id;
-    match_mem w := Mem.extends;
+    match_mem := ext_match_mem;
     match_stbls w := eq;
   |}.
 
@@ -95,28 +101,30 @@ Next Obligation.
 Qed.
 
 Next Obligation.
+  inv H0.
   erewrite <- Mem.mext_sup; eauto.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm lo hi.
+  intros [a b Hm] m1 m2 H lo hi. inv H.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:H1.
   edestruct Mem.alloc_extends as (m2' & Hm2' & Hm'); eauto; try reflexivity.
   rewrite Hm2'.
-  exists tt; split; rauto.
+  exists (extw m1' m2' Hm'); split. red. reflexivity.
+  split. constructor. rauto.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm [[b lo] hi] r2 Hr.
+  intros [a b' Hm] m1 m2 H [[b lo] hi] r2 Hr. inv H.
   apply coreflexivity in Hr; subst. simpl. red.
   destruct (Mem.free m1 b lo hi) as [m1'|] eqn:Hm1'; [|constructor].
   edestruct Mem.free_parallel_extends as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'. constructor.
-  exists tt; split; rauto.
+  eexists; split. 2: econstructor. instantiate (1:= Hm'). reflexivity.
 Qed.
 
 Next Obligation.
-  intros [ ] chunk m1 m2 Hm [b ofs] p2 Hp.
+  intros [c d Hm] chunk m1 m2 H [b ofs] p2 Hp. inv H.
   apply coreflexivity in Hp; subst. simpl. red.
   destruct (Mem.load chunk m1 b ofs) as [v1|] eqn:Hv1; [|constructor].
   edestruct Mem.load_extends as (v2 & Hv2 & Hv); eauto.
@@ -124,16 +132,17 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  intros [ ] chunk m1 m2 Hm [b ofs] p2 Hp v1 v2 Hv.
+  intros [c d Hm] chunk m1 m2 H [b ofs] p2 Hp v1 v2 Hv. inv H.
   apply coreflexivity in Hp; subst. simpl. red.
   destruct (Mem.store chunk m1 b ofs v1) as [m1'|] eqn:Hm1'; [|constructor].
   apply val_inject_lessdef in Hv.
   edestruct Mem.store_within_extends as (m2' & Hm2' & Hm'); eauto.
-  rewrite Hm2'. constructor. exists tt; split; rauto.
+  rewrite Hm2'. constructor. eexists; split. 2: econstructor.
+  instantiate (1:= Hm'). reflexivity.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm [b ofs] p2 Hp sz.
+  intros [c d Hm] m1 m2 H [b ofs] p2 Hp sz. inv H.
   apply coreflexivity in Hp; subst. simpl. red.
   destruct (Mem.loadbytes m1 b ofs sz) as [v1|] eqn:Hv1; [|constructor].
   edestruct Mem.loadbytes_extends as (v2 & Hv2 & Hv); eauto.
@@ -141,22 +150,23 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm [b1 ofs1] p2 Hp vs1 vs2 Hv.
+  intros [c d Hm] m1 m2 H [b1 ofs1] p2 Hp vs1 vs2 Hv. inv H.
   apply coreflexivity in Hp. subst. simpl. red.
   destruct (Mem.storebytes m1 b1 ofs1 vs1) as [m1'|] eqn:Hm1'; [|constructor].
   edestruct Mem.storebytes_within_extends as (m2' & Hm2' & Hm'); eauto.
   eapply list_rel_forall2. apply Hv.
-  rewrite Hm2'. constructor. exists tt; split; rauto.
+  rewrite Hm2'. constructor. eexists; split. 2: econstructor.
+  instantiate (1:= Hm'). reflexivity.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm [b1 ofs1] p2 Hp p k H.
+  intros [c d Hm] m1 m2 H0 [b1 ofs1] p2 Hp p k H. inv H0.
   apply coreflexivity in Hp. subst. simpl in *.
   eapply Mem.perm_extends; eauto.
 Qed.
 
 Next Obligation.
-  intros [ ] m1 m2 Hm b1 b2 Hb.
+  intros [c d Hm] m1 m2 H b1 b2 Hb. inv H.
   apply coreflexivity in Hb. subst.
   apply Mem.valid_block_extends; eauto.
 Qed.
@@ -180,13 +190,14 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  inv H0. inv H3. rewrite Z.add_0_r in H1.
+  inv H. inv H0. inv H2. rewrite Z.add_0_r in H1.
   eapply Mem.perm_extends_inv; eauto.
 Qed.
 
 Next Obligation.
   destruct H0 as (?&?&?).
-  inv H. inv H1. rewrite mext_sup. rewrite mext_sup0.
+  inv H. inv H1. inv Hm1. inv Hm3.
+  rewrite mext_sup. rewrite mext_sup0.
   reflexivity.
 Qed.
 
@@ -203,14 +214,13 @@ Lemma ext_lessdef_list w vs1 vs2:
 Proof.
   split; induction 1; constructor; auto; apply val_inject_lessdef; auto.
 Qed.
-
 Lemma ext_extends w m1 m2:
-  match_mem ext w m1 m2 <-> Mem.extends m1 m2.
+  match_mem ext w m1 m2 -> Mem.extends m1 m2.
 Proof.
-  reflexivity.
+  intro. inv H. auto.
 Qed.
 
-Hint Rewrite ext_lessdef ext_lessdef_list ext_extends : cklr.
+Hint Rewrite ext_lessdef ext_lessdef_list ext_extends: cklr.
 
 
 (** * Composition theorems *)
@@ -233,7 +243,7 @@ Proof.
   destruct (f b) as [[b' delta] | ]; eauto.
   replace (delta + 0) with delta by extlia; eauto.
 Qed.
-
+(*
 Lemma ext_ext :
    eqcklr (ext @ ext) ext.
 Proof.
@@ -367,4 +377,4 @@ Proof.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.
 Qed.
-
+*)

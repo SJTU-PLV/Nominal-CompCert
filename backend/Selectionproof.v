@@ -1435,7 +1435,7 @@ Lemma sel_initial_states:
   forall w q1 q2 S, match_query (cc_c ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros [ ] _ _ S [vf sg vargs1 vargs2 m1 m2 Hvargs Hm] Hq1. inv Hq1.
+  intros [c d Hm] _ _ S [vf vf' sg vargs1 vargs2 m1 m2 Hf Hvargs Hm'] Hq1. inv Hq1.
   CKLR.uncklr.
   exploit functions_translated; eauto. intros (cu & f' & A & B & C).
   setoid_rewrite <- (sig_function_translated _ (Internal f) f'); eauto.
@@ -1443,7 +1443,7 @@ Proof.
   - destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - econstructor; eauto.
-    constructor.
+    constructor. inv Hm'. auto.
 Qed.
 
 Lemma sel_external_states:
@@ -1455,14 +1455,14 @@ Proof.
   intros. inv H0. inv H.
   2: { assert (ef = EF_external name sg) by congruence; subst. discriminate. }
   eapply functions_translated in H1 as (cu & f'' & A & B & C); eauto.
-  eexists tt, _. intuition idtac.
+  eexists (extw m m' ME), _. intuition idtac.
   - rewrite A in TFIND. inv TFIND. destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - destruct LF; try discriminate.
-    econstructor; CKLR.uncklr; eauto.
+    econstructor; CKLR.uncklr; eauto. constructor.
     destruct v; cbn in *; congruence.
   - destruct H as ([ ] & _ & H). destruct H. CKLR.uncklr. inv H0.
-    eexists; split; econstructor; eauto.
+    eexists; split; econstructor; eauto. inv H1. auto.
 Qed.
 
 Lemma sel_final_states:
@@ -1471,15 +1471,16 @@ Lemma sel_final_states:
 Proof.
   intros. inv H0. inv H. inv MC.
   eexists. split. econstructor; eauto.
-  exists tt. split; constructor; CKLR.uncklr; auto.
+  eexists. split; econstructor; CKLR.uncklr; eauto.
+  instantiate (1:= extw m m' ME). constructor.
 Qed.
 
 End PRESERVATION.
 
 
 Lemma eventually_restrict: forall n prog se1 S P I I_inv,
-          eventually prog se1 n S P ->
-          Eventually (restrict (Cminor.semantics prog) I I I_inv se1) n S P.
+    eventually prog se1 n S P ->
+    Eventually (restrict (Cminor.semantics prog) I I I_inv se1) n S P.
 Proof.
   induction n; intros; inv H. constructor; eauto.
   constructor.

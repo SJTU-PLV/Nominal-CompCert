@@ -677,7 +677,7 @@ Proof.
     eapply functions_translated in H; eauto.
     econstructor; eauto.
   - constructor; eauto.
-    repeat constructor; eauto.
+    repeat constructor; eauto. inv H7. auto.
 Qed.
 
 Lemma transf_final_states:
@@ -686,8 +686,8 @@ Lemma transf_final_states:
 Proof.
   intros [w sg] st1 st2 r1 Hst Hr1. inv Hr1. inv Hst. inv STK. inv H1.
   exists (lr tls tm). split. constructor; auto.
-  exists tt. split; constructor; CKLR.uncklr; auto.
-  intros r Hr. CKLR.uncklr; auto.
+  exists (extw m' tm MEM). split; constructor; CKLR.uncklr; auto.
+  intros r Hr. CKLR.uncklr; auto. constructor.
 Qed.
 
 Lemma transf_external_states:
@@ -698,17 +698,17 @@ Lemma transf_external_states:
 Proof.
   intros. inv H0. inv H.
   exploit functions_translated; eauto. cbn. intros TFIND.
-  exists (sg, tt), (lq tvf sg tls tm); intuition idtac.
+  exists (sg, (extw m tm MEM)), (lq tvf sg tls tm); intuition idtac.
   - econstructor; eauto.
   - destruct LF; try discriminate. econstructor; CKLR.uncklr; eauto.
-    intros l _. setoid_rewrite ext_lessdef. auto.
+    intros l _. setoid_rewrite ext_lessdef. auto. constructor.
     destruct v; cbn in *; try congruence.
   - inv H0. destruct H as ([ ] & _ & H). inv H.
     rewrite H8 in H1; inv H1. CKLR.uncklr.
  (*red in H3. setoid_rewrite ext_lessdef in H3. *)
     eexists; split; econstructor; eauto.
-    intro. apply ext_lessdef with tt. apply result_regs_inject; auto.
-    intro. apply ext_lessdef. auto.
+    intro. apply ext_lessdef with (extw m1 m2 Hm). apply result_regs_inject; auto.
+    intro. apply ext_lessdef. auto. inv H5. auto.
 Qed.
 
 End PRESERVATION.

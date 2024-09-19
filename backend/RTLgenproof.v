@@ -1555,7 +1555,7 @@ Proof.
   monadInv B.
   econstructor; split.
   - econstructor; eauto.
-  - econstructor; eauto. constructor.
+  - econstructor; eauto. constructor. inv H8. eauto.
 Qed.
 
 Lemma transl_final_states:
@@ -1564,24 +1564,25 @@ Lemma transl_final_states:
 Proof.
   intros. inv H0. inv H. inv MS.
   eexists; split. constructor; auto.
-  exists tt. split; constructor; uncklr; auto.
+  exists (extw m tm MEXT). split; econstructor; uncklr; eauto. constructor.
 Qed.
 
 Lemma transl_external_states:
   forall S R q1, match_states S R -> CminorSel.at_external ge S q1 ->
-  exists q2, RTL.at_external tge R q2 /\ match_query (cc_c ext) tt q1 q2 /\ se = se /\
-  forall r1 r2 S', match_reply (cc_c ext) tt r1 r2 -> CminorSel.after_external S r1 S' ->
+  exists w q2, RTL.at_external tge R q2 /\ match_query (cc_c ext) w  q1 q2 /\ se = se /\
+  forall r1 r2 S', match_reply (cc_c ext) w r1 r2 -> CminorSel.after_external S r1 S' ->
   exists R', RTL.after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros. inv H0. inv H.
   exploit functions_translated; eauto. intros [tf' [P TF]].
   monadInv TF.
-  eexists; intuition idtac.
+  exists (extw m tm MEXT). eexists; intuition idtac.
   - econstructor; eauto.
   - destruct LF; try discriminate. econstructor; uncklr; eauto.
+    constructor.
     destruct v; cbn in *; congruence.
   - inv H0. destruct H as ([ ] & _ & H). inv H. uncklr.
-    eexists; split; constructor; eauto.
+    eexists; split; constructor; eauto. inv H5. auto.
 Qed.
 
 End CORRECTNESS.
@@ -1597,7 +1598,7 @@ Proof.
     intros [|] ? Hf; monadInv Hf; auto. }
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.
-  exists tt. eapply transl_external_states; eauto.
+  eapply transl_external_states; eauto.
   eapply transl_step_correct; eauto.
   apply lt_state_wf.
 Qed.

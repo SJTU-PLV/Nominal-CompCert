@@ -2490,18 +2490,19 @@ Proof.
     rewrite H4. eauto.
     intros p Hp. cbn. apply getpair_initial_regs; auto. rewrite SIG. eauto.
   - intros l Hl. simpl. reflexivity.
+  - inv H1. auto.
   - simpl. rewrite H4. eauto.
 Qed.
 
 Lemma final_states_simulation:
   forall st1 st2 r1, match_states st1 st2 -> RTL.final_state st1 r1 ->
-  exists r2,
+  exists w r2,
     LTL.final_state st2 r2 /\
-    match_reply (cc_c ext @ cc_c_locset) (se, tt, base_sg) r1 r2.
+    match_reply (cc_c ext @ cc_c_locset) (se, w, base_sg) r1 r2.
 Proof.
   intros. inv H0. inv H. inv STACKS. cbn in * |- .
-  eexists; split. econstructor; eauto.
-  eexists; split. exists tt; split; constructor; CKLR.uncklr; eauto.
+  exists (extw m m' MEM). eexists; split. econstructor; eauto.
+  eexists; split. exists (extw m m' MEM); split; constructor; CKLR.uncklr; eauto. constructor.
   econstructor; eauto.
   - destruct sg, base_sg. cbn in *. subst. auto.
 Qed.
@@ -2538,10 +2539,10 @@ Proof.
   edestruct functions_translated as (tf & TFIND & FUN); eauto.
   erewrite <- sig_function_translated in STACKS; eauto.
   simpl in FUN; inv FUN.
-  exists (se, tt, sg), (lq tvf sg ls m'). intuition idtac; cbn in *.
+  exists (se, (extw m m' MEM), sg), (lq tvf sg ls m'). intuition idtac; cbn in *.
   - econstructor; eauto.
   - destruct LF; try discriminate.
-    eexists; split; econstructor; CKLR.uncklr; eauto.
+    eexists; split; econstructor; CKLR.uncklr; eauto. constructor.
     destruct v; cbn in *; congruence.
   - destruct H as (ri & ([ ] & _ & Hr1i) & Hri2).
     inv H0. inv Hr1i. inv Hri2. eexists; split; econstructor; CKLR.uncklr; eauto.
@@ -2549,6 +2550,7 @@ Proof.
       assumption.
     + intros l Hl. transitivity (ls l); eauto.
       apply result_regs_agree_callee_save; auto.
+    + inv H4. auto.
 Qed.
 
 Lemma wt_prog: wt_program prog.
@@ -2584,10 +2586,10 @@ Proof.
 - intros q1 q2 s1 Hq (Hs1 & [xse xsg] & Hxse & [Hxsg Hargs] & WT). subst.
   eapply initial_states_simulation; cbn; eauto.
 - intros s1 s2 r1 Hs (Hs1 & [xse xsg] & Hxse & Hr1 & WTr1). cbn in *. subst.
-  edestruct final_states_simulation as (? & ? & ?); eauto.
+  edestruct final_states_simulation as (? & ? & ? & ?); eauto.
 - cbn. intros s1 s2 q1 Hs (Hq1 & [xse xsg] & [? ?] & ? & WTs1 & ? & WT). subst.
   edestruct external_states_simulation as ([[? [ ]] wA] & q2 & Hq2 & Hq & Hr); eauto.
-  eexists (_, tt, wA), q2. cbn. repeat apply conj; eauto.
+  eexists (_, (extw m0 m3 Hm0), wA), q2. cbn. repeat apply conj; eauto.
   intros r1 r2 s1' Hr12 (? & [? ?] & [? ?] & ? & ? & ? & ? & [? ?] & ? & ?).
   subst. inv Hq1. inv H1. cbn in *. assert (sg1 = sg0) by congruence. subst.
   eapply Hr; eauto.
