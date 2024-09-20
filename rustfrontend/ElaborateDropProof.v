@@ -1541,7 +1541,7 @@ Proof.
     admit.
     instantiate (1 := Hm1).
     intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & MENV2).
-
+    (* require that init_own is equal to entry analysis result *)
     
     
     eexists. split.
