@@ -131,57 +131,8 @@ Proof.
   eapply st_fsim_vcomp; eauto. eapply oldfsim_newfsim_ccid; eauto.
 Qed.
 
-(** Algebratic properties *)
 
 
-Require Import Extends.
-
-(** c_ext cannot be defined using cc_unit_world because [cc_c] uses <> diamond constructer for match_reply*)
-Program Definition c_ext : callconv li_c li_c := cc_c ext.
-(*  {|
-    ccworld := unit;
-    ccworld_world := world_unit;
-    match_senv w := eq;
-    match_query w := cc_c_query ext w;
-    match_reply w := cc_c_reply ext w;
-  |}.
-*)
-Lemma cctrans_ext_comp : cctrans (cc_compose c_ext c_ext) c_ext.
-Proof.
-  Admitted. (*TODO using new c_ext*)
-  (*constructor.
-  econstructor. instantiate (1:= fun _ _ => True).
-  - red. intros. inv H.  inv H0. simpl in H, H1, H2.
-    exists (se2, (tt,tt)). intuition auto. econstructor; eauto. reflexivity. reflexivity.
-    exists (cq vf1 sg vargs1 m1). split.
-    econstructor; eauto. reflexivity. simpl.
-    generalize dependent vargs1.
-    induction 1. constructor. constructor; eauto. reflexivity.
-    simpl. eapply Mem.extends_refl.
-    econstructor; eauto.
-    exists tt. intuition auto. destruct wp1'. simpl in H6. 
-    destruct H6 as [r1' [[? [A0 A]][? [B0 B]]]]. inv A. inv B. simpl in *.
-    exists tt. split. eauto.
-    econstructor; simpl; eauto.
-    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
-    eapply Mem.extends_extends_compose; eauto.
-  - red. intros. destruct w1 as [se' [w11 w12]]. inv H. inv H3. inv H4. inv H2.
-    inv H0. inv H. inv H0. inv H2. simpl in H9, H11, H12, H , H3, H4.
-    exists tt. intuition auto. reflexivity. constructor.
-    constructor; simpl; eauto.
-    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
-    eapply CallConv.val_inject_lessdef_list_compose. eauto.
-    eapply (ext_lessdef_list tt). eauto.
-    eapply Mem.extends_extends_compose; eauto.
-    exists (tt,tt). split. reflexivity. split. exists r1. destruct H2 as [? [X H2]]. inv H2. simpl in *.
-    split. exists tt. split. eauto.
-    econstructor; simpl; eauto. eapply val_inject_id.
-    eapply Val.lessdef_refl.
-    eapply Mem.extends_refl.
-    exists tt. split. eauto.
-    econstructor; eauto. auto.
-Qed.
-   *)
 (*
 Lemma oldfsim_newfsim_ext_c : forall  (L1 L2: semantics li_c li_c),
     Smallstep.forward_simulation (cc_c ext) (cc_c ext) L1 L2 ->
@@ -202,6 +153,97 @@ Proof.
     eapply H4; eauto.
 Qed.
 *)
+
+(** * Definition of new extend, including some internal (and? external) accessibilities for composing with injp *)
+Require Import Extends.
+
+Definition free_preserved_ext (m1 m1' m2': mem) : Prop :=
+  forall b ofs, fst b <> Mem.tid (Mem.support m1) ->
+           Mem.perm m1 b ofs Max Nonempty ->
+           ~ Mem.perm m1' b ofs Max Nonempty ->
+           ~ Mem.perm m2' b ofs Max Nonempty.
+
+Inductive ext_acci : relation ext_world :=
+    ext_acci_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
+                     (m1' m2' : mem) (Hm' : Mem.extends m1' m2')
+                     (TID1: Mem.tid (Mem.support m1) = Mem.tid (Mem.support m1'))
+                     (TID2: Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2'))
+                     (SUP1: Mem.sup_include (Mem.support m1) (Mem.support m1'))
+                     (SUP2: Mem.sup_include (Mem.support m2) (Mem.support m2'))
+                     (MPD1: Mem.max_perm_decrease m1 m1')
+                     (MPD2: Mem.max_perm_decrease m2 m2')
+                     (FREEP: free_preserved_ext m1 m1' m2'),
+                     ext_acci (extw m1 m2 Hm) (extw m1' m2' Hm').
+
+Instance ext_acci_preo : PreOrder ext_acci.
+Proof.
+  split.
+  - intros [m1 m2 Hm]. constructor; eauto; try red; intros; auto.
+  - intros [m1 m2 Hm] [m1' m2' Hm'] [m1'' m2'' Hm''] HA HB.
+    inv HA. inv HB. constructor; eauto; try congruence.
+    + red. intros. apply MPD1. auto. apply MPD0. apply SUP1. auto. auto.
+    + red. intros. apply MPD2. auto. apply MPD3. apply SUP2. auto. auto.
+    + red in FREEP, FREEP0.
+      red. intros.
+      destruct (Mem.perm_dec m1' b ofs Max Nonempty).
+      * eapply FREEP0; eauto. congruence.
+      * intro. eapply FREEP; eauto. apply MPD3; auto.
+        apply SUP2. inv Hm. rewrite <- mext_sup.
+        eapply Mem.perm_valid_block; eauto.
+Qed.
+
+Program Instance ext_world_id : World ext_world :=
+    {
+      w_state := ext_world;
+      w_lens := lens_id;
+      w_acci := ext_acci;
+      w_acce := fun _ _ => True;
+      w_acci_trans := ext_acci_preo;
+    }.
+
+Program Definition c_ext : callconv li_c li_c :=
+  {|
+    ccworld := ext_world;
+    ccworld_world := ext_world_id;
+    match_senv w := eq;
+    match_query := cc_c_query ext;
+    match_reply := cc_c_reply ext;    
+  |}.
+
+
+Program Instance lens_ext_locset : Lens (signature * ext_world) ext_world :=
+  {
+    get := snd;
+    set := fun w wp => (fst w, wp);
+  }.
+
+Program Instance ext_world_id_l : World (signature * ext_world) :=
+    {
+      w_state := ext_world;
+      w_lens := lens_ext_locset;
+      w_acci := ext_acci;
+      w_acce := fun _ _ => True;
+      w_acci_trans := ext_acci_preo;
+    }.
+
+Program Definition locset_ext : callconv li_locset li_locset :=
+  {|
+    ccworld := signature * ext_world;
+    ccworld_world := ext_world_id_l;
+    match_senv w := eq;
+    match_query w := cc_locset_query ext (fst w) (snd w);
+    match_reply w := cc_locset_reply ext (fst w) (snd w);    
+  |}.
+
+
+Program Definition mach_ext : callconv li_mach li_mach :=
+   {|
+    ccworld := ext_world;
+    ccworld_world := ext_world_id;
+    match_senv w := eq;
+    match_query := cc_mach_mq ext;
+    match_reply := cc_mach_mr ext;    
+  |}.
 
 (** Big Problem : bring lower cklrs to C level *)
 
@@ -326,11 +368,9 @@ Proof.
 Admitted.
 (** Seems can be proved? *)
 
-Definition mach_ext := cc_mach ext.
-Definition l_ext := cc_locset ext.
 
 (** We have to change cc_locset_mach. But the problem is how? *)
-Lemma LM_trans_ext : cctrans (cc_locset_mach @ mach_ext) (l_ext @ cc_locset_mach).
+Lemma LM_trans_ext : cctrans (cc_locset_mach @ mach_ext) (locset_ext @ cc_locset_mach).
 Proof.
   constructor. econstructor.
   - red. intros [se' [[sg a] [sg' rs]]] se1 se2 q1 q2.
@@ -622,10 +662,10 @@ Proof.
       try (eapply notin_loc_arguments_elf64_y_float; try apply Hz; lia).
 Qed.
 
-Lemma CL_trans_ext : cctrans (cc_c_locset @ l_ext) (c_ext @ cc_c_locset).
+Lemma CL_trans_ext : cctrans (cc_c_locset @ locset_ext) (c_ext @ cc_c_locset).
 Proof.
   constructor.
-  econstructor. instantiate (1:= eq).
+  econstructor. instantiate (1:= fun w1 w2 => snd w1 = fst w2).
   - red. intros [se' [x sg]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in x,sg. destruct x. inv Hse2. inv Hse1. inv Hq2. inv Hq1.
     cbn in H4, H5, H6. inv H6. clear Hm1 Hm2.
@@ -659,25 +699,28 @@ Proof.
       destruct H as [rs1 [A B]].
       exists (lq vf1 sg rs1 m0). split. econstructor; eauto.
       constructor; eauto. constructor.
-    + intros. exists (tt,tt). split. simpl. auto.
-      split. auto. inv H1. destruct wp1'. inv H0.
-      destruct H2 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2.
-      destruct H0. inv H2. simpl in H10, H12. inv H12. clear Hm1 Hm2.
-      eexists. simpl. split. exists (extw m' m2' Hm0). split. reflexivity.
+    + intros. destruct wp1' as [x wp1']. 
+      exists (wp1',tt). split. simpl. auto.
+      split. split. rewrite <- H. apply H1. reflexivity.
+      inv H1.  inv H0.
+      destruct H2 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H11. simpl in *.
+      clear Hm1 Hm2.
+      eexists. simpl. split. 
       constructor; simpl; eauto.
-      2: { constructor. }
+      2: { rewrite <- H0. econstructor. }
       2: { constructor. reflexivity. }
-      red in H10. simpl.
+      red in H9. simpl.
       destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr in *. cbn in *.
-      apply H10. auto.
+      apply H9. auto.
   - red. intros [? ?] [? ?] [se [sg [sg' t]]]. simpl in w,w0,w1,w2,sg,sg',t.
     intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2.  inv Hse1. inv Hse2.
-    inv Hq1. inv Hq2. simpl in H3, H5,H6. clear A1 A2. inv H6.
+    inv Hq1. inv Hq2. simpl in H3, H5,H6. simpl in  A1, A2. inv H6.
+    destruct A1 as [ACI1 ACI2]. simpl in ACI2.
     (* Compute (ccworld (c_ext @ cc_c_locset)). *)
-    exists (se2,((extw m m2 Hm),sg)). repeat apply conj; eauto. reflexivity. reflexivity.
+    exists (se2,((extw m m2 Hm),sg)). repeat apply conj; eauto.
     + constructor; eauto. constructor. constructor.
     + eexists. split. econstructor; eauto.
-      2: { constructor. }
+      2: { econstructor. }
       2: { econstructor. reflexivity. }
       simpl. red in H5.
       pose proof (loc_arguments_external sg).
@@ -686,20 +729,19 @@ Proof.
       apply locmap_getpair_inject.
       assert (forall_rpair (loc_external sg) a) by eauto.
       destruct a; cbn in *; intuition auto.
-    + intros r1 r2 [a b] AC1 Hr. destruct Hr as [r1' [[x [Hx Hr1]] Hr2]].
-      inv Hr1. inv Hr2. simpl in H, H0.
-      exists (tt,tt). split. reflexivity. split.
+    + intros r1 r2 [a b] AC1 Hr. destruct Hr as [r1' [Hr1 Hr2]].
+      inv Hr1. inv Hr2. simpl in H, H0. inv H0.
+      exists (tt,(extw m1' m2' Hm3)). split. simpl.  split; reflexivity. split.
       set (rs'' := Locmap.setpair (loc_result sg) vres1 (rs')).
       econstructor. split. econstructor. instantiate (1:= rs'').
       unfold rs''. simpl.
       destruct (loc_result_always_one sg) as [r ->].
-      cbn. rewrite Locmap.gss. reflexivity. inv H0.
-      econstructor. split. instantiate (1:= extw m1' m2' Hm2).
-      reflexivity. constructor; eauto.
-      red. intros.  unfold rs''.
-      destruct (loc_result_always_one sg) as [r' Hr]. rewrite Hr in *. cbn in *.
+      cbn. rewrite Locmap.gss. reflexivity. 
+      econstructor.
+      red. intros.  unfold rs''. 
+      destruct (loc_result_always_one sg) as [r' Hr]. cbn in *. rewrite Hr in *. cbn in *.
       intuition subst. rewrite Locmap.gss. auto. constructor.
-      destruct a. destruct b. reflexivity.
+      reflexivity.
 Qed.
 
 Lemma CL_trans_injp : cctrans (cc_c_locset @ locset_injp) (c_injp @ cc_c_locset).
@@ -794,10 +836,73 @@ Qed.
 (** TODO: wt_loc through CL *)
 
 
-
+(** *Compose c_injp with c_ext, to be moved to individual file later  *****)
 Require Import InjpAccoComp.
 
 (** Definition of new c_ext, including wp *)
+
+Inductive ext_comp_match : (ext_world * ext_world) -> ext_world -> Prop :=
+|ext_comp_match_intro m1 m2 m3 Hm12 Hm23 Hm13:
+  ext_comp_match ((extw m1 m2 Hm12), (extw m2 m3 Hm23)) (extw m1 m3 Hm13).
+
+Lemma cctrans_ext_comp : cctrans (cc_compose c_ext c_ext) c_ext.
+Proof.
+  constructor.
+  econstructor. instantiate (1:= ext_comp_match).
+  - red. intros. inv H.  inv H0. simpl in H, H1, H2. inv H2. clear Hm Hm1. rename Hm0 into Hm12.
+    assert (Hm11: Mem.extends m1 m1). apply Mem.extends_refl.
+    exists (se2, ((extw m1 m1 (Hm11)),(extw m1 m2 Hm12))).
+    intuition auto. econstructor; eauto. reflexivity. reflexivity.
+    exists (cq vf1 sg vargs1 m1). split.
+    econstructor; eauto. reflexivity. simpl.
+    generalize dependent vargs1.
+    induction 1. constructor. constructor; eauto. reflexivity.
+    constructor.
+    econstructor; eauto. constructor.
+    constructor.
+    destruct wp1' as [[m1' m2' Hm12'] [m2'' m3' Hm23']].
+    destruct H5 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. simpl in *. inv H6. inv H11.
+    rename m2'1 into m3'. rename m2'0 into m2'. rename m1'0 into m1'.
+    assert (Hm13' : Mem.extends m1' m3'). 
+    eapply Mem.extends_extends_compose; eauto. inv H0.
+    destruct H4 as [ACI1 ACI2]. simpl in ACI1, ACI2. 
+    exists (extw m1' m3' Hm13'). intuition auto.
+    {
+      clear - ACI1 ACI2. rename m0 into m1. rename m3 into m2. rename m4 into m3.
+      inv ACI1. inv ACI2. constructor; eauto.
+      red. intros. eapply FREEP0. inv Hm0. congruence.
+      eapply Mem.perm_extends; eauto. eapply FREEP; eauto.
+    }
+    econstructor; simpl; eauto.
+    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
+    constructor.
+  - red. intros. destruct w1 as [se' [w11 w12]]. inv H. inv H3. inv H4. inv H2.
+    inv H0. inv H. inv H0. inv H2. inv H4. inv H12.
+    simpl in H9, H11, H , H3.  rename m0 into m1'. rename m4 into m2'. rename m6 into m3'.
+    assert (Hm13' : Mem.extends m1' m3'). 
+    eapply Mem.extends_extends_compose; eauto. 
+    exists (extw m1' m3' Hm13'). intuition auto. 
+    {
+      destruct H1 as [ACI1 ACI2]. simpl in ACI1, ACI2. inv ACI1. inv ACI2.
+      constructor; eauto.
+      red. intros. eapply FREEP0. inv Hm0. congruence.
+      eapply Mem.perm_extends; eauto. eapply FREEP; eauto.
+    }
+    constructor.
+    constructor; simpl; eauto.
+    eapply val_inject_id. eapply Val.lessdef_trans; eapply val_inject_id; eauto.
+    eapply CallConv.val_inject_lessdef_list_compose. eauto.
+    eapply (ext_lessdef_list (extw m2' m3' Hm3)). eauto. constructor.
+    destruct wp2' as [m1'' m3'' Hm13''].
+    assert (Hm12' : Mem.extends m1'' m1''). apply Mem.extends_refl.
+    exists (extw m1'' m1'' Hm12', extw m1'' m3'' Hm13''). split; simpl; eauto.
+    split. reflexivity. reflexivity. split.
+    exists r1. inv H2. inv H6. simpl in *.
+    split.
+    econstructor; simpl; eauto. eapply val_inject_id.
+    eapply Val.lessdef_refl. constructor.
+    econstructor; eauto. constructor. constructor.
+Qed.
 
 (*  {|
     ccworld := unit;
@@ -814,6 +919,20 @@ Inductive match_injp_ext_comp_world : injp_world -> injp_world -> injp_world -> 
     j14 = compose_meminj j12 j34 ->
     Mem.extends m2 m3 ->
     match_injp_ext_comp_world (injpw j12 m1 m2 Hm12) (injpw j34 m3 m4 Hm34) (injpw j14 m1 m4 Hm14).
+
+Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
+|external_mid_hidden_intro :
+  forall j12 j34 m1 m2 m3 m4 Hm12 Hm34
+    (** This case says that for any related external blocks [j14 b1 = Some b3],
+        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
+    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
+                 j12 b1 = Some (b2, d) -> j34 b2 <> None)
+    (** This cases says that for any external stack block [with permission] in m2
+        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
+    (Hconstr2: forall b3 ofs3 b4 d3, fst b3 <> Mem.tid (Mem.support m3) ->
+                Mem.perm m3 b3 ofs3 Max Nonempty -> j34 b3 = Some (b3, d3) ->
+                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
+    external_mid_hidden_ext (injpw j12 m1 m2 Hm12) (injpw j34 m3 m4 Hm34).
 
 Definition injp_ext_cctrans : injp_world * (unit * injp_world) -> injp_world -> Prop :=
   fun wjxj w =>
