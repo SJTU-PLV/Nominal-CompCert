@@ -1091,7 +1091,7 @@ Proof.
       intro. apply H. destruct H20 as [[_ Z] _].
       erewrite Mem.mext_sup. 2: eauto.
       congruence.
-  -
+  - 
     (* intros. red in Hnb3. destruct (j34 b3) as [[b4' d']|] eqn:Hj23.
     + apply H22 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
       destruct (Mem.loc_in_reach_find m1 j12 b3 ofs3) as [[b1 ofs1]|] eqn:FIND12.
