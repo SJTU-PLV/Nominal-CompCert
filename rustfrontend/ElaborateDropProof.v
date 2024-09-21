@@ -578,8 +578,17 @@ Proof.
   auto. auto.
   erewrite PTree.gempty in *. congruence.
 Qed.
-  
-(** Properties of match_envs_flagm *)
+
+Lemma match_envs_injp_acc: forall j1 j2 le m1 m2 lo hi tle tm1 tm2 tlo thi Hm1 Hm2,
+    match_envs j1 le m1 lo hi tle tm1 tlo thi ->
+    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
+    Mem.sup_include hi (Mem.support m1) ->
+    Mem.sup_include thi (Mem.support tm1) ->
+    match_envs j2 le m2 lo hi tle tm2 tlo thi.
+Admitted.
+
+
+(** Properties of match_envs_flagm: use match_envs_injp_acc to prove this *)
 Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi Hm1 Hm2,
     match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi ->
     injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
@@ -605,18 +614,17 @@ Admitted.
 
 (* establish match_envs after the allocation of the drop flags in the
 target programs *)
-Lemma alloc_drop_flags_match: forall j1 m1 tm1 e1 lo hi te1 tlo thi flags Hm1
+Lemma alloc_drop_flags_match: forall j1 m1 tm1 e1 lo hi te1 tlo thi (flags: list (place * ident)) Hm1
     (MENV: match_envs j1 e1 m1 lo hi te1 tm1 tlo thi)
     (SINCR: Mem.sup_include thi (Mem.support tm1))
-    (TYS: forall id ty, In (id, ty) flags -> ty = type_bool)
-    (DISJOINT: forall id ty, In (id, ty) flags -> e1 ! id = None),
+    (DISJOINT: forall p id, In (p, id) flags -> e1 ! id = None),
   exists te2 tm2 Hm2,
-    alloc_variables tge te1 tm1 flags te2 tm2
+    alloc_variables tge te1 tm1 (combine (map snd flags) (repeat type_bool (length flags))) te2 tm2
     /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j1 m1 tm2 Hm2)
     (* wf_dropm *)
-    /\ (forall id, In id (map fst flags) ->
-             exists b, te2 ! id = Some (b, type_bool)
-                  /\ e1 ! id = None)
+    /\ (forall p id, In (p, id) flags ->
+               exists b, te2 ! id = Some (b, type_bool)
+                    /\ e1 ! id = None)
     /\ match_envs j1 e1 m1 lo hi te2 tm2 tlo (Mem.support tm2).
 Admitted.
 
@@ -638,11 +646,12 @@ Lemma alloc_variables_app: forall ce m1 m2 m3 l1 l2 e1 e2 e3,
     alloc_variables ce e1 m1 (l1 ++ l2) e3 m3.
 Admitted.
 
-Lemma bind_parameters_injp_acc: forall params e te m1 m2 vl j lo hi tlo thi tm1 Hm1
+Lemma bind_parameters_injp_acc: forall params e te m1 m2 vl tvl j lo hi tlo thi tm1 Hm1
     (STORE: bind_parameters ge e m1 params vl m2)
-    (MENV: match_envs j e m1 lo hi te tm1 tlo thi),
+    (MENV: match_envs j e m1 lo hi te tm1 tlo thi)
+    (VINJS: Val.inject_list j vl tvl),
   exists tm2 Hm2,
-    bind_parameters tge te tm1 params vl tm2
+    bind_parameters tge te tm1 params tvl tm2
     /\ injp_acc (injpw j m1 tm1 Hm1) (injpw j m2 tm2 Hm2).
 Admitted.
 
@@ -1046,6 +1055,25 @@ Admitted.
 Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
     (GEN: generate_drop_flags mayinitMap mayuninitMap universe ce f cfg = OK flags),
     sound_flagm ce f.(fn_body) cfg (generate_place_map flags) mayinitMap mayuninitMap universe.
+Admitted.
+
+Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e m1 lo hi te tm1 tlo thi Hm1 own tf k
+  (STMT: init_drop_flags init uninit universe flags = OK init_stmt)
+  (OWN: sound_own own init uninit universe)
+  (WF: forall p id, In (p, id) flags ->
+               exists tb, te ! id = Some (tb, type_bool)
+                       /\ e ! id = None)
+  (MENV: match_envs j1 e m1 lo hi te tm1 tlo thi),
+  exists j2 tm2 Hm2,
+    plus RustIRsem.step tge (RustIRsem.State tf init_stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
+    /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m1 tm2 Hm2)
+    (* establish me_wf_flagm *)
+    /\ (forall p id, In (p, id) flags ->
+             exists tb v, te ! id = Some (tb, type_bool)
+                     /\ e ! id = None
+                     /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
+                     /\ negb (Int.eq v Int.zero) = is_owned own p)
+    /\ match_envs j2 e m1 lo hi te tm2 tlo thi.
 Admitted.
 
   
@@ -1517,7 +1545,7 @@ Proof.
     monadInv EQ2.
     (* use transl_on_cfg_meet_spec to get match_stmt in fuction entry *)
     exploit (@transl_on_cfg_meet_spec AN); eauto.
-    intros (nret & MSTMT).
+    intros (nret & MSTMT & IEND).
     (* own_env in function entry is sound *)
     exploit sound_function_entry. simpl. eauto.
     eauto. eauto. intros OWNENTRY.        
@@ -1531,23 +1559,88 @@ Proof.
     instantiate (1 := Hm).
     intros (j1 & tm1 & Hm1 & te1 & ALLOC1 & MENV1 & INJP1).
     (* alloc drop flag in the target program *)
-    set (flags := combine (map snd x2) (repeat type_bool (Datatypes.length x2))) in *.
+    rename x2 into drop_flags.
+    set (flags := combine (map snd drop_flags) (repeat type_bool (Datatypes.length drop_flags))) in *.
     exploit alloc_drop_flags_match; eauto.    
-    instantiate (1 := flags).
-    (* easy: all types of drop flag is bool *)
-    admit.
+    instantiate (1 := drop_flags).
     (* easy: added a norepet check in target program to ensure that
     source env does not contains identities of drop flags *)
     admit.
     instantiate (1 := Hm1).
     intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & MENV2).
+    (* bind_parameters in target program *)
+    exploit bind_parameters_injp_acc; eauto.
+    eapply val_inject_list_incr.
+    inv INJP1. eauto. eauto.
+    instantiate (1 := Hm2).
+    intros (tm3 & Hm3 & TBIND & INJP3).
+    (* bind parameters does not change match_env *)
+    exploit match_envs_injp_acc; eauto.
+    intros MENV3.        
     (* require that init_own is equal to entry analysis result *)
-    
-    
+    rename x4 into init_stmts. rename x3 into body.
+    (* construct the state after the initialization of drop flags *)
+    exploit eval_init_drop_flags_wf; eauto.
+    instantiate (1 := Hm3). instantiate (1 := (RustIRsem.Kseq body tk)).
+    intros (j2 & tm4 & Hm4 & INITFLAGS & INJP4 & WFFLAGM & MENV4).
     eexists. split.
     (* step *)
     econstructor. econstructor; eauto.
-    
+    (* function entry *)
+    econstructor; simpl.
+    (* list_norepet *)
+    admit.
+    (* alloc_variables *)
+    simpl. rewrite app_assoc.
+    eapply alloc_variables_app; eauto.
+    (* bind_parameters *)
+    eauto.
+    (** TODO: evaluate init statement *)
+    simpl. eapply star_step.
+    econstructor.
+    eapply plus_star. eapply plus_trans.
+    eauto.
+    econstructor. eapply RustIRsem.step_skip_seq.
+    eapply star_refl.
+    1-4: eauto.
+    (* match_states *)
+    assert (INJP14: injp_acc (injpw j m tm Hm) (injpw j2 m' tm4 Hm4)).
+    { etransitivity. eauto.
+      etransitivity. eauto.
+      etransitivity. eauto. auto. }
+    assert (INCR1: Mem.sup_include (Mem.support m1) (Mem.support m')).
+    { inv INJP3. eapply Mem.unchanged_on_support; eauto. }    
+    assert (INCR2: Mem.sup_include (Mem.support tm2) (Mem.support tm4)).
+    { inv INJP3. inv INJP4.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support; eauto.
+      eapply Mem.unchanged_on_support; eauto. }
+    econstructor; eauto.
+    (* match_cont *)
+    instantiate (1 := Mem.support tm).
+    instantiate (1 := Mem.support m).
+    instantiate (1 := j2).
+    inv MCONT. econstructor; eauto.
+    econstructor. econstructor; eauto.
+    eapply match_cont_injp_acc. eauto.
+    eauto.
+    (** TODO: match_cont implies sup_include lo (Mem.support m) *)
+    admit. admit.
+    (* match_envs_flagm in match_cont *)
+    eapply match_envs_flagm_injp_acc; eauto.
+    auto.
+    etransitivity; eauto.
+    (* this function match_envs_flagm *)    
+    eapply match_envs_flagm_incr with (hi1 := Mem.support m1) (thi1:= Mem.support tm2); eauto.
+    econstructor; auto.
+    (* prove wf_flagm *)
+    intros. eapply WFFLAGM.
+    (* property of generate_place_map *)
+    admit.
+    (** sound_flagm  *)
+    eapply generate_flag_map_sound; eauto.
+
+  Admitted.
     
 Lemma transf_initial_states q:
   forall S1, initial_state ge q S1 ->

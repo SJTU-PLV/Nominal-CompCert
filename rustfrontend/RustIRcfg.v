@@ -847,9 +847,11 @@ Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -
 Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
     (CFG: generate_cfg s = OK (entry, cfg))
     (TRANSL: transl_on_cfg s cfg = OK ts),
-  exists nret, match_stmt s cfg s ts entry nret None None nret.
+  exists nret, match_stmt s cfg s ts entry nret None None nret
+          /\ cfg ! nret = Some Iend.
 Admitted.
 
 End SPEC.
 
 End TRANSL.
+

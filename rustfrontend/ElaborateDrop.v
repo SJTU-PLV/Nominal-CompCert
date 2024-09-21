@@ -225,14 +225,17 @@ End ELABORATE.
 
 Local Open Scope error_monad_scope.
 
-Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (elt: place * ident) : statement :=
-  let (p, flag) := elt in
+Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
   if must_owned mayinit mayuninit universe p then
-    set_dropflag flag true
+    OK (set_dropflag flag true)
   else
-    (* how to show that must_owned = false is must_unowed in function
-    entry *)
-    set_dropflag flag false.                 
+    (* impossible: return error *)
+    if may_owned mayinit mayuninit universe p then
+      Error (msg "impossible may_owned in init_drop_flag")           
+    else      
+      (* how to show that must_owned = false is must_unowed in function
+         entry *)
+      OK (set_dropflag flag false).
   (* let id := local_of_place p in *)
   (* match mayinit!id, mayuninit!id with *)
   (* | Some init, Some uninit => *)
@@ -244,6 +247,15 @@ Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (elt: place *
   (*       else Sskip *)
   (* | _, _ => Sskip *)
   (* end. *)
+
+Fixpoint init_drop_flags (mayinit mayuninit universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
+  match flags with
+  | nil => OK Sskip
+  | (p, flag) :: flags' =>
+      do stmt <- init_drop_flags mayinit mayuninit universe flags';
+      do init <- init_drop_flag mayinit mayuninit universe p flag;
+      OK (Ssequence init stmt)
+  end.
 
 (* instance of [get_an] *)
 Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t)) (pc: node) : PathsMap.t * PathsMap.t * PathsMap.t :=
@@ -265,7 +277,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let entry_init := mayinit!!entry in
   let entry_uninit := mayuninit!!entry in
   (* init drop flags: if no flags, it would be a Sskip *)
-  let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit universe) flags) in
+  do init_stmt <- init_drop_flags entry_init entry_uninit universe flags;
   let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
   Errors.OK (mkfunction f.(fn_generic_origins)
                         f.(fn_origins_relation)
