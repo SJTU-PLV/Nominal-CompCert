@@ -550,7 +550,7 @@ Record match_envs (j: meminj) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (tm: 
     
     me_range: forall id b ty,
       e ! id = Some (b, ty) ->
-      ~ In b lo /\ In b hi;
+      ~ sup_In b lo /\ sup_In b hi;
 
     (* local injp_acc breaks when changing the drop flags, but we can
     use me_trange to say that we do not change valid block in the
@@ -558,13 +558,16 @@ Record match_envs (j: meminj) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (tm: 
     world *)
     me_trange: forall id b ty,
       te ! id = Some (b, ty) ->
-      ~ In b tlo /\ In b thi;
+      ~ sup_In b tlo /\ sup_In b thi;
 
+    me_tinitial:
+      Mem.sup_include (Mem.support wm2) tlo;
+    
     me_incr:
       Mem.sup_include lo hi;
     me_tincr:
       Mem.sup_include tlo thi;
-    
+                                         
     (* use out_of_reach to protect the drop flags *)
     me_protect: forall id b ty,
       e ! id = None ->
@@ -595,6 +598,7 @@ Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem
 Lemma match_empty_envs: forall j m tm lo hi tlo thi,
     Mem.sup_include lo hi ->
     Mem.sup_include tlo thi ->
+    Mem.sup_include (Mem.support wm2) tlo ->
     match_envs j empty_env m lo hi empty_env tm tlo thi.
 Proof.
   intros.
@@ -603,6 +607,7 @@ Proof.
   erewrite PTree.gempty in *. congruence.
   erewrite PTree.gempty in *. congruence.
   erewrite PTree.gempty in *. congruence.
+  auto.
   auto. auto.
   erewrite PTree.gempty in *. congruence.
   (* erewrite PTree.gempty in *. congruence. *)
@@ -1062,85 +1067,58 @@ Proof.
   erewrite dropm_preserved; eauto.
 Qed.
 
-(** IMPORTANT TODO *)
-Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 (flag: bool) p tk tf
-  (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
-  (OWN: own2 = if flag then init_place own1 p else move_place own1 p),
-  exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag flagm p flag) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)         
-         /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
-         /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2).
-Admitted.
 
-(* only consider move_place *)
-Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 tk tf
-    (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
-    (OWN: own2 = own_transfer_exprlist own1 al),
-    exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag_list flagm (moved_place_list al) false) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
-               /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
-               /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) .
-Admitted.
+(** Properties of assignment of drop flags *)
 
-(** IMPORTANT TODO  *)
-Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
-    (GEN: generate_drop_flags mayinitMap mayuninitMap universe ce f cfg = OK flags),
-    sound_flagm ce f.(fn_body) cfg (generate_place_map flags) mayinitMap mayuninitMap universe.
-Admitted.
-
-
-(** TODO: extract a more general lemma to be used in all assignment of drop flag *)
-Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p stmt own tf k 
-   (TE: te ! id = Some (tb, type_bool))
-   (MINJ: Mem.inject j1 m1 tm1)
-   (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
-   (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
-   (STMT: init_drop_flag init uninit universe p id = OK stmt)
-   (OWN: sound_own own init uninit universe),
-  exists j2 tm2 v,
-    star RustIRsem.step tge (RustIRsem.State tf stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
-    /\ Mem.inject j2 m1 tm2 
-    (* /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m1 tm2 Hm2) *)
-    /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
-    /\ negb (Int.eq v Int.zero) = is_owned own p
-    /\ Mem.unchanged_on (fun b _ => b <> tb) tm1 tm2.
+Lemma eval_set_drop_flag: forall flag te id tb tm1 m1 j1 tf k
+    (TE: te ! id = Some (tb, type_bool))
+    (MINJ: Mem.inject j1 m1 tm1)
+    (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
+    (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs),
+    exists tm2,
+      RustIRsem.step tge (RustIRsem.State tf (set_dropflag id flag) k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
+      /\ Mem.inject j1 m1 tm2                   
+      /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Val.of_bool flag)
+      (* unchanged properties *)
+      /\ ValueAnalysis.ro_acc tm1 tm2
+      /\ Mem.unchanged_on (fun b _ => b <> tb) tm1 tm2
+      (* permission in b is unchanged *)
+      /\ Mem.range_perm tm2 tb 0 (size_chunk Mint8unsigned) Cur Freeable.
 Proof.
-  intros.
-  unfold init_drop_flag in STMT.
-  destruct (must_owned init uninit universe p) eqn: MUST; try congruence.
-  - inv STMT. 
-    unfold set_dropflag.
-    (* construct storev *)
-    assert (VALID: Mem.valid_access tm1 Mint8unsigned tb 0 Writable).
-    { red. split.
-      rewrite Z.add_0_l. eapply Mem.range_perm_implies; eauto.
-      constructor. apply Z.divide_0_r. }      
-    generalize (Mem.valid_access_store tm1 Mint8unsigned tb 0 (Vint Int.one) VALID).
-    intros (tm2 & STORE).
-    (* establish new injection *)
-    exploit Mem.store_outside_inject; eauto.
-    intros. eapply REACH. eauto.
-    eapply Mem.perm_cur_max.
-    instantiate (1 := ofs' + delta).
-    replace (ofs' + delta - delta) with ofs' by lia.
-    eapply Mem.perm_implies; eauto. constructor.
-    intros MINJ1.
-    (* ro_acc *)
-    assert (RO1: ValueAnalysis.ro_acc m1 m1). eapply ValueAnalysis.ro_acc_refl.
-    assert (RO2: ValueAnalysis.ro_acc tm1 tm2). { eapply ValueAnalysis.ro_acc_store; eauto. }        
-    do 3 eexists.
-    split.
-    (* step *)
-    eapply star_one.
-    econstructor.
-    econstructor; eauto.
-    econstructor. econstructor.
-    simpl.
-    (* maybe we should prove cast_val_casted *)
-    unfold sem_cast. simpl. rewrite Int.eq_false; eauto.
-    apply Int.one_not_zero.
-    econstructor. simpl. eauto.
-    eauto.
-    split.
-    eauto.
+    (* unfold set_dropflag. *)
+    (* (* construct storev *) *)
+    (* assert (VALID: Mem.valid_access tm1 Mint8unsigned tb 0 Writable). *)
+    (* { red. split. *)
+    (*   rewrite Z.add_0_l. eapply Mem.range_perm_implies; eauto. *)
+    (*   constructor. apply Z.divide_0_r. }       *)
+    (* generalize (Mem.valid_access_store tm1 Mint8unsigned tb 0 (Vint Int.one) VALID). *)
+    (* intros (tm2 & STORE). *)
+    (* (* establish new injection *) *)
+    (* exploit Mem.store_outside_inject; eauto. *)
+    (* intros. eapply REACH. eauto. *)
+    (* eapply Mem.perm_cur_max. *)
+    (* instantiate (1 := ofs' + delta). *)
+    (* replace (ofs' + delta - delta) with ofs' by lia. *)
+    (* eapply Mem.perm_implies; eauto. constructor. *)
+    (* intros MINJ1. *)
+    (* (* ro_acc *) *)
+    (* assert (RO1: ValueAnalysis.ro_acc m1 m1). eapply ValueAnalysis.ro_acc_refl. *)
+    (* assert (RO2: ValueAnalysis.ro_acc tm1 tm2). { eapply ValueAnalysis.ro_acc_store; eauto. }         *)
+    (* do 3 eexists. *)
+    (* split. *)
+    (* (* step *) *)
+    (* eapply star_one. *)
+    (* econstructor. *)
+    (* econstructor; eauto. *)
+    (* econstructor. econstructor. *)
+    (* simpl. *)
+    (* (* maybe we should prove cast_val_casted *) *)
+    (* unfold sem_cast. simpl. rewrite Int.eq_false; eauto. *)
+    (* apply Int.one_not_zero. *)
+    (* econstructor. simpl. eauto. *)
+    (* eauto. *)
+    (* split. *)
+    (* eauto. *)
     (* inv RO1. inv RO2. *)
     (* econstructor; eauto. *)
     (* eapply Mem.unchanged_on_refl.     *)
@@ -1148,6 +1126,48 @@ Proof.
     (* eapply Mem.store_unchanged_on; eauto. *)
 Admitted.    
 
+
+Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p stmt own tf k 
+   (TE: te ! id = Some (tb, type_bool))
+   (MINJ: Mem.inject j1 m1 tm1)
+   (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
+   (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
+   (STMT: init_drop_flag init uninit universe p id = OK stmt)
+   (OWN: sound_own own init uninit universe),
+  exists tm2 v,
+    star RustIRsem.step tge (RustIRsem.State tf stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
+    /\ Mem.inject j1 m1 tm2 
+    /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
+    /\ negb (Int.eq v Int.zero) = is_owned own p
+    /\ ValueAnalysis.ro_acc tm1 tm2
+    /\ Mem.unchanged_on (fun b _ => b <> tb) tm1 tm2
+    /\ Mem.range_perm tm2 tb 0 (size_chunk Mint8unsigned) Cur Freeable.
+Proof.
+  intros.  
+  unfold init_drop_flag in STMT.
+  destruct (must_owned init uninit universe p) eqn: MUST.
+  - inv STMT.
+    exploit (eval_set_drop_flag true); eauto.
+    instantiate (1 := k). instantiate (1 := tf).
+    intros (tm2 & A & B & C & D & E & F). simpl in *.
+    unfold Vtrue in C.
+    exists tm2, Int.one.
+    repeat apply conj; auto.
+    eapply star_step. eauto.
+    eapply star_refl. auto.
+    erewrite must_owned_sound; eauto.
+  - destruct (may_owned init uninit universe p) eqn: MAY; try congruence.
+    inv STMT.
+    exploit (eval_set_drop_flag false); eauto.
+    instantiate (1 := k). instantiate (1 := tf).
+    intros (tm2 & A & B & C & D & E & F). simpl in *.
+    unfold Vfalse in C.
+    exists tm2, Int.zero.
+    repeat apply conj; auto.
+    eapply star_step. eauto.
+    eapply star_refl. auto.    
+    erewrite must_not_owned_sound; eauto.
+Qed.
 
 
 (* no injp_acc *)
@@ -1195,8 +1215,122 @@ Proof.
     intros (PERM & REACH). 
     (* we can only show that load and negb in the memory after
     evaluating x0 but we cannot preserve its in the final memory *)
-Admitted.    
+    exploit eval_init_drop_flag_wf; eauto.
+    instantiate (1 := (RustIRsem.Kseq x k)). instantiate (1 := tf).
+    intros (tm2 & v & A & B & C & D & E & F & G).
+    inv NOREPET.    
+    exploit IHflags; eauto.
+    (* prove match_env *)
+    inv MENV.          
+    econstructor; eauto.
+    intros.   
+    exploit me_protect0; eauto.
+    intros (PERM1 & REACH1). split; auto.
+    destruct (eq_block b tb); subst. auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    instantiate (1 := k). instantiate (1 := tf).
+    intros (tm3 & STAR & MINJ3 & WFFLAG3 & MENV3 & UNC3 & RO3).
+    exists tm3.
+    repeat apply conj.
+    (* step *)
+    eapply star_step. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eauto.
+    1-3: eauto.
+    eauto.
+    (* prove wf_flagm *)
+    intros. destruct H. inv H.
+    exists tb, v. repeat apply conj; auto.
+    (* important: tb is not changed in tm2->tm3 *)
+    eapply Mem.load_unchanged_on; eauto.
+    intros. simpl. intros.
+    (* proved by injective *)
+    eapply INJ; eauto.
+    intro. subst. eapply H1.
+    eapply in_map_iff. exists (p,id0). split; auto.
+    eapply WFFLAG3. auto.
+    auto.
+    (* unchanged_on *)
+    eapply Mem.unchanged_on_trans.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply H.
+    left. eauto. eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. intros.
+    eapply H. right. eauto. eauto.
+    (* ro_acc *)
+    eapply ValueAnalysis.ro_acc_trans; eauto.
+Qed. 
+
+(** IMPORTANT TODO *)
+Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf
+  (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
+  (MINJ: Mem.inject j m tm1)
+  (* how to ensure that update ownership of p does not change other place ownership *)
+  (OWN: own2 = if flag then init_place own1 p else move_place own1 p),
+  exists tm2,
+    star RustIRsem.step tge (RustIRsem.State tf (add_dropflag flagm p flag) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+    /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+    /\ Mem.unchanged_on (fun b _ => forall p id tb ty, get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2
+    /\ ValueAnalysis.ro_acc tm1 tm2.
+Proof.
+  intros. unfold add_dropflag.
+  destruct (get_dropflag_temp flagm p) eqn: FLAG.
+  simpl.
+  exploit me_wf_flagm; eauto.
+  intros (tb & v & A & B & C & D).
+  exploit eval_set_drop_flag; eauto.
+  eapply me_protect;eauto. eapply me_envs; eauto.
+  eapply me_protect;eauto. eapply me_envs; eauto.
+  instantiate (1 := flag). instantiate (1 := tk).
+  instantiate (1 := tf).
+  intros (tm2 & E & F & G & H & I & J).
+  exists tm2.
+  repeat apply conj.
+  eapply star_one; eauto.
+  (* match_envs_flagm *)
+  constructor.
+  intros. exploit me_wf_flagm; eauto.
+  intros (tb0 & v0 & A0 & A1 & A2 & A3).
+  exists tb0, v0. repeat apply conj; auto.
+  
+  
+(* only consider move_place *)
+Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 tk tf
+    (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
+    (OWN: own2 = own_transfer_exprlist own1 al),
+    exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag_list flagm (moved_place_list al) false) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+               /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+               /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) .
+Admitted.
+
+
+(** TODO: prove a simple injp_acc_local  *)
+Lemma injp_acc_local_simple:  forall f0 wm wtm Htm j1 m1 tm1 Hm1 tm2 Hm2,
+    injp_acc (injpw f0 wm wtm Htm) (injpw j1 m1 tm1 Hm1) ->
+    Mem.ro_unchanged tm1 tm2 ->    
+    injp_max_perm_decrease tm1 tm2 ->
+    Mem.unchanged_on (fun b ofs => Mem.valid_block wtm b /\ loc_out_of_reach f0 wm b ofs) tm1 tm2 ->
+    injp_acc (injpw f0 wm wtm Htm) (injpw j1 m1 tm2 Hm2).
+Proof.
+  intros.
+  exploit (ValueAnalysis.ro_acc_refl). instantiate (1 := m1). intros RO.
+  inv RO.
+  eapply SimplLocalsproof.injp_acc_local; eauto.
+  inv H. eauto.
+  eapply Mem.unchanged_on_refl.
+Qed.
+
+
+(** IMPORTANT TODO  *)
+Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
+    (GEN: generate_drop_flags mayinitMap mayuninitMap universe ce f cfg = OK flags),
+    sound_flagm ce f.(fn_body) cfg (generate_place_map flags) mayinitMap mayuninitMap universe.
+Admitted.
     
+
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
 Lemma step_dropplace_simulation:
@@ -1676,6 +1810,8 @@ Proof.
     eapply match_empty_envs.
     eapply Mem.sup_include_refl.
     instantiate (1 := tm). eapply Mem.sup_include_refl.
+    unfold wm2. destruct w.
+    inv MINJ. eapply Mem.unchanged_on_support.  eauto.    
     instantiate (1 := Hm).
     intros (j1 & tm1 & Hm1 & te1 & ALLOC1 & MENV1 & INJP1).
     (* alloc drop flag in the target program *)
@@ -1713,17 +1849,12 @@ Proof.
       etransitivity. eauto.
       reflexivity. }
     assert (INJP14: injp_acc (injpw j m tm Hm) (injpw j1 m' tm4 MINJ4)).
-    { eapply SimplLocalsproof.injp_acc_local.
-      eauto.
-      (* key idea: modified out_of_reach blocks in tm4 is invalid in tm *)
-      8 : {
-        eapply Mem.unchanged_on_implies; eauto.
-        simpl. intros. destruct H2.
-        intro. subst.
-        eapply me_trange; eauto.
-      }
-      (* Some dirty work *)
-      1-7: admit. }
+    { inv RO1.
+      eapply injp_acc_local_simple; eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros. destruct H5.
+      intro. subst.
+      eapply me_trange; eauto. }
     eexists. split.
     (* step *)
     econstructor. econstructor; eauto.

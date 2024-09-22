@@ -167,14 +167,10 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
 
 Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (flagm: PTree.t (list (place * ident))) (p: place) : Errors.res statement :=
   let universe := PathsMap.get (local_of_place p) universemap in
-  match split_drop_place ce universe p (typeof_place p) with
-  | OK drop_places =>      
+  do drop_places <- split_drop_place ce universe p (typeof_place p);
       (** may be we should check the disjointness of drop flags. Use a skip to simulate source step_to_dropplace *)
-      OK (Ssequence Sskip (elaborate_drop_for_splits mayinit mayuninit universemap flagm drop_places))
-  (* The error case is considerer in elaboration step *)
-  | Error msg =>
-      Error msg
-  end.
+  OK (Ssequence Sskip (elaborate_drop_for_splits mayinit mayuninit universemap flagm drop_places))
+.
 
 
 Section ELABORATE.
@@ -183,20 +179,33 @@ Section ELABORATE.
 Variable m: PTree.t (list (place * ident)).
 Variable ce: composite_env.
 
-Definition add_dropflag (p: place) (flag: bool) : statement :=
-  set_dropflag_option (get_dropflag_temp m p) flag.
-
-
-Definition add_dropflag_option (p: option place) (flag: bool) : statement :=
-  match p with
-  | Some p => add_dropflag p flag
-  | _ => Sskip
+Fixpoint set_dropflag_for_splits (l: list place) (flag: bool) : statement :=
+  match l with
+  | nil => Sskip
+  | p :: l' =>
+      Ssequence (set_dropflag_option (get_dropflag_temp m p) flag) (set_dropflag_for_splits l' flag)
   end.
 
-Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
-  let stmts := fold_right (fun elt acc => add_dropflag elt flag :: acc) nil l in
-  makeseq stmts.
+Definition add_dropflag (universeMap: PathsMap.t) (p: place) (flag: bool) : Errors.res statement :=
+  let universe := PathsMap.get (local_of_place p) universeMap in
+  do drop_places <- split_drop_place ce universe p (typeof_place p);
+  OK (set_dropflag_for_splits (map fst drop_places) flag).
 
+Definition add_dropflag_option universeMap (p: option place) (flag: bool) : Errors.res statement :=
+  match p with
+  | Some p => add_dropflag universeMap p flag
+  | _ => OK Sskip
+  end.
+
+Fixpoint add_dropflag_list universeMap (l: list place) (flag: bool) : Errors.res statement :=
+  match l with
+  | nil => OK Sskip
+  | p :: l' =>
+      do s1 <- add_dropflag universeMap p flag;
+      do s2 <- add_dropflag_list universeMap l' flag;
+      OK (Ssequence s1 s2)
+  end.
+     
 
 (* Instance of transl_stmt in the transl_on_cfg. [an] is (mayinit,
 mayuninit, universe) *)
@@ -209,13 +218,13 @@ Definition elaborate_stmt (an: PathsMap.t * PathsMap.t * PathsMap.t) (stmt: stat
   | Sassign_variant p _ _ e
   | Sbox p e =>
       let deinit := moved_place e in
-      let stmt1 := add_dropflag_option deinit false in
-      let stmt2 := add_dropflag p true in
+      do stmt1 <- add_dropflag_option universe deinit false;
+      do stmt2 <- add_dropflag universe p true;
       OK (Ssequence stmt1 (Ssequence stmt2 stmt))
   | Scall p e el =>
       let mvpaths := moved_place_list el in
-      let stmt1 := add_dropflag_list mvpaths false in
-      let stmt2 := add_dropflag p true in
+      do stmt1 <- add_dropflag_list universe mvpaths false;
+      do stmt2 <- add_dropflag universe p true;
       OK (Ssequence (Ssequence stmt1 stmt) stmt2)
   | _ => OK stmt
   end.
