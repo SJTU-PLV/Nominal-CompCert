@@ -254,6 +254,10 @@ Definition update_add_same (j23 j23' j12': meminj ) : Prop :=
     exists b1, j12' b1 = Some (b2,0) /\
     (forall b1' d, j12' b1' = Some (b2,d) -> b1' = b1).
 
+Definition update_add_block (s2 s2' : sup) (j12' j23' : meminj) : Prop :=
+  forall b2, ~ sup_In b2 s2 -> sup_In b2 s2' ->
+        exists b1 b3 d, j12' b1 = Some (b2, 0) /\ j23' b2 = Some (b3 ,d).
+
 Definition update_add_same2 (j23 j23' : meminj ) : Prop :=
   forall b2 b3 ofs2,
     j23 b2 = None -> j23' b2 = Some (b3,ofs2) ->
@@ -331,6 +335,7 @@ Lemma update_properties':
     /\ update_add_exists j1 j1' j'
     /\ update_add_zero j1 j1'
     /\ update_add_same j2 j2' j1'
+    /\ update_add_block s2 s2' j1' j2'
     /\ Mem.meminj_thread_local j1'
     /\ Mem.meminj_thread_local j2'
     /\ Mem.match_sup s2 s2'.
@@ -408,7 +413,7 @@ Proof.
         intros. intro. apply IMGIN12 in H. eapply freshness_tid; eauto.
     +
     intros (incrnew1 & incrnew2 & ng1 & ng2 & incr1 & incr2 & sinc & imagein1 & domin2 &
-              disjoint1 & disjoint2 & no_overlap & add_exists & add_zero & add_same1
+              disjoint1 & disjoint2 & no_overlap & add_exists & add_zero & add_same1 & add_newb
                    & thread_local1 & thread_local2 & match_sup).
     repeat apply conj; eauto.
     (*incr_new1*)
@@ -515,6 +520,14 @@ Proof.
           exfalso. eapply freshness_tid; eauto.
         + exploit incrnew1; eauto. eapply sup_incr_tid_in1; eauto. intro. inv H3.
       - eapply add_same1; eauto. rewrite meminj_add_diff; eauto.
+    }
+    {
+      red. red in add_newb. intros.
+      destruct (eq_block b2 (fresh_block_tid s2 (fst a))).
+      - subst. exists a,b,z. split. apply incr1. unfold meminj_add. rewrite pred_dec_true; reflexivity.
+        apply incr2. unfold meminj_add. rewrite pred_dec_true; reflexivity.
+      - apply add_newb; eauto. intro. eapply sup_incr_tid_in in H2.
+        destruct H2. congruence. congruence. auto.
     }
     inv match_sup. unfold sup_incr_tid in H. simpl in H. rewrite Mem.update_list_length in H. auto.
     inv match_sup. auto.
@@ -858,6 +871,7 @@ Lemma inject_incr_inv: forall j1 j2 j' s1 s2 s3 s1',
                update_add_zero j1 j1' /\
                update_add_exists j1 j1' j' /\
                update_add_same j2 j2' j1' /\
+               update_add_block s2 s2' j1' j2' /\
                Mem.meminj_thread_local j1' /\
                Mem.meminj_thread_local j2' /\
                Mem.tid s2 = Mem.tid s2' /\
@@ -887,7 +901,7 @@ Proof.
   intro COMPOSE.
   exploit update_properties'; eauto.
   rewrite inject_incr_disjoint_eqv.
-  intros  (A & B & A1 & B1 & C & D & E & F & G & I & J & K & L & M & N & P & Q & R).
+  intros  (A & B & A1 & B1 & C & D & E & F & G & I & J & K & L & M & N & P & Q & R & S).
   repeat apply conj; eauto.
   red. intros. intro. eapply A; eauto. eapply update_threads_sup2_In; eauto.
   red. intros. intro. eapply B; eauto. eapply update_threads_sup2_In; eauto.
@@ -895,8 +909,9 @@ Proof.
   eapply add_from_to_dom_in; eauto.
   red. intros. exploit I; eauto. intros [X Y]. split; auto. rewrite <- update_threads_sup2_In; eauto.
   red. intros. exploit J; eauto. intros [X Y]. split; auto. rewrite <- update_threads_sup2_In; eauto.
-  unfold update_threads_sup2 in R. destruct R. simpl in H6, H7. auto.
-  unfold update_threads_sup2 in R. destruct R. simpl in H6, H7.
+  red. intros. eapply P; eauto.  rewrite update_threads_sup2_In; eauto.
+  unfold update_threads_sup2 in S. destruct S. simpl in H7, H8. auto.
+  unfold update_threads_sup2 in S. destruct S. simpl in H7, H8.
   setoid_rewrite <- H7. rewrite update_threads_length_1 in H7.
   rewrite update_threads_length_1. unfold Mem.next_tid. reflexivity. apply Hntid. apply Hntid.
 Qed.
@@ -2613,7 +2628,7 @@ Proof.
     clear - DISJ13 INJ12 INJ23. red. intros. exploit DISJ13; eauto.
     erewrite inject_tid. 2: eauto. erewrite inject_tid; eauto.
     generalize (inject_incr_inv j12 j23 j13' (Mem.support m1) (Mem.support m2) (Mem.support m3) (Mem.support m1') Hconstr1 Ht23 Hmtl1 Hmtl2 Hmtl3 NTID DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13' DISJ13ng).
-    intros (j12' & j23' & m2'_sup & JEQ & INCRn1 & INCRn2 & INCRng1 & INCRng2 & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & Hmtl1' & Hmtl2' & HTID & HNTID).
+    intros (j12' & j23' & m2'_sup & JEQ & INCRn1 & INCRn2 & INCRng1 & INCRng2 & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME & ADDBLOCK & Hmtl1' & Hmtl2' & HTID & HNTID).
     subst.
     set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto. split; auto.

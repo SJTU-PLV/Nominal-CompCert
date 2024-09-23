@@ -912,27 +912,13 @@ Qed.
     match_reply w := cc_c_reply ext w;
   |}.
  *)
+Require Import InjpExtAccoComp.
 
 Inductive match_injp_ext_comp_world : injp_world -> ext_world -> injp_world -> injp_world -> Prop :=
 |world_comp_intro:
   forall m1 m2 m3 m4 j12 j34 j14 Hm12 Hm23 Hm34 Hm14,
     j14 = compose_meminj j12 j34 ->
     match_injp_ext_comp_world (injpw j12 m1 m2 Hm12) (extw m2 m3 Hm23) (injpw j34 m3 m4 Hm34) (injpw j14 m1 m4 Hm14).
-
-Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
-|external_mid_hidden_intro :
-  forall j12 j34 m1 m2 m3 m4 Hm12 Hm34
-    (** This case says that for any related external blocks [j14 b1 = Some b3],
-        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
-    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
-                 j12 b1 = Some (b2, d) -> j34 b2 <> None)
-    (** This cases says that for any external stack block [with permission] in m2
-        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
-    (Hconstr2: forall b3 ofs3 b4 d3, fst b3 <> Mem.tid (Mem.support m3) ->
-                Mem.perm m3 b3 ofs3 Max Nonempty -> j34 b3 = Some (b4, d3) ->
-                Mem.perm m2 b3 ofs3 Max Nonempty /\                
-                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b3, ofs3 - ofs1)),
-    external_mid_hidden_ext (injpw j12 m1 m2 Hm12) (injpw j34 m3 m4 Hm34).
 
 Definition injp_ext_cctrans : injp_world * (ext_world * injp_world) -> injp_world -> Prop :=
   fun wjxj w =>
@@ -1138,27 +1124,6 @@ Proof.
       destruct H21 as [[_ Z]_]. congruence.
 Qed.
 
-(** Is this correct? do we have to enforce internal [ro] and [mpd]
-    properties for c_ext (and prove them in passes) to absorb it? *)
-
-(** A construcion, all lemmas can be reused. m2' and m3' can be the same. 
-    Problem: the corrent mid_hidden is good enough? *)
-Lemma injp_acce_ext_outgoing_constr: forall j12 j34 m1 m2 m3 m4 Hm14 j14' m1' m4' (Hm12: Mem.inject j12 m1 m2) (Hm34 :Mem.inject j34 m3 m4) Hm14',
-    let w1 := injpw j12 m1 m2 Hm12 in
-    let w2 := injpw j34 m3 m4 Hm34 in
-    injp_acce (injpw (compose_meminj j12 j34) m1 m4 Hm14) (injpw j14' m1' m4' Hm14') ->
-    external_mid_hidden_ext w1 w2 ->
-    Mem.extends m2 m3 ->
-    exists j12' j23' m2' m3' Hm12' Hm34',
-      let w1' := injpw j12' m1' m2' Hm12' in
-      let w2' := injpw j23' m3' m4' Hm34' in
-      j14' = compose_meminj j12' j23' /\
-        Mem.extends m2' m3' /\
-        injp_acce w1 w1' /\
-        injp_acce w2 w2' /\
-        external_mid_hidden_ext w1' w2'.
-Proof.
-Admitted.
 
 Lemma cctrans_injp_ext:
   cctrans (c_injp @ c_ext @ c_injp) c_injp.
@@ -1182,7 +1147,7 @@ Proof.
     + constructor. rewrite meminj_dom_compose. auto.
     + constructor. intros. unfold meminj_dom in H6.
       destr_in H6.
-      intros. eexists. eexists. split. eauto.
+      intros. split. auto. eexists. eexists. split. eauto.
       unfold meminj_dom. rewrite H7. do 2 f_equal. lia.
     + intros r1 r4 [wpa [wpe wpb]] wp2 [wpa' [wpe' wpb']] MS.
       intros [ACE1 [X ACE2]] [ACI1 [ACI2 ACI3]] [r2 [Hr1 [r3 [Hr2 Hr3]]]].
@@ -1239,7 +1204,8 @@ Proof.
        assert (Hm23' : Mem.extends m2' m3').
        inv Hq1. inv Hq2. inv Hq3. inv H3. inv H12. inv H16. auto.       
        assert (Hhidden: external_mid_hidden_ext (injpw j12' m1' m2' Hm12') (injpw j34' m3' m4' Hm34')).
-       eapply external_mid_hidden_ext_acci; eauto.
+       eapply external_mid_hidden_ext_acci; eauto. inv ACI2. inv Hq1. inv Hq2. inv Hq3.
+       inv H3. inv H12. inv H16. auto.
        exploit injp_acce_ext_outgoing_constr; eauto.
        intros (j12'' & j34'' & m2'' & m3'' & Hm12'' & Hm34'' & COMPOSE & MEXT'' & ACCE1 & ACCE2 & HIDDEN).
        rename m1'0 into m1''. rename m2'0 into m4''.
