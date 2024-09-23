@@ -174,6 +174,14 @@ Section CONSTR_PROOF.
     eapply unchanged_on_map_sup; eauto. erewrite <- Mem.mext_sup; eauto.
     reflexivity.
   Qed.
+
+   Lemma unchanged31_step2: Mem.unchanged_on (loc_out_of_reach j1 m1) m3 m3'1.
+  Proof.
+    intros. unfold m3'1. unfold Mem.step2.
+    eapply Mem.unchanged_on_implies with (P := fun b _ => Mem.valid_block m3 b).
+    eapply unchanged3_step1.
+    intros. eauto.
+  Qed.
   
   Lemma unchanged3_step2: Mem.unchanged_on (loc_unmapped j2) m3 m3'1.
   Proof.
@@ -183,8 +191,8 @@ Section CONSTR_PROOF.
     intros. eauto.
   Qed.
 
-  Lemma unchanged_on_copy_block2 : forall m m' b,
-      Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
+  Lemma unchanged_on_copy_block2 : forall m m' b mx INJx,
+      Mem.copy_block m1 mx m1' j1 j2 j1' INJx b m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -196,7 +204,7 @@ Section CONSTR_PROOF.
     intros. rewrite pmap_update_diff'. reflexivity.
     congruence.
   Qed.
-
+(*
   Lemma unchanged_on_copy_block22 : forall m m' b,
       Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
@@ -210,7 +218,8 @@ Section CONSTR_PROOF.
     intros. rewrite pmap_update_diff'. reflexivity.
     congruence.
   Qed.
-  
+ *)
+  (*
   Lemma unchanged_on_copy_block3 : forall m m' b,
       Mem.copy_block m1 m3 m1' j1 j2 j1' INJ13 b m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
@@ -224,9 +233,9 @@ Section CONSTR_PROOF.
     intros. rewrite pmap_update_diff'. reflexivity.
     congruence.
   Qed.
-  
-  Lemma unchanged_on_copy_block1 : forall m m' b,
-      Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
+  *)
+  Lemma unchanged_on_copy_block1 : forall m m' b mx INJx,
+      Mem.copy_block m1 mx m1' j1 j2 j1' INJx b m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -255,8 +264,8 @@ Section CONSTR_PROOF.
       eauto. intro. inv H1. reflexivity. reflexivity.
   Qed.
 
-  Lemma unchanged_on_copy'1 : forall s m m',
-      Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
+  Lemma unchanged_on_copy'1 : forall s m m' mx INJx,
+      Mem.copy_sup' m1 mx m1' j1 j2 j1' INJx s m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -266,25 +275,14 @@ Section CONSTR_PROOF.
       eauto.
   Qed.
 
-  Lemma unchanged_on_copy'22 : forall s m m',
-      Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
+  Lemma unchanged_on_copy'2 : forall s m m' mx INJx,
+      Mem.copy_sup' m1 mx m1' j1 j2 j1' INJx s m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     induction s; intros; subst; simpl.
     - eauto with mem.
     - eapply Mem.unchanged_on_trans.
-      2: eapply unchanged_on_copy_block22; eauto.
-      eauto. 
-  Qed.
-  
-  Lemma unchanged_on_copy'2 : forall s m m',
-      Mem.copy_sup' m1 m3 m1' j1 j2 j1' INJ13 s m = m' ->
-      Mem.unchanged_on (loc_unmapped j2) m m'.
-  Proof.
-    induction s; intros; subst; simpl.
-    - eauto with mem.
-    - eapply Mem.unchanged_on_trans.
-      2: eapply unchanged_on_copy_block3; eauto.
+      2: eapply unchanged_on_copy_block2; eauto.
       eauto. 
   Qed.
   
@@ -293,17 +291,23 @@ Section CONSTR_PROOF.
     unfold m2'. unfold Mem.copy_sup.
     eapply unchanged_on_copy'1; eauto.
   Qed.
+
+  Lemma unchanged31_step3 : Mem.unchanged_on (loc_out_of_reach j1 m1) m3'1 m3'.
+  Proof.
+     unfold m3'. unfold Mem.copy_sup.
+     eapply unchanged_on_copy'1; eauto.
+  Qed.
   
   Lemma unchanged22_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'.
   Proof.
     unfold m2'. unfold Mem.copy_sup.
-    eapply unchanged_on_copy'22; eauto.
+    eapply unchanged_on_copy'2; eauto.
   Qed.
   
   Lemma unchanged3_step3: Mem.unchanged_on (loc_unmapped j2) m3'1 m3'.
   Proof.
-    unfold m2'. unfold Mem.copy_sup.
-    eapply unchanged_on_copy'2; eauto. unfold m3'. reflexivity.
+    unfold m3'. unfold Mem.copy_sup.
+    eapply unchanged_on_copy'2; eauto.
   Qed.
 
   (** Lemma C.8(1) *)
@@ -328,9 +332,6 @@ Section CONSTR_PROOF.
     eapply unchanged3_step2.
     eapply unchanged3_step3.
   Qed.
-
-  Theorem unchanged31_step2 : Mem.unchanged_on (loc_out_of_reach j1 m1) m3 m3'1.
-  Proof.
     
   Theorem UNCHANGE32 : Mem.unchanged_on (loc_out_of_reach j1 m1) m3 m3'.
   Proof.
@@ -466,12 +467,12 @@ Section CONSTR_PROOF.
     apply m3'1_support.
   Qed.
   
-  Lemma copy_block_content : forall m b1 o1 b2 o2,
+  Lemma copy_block_content : forall m b1 o1 b2 o2 mx INJx,
       j1 b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Cur Readable ->
       ~ (j2 b2 = None) ->
       Mem.support m = s2' ->
-      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2 m) b2 o2 =
+      mem_memval (Mem.copy_block m1 mx m1' j1 j2 j1' INJx b2 m) b2 o2 =
           if (Mem.perm_dec m1 b1 o1 Max Writable) then
             Mem.memval_map j1' (mem_memval m1' b1 o1)
             else mem_memval m b2 o2.
@@ -509,21 +510,21 @@ Section CONSTR_PROOF.
       exploit mi_mappedblocks; eauto.
   Qed.
   
-  Lemma copy_block_content1 : forall m b1 o1 b2 o2,
+  Lemma copy_block_content1 : forall m b1 o1 b2 o2 mx INJx,
       j1 b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Cur Readable ->
       Mem.perm m1 b1 o1 Max Writable ->
       ~ (j2 b2 = None) ->
       Mem.support m = s2' ->
-      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2 m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+      mem_memval (Mem.copy_block m1 mx m1' j1 j2 j1' INJx b2 m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
     intros. erewrite copy_block_content; eauto.
     rewrite pred_dec_true; eauto.
   Qed.
 
-  Lemma copy_block_content3 : forall m b2 o2 b2',
+  Lemma copy_block_content3 : forall m b2 o2 b2' mx INJx,
       b2 <> b2' ->
-      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2' m) b2 o2 = mem_memval m b2 o2.
+      mem_memval (Mem.copy_block m1 mx m1' j1 j2 j1' INJx b2' m) b2 o2 = mem_memval m b2 o2.
   Proof.
     intros.
     unfold Mem.copy_block. destruct (j2 b2'); try reflexivity.
@@ -531,26 +532,26 @@ Section CONSTR_PROOF.
     unfold mem_memval. simpl. rewrite pmap_update_diff'; eauto.
   Qed.
 
-  Lemma copy_block_content2 :  forall m b1 o1 b2 o2,
+  Lemma copy_block_content2 :  forall m b1 o1 b2 o2 mx INJx,
       j1 b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Cur Readable ->
       ~ Mem.perm m1 b1 o1 Max Writable ->
       ~ (j2 b2 = None) ->
       Mem.support m = s2' ->
-      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2 m) b2 o2 = mem_memval m b2 o2.
+      mem_memval (Mem.copy_block m1 mx m1' j1 j2 j1' INJx b2 m) b2 o2 = mem_memval m b2 o2.
   Proof.
     intros. erewrite copy_block_content; eauto.
     rewrite pred_dec_false; eauto.
   Qed.
 
-  Lemma copy_sup_content': forall bl m b1 o1 b2 o2,
+  Lemma copy_sup_content': forall bl m b1 o1 b2 o2 mx INJx,
         j1 b1 = Some (b2, o2 - o1) ->
         Mem.perm m1' b1 o1 Cur Readable ->
         Mem.perm m1 b1 o1 Max Writable ->
         ~ (j2 b2 = None) ->
         In b2 bl ->
         Mem.support m = s2' ->
-        mem_memval (Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 bl m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+        mem_memval (Mem.copy_sup' m1 mx  m1' j1 j2 j1' INJx bl m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
     induction bl; intros.
     - inv H3.
@@ -569,26 +570,26 @@ Section CONSTR_PROOF.
           eapply copy_block_content3; eauto.
   Qed.
   
-  Lemma copy_sup_content: forall s m b1 o1 b2 o2,
+  Lemma copy_sup_content: forall s m b1 o1 b2 o2 mx INJx,
         j1 b1 = Some (b2, o2 - o1) ->
         Mem.perm m1' b1 o1 Cur Readable ->
         Mem.perm m1 b1 o1 Max Writable ->
         ~ (j2 b2 = None) ->
         sup_In b2 s ->
         Mem.support m = s2' ->
-        mem_memval (Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+        mem_memval (Mem.copy_sup m1 mx m1' j1 j2 j1' INJx s m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
     intros. apply Mem.sup_list_in in H3 as H3'.
     eapply copy_sup_content'; eauto.
   Qed.
   
-  Lemma copy_sup_content_2: forall bl m b1 o1 b2 o2,
+  Lemma copy_sup_content_2: forall bl m b1 o1 b2 o2 mx INJx,
         j1 b1 = Some (b2, o2 - o1) ->
         Mem.perm m1' b1 o1 Cur Readable ->
         ~ Mem.perm m1 b1 o1 Max Writable ->
         ~ (j2 b2 = None) ->
         Mem.support m = s2' ->
-        mem_memval (Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 bl m) b2 o2 = mem_memval m b2 o2.
+        mem_memval (Mem.copy_sup' m1 mx m1' j1 j2 j1' INJx bl m) b2 o2 = mem_memval m b2 o2.
   Proof.
     induction bl; intros; cbn.
     - reflexivity.
@@ -629,6 +630,25 @@ Section CONSTR_PROOF.
     eapply Mem.perm_inject; eauto.
   Qed.
 
+   Lemma copy_content_2_m3' : forall b1 o1 b2 o2,
+      j1 b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Cur Readable -> ~ Mem.perm m1 b1 o1 Max Writable ->
+      ~ (j2 b2 = None) ->
+      mem_memval m3' b2 o2 = mem_memval m3 b2 o2.
+  Proof.
+    intros. etransitivity.
+    unfold m2'. eapply copy_sup_content_2; eauto.
+    apply m3'1_support.
+    apply Mem.ro_unchanged_memval_bytes in ROUNC1.
+    exploit ROUNC1; eauto. eapply Mem.valid_block_inject_1; eauto.
+    intros [P1 X].
+    generalize unchanged3_step1. intro U.
+    inv U. eapply unchanged_on_contents.
+    eapply Mem.valid_block_inject_2; eauto. eapply INJ13; eauto.
+    replace o2 with (o1 + (o2 - o1)) by lia.
+    eapply Mem.perm_inject; eauto. eapply INJ13; eauto.
+  Qed.
+  
   Lemma copy_content_inject : forall b1 o1 b2 o2,
           j1 b1 = Some (b2, o2 - o1) ->
           Mem.perm m1' b1 o1 Cur Readable ->
@@ -669,8 +689,8 @@ Section CONSTR_PROOF.
   Qed.
 
 
-  Lemma unchanged_on_copy_block_old : forall a m m',
-      Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 a m = m' ->
+  Lemma unchanged_on_copy_block_old : forall a m m' mx INJx,
+      Mem.copy_block m1 mx m1' j1 j2 j1' INJx a m = m' ->
       Mem.unchanged_on (fun b o => a <> b) m m'.
   Proof.
     intros. constructor.
@@ -686,13 +706,13 @@ Section CONSTR_PROOF.
       simpl. rewrite pmap_update_diff'; eauto; try reflexivity.
   Qed.
 
-  Lemma unchanged_on_copy_sup_old' : forall bl m m',
-      Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 bl m = m' ->
+  Lemma unchanged_on_copy_sup_old' : forall bl m m' mx INJx,
+      Mem.copy_sup' m1 mx m1' j1 j2 j1' INJx bl m = m' ->
       Mem.unchanged_on (fun b o => ~ In b bl) m m'.
   Proof.
     induction bl; intros.
     - inv H. simpl. eauto with mem.
-    - simpl in H. set (m'0 := Mem.copy_sup' m1 m2 m1' j1 j2 j1' INJ12 bl m).
+    - simpl in H. set (m'0 := Mem.copy_sup' m1 mx m1' j1 j2 j1' INJx bl m).
       exploit IHbl. instantiate (1:= m'0). reflexivity. fold m'0 in H.
       intro UNC1. apply unchanged_on_copy_block_old in H as UNC2.
       apply Mem.copy_block_support in H as SUP1.
@@ -715,8 +735,8 @@ Section CONSTR_PROOF.
         intro. apply H0. right. auto. eauto.
   Qed.
   
-  Lemma unchanged_on_copy_sup_old : forall s m m',
-      Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
+  Lemma unchanged_on_copy_sup_old : forall s m m' mx INJx,
+      Mem.copy_sup m1 mx m1' j1 j2 j1' INJx s m = m' ->
       Mem.unchanged_on (fun b o => ~ sup_In b s) m m'.
   Proof.
     intros.
@@ -962,13 +982,18 @@ Section CONSTR_PROOF.
     erewrite Mem.nextblock_noaccess. eauto. eauto.
     congruence.
   Qed.
-      
 
-  (** TODO: problem here, the step2 may map some old blocks which were unmapped in m1 into
-      new blocks in m2', while these blocks are external blocks only
+  Lemma supext_empty_m3 : forall b o k p,
+      ~ sup_In b (Mem.support m3) ->
+      ~ Mem.perm (Mem.supext s2' m3) b o k p.
+  Proof.
+    intros. unfold Mem.supext.
+    destruct Mem.sup_include_dec.
+    unfold Mem.perm. simpl.
+    erewrite Mem.nextblock_noaccess. eauto. eauto.
+    intro. apply H. eapply Mem.perm_valid_block; eauto.
+  Qed.
 
-      It looks possible that we can keep these lemmas below as they are by modifing [map_block]
-     *)
   Lemma step2_perm: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Max Nonempty ->
@@ -1013,9 +1038,37 @@ Section CONSTR_PROOF.
       eapply supext_empty. eauto.
       exploit map_sup_1. instantiate (1:= (Mem.map_sup m1' j1 j1' (Mem.support m1') (Mem.supext s2' m2))).
       reflexivity. eauto. eauto.
-      unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
+      unfold Mem.supext. destruct Mem.sup_include_dec. eauto.
+      congruence. eauto. eauto.
       intro. unfold m2'1 in H2. apply H3. eauto.
   Qed.
+
+   Lemma step2_perm2_m3: forall b1 o1 b2 o2 k p,
+      j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
+      Mem.perm m3' b2 o2 k p ->
+      Mem.perm m1' b1 o1 k p.
+  Proof.
+    intros.
+    specialize (INCRNEW1 _ _ _ H H0) as NOTIN2.
+    assert (IN: sup_In b2 s2').
+    { eapply IMGIN1'; eauto. }
+    assert (Mem.perm m3'1 b2 o2 k p).
+    - unfold m2'.
+      exploit unchanged_on_copy_sup_old.
+      instantiate (1:= m3'). reflexivity.
+      intro. inversion H2. eapply unchanged_on_perm; eauto.
+      unfold Mem.valid_block. rewrite m3'1_support. eauto.
+    - unfold m3'1. unfold Mem.step2.
+      assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m3) b2 o2 Max Nonempty).
+      eapply supext_empty_m3. rewrite m3_support; eauto.
+      exploit map_sup_1. instantiate (1:= (Mem.map_sup m1' j1 j1' (Mem.support m1') (Mem.supext s2' m3))).
+      reflexivity. eauto. eauto. 
+      unfold Mem.supext. destruct Mem.sup_include_dec. eauto.
+      rewrite m3_support in n. congruence.
+      eauto. eauto. intro.
+      unfold m3'1 in H2. eapply H3. auto.
+  Qed.
+  
 
   Lemma step2_content: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
@@ -1137,43 +1190,44 @@ Section CONSTR_PROOF.
        eapply Mem.perm_inject; eauto. apply INJ13; eauto.
       + generalize (UNCHANGE3). intro UNC2.
         inversion UNC2. eapply unchanged_on_perm; eauto.
-   - generalize (UNCHANGE2). intro UNC1.
+   - generalize (UNCHANGE32). intro UNC1.
      inversion UNC1. eapply unchanged_on_perm; eauto.
      eapply Mem.loc_in_reach_find_none; eauto.
-*)
-    Admitted.
+  Qed.
 
   (** Lemma C.11 *)
   Theorem ROUNC3 : Mem.ro_unchanged m3 m3'.
   Proof.
-    Admitted.
-(*    apply Mem.ro_unchanged_memval_bytes.
-    red. intros b2 o2 VALID PERM2' NOPERM2.
+    apply Mem.ro_unchanged_memval_bytes.
+    red. intros b2 o2 VALID PERM3' NOPERM3.
     destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
     - eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
       destruct (j2 b2) as [[b3 d2]|] eqn: MAP2.
       + 
-        exploit copy_perm_2; eauto. congruence. intro PERM1'.
+        exploit copy_perm_m3; eauto. congruence. intro PERM1'.
         assert (NOWRIT1: ~ Mem.perm m1 b1 o1 Max Writable).
-        intro. apply NOPERM2.
+        intro. apply NOPERM3.
         replace o2 with (o1 + (o2 - o1)) by lia.
-        eapply Mem.perm_inject; eauto.
+        eapply Mem.perm_inject; eauto. eapply INJ13; eauto.
         split. apply Mem.ro_unchanged_memval_bytes in ROUNC1.
         exploit ROUNC1; eauto. eapply Mem.valid_block_inject_1; eauto.
+        apply PERM1'. eauto.
         intros [READ1 ?].
         replace o2 with (o1 + (o2 - o1)) by lia.
-        eapply Mem.perm_inject; eauto.
-        symmetry. eapply copy_content_2; eauto. congruence.
-      + generalize UNCHANGE22. intro UNC22. split; inv UNC22.
+        eapply Mem.perm_inject; eauto. eapply INJ13; eauto.
+        symmetry. eapply copy_content_2_m3'; eauto. apply PERM1'.
+        eauto.
+        congruence.
+      + generalize UNCHANGE3. intro UNC22. split; inv UNC22.
         rewrite unchanged_on_perm; eauto.
         symmetry. eapply unchanged_on_contents; eauto.
         eapply unchanged_on_perm; eauto.
     - eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
-      generalize UNCHANGE2. intro UNC21.
+      generalize UNCHANGE32. intro UNC21.
       split; inv UNC21. rewrite unchanged_on_perm; eauto.
       symmetry. eapply unchanged_on_contents; eauto.
       eapply unchanged_on_perm; eauto.
-  Qed. *)
+  Qed.
   
   (** Lemma C.13 *)
   Theorem INJ12' : Mem.inject j1' m1' m2'.
@@ -1325,7 +1379,10 @@ Section CONSTR_PROOF.
     inversion INJ12. exploit mi_mappedblocks; eauto.
   Qed.
 
+  Theorem EXT23' : Mem.extends m2' m3'.
+  Proof.
 
+  Admitted.
 
   (** Lemma C.14 *)
   Theorem INJ34' : Mem.inject j2' m3' m4'.
@@ -1701,7 +1758,7 @@ Section CONSTR_PROOF.
         erewrite Mem.mext_sup in H; eauto.
         specialize (Hconstr2 _ _ _ _ H Hpm3 Hj2).
         destruct Hconstr2 as (b1 & ofs1 & A & B).
-        exists b1, ofs1. split. eapply copy_perm_2; eauto. congruence. admit. (*need a copy_perm_2 for m3'*)
+        exists b1, ofs1. split. eapply copy_perm_m3; eauto. congruence.
         apply INCR1. auto.
         eapply Mem.valid_block_inject_1; eauto.
       + exploit ADDSAME; eauto. intros (b1 & A & B).
@@ -1709,11 +1766,10 @@ Section CONSTR_PROOF.
         apply INCR1 in Hj1 as Heq. rewrite A in Heq. inv Heq.
         specialize (Hconstr1 _ _ _ H Hj1). congruence.
         exists b1, ofs3. split.
-        eapply step2_perm2; eauto.
-        replace (ofs3 - ofs3) with 0 by lia. eauto. admit. (*similar*)
+        eapply step2_perm2_m3; eauto.
         replace (ofs3 - ofs3) with 0 by lia. eauto.
-
-  Admitted.
+        replace (ofs3 - ofs3) with 0 by lia. eauto.
+  Qed.
   
 End CONSTR_PROOF.
 
@@ -1808,7 +1864,8 @@ Proof.
     assert (SUP2' : Mem.support m2' = m2'_sup).
     unfold m2'. rewrite m2'_support. reflexivity. auto.
     exists j12', j34', m2', m3', INJ12', INJ23'.
-    repeat apply conj; eauto. admit.
+    repeat apply conj; eauto.
+    eapply EXT23'; eauto. split; eauto. split; eauto. erewrite m3_support; eauto.
   - constructor; eauto. eapply ROUNC2; eauto. eapply MAXPERM2; eauto.
     split; auto. eapply Mem.unchanged_on_implies; eauto.
     intros. destruct H1. split; auto. red. unfold compose_meminj. rewrite H1. auto.
@@ -1816,16 +1873,14 @@ Proof.
     eapply Mem.unchanged_on_implies.
     eapply UNCHANGE21; eauto. intros. destruct H1. apply H1.
     red. intros. eapply INCRDISJ12; eauto. erewrite <- inject_tid; eauto.
-  - constructor; eauto.  eapply ROUNC3; eauto. split; eauto.
-    split; eauto. erewrite m3_support; eauto. eapply MAXPERM3; eauto.
-    split; eauto. split; eauto. erewrite m3_support; eauto.
+  - constructor; eauto.  eapply ROUNC3; eauto.
+    eapply MAXPERM3; eauto.
     split. erewrite m3_support; eauto. unfold m3'. rewrite m3'_support; eauto. split; eauto. setoid_rewrite HNTID. auto. 
     eapply Mem.unchanged_on_implies. eapply UNCHANGE3; eauto.
     intros. apply H1.
     eapply out_of_reach_trans; eauto. split; auto.
     red. intros. erewrite Mem.mext_sup in INCRDISJ34; eauto.
     eapply INCRDISJ34; eauto. erewrite <- inject_tid; eauto.
-  - eapply EXT_HIDDEN'; eauto. split; eauto. split; eauto.
-    erewrite m3_support; eauto.
+  - eapply EXT_HIDDEN'; eauto.
 Qed.
 

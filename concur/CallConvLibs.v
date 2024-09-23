@@ -930,6 +930,7 @@ Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
         and *mapped to m3* in m2, it comes from a corresponding position im m1*)
     (Hconstr2: forall b3 ofs3 b4 d3, fst b3 <> Mem.tid (Mem.support m3) ->
                 Mem.perm m3 b3 ofs3 Max Nonempty -> j34 b3 = Some (b4, d3) ->
+                Mem.perm m2 b3 ofs3 Max Nonempty /\                
                 exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b3, ofs3 - ofs1)),
     external_mid_hidden_ext (injpw j12 m1 m2 Hm12) (injpw j34 m3 m4 Hm34).
 
@@ -1010,7 +1011,7 @@ Proof.
     intros. destruct H as [X Y]. split; auto.
     red. intros. red in X. intro.
     exploit Hconstr2; eauto. erewrite inject_other_thread; eauto.
-    intros (b1 & ofs1 & Hp1 & Hj12).
+    intros (Hp2 & b1 & ofs1 & Hp1 & Hj12).
     exploit X. unfold compose_meminj. rewrite Hj12, H. reflexivity.
     replace (ofs - (ofs - delta - ofs1 + delta)) with ofs1 by lia. auto.
     auto.
@@ -1073,9 +1074,10 @@ Lemma external_mid_hidden_ext_acci: forall j12 j34 m1 m2 m3 m4 Hm12 Hm34 j12' j3
     external_mid_hidden_ext w1 w2 ->
     injp_acci w1 w1' -> injp_acci w2 w2' ->
     Mem.extends m2 m3 -> Mem.extends m2' m3' ->
+    free_preserved_ext m2 m2' m3' ->
     external_mid_hidden_ext w1' w2'.
 Proof.
-  intros until w2'. intros H H0 H1 He1 He2. inv H. inv H0. inv H1.
+  intros until w2'. intros H H0 H1 He1 He2 Hacie. inv H. inv H0. inv H1.
   econstructor; eauto.
   - intros. red in Hnb0. destruct (j12 b1) as [[b2' d']|] eqn:Hj12.
     + apply H13 in Hj12 as Heq. rewrite H0 in Heq. inv Heq.
@@ -1091,9 +1093,20 @@ Proof.
       intro. apply H. destruct H20 as [[_ Z] _].
       erewrite Mem.mext_sup. 2: eauto.
       congruence.
-  - 
-    (* intros. red in Hnb3. destruct (j34 b3) as [[b4' d']|] eqn:Hj23.
+  - intros. red in Hnb3.
+    destruct (j34 b3) as [[b4' d']|] eqn:Hj23.
     + apply H22 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
+      exploit H18; eauto. eapply inject_implies_dom_in; eauto.
+      intro Hp3.
+      assert (Hp2': Mem.perm m2' b3 ofs3 Max Nonempty).
+      {
+        destruct (Mem.perm_dec m2' b3 ofs3 Max Nonempty). auto.
+        destruct H20 as [[_ XX]_]. 
+        exploit Hconstr2; eauto. congruence. intros [Hp2 YY].
+        exfalso. eapply Hacie; eauto. erewrite Mem.mext_sup. 2: eauto.
+        congruence.
+      }
+      split. auto.
       destruct (Mem.loc_in_reach_find m1 j12 b3 ofs3) as [[b1 ofs1]|] eqn:FIND12.
       * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
         exists b1, ofs1. split. edestruct Mem.perm_dec; eauto. exfalso.
@@ -1101,24 +1114,29 @@ Proof.
         erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_].
         erewrite Mem.mext_sup. 2: eauto.
         congruence.
-        replace (ofs1 + (ofs3 - ofs1)) with ofs3 by lia.
-        auto. auto.
+        (* replace (ofs1 + (ofs3 - ofs1)) with ofs3 by lia. 2: auto. *)
+        red in Hacie. destruct (Mem.perm_dec m2' b3 (ofs1 + (ofs3 - ofs1)) Max Nonempty).
+        auto. exfalso. eapply Hacie; eauto.
+        erewrite Mem.mext_sup. 2: eauto.
+        destruct H20. inv unchanged_on_thread_i. congruence.
+        eapply Mem.perm_inject; eauto.
+        replace (ofs1 + (ofs3 - ofs1)) with ofs3 by lia. 2: auto. auto.
       * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
-        exploit Hconstr2; eauto. congruence. inv Z.
-        eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
-        intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
+        exploit Hconstr2; eauto. destruct H20 as [[XX ?]?].
+        congruence.
+        intros (Hp2 & b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
         edestruct Mem.perm_dec; eauto. exfalso.
         eapply H16; eauto.
-        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_]. congruence.
-        replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
-    + exploit H23; eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_].
+        erewrite Mem.mext_sup. 2: eauto. congruence.
+        replace (ofs1 + (ofs3 - ofs1)) with ofs3 by lia. auto. auto.
+    + exploit H23; eauto. inversion H20. inv unchanged_on_thread_i. congruence.
       intros [A B].
       exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
       erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
       apply H.
-      destruct H21 as [[_ Z]_]. congruence. *)
-Admitted.
-
+      destruct H21 as [[_ Z]_]. congruence.
+Qed.
 
 (** Is this correct? do we have to enforce internal [ro] and [mpd]
     properties for c_ext (and prove them in passes) to absorb it? *)
@@ -1141,9 +1159,6 @@ Lemma injp_acce_ext_outgoing_constr: forall j12 j34 m1 m2 m3 m4 Hm14 j14' m1' m4
         external_mid_hidden_ext w1' w2'.
 Proof.
 Admitted.
-  
-
-
 
 Lemma cctrans_injp_ext:
   cctrans (c_injp @ c_ext @ c_injp) c_injp.
