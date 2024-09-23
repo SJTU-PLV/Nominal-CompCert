@@ -13,11 +13,11 @@ Require Import InjpAccoComp.
     Mem.inject j2 m3 m4 ->
     Mem.extends m2 m3 ->
     j2 b3 = Some (b4,delta4) ->
-    Mem.perm m2 b3 ofs3 k p ->
+    Mem.perm m3 b3 ofs3 k p ->
     loc_out_of_reach j1 m1 b3 ofs3 ->
     loc_out_of_reach (compose_meminj j1 j2) m1 b4 (ofs3 + delta4).
   Proof.
-    intros until p. intros Hm12 Hm34 Hm23 MAP2 PERM2 OUTOFREACH1.
+    intros until p. intros Hm12 Hm34 Hm23 MAP2 PERM3 OUTOFREACH1.
     red.
     red in OUTOFREACH1.
     intros.
@@ -30,15 +30,13 @@ Require Import InjpAccoComp.
     replace (ofs3 + delta'' - (delta' + delta'')) with (ofs3 - delta') in p0 by lia.
     congruence.
     eapply Mem.perm_inject in Hj1b; eauto.
+    eapply Mem.perm_extends in Hj1b; eauto.
     inversion Hm34. exploit mi_no_overlap. apply n. eauto. eauto.
-    eapply Mem.perm_extends. eauto.
-    eauto with mem.
-    eapply Mem.perm_extends; eauto.
+    eauto with mem. eauto with mem.
     intros [A|A]. congruence. extlia.
   Qed.
 
-  
-Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
+  Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
 |external_mid_hidden_intro :
   forall j12 j34 m1 m2 m3 m4 Hm12 Hm34
     (** This case says that for any related external blocks [j14 b1 = Some b3],
@@ -49,6 +47,7 @@ Inductive external_mid_hidden_ext: injp_world -> injp_world -> Prop :=
         and *mapped to m3* in m2, it comes from a corresponding position im m1*)
     (Hconstr2: forall b3 ofs3 b4 d3, fst b3 <> Mem.tid (Mem.support m3) ->
                 Mem.perm m3 b3 ofs3 Max Nonempty -> j34 b3 = Some (b4, d3) ->
+                Mem.perm m2 b3 ofs3 Max Nonempty /\                
                 exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b3, ofs3 - ofs1)),
     external_mid_hidden_ext (injpw j12 m1 m2 Hm12) (injpw j34 m3 m4 Hm34).
 
@@ -611,6 +610,18 @@ Section CONSTR_PROOF.
     apply m2'1_support.
   Qed.
 
+  Lemma copy_content_m3 : forall b1 o1 b2 o2,
+      j1 b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Cur Readable ->
+      Mem.perm m1 b1 o1 Max Writable ->
+      ~ (j2 b2 = None) ->
+      mem_memval m3' b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+  Proof.
+    intros. eapply copy_sup_content; eauto.
+    inversion INJ12. eapply mi_mappedblocks; eauto.
+    apply m3'1_support.
+  Qed.
+  
   Lemma copy_content_2 : forall b1 o1 b2 o2,
       j1 b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Cur Readable -> ~ Mem.perm m1 b1 o1 Max Writable ->
@@ -688,6 +699,27 @@ Section CONSTR_PROOF.
     intro HH. eapply HH; eauto.
   Qed.
 
+    Lemma copy_perm_1_m3 : forall b1 o1 b2 o2 k p,
+          j1 b1 = Some (b2, o2 - o1) ->
+          Mem.perm m1 b1 o1 Max Nonempty ->
+          ~ (j2 b2 = None) ->
+          Mem.perm m1' b1 o1 k p ->
+          Mem.perm m3' b2 o2 k p.
+  Proof.
+    intros. exploit copy_perm_m3; eauto.
+    intro HH. eapply HH; eauto.
+  Qed.
+
+  Lemma copy_perm_2_m3 : forall b1 o1 b2 o2 k p,
+          j1 b1 = Some (b2, o2 - o1) ->
+          Mem.perm m1 b1 o1 Max Nonempty ->
+          ~ (j2 b2 = None) ->
+          Mem.perm m3' b2 o2 k p ->
+          Mem.perm m1' b1 o1 k p.
+  Proof.
+    intros. exploit copy_perm_m3; eauto.
+    intro HH. eapply HH; eauto.
+  Qed.
 
   Lemma unchanged_on_copy_block_old : forall a m m' mx INJx,
       Mem.copy_block m1 mx m1' j1 j2 j1' INJx a m = m' ->
@@ -1018,6 +1050,31 @@ Section CONSTR_PROOF.
       unfold Mem.valid_block. rewrite m2'1_support. eauto.
   Qed.
 
+  Lemma step2_perm_m3: forall b1 o1 b2 o2,
+      j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Max Nonempty ->
+      (forall k p, Mem.perm m1' b1 o1 k p <-> Mem.perm m3' b2 o2 k p).
+  Proof.
+    intros.
+    specialize (INCRNEW1 _ _ _ H H0) as NOTIN2.
+    assert (IN: sup_In b2 s2').
+    { eapply IMGIN1'; eauto. }
+    transitivity (Mem.perm m3'1 b2 o2 k p).
+    - unfold m3'1. unfold Mem.step2.
+      assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m3) b2 o2 Max Nonempty).
+      { eapply supext_empty_m3. rewrite m3_support. auto. }
+      exploit map_sup_1. instantiate (1:= (Mem.map_sup m1' j1 j1' (Mem.support m1') (Mem.supext s2' m3))).
+      reflexivity. eauto. eauto.
+      unfold Mem.supext. destruct Mem.sup_include_dec. eauto.
+      rewrite m3_support in n. congruence.
+      eauto. eauto. eauto.
+    - unfold m2'.
+      exploit unchanged_on_copy_sup_old.
+      instantiate (1:= m3'). reflexivity.
+      intro. inversion H2. eapply unchanged_on_perm; eauto.
+      unfold Mem.valid_block. rewrite m3'1_support. eauto.
+  Qed.
+
   Lemma step2_perm2: forall b1 o1 b2 o2 k p,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
       Mem.perm m2' b2 o2 k p ->
@@ -1098,12 +1155,54 @@ Section CONSTR_PROOF.
       unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto. eauto.
   Qed.
 
+  Lemma step2_content_m3: forall b1 o1 b2 o2,
+      j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Cur Readable ->
+      (mem_memval m3' b2 o2) = Mem.memval_map j1' (mem_memval m1' b1 o1).
+  Proof.
+    intros.
+    specialize (INCRNEW1 _ _ _ H H0) as NOTIN2.
+    assert (IN: sup_In b2 s2').
+    { eapply IMGIN1'; eauto. }
+    exploit unchanged_on_copy_sup_old. instantiate (1:= m3'). reflexivity.
+    intro UNC2.
+    assert (Mem.perm m3'1 b2 o2 Cur Readable).
+    { unfold m2'.
+      inversion UNC2. eapply unchanged_on_perm; eauto.
+      unfold Mem.valid_block. rewrite m3'1_support. eauto.
+      eapply step2_perm_m3; eauto. eauto with mem.
+    }
+    - etransitivity. inversion UNC2.
+      setoid_rewrite unchanged_on_contents. reflexivity. eauto.
+      eauto.
+      unfold m3'1. unfold Mem.step2.
+      assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m3) b2 o2 Max Nonempty).
+      eapply supext_empty_m3. rewrite m3_support. eauto.
+      exploit map_sup_2. instantiate (1:= (Mem.map_sup m1' j1 j1' (Mem.support m1') (Mem.supext s2' m3))). unfold Mem.map_sup.
+      reflexivity. rewrite <- Mem.sup_list_in. eauto. eauto.
+      unfold Mem.supext. destruct Mem.sup_include_dec. eauto.
+      rewrite m3_support in n.
+      congruence. eauto. eauto. eauto.
+  Qed.
+
   Lemma step2_content_inject: forall b1 o1 b2 o2,
       j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 Cur Readable ->
       memval_inject j1' (mem_memval m1' b1 o1) (mem_memval m2' b2 o2).
   Proof.
     intros. erewrite step2_content; eauto.
+    exploit ADDEXISTS; eauto. intros (b3 & o3 & MAP13).
+    eapply memval_compose_1; eauto.
+    inversion INJ14'. inversion mi_inj.
+    eapply  mi_memval; eauto.
+  Qed.
+
+   Lemma step2_content_inject_m3: forall b1 o1 b2 o2,
+      j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Cur Readable ->
+      memval_inject j1' (mem_memval m1' b1 o1) (mem_memval m3' b2 o2).
+  Proof.
+    intros. erewrite step2_content_m3; eauto.
     exploit ADDEXISTS; eauto. intros (b3 & o3 & MAP13).
     eapply memval_compose_1; eauto.
     inversion INJ14'. inversion mi_inj.
@@ -1117,6 +1216,16 @@ Section CONSTR_PROOF.
       Mem.perm m2' b2 o2 k p.
   Proof.
     intros. exploit step2_perm; eauto.
+    intro HH. eapply HH; eauto.
+  Qed.
+
+  Lemma step2_perm1_m3: forall b1 o1 b2 o2 k p,
+      j1 b1 = None -> j1' b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Max Nonempty ->
+      Mem.perm m1' b1 o1 k p ->
+      Mem.perm m3' b2 o2 k p.
+  Proof.
+    intros. exploit step2_perm_m3; eauto.
     intro HH. eapply HH; eauto.
   Qed.
   
@@ -1379,25 +1488,30 @@ Section CONSTR_PROOF.
     inversion INJ12. exploit mi_mappedblocks; eauto.
   Qed.
 
-  Theorem EXT23' : Mem.extends m2' m3'.
+  Lemma step2_perm2'_m3: forall b1 o1 b2 o2 b3 d k p,
+      j1' b1 = Some (b2, o2 - o1) ->
+      j2 b2 = None -> j2' b2 = Some (b3, d) ->
+      Mem.perm m3' b2 o2 k p ->
+      Mem.perm m1' b1 o1 k p.
   Proof.
-
-  Admitted.
+    intros. exploit step2_perm2_m3; eauto.
+    destruct (subinj_dec _ _ _ _ _ INCR1 H); auto.
+    specialize (INCRNEW2 _ _ _ H0 H1).
+    inversion INJ12. exploit mi_mappedblocks; eauto.
+  Qed.
 
   (** Lemma C.14 *)
   Theorem INJ34' : Mem.inject j2' m3' m4'.
   Proof.
-  Admitted.
-  (*
      assert (DOMIN2: inject_dom_in j2 (Mem.support m3)).
      eapply inject_implies_dom_in; eauto.
      assert (IMGIN2: inject_image_in j2 (Mem.support m4)).
      eapply inject_implies_image_in; eauto.
      constructor.
-     - constructor. constructor. rewrite m2'_support.
+     - constructor. constructor. rewrite m3'_support.
        setoid_rewrite <- NTID2. inv INJ14'.
        inv mi_thread. inv Hms. auto.
-       rewrite m2'_support. rewrite <- TID2. clear EXT_HIDDEN.
+       rewrite m3'_support. rewrite <- TID2. clear EXT_HIDDEN.
        inv INJ34. inv mi_thread. inv Hms. erewrite Mem.mext_sup.
        2: eauto.
        rewrite H0. destruct UNCHANGE4 as [[_ X]_].
@@ -1407,15 +1521,14 @@ Section CONSTR_PROOF.
       constructor.
       + (*perm*)
         intros b2 b3 d2 o2 k p MAP2' PERM2'.
-        destruct (Mem.sup_dec b2 (Mem.support m2)).
+        destruct (Mem.sup_dec b2 (Mem.support m3)).
         * assert (MAP2: j2 b2 = Some (b3,d2)).
           destruct (subinj_dec _ _ _ _ _ INCR2 MAP2'); auto.
-          specialize (INCRNEW2 _ _ _ e MAP2'). congruence.
+          specialize (INCRNEW2 _ _ _ e MAP2'). rewrite m3_support in s. congruence.
           destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
           --
             eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
-            
-            exploit copy_perm_2; eauto. congruence.
+            exploit copy_perm_2_m3; eauto. congruence.
             intro PERM1'.
             apply INCR1 in MAP1 as MAP1'.
             exploit Mem.perm_inject. 2: apply INJ14'. 2: apply PERM1'.
@@ -1424,8 +1537,8 @@ Section CONSTR_PROOF.
             auto.
           --
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
-            assert (PERM2 : Mem.perm m2 b2 o2 k p).
-            generalize UNCHANGE21. intro UNC2. inversion UNC2.
+            assert (PERM3 : Mem.perm m3 b2 o2 k p).
+            generalize UNCHANGE32. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
             assert (Htl3 : fst b3 = Mem.tid (Mem.support m3)).
             inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
@@ -1433,9 +1546,8 @@ Section CONSTR_PROOF.
             inv INJ34. inv mi_thread. inv Hms. exploit Hjs; eauto. intro.
             congruence.
             exploit Hconstr2; eauto.
-            eapply Mem.perm_extends. eauto.
             eauto with mem.
-            intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+            intros (Hp2 & b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
             rewrite Hj1. reflexivity.
             replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
@@ -1445,11 +1557,10 @@ Section CONSTR_PROOF.
             red. split; auto. erewrite <- inject_tid; eauto.
             inversion INJ34. eauto.
             eapply Mem.perm_inject; eauto.
-            eapply Mem.perm_extends; eauto.
         * assert (MAP2: j2 b2 = None).
-          { inversion INJ34. apply mi_freeblocks. rewrite <- Mem.valid_block_extends; eauto. }
+          { inversion INJ34. apply mi_freeblocks. eauto. }
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
-          exploit step2_perm2'; eauto. instantiate (1:= o2).
+          exploit step2_perm2'_m3; eauto. instantiate (1:= o2).
           replace (o2 - o2) with 0 by lia. eauto. intro PERM1'.
           eapply Mem.perm_inject. 2: apply INJ14'. unfold compose_meminj.
           rewrite MAP1', MAP2'. eauto. eauto.
@@ -1458,13 +1569,11 @@ Section CONSTR_PROOF.
         * inversion INJ34. inversion mi_inj. eapply mi_align; eauto.
           red. red in RP2. intros.
           exploit RP2; eauto.
-          intro. generalize MAXPERM2. intro UNC2.
-          eapply Mem.perm_extends; eauto.
-          eapply UNC2; eauto. unfold Mem.valid_block in *.
-          destruct (Mem.sup_dec b2 (Mem.support m2)).
-          eauto. exploit mi_freeblocks.
-          erewrite <- Mem.mext_sup; eauto.
-          intro. congruence.
+          intro. generalize MAXPERM3. intro UNC3.
+          eapply UNC3; eauto. unfold Mem.valid_block in *.
+          destruct (Mem.sup_dec b2 (Mem.support m3)).
+          eauto. exfalso. exploit mi_freeblocks.
+          apply n. congruence.
         *
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
           inversion INJ14'. inv mi_inj.
@@ -1474,48 +1583,50 @@ Section CONSTR_PROOF.
           2: eauto.
           red. red in RP2. intros.
           exploit RP2; eauto.
-          intros. eapply step2_perm2'; eauto.
+          intros. eapply step2_perm2'_m3; eauto.
           replace (ofs - ofs) with 0 by lia. eauto.
       + (*memval*)
         intros b2 o2 b3 d2 MAP2' PERM2'.
-        destruct (Mem.sup_dec b2 (Mem.support m2)).
+        destruct (Mem.sup_dec b2 (Mem.support m3)).
         * assert (MAP2: j2 b2 = Some (b3,d2)).
           destruct (subinj_dec _ _ _ _ _ INCR2 MAP2'); auto.
-          specialize (INCRNEW2 _ _ _ e MAP2'). congruence.
+          specialize (INCRNEW2 _ _ _ e MAP2'). rewrite m3_support in s. congruence.
           destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
           --
             eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
             apply INCR1 in MAP1 as MAP1'.
             destruct (Mem.perm_dec m1 b1 o1 Max Writable).
             ++
-              exploit copy_content; eauto. eapply copy_perm_2; eauto. congruence. congruence.
+              exploit copy_content_m3; eauto. eapply copy_perm_2_m3; eauto. congruence. congruence.
               intro. setoid_rewrite H.
               eapply memval_compose_2; eauto.
               inversion INJ14'. inversion mi_inj.
               exploit mi_memval; eauto. unfold compose_meminj.
               rewrite MAP1'. rewrite MAP2'. reflexivity.
-              eapply copy_perm; eauto. congruence. 
+              eapply copy_perm_m3; eauto. congruence. 
               replace (o1 + (o2 - o1 + d2)) with (o2 + d2) by lia.
               eauto.
-            ++ generalize ROUNC2. intro ROUNC2.
-               apply Mem.ro_unchanged_memval_bytes in ROUNC2.
-               assert (NOWRIT2: ~ Mem.perm m2 b2 o2 Max Writable).
+            ++ assert (NOWRIT2: ~ Mem.perm m2 b2 o2 Max Writable).
                intro. apply n. inversion INJ12. exploit mi_perm_inv; eauto.
                instantiate (3:= o1). replace (o1 + (o2 - o1)) with o2 by lia. eauto.
                intros [|]. eauto. congruence.
-               exploit ROUNC2; eauto. intros [PERM2 MVAL2]. rewrite <- MVAL2.
                apply Mem.ro_unchanged_memval_bytes in ROUNC4.
-               assert (PERM3: Mem.perm m3 b2 o2 Cur Readable).
-               eapply Mem.perm_extends; eauto.
+               assert (PERM2: Mem.perm m2 b2 o2 Max Nonempty).
+               replace o2 with (o1 + (o2 - o1)) by lia.
+               eapply Mem.perm_inject. apply MAP1. eauto. eauto.
                assert (NOWRIT3 : ~ Mem.perm m3 b2 o2 Max Writable).
                intro.
                exploit Mem.perm_extends_inv. eauto. apply H.
                intros [|]. eauto. apply H0. eauto with mem.
+               generalize ROUNC3. intro ROUNC3.
+               apply Mem.ro_unchanged_memval_bytes in ROUNC3.
+               exploit ROUNC3; eauto. intros [PERM3 MVAL3].
+               rewrite <- MVAL3.
                assert (NOWRIT4 : ~ Mem.perm m4 b3 (o2 + d2) Max Writable).
                intro. apply NOWRIT3. inversion INJ34. exploit mi_perm_inv; eauto.
                intros [|]. eauto. exfalso. apply H0. eauto with mem.
                exploit ROUNC4; eauto. eapply Mem.valid_block_inject_2; eauto.
-               exploit copy_perm_2; eauto. congruence.
+               exploit copy_perm_2_m3; eauto. congruence.
                intro PERM1'.
                exploit Mem.perm_inject. 2: apply INJ14'. 2: apply PERM1'.
                unfold compose_meminj. rewrite MAP1', MAP2'.
@@ -1523,49 +1634,41 @@ Section CONSTR_PROOF.
                auto.
                intros [PERM4 MVAL4]. rewrite <- MVAL4.
                inversion INJ34. inversion mi_inj. eapply memval_inject_incr; eauto.
-               rewrite <- (compose_meminj_id_left j2).
-               eapply Memdata.memval_inject_compose; eauto.
-               inv EXT23. inv mext_inj. exploit mi_memval0; eauto.
-               reflexivity. rewrite Z.add_0_r. auto.
           --
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
-            assert (PERM2 : Mem.perm m2 b2 o2 Cur Readable).
-            generalize UNCHANGE21. intro UNC2. inversion UNC2.
+            assert (PERM2 : Mem.perm m3 b2 o2 Cur Readable).
+            generalize UNCHANGE32. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
              assert (Htl3 : fst b3 = Mem.tid (Mem.support m3)).
             inv EXT_HIDDEN. clear Hm0 Hm1 Hm2 Hm3 Hm4.
             destruct (Nat.eq_dec (fst b2) (Mem.tid (Mem.support m3))).
             erewrite <- inject_block_tid; eauto.
-            exploit Hconstr2; eauto. eapply Mem.perm_extends. eauto.
+            exploit Hconstr2; eauto.
             eauto with mem.
-            intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+            intros (Hp2 & b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
             rewrite Hj1. reflexivity.
             replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
             assert (PERM4 : Mem.perm m4 b3 (o2 + d2) Cur Readable).
-            eapply Mem.perm_inject; eauto. eapply Mem.perm_extends; eauto.
+            eapply Mem.perm_inject; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
             eapply loc_out_of_reach_trans; eauto.
             inversion UNCHANGE4. inversion unchanged_on_e'.
             erewrite unchanged_on_contents; eauto.
-            generalize UNCHANGE21. intro UNC2. inversion UNC2.
+            generalize UNCHANGE32. intro UNC2. inversion UNC2.
             erewrite unchanged_on_contents0; eauto.
             eapply memval_inject_incr; eauto.
             inversion INJ34. inversion mi_inj.
-            rewrite <- (compose_meminj_id_left j2).
-            eapply Memdata.memval_inject_compose; eauto.
-            2: { apply mi_memval. eauto. eapply Mem.perm_extends; eauto. }
-            inv EXT23. inv mext_inj. exploit mi_memval0; eauto.
-            reflexivity. rewrite Z.add_0_r. auto.
+            eauto.
             red. split; auto.  erewrite <- inject_tid; eauto.
         * assert (MAP2: j2 b2 = None).
-          { inversion INJ34. apply mi_freeblocks.
-            rewrite <- Mem.valid_block_extends; eauto.  }
+          { inversion INJ34. apply mi_freeblocks; eauto. }
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
-          exploit step2_perm2'; eauto. instantiate (1:= o2).
+          exploit step2_perm2'_m3; eauto. instantiate (1:= o2).
           replace (o2 - o2) with 0 by lia. eauto. intro PERM1'.
-          exploit step2_content; eauto.
+          exploit step2_content_m3; eauto.
           destruct (subinj_dec _ _ _ _ _ INCR1 MAP1'); auto.
-          exfalso. apply n. inversion INJ12. exploit mi_mappedblocks; eauto.
+          exfalso. apply n. rewrite m3_support.
+          inversion INJ12. exploit mi_mappedblocks; eauto.
           instantiate (1:= o2).
           replace (o2 - o2) with 0 by lia. eauto. intro.
           setoid_rewrite H.
@@ -1577,7 +1680,7 @@ Section CONSTR_PROOF.
     - intros. destruct (j2' b) as [[b3 d]|] eqn:?.
       exploit DOMIN2'; eauto.
       unfold Mem.valid_block in H.
-      rewrite m2'_support in H. intro. congruence.
+      rewrite m3'_support in H. intro. congruence.
       reflexivity.
     - intros. destruct (subinj_dec _ _ _ _ _ INCR2 H).
       + inversion INJ34. exploit mi_mappedblocks; eauto.
@@ -1590,11 +1693,10 @@ Section CONSTR_PROOF.
       red. intros b2 b3 d2 b2' b3' d2' o2 o2' NEQ MAP2 MAP2' PERM2 PERM2'.
       destruct (subinj_dec _ _ _ _ _ INCR2 MAP2); destruct (subinj_dec _ _ _ _ _ INCR2 MAP2').
       + inversion INJ34. eapply mi_no_overlap; eauto.
-        eapply Mem.perm_extends; eauto.
-        generalize MAXPERM2. intro MAXPERM2.
-        eapply MAXPERM2; eauto. erewrite Mem.valid_block_extends; eauto.
-        eapply DOMIN2; eauto. eapply Mem.perm_extends; eauto.
-        eapply MAXPERM2; eauto. erewrite Mem.valid_block_extends; eauto.
+        generalize MAXPERM3. intro MAXPERM3.
+        eapply MAXPERM3; eauto.
+        eapply DOMIN2; eauto.
+        eapply MAXPERM3; eauto.
         eapply DOMIN2; eauto.
       + exploit IMGIN2; eauto. intro. inversion EXT_HIDDEN. subst.
         destruct (Nat.eq_dec (fst b2) (fst b2')).
@@ -1605,17 +1707,17 @@ Section CONSTR_PROOF.
           intros [A B]. left. congruence.
         ** exploit ADDSAME. eauto. eauto. intros [b1' [MAP1' SAME1']].
            exploit Hconstr2. 3: apply e. erewrite <- Mem.mext_sup; eauto.
-           congruence. eapply Mem.perm_extends; eauto.
-           eapply MAXPERM2; eauto. erewrite Mem.valid_block_extends; eauto.
-           eapply DOMIN2; eauto. intros [b1 [ofs1 [Hp1 MAP1]]].
+           congruence. 
+           eapply MAXPERM3; eauto.
+           eapply DOMIN2; eauto. intros [Hp2 [b1 [ofs1 [Hp1 MAP1]]]].
            destruct (eq_block b1 b1'). subst. apply INCR1 in MAP1. rewrite MAP1 in MAP1'. inv MAP1'.
            congruence.
            inversion INJ14'. exploit mi_no_overlap. eauto. unfold compose_meminj.
            apply INCR1 in MAP1 as MAPj'1.
            rewrite MAPj'1. rewrite MAP2.  reflexivity.
            unfold compose_meminj. rewrite MAP1'. rewrite MAP2'. reflexivity.
-           eapply copy_perm. eauto. eauto. congruence. auto.
-           eapply step2_perm2.  destruct (subinj_dec _ _ _ _ _ INCR1 MAP1').
+           eapply copy_perm_m3. eauto. eauto. congruence. auto.
+           eapply step2_perm2_m3.  destruct (subinj_dec _ _ _ _ _ INCR1 MAP1').
            exploit INCRNEW2; eauto. inversion INJ12. eapply mi_mappedblocks0; eauto.
            intro. inv H0. auto.
            2: eauto. instantiate (1:= o2').
@@ -1631,21 +1733,21 @@ Section CONSTR_PROOF.
           intros [A B]. left. congruence.
         ** exploit ADDSAME. eauto. eauto. intros [b1 [MAP1 SAME1]].
            exploit Hconstr2. 3: apply e0. erewrite <- Mem.mext_sup; eauto.
-           congruence. eapply Mem.perm_extends; eauto.
-           eapply MAXPERM2; eauto. erewrite Mem.valid_block_extends; eauto.
-           eapply DOMIN2; eauto. intros [b1' [ofs1' [Hp1' MAP1']]].
+           congruence.
+           eapply MAXPERM3; eauto.
+           eapply DOMIN2; eauto. intros [Hp2 [b1' [ofs1' [Hp1' MAP1']]]].
            destruct (eq_block b1 b1'). subst. apply INCR1 in MAP1'. rewrite MAP1 in MAP1'. inv MAP1'.
            congruence.
            inversion INJ14'. exploit mi_no_overlap. eauto. unfold compose_meminj.
            rewrite MAP1. rewrite MAP2. reflexivity. unfold compose_meminj.
            apply INCR1 in MAP1' as MAPj'1.
            rewrite MAPj'1. rewrite MAP2'.  reflexivity.
-           eapply step2_perm2.  destruct (subinj_dec _ _ _ _ _ INCR1 MAP1).
+           eapply step2_perm2_m3.  destruct (subinj_dec _ _ _ _ _ INCR1 MAP1).
            exploit INCRNEW2; eauto. inversion INJ12. eapply mi_mappedblocks0; eauto.
            intro. inv H0. auto. 2: apply PERM2.
            instantiate (1:= o2).
            replace (o2 - o2) with 0 by lia. auto.
-           eapply copy_perm. eauto. eauto. congruence. auto.
+           eapply copy_perm_m3. eauto. eauto. congruence. auto.
            intros [A | B]. left. auto. right. lia.
         * left. erewrite THREADLOCAL2 in n. 2: eauto.
           erewrite (THREADLOCAL2 _ _ _ MAP2') in n. congruence.
@@ -1656,28 +1758,26 @@ Section CONSTR_PROOF.
         eapply mi_no_overlap. eauto.
         unfold compose_meminj. rewrite MAP1, MAP2. eauto.
         unfold compose_meminj. rewrite MAP1', MAP2'. eauto.
-        eapply step2_perm2'. instantiate (1:= o2).
+        eapply step2_perm2'_m3. instantiate (1:= o2).
         replace (o2 - o2) with 0 by lia. eauto. eauto. eauto. eauto.
-        eapply step2_perm2'. instantiate (1:= o2').
+        eapply step2_perm2'_m3. instantiate (1:= o2').
         replace (o2' - o2') with 0 by lia. eauto. eauto. eauto. eauto.
     - intros.
       destruct (subinj_dec _ _ _ _ _ INCR2 H).
       + inversion INJ34. eapply mi_representable; eauto.
-        generalize MAXPERM2. intro MAXPERM2.
+        generalize MAXPERM3. intro MAXPERM3.
         destruct H0.
-        left. eapply Mem.perm_extends; eauto.
-        eapply MAXPERM2; eauto. 
-        erewrite Mem.valid_block_extends; eauto.
+        left. eapply MAXPERM3; eauto. 
         eapply DOMIN2; eauto.
-        right. eapply Mem.perm_extends; eauto.
-        eapply MAXPERM2; eauto. erewrite Mem.valid_block_extends; eauto.
+        right.
+        eapply MAXPERM3; eauto.
         eapply DOMIN2; eauto.
       + exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
         inversion INJ14'. eapply mi_representable; eauto.
         unfold compose_meminj. rewrite MAP1',H. eauto.
         destruct H0.
-        left. eapply step2_perm2'; eauto. rewrite Z.sub_diag. eauto.
-        right. eapply step2_perm2'; eauto. rewrite Z.sub_diag. eauto.
+        left. eapply step2_perm2'_m3; eauto. rewrite Z.sub_diag. eauto.
+        right. eapply step2_perm2'_m3; eauto. rewrite Z.sub_diag. eauto.
     - intros b2 o2 b3 d2 k p MAP2' PERM3'.
       generalize INJ12'. intro INJ12'.
       destruct (subinj_dec _ _ _ _ _ INCR2 MAP2').
@@ -1689,14 +1789,13 @@ Section CONSTR_PROOF.
           unfold compose_meminj. rewrite MAP1', MAP2'. reflexivity.
           instantiate (3:= o1). replace (o1 + (o2 - o1 + d2)) with (o2 + d2) by lia.
           eauto. intros [A | B].
-          left. eapply copy_perm; eauto. congruence.
-          right. intro. apply B. eapply copy_perm; eauto. congruence.
+          left. eapply copy_perm_m3; eauto. congruence.
+          right. intro. apply B. eapply copy_perm_m3; eauto. congruence.
         * eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
-          destruct (Mem.perm_dec m2' b2 o2 Max Nonempty); auto.
-          left. generalize UNCHANGE21. intro UNC2.
-          assert (PERM2: Mem.perm m2 b2 o2 Max Nonempty).
+          destruct (Mem.perm_dec m3' b2 o2 Max Nonempty); auto.
+          left. generalize UNCHANGE32. intro UNC2.
+          assert (PERM2: Mem.perm m3 b2 o2 Max Nonempty).
           inversion UNC2. eapply unchanged_on_perm; eauto.
-          erewrite Mem.valid_block_extends; eauto.
           eapply DOMIN2; eauto.
           assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
           eapply loc_out_of_reach_trans; eauto.
@@ -1707,8 +1806,7 @@ Section CONSTR_PROOF.
           erewrite <- Mem.mext_sup; eauto.
           congruence.
           exploit Hconstr2; eauto. erewrite <- Mem.mext_sup; eauto.
-          eapply Mem.perm_extends; eauto.
-          intros (b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
+          intros (Hp2 & b1 & ofs1 & Hp1 & Hj1). exfalso. red in LOCIN. eapply LOCIN.
           rewrite Hj1. reflexivity.
           replace (o2 - (o2 - ofs1)) with ofs1 by lia. auto.
           assert (PERM4: Mem.perm m4 b3 (o2 + d2) k p).
@@ -1718,10 +1816,7 @@ Section CONSTR_PROOF.
           inversion INJ34. exploit mi_perm_inv. eauto. apply PERM4.
           intros [A|B]; try congruence.
           inversion UNC2. eapply unchanged_on_perm; eauto.
-          erewrite Mem.valid_block_extends; eauto.
           eapply DOMIN2; eauto. 
-          eapply Mem.mext_perm_inv in A; eauto. destruct A. auto. congruence.
-          exfalso. apply B. eapply Mem.perm_extends; eauto.
       + specialize (INCRNEW2 _ _ _ e MAP2') as NOTIN.
         exploit ADDSAME; eauto. intros [b1 [MAP1' SAME]].
         inversion INJ14'. exploit mi_perm_inv.
@@ -1730,11 +1825,44 @@ Section CONSTR_PROOF.
         destruct (subinj_dec _ _ _ _ _ INCR1 MAP1').
         inversion INJ12. exploit mi_mappedblocks0; eauto.
         intros [P1 | P1].
-        left. eapply step2_perm1; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
-        right. intro. apply P1. eapply step2_perm2; eauto.
+        left. eapply step2_perm1_m3; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
+        right. intro. apply P1. eapply step2_perm2_m3; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
   Qed.
-   *)
+
+
+  
+  Theorem EXT23' : Mem.extends m2' m3'.
+  Proof.
+    constructor.
+    - rewrite m2'_support. rewrite m3'_support. reflexivity.
+    - admit.
+    - intros b2 ofs2 k p Hp3'.
+      destruct (Mem.sup_dec b2 (Mem.support m3)).
+      + 
+        destruct (j2 b2) as [[b3 delta2]|] eqn:j2b2.
+        -- destruct (Mem.loc_in_reach_find m1 j1 b2 ofs2) as [[b1 o1]|] eqn:LOCIN.
+           admit. admit.
+        -- generalize UNCHANGE3. intro UNC3. inv UNC3.
+           eapply unchanged_on_perm in Hp3' as Hp3; eauto.
+           generalize UNCHANGE22. intro UNC2.
+           inversion EXT23. exploit mext_perm_inv; eauto.
+           intros [A|B]. left.
+           inv UNC2. apply unchanged_on_perm0; eauto with mem.
+           right. intro. apply B.
+           inv UNC2. apply unchanged_on_perm0; eauto with mem.
+           rewrite Mem.valid_block_extends. 2: eauto. eauto with mem.
+      + inversion INJ34'.
+        assert (MAP2: j2 b2 = None).
+        { inversion INJ34. apply mi_freeblocks. eauto. }
+        exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
+        exploit step2_perm2'_m3; eauto. instantiate (1:= o2).
+          replace (o2 - o2) with 0 by lia. eauto. intro PERM1'.
+          eapply Mem.perm_inject. 2: apply INJ14'. unfold compose_meminj.
+          rewrite MAP1', MAP2'. eauto. eauto.
+  Qed.
+  Admitted.
+
   Lemma EXT_HIDDEN' : forall Hp1 Hp2,
     external_mid_hidden_ext (injpw j1' m1' m2' Hp1) (injpw j2' m3' m4' Hp2).
   Proof.
@@ -1757,17 +1885,25 @@ Section CONSTR_PROOF.
         generalize MAXPERM3. intro MAXPERM3. apply MAXPERM3 in H0 as Hpm3.
         erewrite Mem.mext_sup in H; eauto.
         specialize (Hconstr2 _ _ _ _ H Hpm3 Hj2).
-        destruct Hconstr2 as (b1 & ofs1 & A & B).
-        exists b1, ofs1. split. eapply copy_perm_m3; eauto. congruence.
+        destruct Hconstr2 as (Hperm2 & b1 & ofs1 & A & B).
+        exploit copy_perm_m3; eauto. congruence. intro HP13'.
+        exploit copy_perm; eauto. congruence. intro HP12'.
+        apply HP13' in H0 as Hperm1'.
+        apply HP12' in Hperm1' as Hperm2'.
+        split. auto.
+        exists b1, ofs1. split. auto.
         apply INCR1. auto.
         eapply Mem.valid_block_inject_1; eauto.
       + exploit ADDSAME; eauto. intros (b1 & A & B).
         destruct (j1 b1) as [[b2' d']|] eqn:Hj1.
         apply INCR1 in Hj1 as Heq. rewrite A in Heq. inv Heq.
         specialize (Hconstr1 _ _ _ H Hj1). congruence.
-        exists b1, ofs3. split.
-        eapply step2_perm2_m3; eauto.
+        exploit step2_perm2_m3; eauto.
         replace (ofs3 - ofs3) with 0 by lia. eauto.
+        intro Hperm1'.
+        split. eapply step2_perm1; eauto.
+        replace (ofs3 - ofs3) with 0 by lia. eauto.
+        exists b1, ofs3. split; eauto.
         replace (ofs3 - ofs3) with 0 by lia. eauto.
   Qed.
   
