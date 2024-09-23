@@ -689,23 +689,56 @@ Proof.
   (* erewrite PTree.gempty in *. congruence. *)
 Qed.
 
-Lemma match_envs_injp_acc: forall j1 j2 le m1 m2 lo hi tle tm1 tm2 tlo thi Hm1 Hm2,
-    match_envs j1 le m1 lo hi tle tm1 tlo thi ->
-    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
-    Mem.sup_include hi (Mem.support m1) ->
-    Mem.sup_include thi (Mem.support tm1) ->
+Lemma match_envs_injp_acc: forall j1 j2 le m1 m2 lo hi tle tm1 tm2 tlo thi Hm1 Hm2
+    (MENV: match_envs j1 le m1 lo hi tle tm1 tlo thi)
+    (INJP: injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2))
+    (INCL1: Mem.sup_include hi (Mem.support m1))
+    (INCL2: Mem.sup_include thi (Mem.support tm1)),
     match_envs j2 le m2 lo hi tle tm2 tlo thi.
-Admitted.
-
-
+Proof.
+  intros.
+  inv MENV.
+  econstructor;eauto.
+  intros. exploit me_vars0;eauto.
+  intros (tb & A & B).
+  exists tb. split; auto.
+  inv INJP.
+  eapply H12. auto.
+  (* me_protect *)
+  intros. exploit me_protect0; eauto.
+  intros (A & B). inv INJP.  
+  split.
+  red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+  eapply Mem.perm_valid_block; eauto.
+  intros.
+  eapply loc_out_of_reach_incr; eauto.
+  eapply Mem.DOMIN. eauto.
+  eapply Mem.perm_valid_block; eauto. eapply A.
+  instantiate (1 := 0). simpl. lia.
+Qed.
+  
 (** Properties of match_envs_flagm: use match_envs_injp_acc to prove this *)
-Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi Hm1 Hm2,
-    match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi ->
-    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
-    Mem.sup_include hi (Mem.support m1) ->
-    Mem.sup_include thi (Mem.support tm1) ->
+Lemma match_envs_flagm_injp_acc: forall j1 j2 own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi Hm1 Hm2
+    (MENV: match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi)
+    (INJP: injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2))
+    (INCL1: Mem.sup_include hi (Mem.support m1))
+    (INCL2: Mem.sup_include thi (Mem.support tm1)),
     match_envs_flagm j2 own le m2 lo hi tle flagm tm2 tlo thi.
-Admitted.
+Proof.
+  intros.
+  econstructor.
+  intros. exploit me_wf_flagm; eauto.
+  intros (tb & v & A1 & A2 & A3 & A4).
+  exists tb,v. repeat apply conj; auto.
+  exploit me_protect. eapply me_envs; eauto.
+  eauto. eauto. intros (PERM & REACH).
+  inv INJP.
+  eapply Mem.load_unchanged_on. eauto.
+  intros. eapply REACH. auto.
+  eapply me_flagm_inj. eauto.
+  eapply match_envs_injp_acc; eauto.
+  eapply me_envs. eauto.
+Qed.
 
 Lemma match_envs_flagm_incr: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 thi2
    (MENV: match_envs_flagm j own le m lo hi1 tle flagm tm tlo thi1)
@@ -714,13 +747,14 @@ Lemma match_envs_flagm_incr: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 
     match_envs_flagm j own le m lo hi2 tle flagm tm tlo thi2.
 Admitted.
 
-Lemma match_envs_flagm_bound_unchanged: forall j own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi ,
-    match_envs_flagm j own le m1 lo hi tle flagm tm1 tlo thi ->
-    Mem.unchanged_on (fun b _ => ~ Mem.sup_In b hi) m1 m2 ->
-    Mem.unchanged_on (fun b _ => ~ Mem.sup_In b thi) tm1 tm2 ->
-    match_envs_flagm j own le m2 lo hi tle flagm tm2 tlo thi.
-Proof.
-Admitted.
+(* unused *)
+(* Lemma match_envs_flagm_bound_unchanged: forall j own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi , *)
+(*     match_envs_flagm j own le m1 lo hi tle flagm tm1 tlo thi -> *)
+(*     Mem.unchanged_on (fun b _ => ~ Mem.sup_In b hi) m1 m2 -> *)
+(*     Mem.unchanged_on (fun b _ => ~ Mem.sup_In b thi) tm1 tm2 -> *)
+(*     match_envs_flagm j own le m2 lo hi tle flagm tm2 tlo thi. *)
+(* Proof. *)
+(* Admitted.  *)
 
 (* establish match_envs after the allocation of the drop flags in the
 target programs *)
@@ -820,24 +854,112 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
 
 (** Properties of match_cont  *)
 
-Lemma match_cont_injp_acc: forall j1 j2 an fm body cfg k tk pc cont brk nret m1 m2 tm1 tm2 lo tlo Hm1 Hm2,
-    match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo ->
-    injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
-    Mem.sup_include lo (Mem.support m1) ->
-    Mem.sup_include tlo (Mem.support tm1) ->
+Lemma match_cont_injp_acc: forall k tk j1 j2 an fm body cfg pc cont brk nret m1 m2 tm1 tm2 lo tlo Hm1 Hm2
+    (MCONT: match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)
+    (INJP: injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2))
+    (INCL1: Mem.sup_include lo (Mem.support m1))
+    (INCL2: Mem.sup_include tlo (Mem.support tm1)),
     match_cont j2 an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
-Admitted.
-
-(** IMPORTANT TODO: how to establish match_cont when modifying the
-drop flags in the current stacks? We should use
-match_envs_flagm_unchanged to prove it *)
-Lemma match_cont_bound_unchanged: forall j an fm body cfg k tk pc cont brk nret m1 m2 tm1 tm2 lo tlo,
-    match_cont j an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo ->
-    Mem.unchanged_on (fun b _ => Mem.sup_In b lo) m1 m2 ->
-    Mem.unchanged_on (fun b _ => Mem.sup_In b tlo) tm1 tm2 ->
-    match_cont j an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
 Proof.
-Admitted.
+  induction k; intros; inv MCONT.
+  - constructor. auto.
+  - econstructor; eauto.
+  - econstructor; eauto.
+  - inv MSTK.
+    econstructor; eauto.
+    econstructor; eauto.
+    eapply IHk. eauto.
+    eauto.
+    eapply Mem.sup_include_trans. eapply me_incr.
+    eapply me_envs; eauto. auto.
+    eapply Mem.sup_include_trans. eapply me_tincr.
+    eapply me_envs; eauto. auto.
+    eapply match_envs_flagm_injp_acc. eauto.
+    eauto. auto. auto.
+  - econstructor; eauto.
+    eapply IHk. eauto.
+    eauto.
+    eapply Mem.sup_include_trans. eapply me_incr.
+    eapply me_envs; eauto. auto.
+    eapply Mem.sup_include_trans. eapply me_tincr.
+    eapply me_envs; eauto. auto.
+    eapply match_envs_flagm_injp_acc. eauto.
+    eauto. auto. auto.
+  - econstructor; eauto.
+    inv INJ.
+    econstructor; auto. inv INJP.
+    eapply H12. auto.
+Qed.
+
+(** Only support m1 unchanged: because we cannot ensure that the
+out_of_reach block becomes mapped in m1 *)
+Lemma match_cont_bound_unchanged: forall k tk j an fm body cfg pc cont brk nret m1 tm1 tm2 lo tlo
+   (MCONT:match_cont j an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)   
+   (UNC: Mem.unchanged_on (fun b _ => Mem.sup_In b tlo) tm1 tm2),
+    match_cont j an fm body cfg k tk pc cont brk nret m1 tm2 lo tlo.
+Proof.
+  induction k; intros; inv MCONT.
+  - constructor. auto.
+  - econstructor; eauto.
+  - econstructor; eauto.
+  - inv MSTK.
+    econstructor; eauto.
+    econstructor; eauto.
+    eapply IHk; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply me_tincr. eapply me_envs; eauto. auto.
+    (* match_envs_flagm *)
+    generalize MENV. intros MENV1.
+    inv MENV.
+    econstructor; eauto.
+    (* wf_flagm *)
+    intros. exploit me_wf_flagm0; eauto.
+    intros (tb & v & A1 & A2 & A3 & A4).
+    exists tb, v. repeat apply conj; auto.
+    eapply Mem.load_unchanged_on; eauto.
+    intros. simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    (* mathc_envs *)
+    inv me_envs0.
+    constructor; eauto.
+    intros. exploit me_protect0; eauto.
+    intros (B1 & B2).
+    split.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    eapply Mem.perm_valid_block; eauto.
+    (* out_of_reach *)
+    auto.
+  - econstructor; eauto.
+    eapply IHk; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply me_tincr. eapply me_envs; eauto. auto.
+    (* match_envs_flagm *)
+    generalize MENV. intros MENV1.
+    inv MENV.
+    econstructor; eauto.
+    (* wf_flagm *)
+    intros. exploit me_wf_flagm0; eauto.
+    intros (tb & v & A1 & A2 & A3 & A4).
+    exists tb, v. repeat apply conj; auto.
+    eapply Mem.load_unchanged_on; eauto.
+    intros. simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    (* mathc_envs *)
+    inv me_envs0.
+    constructor; eauto.
+    intros. exploit me_protect0; eauto.
+    intros (B1 & B2).
+    split.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    eapply Mem.perm_valid_block; eauto.
+    (* out_of_reach *)
+    auto.
+  - econstructor; eauto.
+Qed.
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
@@ -1641,13 +1763,29 @@ Proof.
   eapply H. eauto. eauto.
 Qed.
 
+(* Lemma eval_dropflag_option_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf stmt universe *)
+(*   (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi) *)
+(*   (MINJ: Mem.inject j m tm1) *)
+(*   (* how to ensure that update ownership of p does not change other place ownership *) *)
+(*   (OWN: own2 = if flag then init_place own1 p else move_place own1 p) *)
+(*   (DROPS: add_dropflag_option flagm ge universe p flag = OK stmt) *)
+(*   (UNI: PathsMap.eq own1.(own_universe) universe), *)
+(*   exists tm2, *)
+(*     star RustIRsem.step tge (RustIRsem.State tf stmt tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2) *)
+(*     /\ Mem.inject j m tm2 *)
+(*     /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi *)
+(*     (* only unchange the blocks outside the drop flag, enough? *) *)
+(*     /\ Mem.unchanged_on (fun b _ => forall p id tb ty, get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2 *)
+(*     /\ ValueAnalysis.ro_acc tm1 tm2. *)
+
+
 
 (* only consider move_place *)
 Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 universe stmt tk tf
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
     (MINJ: Mem.inject j m tm1)
     (* how to ensure that update ownership of p does not change other place ownership *)
-    (OWN: own2 = own_transfer_exprlist own1 al)
+    (OWN: own2 = move_place_list own1 (moved_place_list al))
     (DROPS: add_dropflag_list flagm ge universe (moved_place_list al) false = OK stmt)
     (UNI: PathsMap.eq own1.(own_universe) universe),
   exists tm2,
@@ -1679,7 +1817,7 @@ Proof.
       eapply star_step. eapply RustIRsem.step_skip_seq.
       eauto. 1-3: eauto.
       (* match_envs_flagm *)
-      unfold moved_place in MP. unfold own_transfer_expr.
+      unfold moved_place in MP. 
       destruct a; try congruence.
       (* unchanged_on *)
       eapply Mem.unchanged_on_trans.
@@ -1688,14 +1826,6 @@ Proof.
       (* ro_acc *)
       eapply ValueAnalysis.ro_acc_trans; eauto.
     + exploit IHal; eauto.
-      instantiate (1 := tk).
-      instantiate (1 := tf).
-      intros (tm3 & B1 & B2 & B3 & B4 & B5).
-      exists tm3. repeat apply conj; auto.
-      (* match_envs_flagm *)
-      subst.
-      unfold moved_place in MP. unfold own_transfer_expr.
-      destruct a; try congruence.
 Qed.
 
 (** prove a simple injp_acc_local  *)
@@ -1955,9 +2085,9 @@ Lemma step_simulation:
 Proof. 
   induction 1; intros; inv MS.
   (* step_assign *)
-  - inv MSTMT.
-    simpl in TR. 
+  - inv MSTMT. simpl in TR. monadInv TR.
     admit.
+    
   (* step_assign_variant *)
   - admit.
   (* step_box *)
@@ -2153,7 +2283,6 @@ Proof.
     econstructor; eauto.
     (* match_cont *)
     eapply match_cont_bound_unchanged; eauto.
-    eapply Mem.unchanged_on_refl.
     eapply Mem.unchanged_on_implies; eauto.
     intros. simpl. intros. intro. subst.
     eapply me_trange. eapply me_envs; eauto. eauto. auto.
@@ -2289,6 +2418,8 @@ Proof.
     (* prove wf_flagm *)
     intros. eapply WFFLAGM.
     (* property of generate_place_map *)
+    admit.
+    (** injective of get_dropflag_temp of the generated flagm *)
     admit.
     (** sound_flagm *)
     eapply generate_flag_map_sound; eauto.

@@ -11,21 +11,6 @@ Require Import InitDomain.
 Import ListNotations.
 Local Open Scope list_scope.
 
-Definition moved_place (e: expr) : option place :=
-  match e with
-  | Emoveplace p _ => Some (valid_owner p)
-  | _ => None
-  end.
-
-Fixpoint moved_place_list (al: list expr) : list place :=
-  match al with
-  | e :: l =>
-      match moved_place e with
-      | Some p => p :: moved_place_list l
-      | None => moved_place_list l
-      end
-  | nil => nil
-  end.
 
 (* S is the whole set, flag = true indicates that it computes the MaybeInit set *)
 Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (pc: node) (before: PathsMap.t) : PathsMap.t :=
@@ -578,7 +563,7 @@ Proof.
     exploit analyze_succ. 1-3: eauto. eapply SEL.
     instantiate (1 :=next). simpl. auto. eauto. eauto.
     (* prove sound_own *)
-    instantiate (1 := (init_place (own_transfer_exprlist own1 al) p)). admit.
+    instantiate (1 := (init_place (move_place_list own1 (moved_place_list al)) p)). admit.
     intros (mayinit3 & mayuninit3 & A & B & C). subst. auto.
     econstructor; eauto.
   (* step_internal_function *)

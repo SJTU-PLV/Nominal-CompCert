@@ -347,7 +347,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3)
     (TYP: forall orgs id, typeof_place p <> Tvariant orgs id),
@@ -363,7 +363,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3)
     (* necessary for clightgen simulation *)
@@ -391,7 +391,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3),
     typeof_place p = Tbox ty ->
@@ -430,7 +430,7 @@ Inductive step : state -> trace -> state -> Prop :=
          
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
     (CHKEXPRLIST: own_check_exprlist own1 al = true)
-    (TFEXPRLIST: own_transfer_exprlist own1 al = own2), 
+    (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2), 
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -463,7 +463,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
 | step_return_1: forall le a v v1 lb m1 m2 f k own1 own2
     (CHKEXPR: own_check_expr own1 a = true)
-    (TFEXPR: own_transfer_expr own1 a = own2),
+    (TFEXPR: move_place_option own1 (moved_place a) = own2),
     eval_expr ge le m1 a v ->
     (* sem_cast to the return type *)
     sem_cast v (typeof a) f.(fn_return) = Some v1 ->

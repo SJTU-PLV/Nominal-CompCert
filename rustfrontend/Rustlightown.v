@@ -162,13 +162,6 @@ Proof.
   eapply proj_sumbool_true in PFX. auto.
 Qed.  
   
-(* place with succesive Pdowncast in the end is not a valid owner. For
-example, move (Pdowncast p) is equivalent to move p *)
-Fixpoint valid_owner (p: place) :=
-  match p with
-  | Pdowncast p' _ _ => valid_owner p'
-  | _ => p
-  end.
 
 Definition check_movable (own: own_env) (p: place) : bool :=
   (* the place itself and its children are all owned *)
@@ -278,15 +271,28 @@ Next Obligation.
   - auto.
 Defined.
 
-(* ownership transfer of an expression *)
-Definition own_transfer_expr (own: own_env) (e: expr) : own_env :=
-  match e with
-  | Emoveplace p ty =>
-      let p := valid_owner p in
-      move_place own p
-  | Epure pe =>
-      own
+Definition move_place_option (own: own_env) (p: option place) : own_env :=
+  match p with
+  | None => own
+  | Some p => move_place own p
   end.
+
+Fixpoint move_place_list (own: own_env) (l: list place) : own_env :=
+  match l with
+  | nil => own
+  | p :: l' =>
+      move_place_list (move_place own p) l'
+  end.
+
+(* (* ownership transfer of an expression *) *)
+(* Definition own_transfer_expr (own: own_env) (e: expr) : own_env := *)
+(*   match e with *)
+(*   | Emoveplace p ty => *)
+(*       let p := valid_owner p in *)
+(*       move_place own p *)
+(*   | Epure pe => *)
+(*       own *)
+(*   end. *)
 
 
 (* Move to Rustlight: Check the ownership of expression *)
@@ -303,12 +309,12 @@ Definition own_check_expr (own: own_env) (e: expr) : bool :=
       true
   end.
 
-Fixpoint own_transfer_exprlist (own: own_env) (l: list expr) : own_env :=
-  match l with
-  | nil => own
-  | e :: l' =>
-      own_transfer_exprlist (own_transfer_expr own e) l'
-  end.
+(* Fixpoint own_transfer_exprlist (own: own_env) (l: list expr) : own_env := *)
+(*   match l with *)
+(*   | nil => own *)
+(*   | e :: l' => *)
+(*       own_transfer_exprlist (own_transfer_expr own e) l' *)
+(*   end. *)
 
 
 Definition own_check_exprlist (own: own_env) (l: list expr) : bool :=
@@ -1242,7 +1248,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3)
     (TYP: forall orgs id, typeof_place p <> Tvariant orgs id),
@@ -1259,7 +1265,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3)
     (* necessary for clightgen simulation *)
@@ -1324,7 +1330,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
     (* check ownership *)
     (CHKEXPR: own_check_expr own1 e = true)
-    (TFEXPR: own_transfer_expr own1 e = own2)
+    (TFEXPR: move_place_option own1 (moved_place e) = own2)
     (CHKASSIGN: own_check_assign own2 p = true)
     (TFASSIGN: own_transfer_assign own2 p = own3),
     typeof_place p = Tbox ty ->
@@ -1361,7 +1367,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
     (CHKEXPRLIST: own_check_exprlist own1 al = true)
-    (TFEXPRLIST: own_transfer_exprlist own1 al = own2),    
+    (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -1390,7 +1396,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sreturn None) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
 | step_return_1: forall le a v v1 m f k own1 own2 drops param_drops
     (CHKEXPR: own_check_expr own1 a = true)
-    (TFEXPR: own_transfer_expr own1 a = own2)
+    (TFEXPR: move_place_option own1 (moved_place a) = own2)
     (EXPR: eval_expr ge le m a v)
     (* sem_cast to the return type *)
     (CAST: sem_cast v (typeof a) f.(fn_return) = Some v1)

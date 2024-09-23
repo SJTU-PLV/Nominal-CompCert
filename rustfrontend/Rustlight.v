@@ -177,6 +177,32 @@ Definition type_of_fundef (f: fundef) : type :=
       Tfunction orgs org_rels typs typ cc
   end.
 
+(* Moved place of expressions *)
+
+(* place with succesive Pdowncast in the end is not a valid owner. For
+example, move (Pdowncast p) is equivalent to move p *)
+Fixpoint valid_owner (p: place) :=
+  match p with
+  | Pdowncast p' _ _ => valid_owner p'
+  | _ => p
+  end.
+
+Definition moved_place (e: expr) : option place :=
+  match e with
+  | Emoveplace p _ => Some (valid_owner p)
+  | _ => None
+  end.
+
+Fixpoint moved_place_list (al: list expr) : list place :=
+  match al with
+  | e :: l =>
+      match moved_place e with
+      | Some p => p :: moved_place_list l
+      | None => moved_place_list l
+      end
+  | nil => nil
+  end.
+
 (** Prefix of a place  *)
 
 Fixpoint parent_paths (p: place) : list place :=
