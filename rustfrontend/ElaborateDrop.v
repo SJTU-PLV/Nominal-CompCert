@@ -35,10 +35,10 @@ Fixpoint generate_drop_flags_for_splits (mayinit mayuninit universe: PathsMap.t)
   | nil => nil
   | p :: l' =>
       let flags := generate_drop_flags_for_splits mayinit mayuninit universe l' in
-      if must_owned mayinit mayuninit universe p then
+      if must_init mayinit mayuninit p then
         (* this place must be init, no need for drop flag *)
         flags
-      else if may_owned mayinit mayuninit universe p then
+      else if may_init mayinit mayuninit p then
         (* need drop flag *)
         let drop_flag := fresh_atom tt in
         (p, drop_flag) :: flags
@@ -157,7 +157,7 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
           (* need drop flag *)
           (Ssequence (generate_drop p full (Some id)) stmt)
       | None =>
-          if must_owned mayinit mayuninit universe p then
+          if must_init mayinit mayuninit p then
             (Ssequence (generate_drop p full None) stmt)
           else
             (* this place must be uninit, no need to drop *)
@@ -235,14 +235,14 @@ End ELABORATE.
 Local Open Scope error_monad_scope.
 
 Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
-  if must_owned mayinit mayuninit universe p then
+  if must_init mayinit mayuninit p then
     OK (set_dropflag flag true)
   else
     (* impossible: return error *)
-    if may_owned mayinit mayuninit universe p then
-      Error (msg "impossible may_owned in init_drop_flag")           
+    if may_init mayinit mayuninit p then
+      Error (msg "impossible may_init in init_drop_flag")           
     else      
-      (* how to show that must_owned = false is must_unowed in function
+      (* how to show that must_init = false is must_unowed in function
          entry *)
       OK (set_dropflag flag false).
   (* let id := local_of_place p in *)

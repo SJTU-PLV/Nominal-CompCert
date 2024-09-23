@@ -157,7 +157,82 @@ Proof.
   - eapply H.
 Qed.
 
-Lemma move_split_places_uncheck_sound: forall drops own own',
+Lemma move_place_not_init: forall p own,
+    is_init (move_place own p) p = false.
+Proof.
+  intros. unfold move_place, is_init.
+  simpl. unfold remove_place.
+  erewrite PathsMap.gsspec.
+  destruct peq; try congruence.
+  eapply not_true_is_false.
+  intro. eapply Paths.mem_2 in H.
+  eapply Paths.filter_2 in H.
+  erewrite is_prefix_refl in H. simpl in H.
+  congruence.
+  red. solve_proper.
+Qed.
+
+  
+(* all the children has been moved out *)
+Inductive move_ordered_split_places_spec : own_env -> list place -> Prop :=
+| ordered_in_own_nil: forall own,
+    move_ordered_split_places_spec own nil
+| ordered_in_own_cons: forall p l own,
+    (forall p', is_prefix p p' = true -> is_init (if is_init own p then move_place own p else own) p' = false) ->
+    move_ordered_split_places_spec (if is_init own p then move_place own p else own) l ->
+    move_ordered_split_places_spec own (p :: l).
+
+Lemma move_place_still_not_owned: forall p1 p2 own,
+    is_init own p1 = false ->
+    is_init (move_place own p2) p1 = false.
+  Admitted.
+
+
+Lemma ordered_and_complete_split_places_meet_spec: forall drops own
+    (COMPLETE: forall p a, In p drops -> is_prefix p a = true -> Paths.In a (PathsMap.get (local_of_place a) own.(own_universe)) -> In a drops \/ is_init own a = false)
+    (ORDER: split_places_ordered drops),   
+    move_ordered_split_places_spec own drops.
+Proof.
+  induction drops; simpl; intros.
+  constructor.
+  econstructor.
+  - intros.
+    destruct (Paths.mem p' (PathsMap.get (local_of_place a) (own_universe own))) eqn: UNI.
+    + eapply Paths.mem_2 in UNI.      
+      (* p' must be equal to a? *)
+      exploit COMPLETE. left. eauto.
+      eauto. erewrite <- is_prefix_same_local. eauto.
+      auto. intros [[A|B]|C].
+      * subst. destruct (is_init own p') eqn: INIT.
+        eapply move_place_not_init. auto.
+      * inv ORDER. eapply Forall_forall with (x:=p') in H2.
+        congruence. auto.
+      * destruct (is_init own a); auto.
+        eapply move_place_still_not_owned. auto.
+    (* easy *)
+    + admit.
+  - inv ORDER. eapply IHdrops; eauto.
+    assert (UNIEQ: PathsMap.eq (own_universe (if is_init own a then move_place own a else own)) (own_universe own)).
+    {                           (* easy *)
+      admit. }
+    intros. exploit COMPLETE.
+    right. eauto.
+    eauto.
+    eapply UNIEQ. eauto.
+    intros [[A | B]| C].
+    + subst. right.
+      destruct (is_init own a0) eqn: INIT.
+      eapply move_place_not_init.
+      auto.
+    + auto.
+    + right.
+      destruct (is_init own a) eqn: INIT.
+      eapply move_place_still_not_owned. auto.
+      auto.
+Admitted.
+
+Lemma move_split_places_uncheck_sound: forall drops own own'
+    (SPEC: move_ordered_split_places_spec own (map fst drops)),
     move_split_places own drops = own' ->
     PathsMap.ge (move_split_places_uncheck (own_init own) drops) (own_init own')
     /\ PathsMap.ge (add_split_places_uncheck (own_universe own) (own_uninit own) drops) (own_uninit own')
@@ -168,7 +243,8 @@ Proof.
     split. apply PathsMap.ge_refl. eapply PathsMap.eq_refl.
     apply PathsMap.eq_refl.
   - destruct a.
-    destruct (is_owned own p) eqn: OWN.
+    simpl in SPEC. inv SPEC.
+    destruct (is_init own p) eqn: OWN.
     + exploit (IHdrops (move_place own p)); eauto.
     (* p is not owned, so remove it has no effect *)
     + exploit (IHdrops own); eauto.
@@ -190,28 +266,22 @@ Proof.
         + red. intros a IN.
           eapply Paths.filter_3. red. solve_proper.
           auto.
-          (* key to prove: a is not a child of p. From opposite side,
-          if a is a children of p, then is_owned p = true. This can be
-          proved by own_wf_init *)
-          eapply negb_true_iff in OWN.
-          apply Is_true_eq_true. apply Is_true_eq_left in OWN.           
-          apply negb_prop_intro. apply negb_prop_elim in OWN.
-          intro PRE. apply OWN. apply Is_true_eq_true in PRE.
-          apply Is_true_eq_left.
-          (* prove p is owned *)
-          unfold is_owned. eapply Paths.for_all_1.
-          red. solve_proper.
-          red. intros p1 IN1. eapply Paths.filter_2 in IN1 as IN2.
-          eapply Paths.filter_1 in IN1 as IN3.
-          exploit (own_wf_init own (local_of_place p) a IN p1). auto.
-          erewrite is_prefix_trans; eauto.
-          red. solve_proper.
-          red. solve_proper.          
+          (* key to prove: a is not a child of p. From opposite side, *)
+          (* if a is a children of p, then is_init own a = false which
+          is a contradiction of IN *)                             
+          apply Is_true_eq_true.
+          apply negb_prop_intro.
+          intro PRE. apply Is_true_eq_true in PRE.
+          exploit H2; eauto.
+          unfold is_init. intros INIT.
+          eapply Paths.mem_1 in IN.
+          erewrite is_prefix_same_local in IN; eauto.
+          congruence.
         + eapply LPaths.ge_refl. apply LPaths.eq_refl. }
       eapply move_split_places_uncheck_more; eauto.
 Qed.
 
-  
+
 (* equivalent (just ge for now because it is enough) between
 get-filter-set and get-set-get-set ... -get-set mode *)
 Lemma filter_move_split_places_ge: forall l id init
@@ -437,19 +507,19 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
     match_split_drop_places flagm own nil Sskip
 | match_sdp_cons_flag: forall p flag own l ts full
     (FLAG: get_dropflag_temp flagm p = Some flag)
-    (SPLIT: match_split_drop_places flagm (if is_owned own p then move_place own p else own) l ts),
+    (SPLIT: match_split_drop_places flagm (if is_init own p then move_place own p else own) l ts),
     (* how to ensure that p is owned in own_env *)    
     match_split_drop_places flagm own ((p,full)::l) (Ssequence (generate_drop p full (Some flag)) ts)
 | match_sdp_cons_must_init: forall p own l ts full
     (FLAG: get_dropflag_temp flagm p = None)
     (SPLIT: match_split_drop_places flagm (move_place own p) l ts)
-    (OWN: is_owned own p = true),
+    (OWN: is_init own p = true),
     (* how to ensure that p is owned in own_env *)    
     match_split_drop_places flagm own ((p,full)::l) (Ssequence (generate_drop p full None) ts)
 | match_sdp_cons_must_uninit: forall p own l ts full
     (FLAG: get_dropflag_temp flagm p = None)
     (SPLIT: match_split_drop_places flagm own l ts)
-    (OWN: is_owned own p = false),
+    (OWN: is_init own p = false),
     (* how to ensure that p is owned in own_env *)
     match_split_drop_places flagm own ((p,full)::l) (Ssequence Sskip ts)
 .
@@ -465,9 +535,9 @@ Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uni
     In p1 (map fst drops) ->
     get_dropflag_temp flagm p1 = None ->
     (* must owned *)
-    (must_owned init!!pc uninit!!pc universe p1 = true \/
+    (must_init init!!pc uninit!!pc p1 = true \/
        (* must unowned *)
-       may_owned init!!pc uninit!!pc universe p1 = false).
+       may_init init!!pc uninit!!pc p1 = false).
 
 Lemma generate_drop_flags_inv: forall init uninit universe f cfg ce flags entry
   (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
@@ -588,7 +658,13 @@ Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem
               /\ e ! id = None
               /\ Mem.load Mint8unsigned tm tb 0 = Some (Vint v)
               (* TODO: add a rust bool_val *)
-              /\ negb (Int.eq v Int.zero) = is_owned own p;
+              /\ negb (Int.eq v Int.zero) = is_init own p;
+
+    me_flagm_inj: forall p1 p2 id1 id2,
+      get_dropflag_temp flagm p1 = Some id1 ->
+      get_dropflag_temp flagm p2 = Some id2 ->
+      p1 <> p2 ->
+      id1 <> id2;
     
     me_envs: match_envs j e m lo hi te tm tlo thi;
   }.
@@ -729,7 +805,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
-| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry
+| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry stmt
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
@@ -737,8 +813,9 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* own2 is built after the function call *)
     (AFTER: own2 = init_place own1 p)                  
-    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe),
-    match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall (Some p) tf tle (RustIRsem.Kseq (add_dropflag flagm p true) tk)) m tm hi thi
+    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
+    (STMT: add_dropflag flagm ce universe p true = OK stmt),
+    match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall (Some p) tf tle (RustIRsem.Kseq stmt tk)) m tm hi thi
 .
 
 (** Properties of match_cont  *)
@@ -822,24 +899,20 @@ Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_en
     wf_split_drop_places flagm init uninit universe own nil
 | wf_sdp_flag: forall own b id l p
     (FLAG: get_dropflag_temp flagm p = Some id)
-    (WF: wf_split_drop_places flagm init uninit universe (if is_owned own p then (move_place own p) else own) l),
+    (WF: wf_split_drop_places flagm init uninit universe (if is_init own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 | wf_sdp_must: forall own b l p
     (FLAG: get_dropflag_temp flagm p = None)
-    (OWN: must_owned init uninit universe p = is_owned own p)
-    (WF: wf_split_drop_places flagm init uninit universe (if is_owned own p then (move_place own p) else own) l),
+    (OWN: must_init init uninit p = is_init own p)
+    (WF: wf_split_drop_places flagm init uninit universe (if is_init own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 .
 
-Lemma move_place_still_not_owned: forall p1 p2 own,
-    is_owned own p1 = false ->
-    is_owned (move_place own p2) p1 = false.
-  Admitted.
 
 Lemma move_irrelavent_place_still_owned: forall p1 p2 own,
-    is_owned own p1 = true ->
+    is_init own p1 = true ->
     is_prefix p2 p1 = false ->
-    is_owned (move_place own p2) p1 = true.
+    is_init (move_place own p2) p1 = true.
 Admitted.
 
 (** IMPORTANT TODO  *)
@@ -847,24 +920,24 @@ Lemma ordered_split_drop_places_wf:
   forall drops own init uninit universe flagm
     (ORDER: split_places_ordered (map fst drops))
     (OWN: forall p full, In (p, full) drops ->
-                    must_owned init uninit universe p = true ->
-                    is_owned own p = true)
-    (NOTOWN: forall p, must_owned init uninit universe p = false ->
-                  may_owned init uninit universe p = false ->
-                  is_owned own p = false)
+                    must_init init uninit p = true ->
+                    is_init own p = true)
+    (NOTOWN: forall p, must_init init uninit p = false ->
+                  may_init init uninit p = false ->
+                  is_init own p = false)
     (UNI: PathsMap.eq universe (own_universe own))
     (FLAG: forall p full,
         In (p, full) drops ->
         get_dropflag_temp flagm p = None ->
-        must_owned init uninit universe p = true
-        \/ may_owned init uninit universe p = false),
+        must_init init uninit p = true
+        \/ may_init init uninit p = false),
     wf_split_drop_places flagm init uninit universe own drops.
 Proof.
   induction drops; simpl; intros.
   constructor.
   destruct a.
   assert (A: wf_split_drop_places flagm init uninit universe
-               (if is_owned own p then move_place own p else own) drops).
+               (if is_init own p then move_place own p else own) drops).
   { inv ORDER.
     eapply IHdrops. eauto.
     (* prove own *)
@@ -872,7 +945,7 @@ Proof.
       (* show that p1 is still owned after removing p which is not a
     pare nt of p1 from the own_env *)
       exploit OWN. right. eauto. auto. intros POWN1.
-      destruct (is_owned own p) eqn: POWN; auto.
+      destruct (is_init own p) eqn: POWN; auto.
       eapply Forall_forall with (x:= p1) in H1; auto.
       (* use H1 POWN1 to prove this goal *)
       eapply move_irrelavent_place_still_owned; eauto.
@@ -880,10 +953,10 @@ Proof.
     + intros p1 MUSTOWN1 MAYOWN1.
       exploit NOTOWN. eauto. eauto.
       intros NOTOWNP1.
-      destruct (is_owned own p) eqn: POWN; auto.
+      destruct (is_init own p) eqn: POWN; auto.
       apply move_place_still_not_owned; auto.      
     + eapply PathsMap.eq_trans; eauto.
-      unfold move_place. destruct (is_owned own p) eqn: POWN; apply PathsMap.eq_refl.
+      unfold move_place. destruct (is_init own p) eqn: POWN; apply PathsMap.eq_refl.
     + intros. eapply FLAG; eauto. }
   
   (* p has drop flag or not *)
@@ -892,7 +965,7 @@ Proof.
   - exploit FLAG. left; eauto.
     auto. intros MOWN.
     eapply wf_sdp_must. eauto. 2: auto.
-    destruct (must_owned init uninit universe p) eqn: MUSTOWN.
+    destruct (must_init init uninit p) eqn: MUSTOWN.
     + symmetry. eapply OWN; eauto.
     + destruct MOWN. congruence.
       symmetry. eapply NOTOWN.
@@ -914,7 +987,7 @@ Proof.
     eapply IHdrops. inv WFDROPS.
     auto. congruence.
   - inv WFDROPS. congruence.
-    destruct (must_owned init uninit universe p) eqn: MUST.
+    destruct (must_init init uninit p) eqn: MUST.
     (* must_owned = true *)
     + rewrite <- OWN in WF.
       econstructor; auto.      
@@ -1138,14 +1211,14 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
     star RustIRsem.step tge (RustIRsem.State tf stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
     /\ Mem.inject j1 m1 tm2 
     /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
-    /\ negb (Int.eq v Int.zero) = is_owned own p
+    /\ negb (Int.eq v Int.zero) = is_init own p
     /\ ValueAnalysis.ro_acc tm1 tm2
     /\ Mem.unchanged_on (fun b _ => b <> tb) tm1 tm2
     /\ Mem.range_perm tm2 tb 0 (size_chunk Mint8unsigned) Cur Freeable.
 Proof.
   intros.  
   unfold init_drop_flag in STMT.
-  destruct (must_owned init uninit universe p) eqn: MUST.
+  destruct (must_init init uninit p) eqn: MUST.
   - inv STMT.
     exploit (eval_set_drop_flag true); eauto.
     instantiate (1 := k). instantiate (1 := tf).
@@ -1155,8 +1228,8 @@ Proof.
     repeat apply conj; auto.
     eapply star_step. eauto.
     eapply star_refl. auto.
-    erewrite must_owned_sound; eauto.
-  - destruct (may_owned init uninit universe p) eqn: MAY; try congruence.
+    erewrite must_init_sound; eauto.
+  - destruct (may_init init uninit p) eqn: MAY; try congruence.
     inv STMT.
     exploit (eval_set_drop_flag false); eauto.
     instantiate (1 := k). instantiate (1 := tf).
@@ -1166,7 +1239,7 @@ Proof.
     repeat apply conj; auto.
     eapply star_step. eauto.
     eapply star_refl. auto.    
-    erewrite must_not_owned_sound; eauto.
+    erewrite must_not_init_sound; eauto.
 Qed.
 
 
@@ -1191,7 +1264,7 @@ Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e 
              exists tb v, te ! id = Some (tb, type_bool)
                      /\ e ! id = None
                      /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
-                     /\ negb (Int.eq v Int.zero) = is_owned own p)
+                     /\ negb (Int.eq v Int.zero) = is_init own p)
     /\ match_envs j1 e m1 lo hi te tm2 tlo thi
     (* we only change the blocks of drop flags *)
     /\ Mem.unchanged_on (fun b _ => forall p id tb ty, In (p, id) flags -> te ! id = Some (tb, ty) -> b <> tb) tm1 tm2
@@ -1264,47 +1337,178 @@ Proof.
     eapply ValueAnalysis.ro_acc_trans; eauto.
 Qed. 
 
-(** IMPORTANT TODO *)
-Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf
+
+Lemma move_prefix_not_init: forall p1 p2 own,
+    (* this premise is important to prevent that p1 and p2 *)
+(*        does not exists in universe so that move p1 has no *)
+(*        effect *)
+    Paths.In p2 (PathsMap.get (local_of_place p1) own.(own_universe)) ->
+    is_prefix p1 p2 = true ->
+    is_init (move_place own p1) p2 = false.
+Admitted.
+
+
+Lemma init_prefix_init: forall p1 p2 own,
+    Paths.In p2 (PathsMap.get (local_of_place p1) own.(own_universe)) ->
+    is_prefix p1 p2 = true ->
+    is_init (init_place own p1) p2 = true.
+Proof.
+Admitted.
+
+Lemma eval_split_dropflag_match: forall drops j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf
+  (MENV: match_envs j le m lo hi tle tm1 tlo thi)
+  (MINJ: Mem.inject j m tm1)
+  (OWN: own2 = if flag then init_place own1 p else move_place own1 p)
+  (WFFLAG: forall p id,
+      get_dropflag_temp flagm p = Some id ->
+      exists tb v, tle ! id = Some (tb, type_bool)
+              /\ le ! id = None
+              /\ Mem.load Mint8unsigned tm1 tb 0 = Some (Vint v)
+              (* weaker than wf_flagm *)
+              /\ (In p drops -> negb (Int.eq v Int.zero) = is_init own1 p)
+              (* proved by split_complete *)
+              /\ (~ In p drops -> negb (Int.eq v Int.zero) = is_init own2 p))
+  (FMINJ: forall (p1 p2 : place) (id1 id2 : ident),
+      get_dropflag_temp flagm p1 = Some id1 ->
+      get_dropflag_temp flagm p2 = Some id2 -> p1 <> p2 -> id1 <> id2)
+  (NOREPET: list_norepet drops)
+  (* prove by split_sound *)
+  (SPLITSOUND: forall a, In a drops -> Paths.In a (PathsMap.get (local_of_place p) own1.(own_universe)) /\ is_prefix p a = true),
+  exists tm2,
+    (** What properties do we need for drops? *)
+    star RustIRsem.step tge (RustIRsem.State tf (set_dropflag_for_splits flagm drops flag) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+    /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+    (* only unchange the blocks outside the drop flag, enough? *)
+    /\ Mem.unchanged_on (fun b _ => forall p id tb ty, In p drops -> get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2
+    /\ ValueAnalysis.ro_acc tm1 tm2.
+Proof.
+  induction drops; simpl; intros.
+  - exists tm1.
+    repeat apply conj.
+    eapply star_refl.
+    constructor; eauto.
+    intros. exploit WFFLAG; eauto.
+    intros (tb & v & A & B & C & D & E).
+    exists tb,v. repeat apply conj; auto.
+    eapply Mem.unchanged_on_refl.
+    eapply ValueAnalysis.ro_acc_refl.
+  - destruct (get_dropflag_temp flagm a) eqn: FLAG.
+    + simpl.
+      exploit WFFLAG; eauto.
+      intros (tb & v & A1 & A2 & A3 & A4 & A5).
+      exploit eval_set_drop_flag; eauto.
+      eapply me_protect; eauto.
+      eapply me_protect; eauto.
+      instantiate (1 := flag). instantiate (1 := (RustIRsem.Kseq (set_dropflag_for_splits flagm drops flag) tk)).
+      instantiate (1 := tf).
+      intros (tm2 & B1 & B2 & B3 & B4 & B5 & B6).
+      (* establish WFFLAG for I.H. *)
+      assert (WFG: forall p id,
+                 get_dropflag_temp flagm p = Some id ->
+                 exists tb v, tle ! id = Some (tb, type_bool)
+                         /\ le ! id = None
+                         /\ Mem.load Mint8unsigned tm2 tb 0 = Some (Vint v)
+                         (* weaker than wf_flagm *)
+                         /\ (In p drops -> negb (Int.eq v Int.zero) = is_init own1 p)
+                         (* proved by split_complete *)
+                         /\ (~ In p drops -> negb (Int.eq v Int.zero) = is_init own2 p)).
+      { intros p0 id GET.
+        destruct (place_eq p0 a). subst.
+        (* p0 = a *)
+        * rewrite GET in FLAG. inv FLAG.
+          exists tb, (if flag then Int.one else Int.zero).
+          repeat apply conj; auto.
+          rewrite B3. f_equal. destruct flag; simpl; auto.
+          (* a cannot appear in drops *)
+          intros. inv NOREPET. congruence.
+          intros.
+          (* use split_sound to relate p and a *)
+          exploit SPLITSOUND. left; eauto. intros (INU & PRE).
+          destruct flag.
+          -- erewrite init_prefix_init; eauto.
+          -- erewrite move_prefix_not_init; eauto.
+        (* p0 <> a *)
+        * exploit WFFLAG; eauto.
+          intros (tb0 & v0 & C1 & C2 & C3 & C4 & C5).
+          exists tb0, v0. repeat apply conj; auto.
+          (* load value unchanged *)
+          eapply Mem.load_unchanged_on; eauto.
+          intros. simpl. eapply me_tinj; eauto.
+          intros. eapply C5. intro.
+          destruct H0; try congruence. }
+      assert (MENV2: match_envs j le m lo hi tle tm2 tlo thi).
+      { generalize MENV. intros D. inv D.
+        constructor; eauto.
+        intros. exploit me_protect0; eauto.
+        intros (D1 & D2).
+        split; auto.
+        destruct (peq id i). subst.
+        (* id = i *)
+        - rewrite A1 in H0. inv H0.
+          auto.
+        (* id <> i *)
+        - red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+          simpl. eapply me_tinj; eauto. eapply Mem.perm_valid_block. eauto. }
+      exploit IHdrops; eauto.
+      inv NOREPET. auto.
+      instantiate (1 := tk). instantiate (1 := tf).
+      intros (tm3 & C1 & C2 & C3 & C4).
+      (*** TODO  *)
+Admitted.
+      
+(** important TODO *)
+Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf stmt universe
   (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
   (MINJ: Mem.inject j m tm1)
   (* how to ensure that update ownership of p does not change other place ownership *)
-  (OWN: own2 = if flag then init_place own1 p else move_place own1 p),
+  (OWN: own2 = if flag then init_place own1 p else move_place own1 p)
+  (DROPS: add_dropflag flagm tge universe p flag = OK stmt)
+  (UNI: PathsMap.eq own1.(own_universe) universe),
   exists tm2,
-    star RustIRsem.step tge (RustIRsem.State tf (add_dropflag flagm p flag) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+    star RustIRsem.step tge (RustIRsem.State tf stmt tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
     /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+    (* only unchange the blocks outside the drop flag, enough? *)
     /\ Mem.unchanged_on (fun b _ => forall p id tb ty, get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2
     /\ ValueAnalysis.ro_acc tm1 tm2.
 Proof.
-  intros. unfold add_dropflag.
-  destruct (get_dropflag_temp flagm p) eqn: FLAG.
-  simpl.
-  exploit me_wf_flagm; eauto.
-  intros (tb & v & A & B & C & D).
-  exploit eval_set_drop_flag; eauto.
-  eapply me_protect;eauto. eapply me_envs; eauto.
-  eapply me_protect;eauto. eapply me_envs; eauto.
-  instantiate (1 := flag). instantiate (1 := tk).
-  instantiate (1 := tf).
-  intros (tm2 & E & F & G & H & I & J).
-  exists tm2.
-  repeat apply conj.
-  eapply star_one; eauto.
-  (* match_envs_flagm *)
-  constructor.
-  intros. exploit me_wf_flagm; eauto.
-  intros (tb0 & v0 & A0 & A1 & A2 & A3).
-  exists tb0, v0. repeat apply conj; auto.
+  intros. unfold add_dropflag in DROPS.
+  monadInv DROPS. rename x into drops.
+  exploit split_drop_place_meet_spec; eauto. intros SPEC.
+
+  (* inv SPEC.  *)
   
+
+      
+      
+  
+  (* destruct (get_dropflag_temp flagm p) eqn: FLAG. *)
+  (* simpl. *)
+  (* exploit me_wf_flagm; eauto. *)
+  (* intros (tb & v & A & B & C & D). *)
+  (* exploit eval_set_drop_flag; eauto. *)
+  (* eapply me_protect;eauto. eapply me_envs; eauto. *)
+  (* eapply me_protect;eauto. eapply me_envs; eauto. *)
+  (* instantiate (1 := flag). instantiate (1 := tk). *)
+  (* instantiate (1 := tf). *)
+  (* intros (tm2 & E & F & G & H & I & J). *)
+  (* exists tm2. *)
+  (* repeat apply conj. *)
+  (* eapply star_one; eauto. *)
+  (* (* match_envs_flagm *) *)
+  (* constructor. *)
+  (* intros. exploit me_wf_flagm; eauto. *)
+  (* intros (tb0 & v0 & A0 & A1 & A2 & A3). *)
+  (* exists tb0, v0. repeat apply conj; auto. *)
+Admitted.  
   
 (* only consider move_place *)
-Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 tk tf
-    (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
-    (OWN: own2 = own_transfer_exprlist own1 al),
-    exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag_list flagm (moved_place_list al) false) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
-               /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
-               /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) .
-Admitted.
+(* Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 Hm1 tk tf *)
+(*     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi) *)
+(*     (OWN: own2 = own_transfer_exprlist own1 al), *)
+(*     exists tm2 Hm2, plus RustIRsem.step tge (RustIRsem.State tf (add_dropflag_list flagm tge universe (moved_place_list al) false) tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2) *)
+(*                /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi *)
+(*                /\ injp_acc (injpw j m tm1 Hm1) (injpw j m tm2 Hm2) . *)
+(* Admitted. *)
 
 
 (** TODO: prove a simple injp_acc_local  *)
@@ -1475,38 +1679,6 @@ Proof.
   - admit.
 Admitted.
 
-(** REMOVE IT: This lemma is impossible to prove: because the
-semantics is flow-insensitive so that we do not know whether or not s
-in match_stmt locates in the same branch as the s in tr_stmt. So pc1 =
-pc2 is impossible. *)
-Lemma match_stmt_cont_unique: forall k tk an fm body cfg s ts pc1 next1 cont1 brk1 nret j m tm lo tlo pc2 next2 cont2 brk2,
-    match_stmt an fm body cfg s ts pc1 next1 cont1 brk1 nret ->
-    match_cont j an fm body cfg k tk next1 cont1 brk1 nret m tm lo tlo ->
-    tr_stmt body cfg s pc2 next2 cont2 brk2 nret ->
-    tr_cont body cfg k next2 cont2 brk2 nret ->
-    pc1 = pc2 /\ next1 = next2 /\ cont1 = cont2 /\ brk1 = brk2.
-Proof.
-  induction k; intros until brk2; intros MSTMT MCONT TRSTMT TRCONT.
-  (* Sskip *)
-  - inv MCONT. inv TRCONT.
-    (* how to prove pc1 = pc2: match_stmt and tr_stmt with same next
-    node have the same pc *)
-    admit.
-  (* Kseq *)
-  - inv MCONT. inv TRCONT.
-    assert (MSTMT1: match_stmt an fm body cfg (Ssequence s0 s) (Ssequence ts ts0) pc1 next cont1 brk1 nret).
-    { econstructor; eauto. }
-    assert (TRSTMT1: tr_stmt body cfg (Ssequence s0 s) pc2 next0 cont2 brk2 nret).
-    { econstructor; eauto. }
-    exploit IHk.
-    eapply MSTMT1. eauto.
-    eapply TRSTMT1. eauto. intros (A & B & C & D).
-    subst.
-    repeat split; eauto.
-    (* how to prove pc1 = pc2: match_stmt and tr_stmt with same next
-    node have the same pc *)
-    admit.
-Abort.
 
 Lemma step_dropstate_simulation:
   forall S1 t S2, step_drop ge S1 t S2 ->
@@ -1628,8 +1800,8 @@ Proof.
     eapply ordered_split_drop_places_wf.
     eapply split_ordered. eapply split_drop_place_meet_spec; eauto.
     (* use sound_own properties *)
-    intros. eapply must_owned_sound; eauto.
-    intros. eapply must_not_owned_sound; eauto.
+    intros. eapply must_init_sound; eauto.
+    intros. eapply must_not_init_sound; eauto.
     eapply sound_own_universe; eauto.
     intros. eapply SFLAGM; eauto.
     erewrite split_drop_place_eq_universe; eauto.
@@ -1641,6 +1813,15 @@ Proof.
     { exploit split_drop_place_meet_spec; eauto.
       intros SPLIT_SPEC.
       exploit (move_split_places_uncheck_sound drops own); eauto.
+      eapply ordered_and_complete_split_places_meet_spec.
+      (* Complete *)
+      intros. left.
+      assert (PRE: is_prefix p a = true).
+      { eapply is_prefix_trans. eapply split_sound; eauto. auto. }
+      eapply split_complete. eauto.
+      erewrite is_prefix_same_local. eauto.
+      auto. auto.
+      eapply split_ordered; eauto.      
       intros (INITGE & UNINITGE & UNIEQ1).      
       constructor.
       + (* step1 *)

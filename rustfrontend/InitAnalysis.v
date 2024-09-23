@@ -135,6 +135,22 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   Paths.for_all (must_owned initmap uninitmap universemap)
     (Paths.filter (is_prefix p) universe).
 
+(* static version of is_init *)
+Definition must_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let mustinit := Paths.diff init uninit in
+  Paths.mem p mustinit.
+
+(* place that needs drop flag *)
+Definition may_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let mayinit := Paths.inter init uninit in
+  Paths.mem p mayinit.
+
 (* move it to a new file *)
 
 
@@ -184,17 +200,17 @@ Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
 
 (* Properties of sound_own *)
 
-Lemma must_owned_sound (own: own_env) (init uninit universe: PathsMap.t) p:
+Lemma must_init_sound (own: own_env) (init uninit universe: PathsMap.t) p:
     sound_own own init uninit universe ->
-    must_owned init uninit universe p = true ->
-    is_owned own p = true.
+    must_init init uninit p = true ->
+    is_init own p = true.
 Admitted.
 
-Lemma must_not_owned_sound (own: own_env) (init uninit universe: PathsMap.t) p:
+Lemma must_not_init_sound (own: own_env) (init uninit universe: PathsMap.t) p:
     sound_own own init uninit universe ->
-    must_owned init uninit universe p = false ->
-    may_owned init uninit universe p = false ->
-    is_owned own p = false.
+    must_init init uninit p = false ->
+    may_init init uninit p = false ->
+    is_init own p = false.
 Admitted.
 
 
@@ -205,7 +221,7 @@ Fixpoint move_split_places (own :own_env) (l: list (place * bool)) : own_env :=
   match l with
   | nil => own
   | (p,_) :: l' =>
-      move_split_places (if is_owned own p then move_place own p else own) l'
+      move_split_places (if is_init own p then move_place own p else own) l'
   end.
   
 

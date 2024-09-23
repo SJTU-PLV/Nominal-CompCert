@@ -84,25 +84,33 @@ Record own_env :=
             LPaths.eq (Paths.union (PathsMap.get id own_init) (PathsMap.get id own_uninit)) (PathsMap.get id own_universe);
           own_disjoint: forall id,
             LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_uninit)) Paths.empty;
+          (* The following two properties require move checking to guarantee *)
+          
           (* ∀ p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
-          own_wf_init: forall id,
-            let init := PathsMap.get id own_init in
-            let universe := PathsMap.get id own_universe in
-            Paths.For_all (fun p => Paths.For_all
-                                   (fun p' => if is_prefix p' p
-                                           then Paths.mem p' init = true
-                                           else True) universe) init;
+          (* own_wf_init: forall id, *)
+          (*   let init := PathsMap.get id own_init in *)
+          (*   let universe := PathsMap.get id own_universe in *)
+          (*   Paths.For_all (fun p => Paths.For_all *)
+          (*                          (fun p' => if is_prefix p' p *)
+          (*                                  then Paths.mem p' init = true *)
+          (*                                  else True) universe) init; *)
 
           (* ∀ p ∈ U → ∀ p' ∈ W, is_prefix p p' → p' ∈ U *)
-          own_wf_uninit: forall id,
-            let uninit := PathsMap.get id own_uninit in
-            let universe := PathsMap.get id own_universe in
-            Paths.For_all (fun p => Paths.For_all
-                                   (fun p' => if is_prefix p p'
-                                           then Paths.mem p' uninit = true
-                                           else True) universe) uninit;
+          (* own_wf_uninit: forall id, *)
+          (*   let uninit := PathsMap.get id own_uninit in *)
+          (*   let universe := PathsMap.get id own_universe in *)
+          (*   Paths.For_all (fun p => Paths.For_all *)
+          (*                          (fun p' => if is_prefix p p' *)
+          (*                                  then Paths.mem p' uninit = true *)
+          (*                                  else True) universe) uninit; *)
     }.
 
+Definition in_universe (own: own_env) (p: place) : bool :=
+  let id := local_of_place p in
+  let universe := PathsMap.get id own.(own_universe) in
+  Paths.mem p universe.
+
+(* Too strong to be used in drop semantics *)
 Definition is_owned (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
@@ -110,6 +118,12 @@ Definition is_owned (own: own_env) (p: place): bool :=
   (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *)
   Paths.for_all (fun p' => Paths.mem p' init)
     (Paths.filter (fun p' => is_prefix p' p) universe).
+
+(* It is only used fpr place that is in the universe (e.g., the place obtained from split_drop_places) *)
+Definition is_init (own: own_env) (p: place): bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id own.(own_init) in
+  Paths.mem p init.
 
 (** Unused: A owned place is deep owned **xor** shallow owned *)
 
@@ -192,7 +206,7 @@ Program Definition move_place (own: own_env) (p: place) : own_env :=
 Next Obligation.
   destruct own. simpl.
   unfold remove_place, add_place.
-  clear own_disjoint0 own_wf_init0 own_wf_uninit0.
+  clear own_disjoint0.
   generalize (own_consistent0 id). intros WP.
   set (pid := (local_of_place p)) in *.
   do 2 erewrite PathsMap.gsspec.
@@ -234,7 +248,6 @@ Defined.
 Next Obligation.
   destruct own. simpl.
   unfold remove_place, add_place.
-  clear own_wf_init0 own_wf_uninit0.
   set (pid := (local_of_place p)) in *.
   generalize (own_disjoint0 pid). intros DIS.
   generalize (own_consistent0 pid). intros CON.
@@ -264,10 +277,6 @@ Next Obligation.
       eapply Paths.empty_1. eauto.
   - auto.
 Defined.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
 
 (* ownership transfer of an expression *)
 Definition own_transfer_expr (own: own_env) (e: expr) : own_env :=
@@ -339,10 +348,6 @@ Program Definition init_place (own: own_env) (p: place) : own_env :=
   {| own_init := (add_place own.(own_universe) p own.(own_init));
     own_uninit := (remove_place p own.(own_uninit));
     own_universe := own.(own_universe) |}.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
 Next Obligation.
 Admitted.
 Next Obligation.
@@ -905,10 +910,6 @@ Next Obligation.
 Admitted.
 Next Obligation.
 Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
 
 
 
@@ -1153,11 +1154,11 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
     (* p is not owned, so just skip it (How to relate this case with
     RustIRsem because drop elaboration removes this place earlier in
     generate_drop_flag) *)
-    (NOTOWN: is_owned own p = false),
+    (NOTOWN: is_init own p = false),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
-    (OWN: is_owned own p = true)
+    (OWN: is_init own p = true)
     (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)
