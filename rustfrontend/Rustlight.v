@@ -262,6 +262,18 @@ Admitted.
 Lemma is_prefix_trans: forall p1 p2 p3, is_prefix p1 p2 = true -> is_prefix p2 p3 = true -> is_prefix p1 p3 = true.
 Admitted.
 
+Lemma is_prefix_strict_implies: forall p1 p2,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p1 p2 = true.
+Admitted.
+
+Lemma is_prefix_strict_not_refl: forall p,
+    is_prefix_strict p p = false.
+Admitted.
+
+Lemma is_prefix_strict_iff: forall p1 p2,
+    is_prefix_strict p1 p2 = true <-> (is_prefix p1 p2 = true /\ p1 <> p2).
+Admitted.
 
 Fixpoint local_of_place (p: place) :=
   match p with

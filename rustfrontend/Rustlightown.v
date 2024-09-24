@@ -429,6 +429,17 @@ Definition own_check_assign (own: own_env) (p: place) : bool :=
   need to compute the address of [p] *)
   place_dominator_own own p.
 
+Lemma is_init_in_universe: forall p own,
+    is_init own p = true ->
+    in_universe own p = true.
+Proof.
+  intros. unfold is_init, in_universe in *.
+  eapply Paths.mem_1.
+  eapply Paths.mem_2 in H.
+  eapply own_consistent.
+  eapply Paths.union_2. auto.
+Qed.
+
 (* Update the ownership environment when assigning to p. We must
 ensure that p is not deeply owned because p must be dropped before
 this assignment. *)
