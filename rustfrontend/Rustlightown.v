@@ -192,23 +192,24 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
 end.          
   
 
-Program Definition move_place (own: own_env) (p: place) : own_env :=
-  {| own_init := (remove_place p own.(own_init));
-    own_uninit := (add_place own.(own_universe) p own.(own_uninit));
-    own_universe := own.(own_universe) |}.
-Next Obligation.
-  destruct own. simpl.
+Lemma move_place_consistent: forall IM UM WM i p
+    (CON: forall id, LPaths.eq
+                  (Paths.union (PathsMap.get id IM) (PathsMap.get id UM))
+                  (PathsMap.get id WM)),
+    LPaths.eq (Paths.union (PathsMap.get i (remove_place p IM)) (PathsMap.get i (add_place WM p UM)))
+      (PathsMap.get i WM).
+Proof.
+  intros.
   unfold remove_place, add_place.
-  clear own_disjoint0.
-  generalize (own_consistent0 id). intros WP.
+  generalize (CON i). intros WP.
   set (pid := (local_of_place p)) in *.
   do 2 erewrite PathsMap.gsspec.
-  destruct (peq id pid).
+  destruct (peq i pid).
   - subst.    
     red. red. intros.
-    set (I := (PathsMap.get pid own_init0)) in *.
-    set (U := (PathsMap.get pid own_uninit0)) in *.
-    set (W := (PathsMap.get pid own_universe0)) in *.
+    set (I := (PathsMap.get pid IM)) in *.
+    set (U := (PathsMap.get pid UM)) in *.
+    set (W := (PathsMap.get pid WM)) in *.
     split.
     + intros IN.
       eapply WP. 
@@ -237,6 +238,50 @@ Next Obligation.
       * eapply Paths.union_3.
         eapply Paths.union_2. auto.
   - auto.
+Qed.
+
+Lemma add_place_consistent: forall IM UM WM i p
+    (CON: forall id, LPaths.eq
+                  (Paths.union (PathsMap.get id IM) (PathsMap.get id UM))
+                  (PathsMap.get id WM)),
+    LPaths.eq (Paths.union (PathsMap.get i (add_place WM p IM)) (PathsMap.get i (remove_place p UM)))
+      (PathsMap.get i WM).
+Proof.
+  intros.
+  eapply LPaths.eq_trans.
+  - instantiate (1 := (Paths.union (PathsMap.get i (remove_place p UM))
+                       (PathsMap.get i (add_place WM p IM)))).
+    red. red. intros.
+    split; intros IN.
+    + eapply Paths.union_1 in IN.
+      destruct IN.
+      eapply Paths.union_3. auto.
+      eapply Paths.union_2. auto.
+    + eapply Paths.union_1 in IN.
+      destruct IN.
+      eapply Paths.union_3. auto.
+      eapply Paths.union_2. auto.
+  - eapply move_place_consistent.
+    intros. eapply LPaths.eq_trans; try eapply CON.
+    red. red. intros.
+    split; intros IN.
+    + eapply Paths.union_1 in IN.
+      destruct IN.
+      eapply Paths.union_3. auto.
+      eapply Paths.union_2. auto.
+    + eapply Paths.union_1 in IN.
+      destruct IN.
+      eapply Paths.union_3. auto.
+      eapply Paths.union_2. auto.
+Qed.
+    
+Program Definition move_place (own: own_env) (p: place) : own_env :=
+  {| own_init := (remove_place p own.(own_init));
+    own_uninit := (add_place own.(own_universe) p own.(own_uninit));
+    own_universe := own.(own_universe) |}.
+Next Obligation.
+  eapply move_place_consistent.
+  eapply own_consistent.
 Defined.           
 Next Obligation.
   destruct own. simpl.
@@ -283,6 +328,24 @@ Fixpoint move_place_list (own: own_env) (l: list place) : own_env :=
   | p :: l' =>
       move_place_list (move_place own p) l'
   end.
+
+Lemma move_place_eq_universe: forall own p,
+    PathsMap.eq (own_universe own) (own_universe (move_place own p)).
+Proof.
+  intros.
+  unfold move_place.
+  simpl. eapply PathsMap.eq_refl.
+Qed.  
+
+Lemma move_place_option_eq_universe: forall own p,
+    PathsMap.eq (own_universe own) (own_universe (move_place_option own p)).
+Proof.
+  intros.
+  unfold move_place_option.
+  destruct p. simpl.
+  eapply PathsMap.eq_refl. eapply PathsMap.eq_refl.
+Qed.  
+
 
 (* (* ownership transfer of an expression *) *)
 (* Definition own_transfer_expr (own: own_env) (e: expr) : own_env := *)
@@ -355,7 +418,9 @@ Program Definition init_place (own: own_env) (p: place) : own_env :=
     own_uninit := (remove_place p own.(own_uninit));
     own_universe := own.(own_universe) |}.
 Next Obligation.
-Admitted.
+  eapply add_place_consistent.
+  eapply own_consistent.
+Defined.
 Next Obligation.
 Admitted.
 
@@ -896,6 +961,72 @@ Definition collect_func (f: function) : Errors.res PathsMap.t :=
 
 End WITH_CE.
 
+Definition inter_opt :=
+  (fun a b : option LPaths.t =>
+     match a with
+     | Some u => match b with
+                | Some v => Some (Paths.inter u v)
+                | None => Some LPaths.bot
+                end
+     | None => None
+     end).
+
+(* extract it into lemma which is used in funciton_entry_sound in InitAnalysis *)
+Lemma PathsMap_lub_union: forall id whole init uninit,
+    PathsMap.eq whole (PathsMap.lub init uninit) ->
+    LPaths.eq (Paths.union (PathsMap.get id init) (PathsMap.get id uninit))
+      (PathsMap.get id whole).
+Proof.
+  intros until uninit. intros A.
+  eapply LPaths.eq_sym.
+  eapply LPaths.eq_trans. eapply A.
+  red. red. intros a.
+  unfold PathsMap.lub.
+  set (g:=(fun a b : option LPaths.t =>
+             match a with
+             | Some u => match b with
+                        | Some v => Some (LPaths.lub u v)
+                        | None => a
+                        end
+             | None => b
+             end)) in *.
+  assert (C: g None None = None) by auto.
+  exploit (PathsMap.gcombine g C init uninit).  
+  instantiate (1 := id).
+  intros OPTEQ.
+  split; intros IN.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.union_2.
+        eapply OPTEQ. auto.
+      * eapply Paths.union_3.
+        eapply OPTEQ. auto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      exfalso.
+      eapply Paths.empty_1. eauto.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.union_1 in IN.
+        destruct IN.
+        eapply OPTEQ. auto.
+        exfalso. eapply Paths.empty_1. eauto.
+      * eapply Paths.union_1 in IN.
+        destruct IN.
+        exfalso. eapply Paths.empty_1. eauto.
+        eapply OPTEQ. auto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      eapply Paths.union_1 in IN.
+      destruct IN; auto.
+Qed.
+  
 (* copy from init analysis *)
 Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
   (* collect the whole set in order to simplify the gen and kill operation *)
@@ -905,19 +1036,96 @@ Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res o
   (* It is necessary because we have to guarantee that the map is not
   PathMap.bot in the 'transfer' function *)
   let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
-  let init := fold_right (add_place whole) empty_pathmap pl in
+  let init := add_place_list whole pl empty_pathmap in
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) (extract_vars f.(fn_body)) in
-  let uninit := fold_right (add_place whole) empty_pathmap vl in
-  OK {| own_init := init;
-       own_uninit := uninit;
-       own_universe := whole |}.
+  let uninit := add_place_list whole vl empty_pathmap in
+  (** Is it reasonable? Translation validation: check (whole = init ∪
+  uninit) and (∅ = init ∩ uninit) *)
+  match PathsMap.beq whole (PathsMap.lub init uninit) &&
+          PathsMap.beq empty_pathmap (PathsMap.combine inter_opt init uninit) with
+  | true =>
+      OK {| own_init := init;
+           own_uninit := uninit;
+           own_universe := whole |}
+  | _ =>
+      Error (msg "validation fail in init_own_env")
+  end.
 Next Obligation.
-Admitted.
+  symmetry in Heq_anonymous.
+  eapply andb_true_iff in Heq_anonymous.
+  destruct Heq_anonymous as (A & B).
+  eapply PathsMap.beq_correct in A.
+  eapply PathsMap.beq_correct in B.
+  set (init:= (add_place_list whole
+              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
+              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  set (uninit :=(add_place_list whole
+             (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
+                (extract_vars (fn_body f)))
+             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  clear B.
+  eapply PathsMap_lub_union.
+  auto.
+Defined.
 Next Obligation.
-Admitted.
-
-
+  symmetry in Heq_anonymous.
+  eapply andb_true_iff in Heq_anonymous.
+  destruct Heq_anonymous as (A & B).
+  eapply PathsMap.beq_correct in A.
+  eapply PathsMap.beq_correct in B.
+  set (init:= (add_place_list whole
+              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
+              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  set (uninit :=(add_place_list whole
+             (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
+                (extract_vars (fn_body f)))
+             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  red in B.
+  generalize (B id). intros EQ.
+  assert (EQ1: LPaths.eq (PathsMap.get id
+                       (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))
+                    Paths.empty).  
+  {  unfold PathsMap.get in *.
+     erewrite PTree.gmap in *.
+     destruct (whole ! id). simpl. eapply LPaths.eq_refl.
+     simpl. eapply LPaths.eq_refl. }  
+  eapply LPaths.eq_trans; eauto.
+  (* core proof *)
+  eapply LPaths.eq_sym.
+  eapply LPaths.eq_trans. eapply B.
+  red. red. intros a.
+  assert (C: inter_opt None None = None) by auto.
+  exploit (PathsMap.gcombine inter_opt C init uninit).  
+  instantiate (1 := id).
+  intros OPTEQ. clear EQ EQ1.
+  split; intros IN.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * exfalso. eapply Paths.empty_1.
+        eapply OPTEQ. eauto.                 
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      exfalso.
+      eapply Paths.empty_1. eauto.
+      exfalso.
+      eapply Paths.empty_1. eauto.      
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.inter_2 in IN.
+        exfalso. eapply Paths.empty_1. eauto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      eapply Paths.inter_1 in IN.
+      exfalso. eapply Paths.empty_1. eauto.
+      eapply Paths.inter_1 in IN. auto.
+Defined.  
 
 (* Use extract_vars to extract the local variables *)
 

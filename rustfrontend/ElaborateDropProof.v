@@ -1293,6 +1293,27 @@ Proof.
     econstructor; eauto. 
 Qed. 
 
+Lemma sem_cast_inject: forall f v1 ty1 ty v tv1,
+    sem_cast v1 ty1 ty = Some v ->
+    Val.inject f v1 tv1 ->
+    exists tv, sem_cast tv1 ty1 ty = Some tv /\ Val.inject f v tv.
+Admitted.
+
+(* same as that in SimplLocalProof *)
+Lemma assign_loc_support: forall ge ty m b ofs v m',
+    assign_loc ge ty m b ofs v m' -> Mem.support m' = Mem.support m.
+Admitted.
+
+
+Lemma assign_loc_injp_acc: forall f ty m loc ofs v m' tm loc' ofs' v' Hm,
+    assign_loc ge ty m loc ofs v m' ->
+    Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
+    Val.inject f v v' ->
+    exists f' tm' Hm',
+      assign_loc tge ty tm loc' ofs' v' tm'
+      /\ injp_acc (injpw f m tm Hm) (injpw f' m' tm' Hm').
+Admitted.
+
 
 Lemma type_to_drop_member_state_eq: forall id ty,
     type_to_drop_member_state ge id ty = type_to_drop_member_state tge id ty.
@@ -1364,7 +1385,8 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
    (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
    (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
    (STMT: init_drop_flag init uninit universe p id = OK stmt)
-   (OWN: sound_own own init uninit universe),
+   (OWN: sound_own own init uninit universe)
+   (IN: Paths.In p (PathsMap.get (local_of_place p) universe)),
   exists tm2 v,
     star RustIRsem.step tge (RustIRsem.State tf stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
     /\ Mem.inject j1 m1 tm2 
@@ -1413,7 +1435,8 @@ Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e 
   (* we require that te is injective *)
   (INJ: forall id1 b1 ty1 id2 b2 ty2, te!id1 = Some(b1, ty1) -> te!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2)
   (* idents in flags are norepet *)
-  (NOREPET: list_norepet (map snd flags)),
+  (NOREPET: list_norepet (map snd flags))
+  (INUNI: forall p, In p (map fst flags) -> Paths.In p (PathsMap.get (local_of_place p) universe)),
   exists tm2,
     star RustIRsem.step tge (RustIRsem.State tf init_stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
     /\ Mem.inject j1 m1 tm2
@@ -1689,7 +1712,7 @@ Proof.
   apply own_consistent. eapply Paths.union_2. auto.
 Qed.
 
-  (** important TODO *)
+(** important *)
 Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf stmt universe
   (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
   (MINJ: Mem.inject j m tm1)
@@ -1763,23 +1786,30 @@ Proof.
   eapply H. eauto. eauto.
 Qed.
 
-(* Lemma eval_dropflag_option_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf stmt universe *)
-(*   (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi) *)
-(*   (MINJ: Mem.inject j m tm1) *)
-(*   (* how to ensure that update ownership of p does not change other place ownership *) *)
-(*   (OWN: own2 = if flag then init_place own1 p else move_place own1 p) *)
-(*   (DROPS: add_dropflag_option flagm ge universe p flag = OK stmt) *)
-(*   (UNI: PathsMap.eq own1.(own_universe) universe), *)
-(*   exists tm2, *)
-(*     star RustIRsem.step tge (RustIRsem.State tf stmt tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2) *)
-(*     /\ Mem.inject j m tm2 *)
-(*     /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi *)
-(*     (* only unchange the blocks outside the drop flag, enough? *) *)
-(*     /\ Mem.unchanged_on (fun b _ => forall p id tb ty, get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2 *)
-(*     /\ ValueAnalysis.ro_acc tm1 tm2. *)
-
-
-
+Lemma eval_dropflag_option_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 p tk tf stmt universe
+  (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
+  (MINJ: Mem.inject j m tm1)
+  (* how to ensure that update ownership of p does not change other place ownership *)
+  (OWN: own2 = move_place_option own1 p)
+  (DROPS: add_dropflag_option flagm ge universe p false = OK stmt)
+  (UNI: PathsMap.eq own1.(own_universe) universe),
+  exists tm2,
+    star RustIRsem.step tge (RustIRsem.State tf stmt tk tle tm1) E0 (RustIRsem.State tf Sskip tk tle tm2)
+    /\ Mem.inject j m tm2
+    /\ match_envs_flagm j own2 le m lo hi tle flagm tm2 tlo thi
+    (* only unchange the blocks outside the drop flag, enough? *)
+    /\ Mem.unchanged_on (fun b _ => forall p id tb ty, get_dropflag_temp flagm p = Some id -> tle ! id = Some (tb, ty) -> b <> tb) tm1 tm2
+    /\ ValueAnalysis.ro_acc tm1 tm2.
+Proof.
+  intros. destruct p; simpl in *.
+  subst. exploit eval_dropflag_match; eauto.
+  inv DROPS.
+  exists tm1. repeat apply conj; eauto.
+  eapply star_refl. eapply Mem.unchanged_on_refl.
+  eapply ValueAnalysis.ro_acc_refl.
+Qed.
+  
+  
 (* only consider move_place *)
 Lemma eval_dropflag_list_match: forall al j own1 own2 le tle lo hi tlo thi flagm m tm1 universe stmt tk tf
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
@@ -2086,7 +2116,103 @@ Proof.
   induction 1; intros; inv MS.
   (* step_assign *)
   - inv MSTMT. simpl in TR. monadInv TR.
+    set (own2:=(move_place_option own1 (moved_place e))).
+    set (own3:=(own_transfer_assign own2 p)).
+    (* evaluate x *)
+    exploit eval_dropflag_option_match; eauto.
+    eapply PathsMap.eq_sym. eapply sound_own_universe. eauto.
+    instantiate (1 := (RustIRsem.Kseq (Ssequence x0 (Sassign p e)) tk)).
+    instantiate (1 := tf).
+    intros (tm2 & STEP1 & MINJ1 & MENV1 & UNC1 & RO1).
+    (* evaluate x0 *)    
+    exploit eval_dropflag_match; eauto.
+    eapply PathsMap.eq_sym. eapply PathsMap.eq_trans.
+    eapply sound_own_universe. eauto.
+    eapply move_place_option_eq_universe.
+    instantiate (1 := (RustIRsem.Kseq (Sassign p e) tk)).
+    instantiate (1 := tf).
+    intros (tm3 & STEP2 & MINJ2 & MENV2 & UNC2 & RO2).
+    (* evaluate assign *)
+    exploit eval_expr_inject; eauto.
+    intros (tv & EXPR & VINJ).
+    exploit eval_place_inject; eauto.
+    intros (tb & tofs & EVALP & VINJ1).
+    exploit sem_cast_inject; eauto.
+    intros (tv1 & CAST1 & VINJ2).
+    exploit assign_loc_injp_acc; eauto.
+    instantiate (1 := MINJ2).
+    intros (j2 & tm4 & MINJ3 & ASSIGN & INJP2).
+    (* match_envs_flagm *)
+    assert (SUP1: Mem.sup_include thi (Mem.support tm3)).
+    { eapply Mem.sup_include_trans. eauto.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support. eauto.
+      eapply Mem.unchanged_on_support. eauto. }    
+    exploit match_envs_flagm_injp_acc. eapply MENV2. eauto.
+    auto. auto.
+    intros MENV3.
+    (* match_cont *)
+    assert (UNC13: Mem.unchanged_on (fun b _ => sup_In b tlo) tm tm3).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto. }    
+    exploit match_cont_bound_unchanged;eauto.
+    intros MCONT1.
+    exploit match_cont_injp_acc. eauto. eauto.
+    eapply Mem.sup_include_trans.
+    eapply me_incr. eapply me_envs. eauto. auto.
+    eapply Mem.sup_include_trans.
+    eapply me_tincr. eapply me_envs. eauto. auto.
+    intros MCONT2.
+    (* injp_acc *)
+    assert (RO3: ValueAnalysis.ro_acc tm tm3).
+    { eapply ValueAnalysis.ro_acc_trans. eauto.
+      auto. }
+    assert (INJP1: injp_acc w (injpw j m1 tm3 MINJ2)).
+    { generalize me_tinitial. intros TINIT.
+      unfold wm2 in TINIT.
+      destruct w. inv RO3.
+      eapply injp_acc_local_simple. eauto.
+      auto. auto.
+      eapply Mem.unchanged_on_implies. eauto.
+      intros. simpl. destruct H6.
+      eapply TINIT. eapply me_envs; eauto. auto. }
+    (* step *)
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor; eauto.
+    eapply star_refl. 1-7: eauto.
+    (* match_states *)
+    assert (SUP2: Mem.sup_include hi (Mem.support m2)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eapply Mem.sup_include_refl.
+      eauto. }
+    assert (SUP3: Mem.sup_include thi (Mem.support tm4)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eapply Mem.sup_include_refl.
+      eauto. }      
+    econstructor; eauto. econstructor.
+    etransitivity. eauto. eauto.
+    (* sound_own *)
+    exploit analyze_succ; eauto. simpl. eauto.
+    instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
+    unfold transfer. rewrite SEL. rewrite STMT.
+
+    
     admit.
+    intros (mayinit3 & mayuninit3 & A & B & C). subst.
+    auto.
     
   (* step_assign_variant *)
   - admit.
@@ -2113,16 +2239,21 @@ Proof.
     (* match_split_drop_places *)
     eapply elaborate_drop_match_drop_places.
     (** IMPORTANT TODO: wf_split_drop_places *)
-    
+    erewrite <- split_drop_place_eq_universe in SPLIT.
+    2: { eapply sound_own_universe. eauto. }
+    exploit split_drop_place_meet_spec; eauto.
+    intros SPEC.
     eapply ordered_split_drop_places_wf.
-    eapply split_ordered. eapply split_drop_place_meet_spec; eauto.
-    (* use sound_own properties *)
+    eapply split_ordered. eauto.
+    (* use sound_own properties, prove p0 is in the universe *)
     intros. eapply must_init_sound; eauto.
+    exploit split_sound; eauto.
+    eapply (in_map fst)in H. eauto.
+    intros (A & B).
+    erewrite <- is_prefix_same_local; eauto.
     intros. eapply must_not_init_sound; eauto.
     eapply sound_own_universe; eauto.
     intros. eapply SFLAGM; eauto.
-    erewrite split_drop_place_eq_universe; eauto.
-    eapply sound_own_universe; eauto.
     eapply in_map_iff. exists (p0, full). auto.
     
     (** sound_own: this proof is important. Make it a lemma!  *)
@@ -2294,7 +2425,7 @@ Proof.
     (** sound_own *)
     exploit analyze_succ; eauto.
     simpl. eauto.
-    instantiate (1 := (init_place (own_transfer_exprlist own1 al) p)).
+    instantiate (1 := (init_place (move_place_list own1 (moved_place_list al)) p)).
     2: { intros (mayinit3 & mayuninit3 & A & B & C). subst. auto. }
     unfold transfer. rewrite SEL.
     rewrite STMT.
@@ -2356,6 +2487,8 @@ Proof.
     eapply me_tinj; eauto.
     (* norepet of drop_flags *)
     admit.
+    (** prove p is in universe: properties of generate_dropflag *)
+    intros p IN. admit.
     instantiate (1 := (RustIRsem.Kseq body tk)).
     intros (tm4 & INITFLAGS & MINJ4 & WFFLAGM & MENV4 & UNC1 & RO1).
     (** establish injp_acc (j,m,tm) ~-> (j2, m', tm4)  *)

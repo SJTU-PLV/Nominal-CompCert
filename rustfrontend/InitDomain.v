@@ -221,6 +221,13 @@ Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
   | None => m
   end.
 
+Fixpoint remove_place_list (l: list place) (m: PathsMap.t) : PathsMap.t :=
+  match l with
+  | nil => m
+  | p :: l' =>
+      remove_place_list l' (remove_place p m)
+  end.
+
 (* Gen function: it add {p' | is_prefix p p' /\ p' ∈ S} to m[id]. Here
 [S] is the whole set *)
 Definition add_place (S: PathsMap.t) (p: place) (m: PathsMap.t) : PathsMap.t :=
@@ -234,6 +241,13 @@ Definition add_option (S: PathsMap.t) (p: option place) (m: PathsMap.t) : PathsM
   match p with
   | Some p => add_place S p m
   | None => m
+  end.
+
+Fixpoint add_place_list S (l: list place) (m: PathsMap.t) : PathsMap.t :=
+  match l with
+  | nil => m
+  | p :: l' =>
+      add_place_list S l' (add_place S p m)
   end.
 
 

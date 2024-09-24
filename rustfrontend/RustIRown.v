@@ -119,25 +119,149 @@ Inductive state: Type :=
 
 Local Open Scope error_monad_scope.
 
+(* just copy from Rustlightown except the extract_vars *)
 Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
-  (* collect the whole set in order to simplify the gen and kill operation *)
+    (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
   let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
   (* It is necessary because we have to guarantee that the map is not
   PathMap.bot in the 'transfer' function *)
   let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
-  let init := fold_right (add_place whole) empty_pathmap pl in
+  let init := add_place_list whole pl empty_pathmap in
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
-  let uninit := fold_right (add_place whole) empty_pathmap vl in
-  OK {| own_init := init;
-       own_uninit := uninit;
-       own_universe := whole |}.
+  let uninit := add_place_list whole vl empty_pathmap in
+  (** Is it reasonable? Translation validation: check (whole = init ∪
+  uninit) and (∅ = init ∩ uninit) *)
+  match PathsMap.beq whole (PathsMap.lub init uninit) &&
+          PathsMap.beq empty_pathmap (PathsMap.combine inter_opt init uninit) with
+  | true =>
+      OK {| own_init := init;
+           own_uninit := uninit;
+           own_universe := whole |}
+  | _ =>
+      Error (msg "validation fail in init_own_env")
+  end.
 Next Obligation.
-Admitted.
+  symmetry in Heq_anonymous.
+  eapply andb_true_iff in Heq_anonymous.
+  destruct Heq_anonymous as (A & B).
+  eapply PathsMap.beq_correct in A.
+  eapply PathsMap.beq_correct in B.
+  set (init:= (add_place_list whole
+              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
+              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  set (uninit :=(add_place_list whole
+             (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
+                f.(fn_vars))
+             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  eapply LPaths.eq_sym.
+  eapply LPaths.eq_trans. eapply A.
+  red. red. intros a.
+  unfold PathsMap.lub.
+  set (g:=(fun a b : option LPaths.t =>
+             match a with
+             | Some u => match b with
+                        | Some v => Some (LPaths.lub u v)
+                        | None => a
+                        end
+             | None => b
+             end)) in *.
+  assert (C: g None None = None) by auto.
+  exploit (PathsMap.gcombine g C init uninit).  
+  instantiate (1 := id).
+  intros OPTEQ.
+  split; intros IN.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.union_2.
+        eapply OPTEQ. auto.
+      * eapply Paths.union_3.
+        eapply OPTEQ. auto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      exfalso.
+      eapply Paths.empty_1. eauto.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.union_1 in IN.
+        destruct IN.
+        eapply OPTEQ. auto.
+        exfalso. eapply Paths.empty_1. eauto.
+      * eapply Paths.union_1 in IN.
+        destruct IN.
+        exfalso. eapply Paths.empty_1. eauto.
+        eapply OPTEQ. auto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      eapply Paths.union_1 in IN.
+      destruct IN; auto.
+Defined.
 Next Obligation.
-Admitted.
+  symmetry in Heq_anonymous.
+  eapply andb_true_iff in Heq_anonymous.
+  destruct Heq_anonymous as (A & B).
+  eapply PathsMap.beq_correct in A.
+  eapply PathsMap.beq_correct in B.
+  set (init:= (add_place_list whole
+              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
+              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  set (uninit :=(add_place_list whole
+             (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
+                f.(fn_vars))
+             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  red in B.
+  generalize (B id). intros EQ.
+  assert (EQ1: LPaths.eq (PathsMap.get id
+                       (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))
+                    Paths.empty).  
+  {  unfold PathsMap.get in *.
+     erewrite PTree.gmap in *.
+     destruct (whole ! id). simpl. eapply LPaths.eq_refl.
+     simpl. eapply LPaths.eq_refl. }  
+  eapply LPaths.eq_trans; eauto.
+  (* core proof *)
+  eapply LPaths.eq_sym.
+  eapply LPaths.eq_trans. eapply B.
+  red. red. intros a.
+  assert (C: inter_opt None None = None) by auto.
+  exploit (PathsMap.gcombine inter_opt C init uninit).  
+  instantiate (1 := id).
+  intros OPTEQ. clear EQ EQ1.
+  split; intros IN.
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * exfalso. eapply Paths.empty_1.
+        eapply OPTEQ. eauto.                 
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      exfalso.
+      eapply Paths.empty_1. eauto.
+      exfalso.
+      eapply Paths.empty_1. eauto.      
+  - unfold PathsMap.get in *.
+    destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      * eapply OPTEQ. auto.
+      * eapply Paths.inter_2 in IN.
+        exfalso. eapply Paths.empty_1. eauto.
+    + simpl in OPTEQ.
+      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      eapply Paths.inter_1 in IN.
+      exfalso. eapply Paths.empty_1. eauto.
+      eapply Paths.inter_1 in IN. auto.
+Defined.  
 
 
 Section SMALLSTEP.
