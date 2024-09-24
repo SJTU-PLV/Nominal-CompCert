@@ -1124,12 +1124,45 @@ Proof.
     eexists. split. econstructor. eauto. auto. 
 Qed.
 
+Ltac TrivialInject :=
+  match goal with
+  | [ H: None = Some _ |- _ ] => discriminate
+  | [ H: Some _ = Some _ |- _ ] => inv H; TrivialInject
+  | [ H: match ?x with Some _ => _ | None => _ end = Some _ |- _ ] => destruct x; TrivialInject
+  | [ H: match ?x with true => _ | false => _ end = Some _ |- _ ] => destruct x eqn:?; TrivialInject
+  | [ |- exists v', Some ?v = Some v' /\ _ ] => exists v; split; auto
+  | _ => idtac
+  end.
+
+
+Lemma sem_cast_inject: forall v ty1 ty2 j tv v' own le m lo hi tle flagm tm tlo thi
+        (CAST: sem_cast v ty1 ty2 = Some v')
+        (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi)
+        (MINJ: Mem.inject j m tm)
+        (VINJ: Val.inject j v tv),
+        exists tv', sem_cast tv ty1 ty2  = Some tv' /\ Val.inject j v' tv'. 
+Proof.
+  unfold sem_cast; intros; destruct (classify_cast ty1 ty2); inv VINJ; TrivialInject.  
+  - econstructor; eauto. 
+  - destruct (ident_eq id1 id2) eqn: EQ; inv CAST. 
+    eexists. split. eauto. econstructor; eauto. 
+  - destruct (ident_eq id1 id2); inv CAST; eauto. 
+Qed.
+
 Lemma eval_exprlist_inject: forall le m args vl tm tle own lo hi flagm tlo thi j tyl
         (EVAL: eval_exprlist ge le m args tyl vl)
         (MINJ: Mem.inject j m tm)
         (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
         exists tvl, eval_exprlist tge tle tm args tyl tvl /\ Val.inject_list j vl tvl.
-Admitted.
+Proof. 
+  induction 1; intros. 
+  - eexists. split. econstructor. eauto. 
+  - exploit eval_expr_inject; eauto. intros (tv & A & B). 
+    exploit IHEVAL; eauto. intros (tvl & C & D).
+    exploit sem_cast_inject; eauto. intros (tv' & E & F). 
+    eexists. split. econstructor; eauto. 
+    econstructor; eauto. 
+Qed. 
 
 
 Lemma type_to_drop_member_state_eq: forall id ty,

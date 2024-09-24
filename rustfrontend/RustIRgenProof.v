@@ -38,10 +38,18 @@ Record match_prog (p : Rustlight.program) (tp : RustIR.program) : Prop := {
 
 Inductive match_states: Rustlightown.state -> RustIRown.state -> Prop := 
   | match_regular_state: 
-    forall f s k e own m tf ts tk te town tm ce params_drops oretv vars j
-    (MSTMT: transl_stmt ce params_drops oretv s vars = ts)
+    forall f s k e own m tf ts tk te town tm params_drops oretv vars j
+    (MSTMT: transl_stmt ge params_drops oretv s vars = ts)
+    (* (OWN: own_type ce (typeof_place p)) *)
+    (* (SPLIT: InitDomain.split_drop_place ge universe p (typeof_place p) = OK drops) *)
     (MINJ: Mem.inject j m tm),
-    match_states (State f s k e own m) (RustIRown.State tf ts tk te town tm). 
+    match_states (State f s k e own m) (RustIRown.State tf ts tk te town tm) 
+  | match_drop_insert_state:
+    forall f l dk k le own m tf ts tk te town tm j
+    (MINJ: Mem.inject j m tm),
+    (* Dropinsert f l dk k le own m *)
+    match_states (Dropinsert f l dk k le own m) (RustIRown.State tf ts tk te town tm).
+
 
 
 
@@ -49,13 +57,15 @@ Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRown.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
-  induction 1; intros; inv MS.
-  - simpl in *. simpl.   inv MSTMT.  . split. eapply plus_one. destruct (own_type ce (typeof_place p)) eqn:A. 
-  + admit. 
-    + eapply RustIRown.step_assign; eauto.  
+  induction 1; intros. 
+  - inv MS. simpl. destruct (own_type (prog_comp_env prog) (typeof_place p)) eqn:A. 
+    + eexists. split. eapply plus_one. eapply RustIRown.step_seq. 
+      econstructor. eauto. 
+    + eexists. split. eapply plus_one. econstructor; eauto.       
+      
+  Admitted. 
 
-
-Theorem transl_program_correct prog tprog:
+(* Theorem transl_program_correct prog tprog:
    match_prog prog tprog ->
    forward_simulation (cc_rs injp) (cc_rs injp) (semantics prog) (RustIRown.semantics tprog).
 Proof.
