@@ -192,12 +192,97 @@ Proof.
         eapply Mem.perm_valid_block; eauto.
 Qed.
 
+Lemma ext_acci_free : forall m m' tm tm' Hm b lo hi Hm',
+    Mem.free m b lo hi = Some m' ->
+    Mem.free tm b lo hi = Some tm' ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. constructor; eauto;
+    try erewrite <- Mem.support_free; eauto;
+    try red; intros; eauto with mem.
+  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
+  destruct H2. subst.
+  eapply Mem.perm_free_2; eauto.
+Qed.
+
+Lemma ext_acci_store : forall m m' tm tm' Hm chunk b ofs v1 v2 Hm',
+    Mem.store chunk m b ofs v1 = Some m' ->
+    Mem.store chunk tm b ofs v2 = Some tm' ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. constructor; eauto;
+    try erewrite <- Mem.support_store; eauto;
+    try red; intros; eauto with mem.
+Qed.
+
+Lemma ext_acci_storev : forall m m' tm tm' Hm chunk a1 a2 v1 v2 Hm',
+    Mem.storev chunk m a1 v1 = Some m' ->
+    Mem.storev chunk tm a2 v2 = Some tm' ->
+    Val.lessdef a1 a2 ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. inv H1; try inv H.
+  destruct a2; inv H0. inv H2. eapply ext_acci_store; eauto.
+Qed.
+(*
+Lemma ext_acci_storebytes : forall m m' tm tm' Hm b ofs vs1 vs2 Hm',
+    Mem.storebytes m b ofs vs1 = Some m' ->
+    Mem.storebytes tm b ofs vs2 = Some tm' ->
+    Val.lessdef_list vs1 vs2 ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. constructor; eauto;
+    try erewrite <- Mem.support_free; eauto;
+    try red; intros; eauto with mem.
+  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
+  destruct H2. subst.
+  eapply Mem.perm_free_2; eauto.
+Qed.
+*)
+Lemma ext_acci_alloc : forall m m' tm tm' Hm b1 b2 lo1 hi1 lo2 hi2 Hm',
+    Mem.alloc m lo1 hi1 = (m', b1) ->
+    Mem.alloc tm lo2 hi2 = (tm', b2) ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. apply Mem.support_alloc in H as S1. apply Mem.support_alloc in H0 as S2.
+  constructor; eauto. rewrite S1. eauto. rewrite S2. reflexivity.
+  rewrite S1. eauto with mem. rewrite S2. eauto with mem.
+  red. intros. eauto with mem.
+  red. intros. eauto with mem.
+  red. intros. eauto with mem.
+Qed.
+
+Inductive ext_acce : relation ext_world :=
+    ext_acce_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
+                     (m1' m2' : mem) (Hm' : Mem.extends m1' m2')
+                     (TID1: Mem.tid (Mem.support m1) = Mem.tid (Mem.support m1'))
+                     (TID2: Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2'))
+                     (SUP1: Mem.sup_include (Mem.support m1) (Mem.support m1'))
+                     (SUP2: Mem.sup_include (Mem.support m2) (Mem.support m2'))
+                     (MPD1: Mem.max_perm_decrease m1 m1')
+                     (MPD2: Mem.max_perm_decrease m2 m2'),
+                     ext_acce (extw m1 m2 Hm) (extw m1' m2' Hm').
+
+Instance ext_acce_preo : PreOrder ext_acce.
+Proof.
+  split.
+  - intros [m1 m2 Hm]. constructor; eauto; try red; intros; auto.
+  - intros [m1 m2 Hm] [m1' m2' Hm'] [m1'' m2'' Hm''] HA HB.
+    inv HA. inv HB. constructor; eauto; try congruence.
+    + red. intros. apply MPD1. auto. apply MPD0. apply SUP1. auto. auto.
+    + red. intros. apply MPD2. auto. apply MPD3. apply SUP2. auto. auto.
+Qed.
+
+
+
+
+
 Program Instance ext_world_id : World ext_world :=
     {
       w_state := ext_world;
       w_lens := lens_id;
       w_acci := ext_acci;
-      w_acce := fun _ _ => True;
+      w_acce := ext_acce;
       w_acci_trans := ext_acci_preo;
     }.
 
@@ -222,7 +307,7 @@ Program Instance ext_world_id_l : World (signature * ext_world) :=
       w_state := ext_world;
       w_lens := lens_ext_locset;
       w_acci := ext_acci;
-      w_acce := fun _ _ => True;
+      w_acce := ext_acce;
       w_acci_trans := ext_acci_preo;
     }.
 
@@ -699,19 +784,19 @@ Proof.
       destruct H as [rs1 [A B]].
       exists (lq vf1 sg rs1 m0). split. econstructor; eauto.
       constructor; eauto. constructor.
-    + intros. destruct wp1' as [x wp1']. 
-      exists (wp1',tt). split. simpl. auto.
+    + intros. destruct wp1' as [x wp1'].  destruct H0 as [ACE1 ACE2]. simpl in ACE1, ACE2.
+      exists (wp1',tt). split. simpl. split. simpl. auto. auto.
       split. split. rewrite <- H. apply H1. reflexivity.
       inv H1.  inv H0.
-      destruct H2 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H11. simpl in *.
+      destruct H2 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H8. simpl in *.
       clear Hm1 Hm2.
       eexists. simpl. split. 
       constructor; simpl; eauto.
       2: { rewrite <- H0. econstructor. }
       2: { constructor. reflexivity. }
-      red in H9. simpl.
+      red in H2. simpl.
       destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr in *. cbn in *.
-      apply H9. auto.
+      apply H2. auto.
   - red. intros [? ?] [? ?] [se [sg [sg' t]]]. simpl in w,w0,w1,w2,sg,sg',t.
     intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2.  inv Hse1. inv Hse2.
     inv Hq1. inv Hq2. simpl in H3, H5,H6. simpl in  A1, A2. inv H6.
@@ -731,9 +816,11 @@ Proof.
       destruct a; cbn in *; intuition auto.
     + intros r1 r2 [a b] AC1 Hr. destruct Hr as [r1' [Hr1 Hr2]].
       inv Hr1. inv Hr2. simpl in H, H0. inv H0.
-      exists (tt,(extw m1' m2' Hm3)). split. simpl.  split; reflexivity. split.
-      set (rs'' := Locmap.setpair (loc_result sg) vres1 (rs')).
-      econstructor. split. econstructor. instantiate (1:= rs'').
+      exists (tt,(extw m1' m2' Hm3)). split. simpl. split. auto. simpl. destruct AC1. simpl in H0, H1.
+      inv H0. constructor; eauto.
+      set (rs'' := Locmap.setpair (loc_result sg) vres1 (rs')). split.
+      econstructor. econstructor. constructor.
+      instantiate (1:= rs'').
       unfold rs''. simpl.
       destruct (loc_result_always_one sg) as [r ->].
       cbn. rewrite Locmap.gss. reflexivity. 
@@ -865,8 +952,12 @@ Proof.
     rename m2'1 into m3'. rename m2'0 into m2'. rename m1'0 into m1'.
     assert (Hm13' : Mem.extends m1' m3'). 
     eapply Mem.extends_extends_compose; eauto. inv H0.
-    destruct H4 as [ACI1 ACI2]. simpl in ACI1, ACI2. 
+    destruct H4 as [ACI1 ACI2]. simpl in ACI1, ACI2.
+    destruct H2 as [ACE1 ACE2]. simpl in ACE1, ACE2.
     exists (extw m1' m3' Hm13'). intuition auto.
+    {
+      clear - ACE1 ACE2. inv ACE1. inv ACE2. constructor; eauto.
+    }
     {
       clear - ACI1 ACI2. rename m0 into m1. rename m3 into m2. rename m4 into m3.
       inv ACI1. inv ACI2. constructor; eauto.
@@ -896,7 +987,13 @@ Proof.
     destruct wp2' as [m1'' m3'' Hm13''].
     assert (Hm12' : Mem.extends m1'' m1''). apply Mem.extends_refl.
     exists (extw m1'' m1'' Hm12', extw m1'' m3'' Hm13''). split; simpl; eauto.
-    split. reflexivity. reflexivity. split.
+    split. simpl.
+    inv H0. constructor; eauto; try (erewrite <- Mem.mext_sup; eauto).
+    red. intros. eapply Mem.perm_extends; eauto. apply MPD1; eauto.
+    erewrite Mem.valid_block_extends; eauto.
+    simpl. inv H0. constructor; eauto; try (erewrite <- Mem.mext_sup; eauto).
+    red. intros. eapply Mem.perm_extends; eauto. apply MPD1; eauto.
+    erewrite Mem.valid_block_extends; eauto. split.
     exists r1. inv H2. inv H6. simpl in *.
     split.
     econstructor; simpl; eauto. eapply val_inject_id.
@@ -1211,7 +1308,8 @@ Proof.
        rename m1'0 into m1''. rename m2'0 into m4''.
       exists ((injpw j12'' m1'' m2'' Hm12''),(extw m2'' m3'' MEXT'', injpw j34'' m3'' m4'' Hm34'')).
       repeat apply conj; eauto.
-      -- simpl. reflexivity.
+       -- simpl. inv ACCE1. inv ACCE2. inv Hq1. inv Hq2. inv Hq3. inv H3. inv H30. inv H34.
+          econstructor; eauto. apply H12. apply H20. apply H12. apply H20.
       -- rewrite COMPOSE in H.
          rename vres2 into vres4. exploit compose_meminj_midvalue; eauto.
          intros [vres2 [RES1 RES2]].

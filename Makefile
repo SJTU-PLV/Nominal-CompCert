@@ -202,6 +202,7 @@ CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
        InvariantC.v StackingproofC.v \
        ConstpropproofC.v CSEproofC.v DeadcodeproofC.v UnusedglobproofC.v \
+       SelectionproofC.v \
        Composition.v
 
 

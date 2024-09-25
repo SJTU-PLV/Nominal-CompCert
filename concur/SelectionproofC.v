@@ -1260,66 +1260,6 @@ Definition measure (s: Cminor.state) : nat :=
   | Cminor.Returnstate _ _ _ => 2%nat
   end.
 
-Lemma ext_acci_free : forall m m' tm tm' Hm b lo hi Hm',
-    Mem.free m b lo hi = Some m' ->
-    Mem.free tm b lo hi = Some tm' ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_free; eauto;
-    try red; intros; eauto with mem.
-  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
-  destruct H2. subst.
-  eapply Mem.perm_free_2; eauto.
-Qed.
-
-Lemma ext_acci_store : forall m m' tm tm' Hm chunk b ofs v1 v2 Hm',
-    Mem.store chunk m b ofs v1 = Some m' ->
-    Mem.store chunk tm b ofs v2 = Some tm' ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_store; eauto;
-    try red; intros; eauto with mem.
-Qed.
-
-Lemma ext_acci_storev : forall m m' tm tm' Hm chunk a1 a2 v1 v2 Hm',
-    Mem.storev chunk m a1 v1 = Some m' ->
-    Mem.storev chunk tm a2 v2 = Some tm' ->
-    Val.lessdef a1 a2 ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. inv H1; try inv H.
-  destruct a2; inv H0. inv H2. eapply ext_acci_store; eauto.
-Qed.
-(*
-Lemma ext_acci_storebytes : forall m m' tm tm' Hm b ofs vs1 vs2 Hm',
-    Mem.storebytes m b ofs vs1 = Some m' ->
-    Mem.storebytes tm b ofs vs2 = Some tm' ->
-    Val.lessdef_list vs1 vs2 ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_free; eauto;
-    try red; intros; eauto with mem.
-  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
-  destruct H2. subst.
-  eapply Mem.perm_free_2; eauto.
-Qed.
-*)
-Lemma ext_acci_alloc : forall m m' tm tm' Hm b1 b2 lo1 hi1 lo2 hi2 Hm',
-    Mem.alloc m lo1 hi1 = (m', b1) ->
-    Mem.alloc tm lo2 hi2 = (tm', b2) ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. apply Mem.support_alloc in H as S1. apply Mem.support_alloc in H0 as S2.
-  constructor; eauto. rewrite S1. eauto. rewrite S2. reflexivity.
-  rewrite S1. eauto with mem. rewrite S2. eauto with mem.
-  red. intros. eauto with mem.
-  red. intros. eauto with mem.
-  red. intros. eauto with mem.
-Qed.
-
 Lemma sel_step_correct:
   forall S1 wp t S2, Cminor.step ge S1 t S2 ->
   forall ttop T1, match_states wp S1 T1 -> wt_state ge ttop S1 ->
@@ -1609,23 +1549,23 @@ Proof.
 - intros wp S1 S2 q1 (M & W) (Hq1 & _). cbn in *.
   edestruct sel_external_states as (wx & q2 & Hq2 & ACI & Hq & _ & Hr); eauto.
   exists wx, q2. intuition auto.
-  edestruct Hr as (s2' & Hs2' & Hs'); eauto.
+  edestruct Hr as (s2' & Hs2' & Hs'); eauto. simpl. eauto.
   exists s2'. split. eauto. split. eauto. 
-  destruct H2 as (w1 & w2 & q & A & B & C & D & E & F).
+  destruct H3 as (w1 & w2 & q & A & B & C & D & E & F).
   destruct w1. exists s0. subst. eauto.
-- intros S1 t S2 (A & [? ?] & ? & WT1 & WT2) T1 (M & W). cbn in H. subst.
+- intros S1 t S2 (A & [? ?] & ? & WT1 & WT2) wp T1 (M & W). cbn in H. subst.
   exploit sel_step_correct; eauto.
   replace (erase_program tprog) with (erase_program prog) by fsim_skel MATCH. auto. eauto.
   intros [(T2 & D & E) | [(D & E & F) | (S3 & T2 & D & E)]].
-  + left; exists T2; intuition eauto.
-  + subst t. left; exists T1; intuition eauto using star_refl.
-  + right; exists T2, S3; split.
+  * left; exists T2; intuition eauto.
+  * subst t. left; exists T1; intuition eauto using star_refl.
+  * right; exists T2, S3; split.
     apply plus_one; auto.
     apply eventually_and_invariant; eauto using subject_reduction, wt_prog.
     -- intros. destruct H0 as [sg H0]. cbn in H. destruct H.
        exists sg. eapply subject_reduction; eauto. eapply wt_prog. eauto.
     -- apply eventually_restrict. eauto.
-- auto using wf_lex_ord, well_founded_ltof, lt_wf.
++ auto using wf_lex_ord, well_founded_ltof, lt_wf.
 Qed.
 
 (** ** Commutation with linking *)
