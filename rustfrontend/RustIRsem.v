@@ -394,32 +394,35 @@ Inductive step : state -> trace -> state -> Prop :=
 
 (** Open semantics *)
 
-Inductive initial_state: c_query -> state -> Prop :=
+Inductive initial_state: rust_query -> state -> Prop :=
 | initial_state_intro: forall vf f targs tres tcc vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction orgs org_rels targs tres tcc ->
     (* This function must not be drop glue *)
     f.(fn_drop_glue) = None ->
+    (* how to use it? *)
     val_casted_list vargs targs ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
-    initial_state (cq vf (signature_of_type targs tres tcc) vargs m)
-                  (Callstate vf vargs Kstop m).
-    
-Inductive at_external: state -> c_query -> Prop:=
-| at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
-    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->    
-    at_external (Callstate vf args k m) (cq vf sg args m).
+    initial_state (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres tcc ge) vargs m)
+      (Callstate vf vargs Kstop m).
 
-Inductive after_external: state -> c_reply -> state -> Prop:=
+
+Inductive at_external: state -> rust_query -> Prop:=
+| at_external_intro: forall vf name args k m targs tres cconv orgs org_rels,
+    (* check the validity of the signature *)
+    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name (signature_of_type targs tres cconv)) targs tres cconv) ->
+    at_external (Callstate vf args k m) (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres cconv ge) args m).
+
+Inductive after_external: state -> rust_reply -> state -> Prop:=
 | after_external_intro: forall vf args k m m' v,
     after_external
       (Callstate vf args k m)
-      (cr v m')
+      (rsr v m')
       (Returnstate v k m').
 
-Inductive final_state: state -> c_reply -> Prop:=
+Inductive final_state: state -> rust_reply -> Prop:=
 | final_state_intro: forall v m,
-    final_state (Returnstate v Kstop m) (cr v m).
+    final_state (Returnstate v Kstop m) (rsr v m).
 
 (* Definition of memory error state in RustIR *)
 

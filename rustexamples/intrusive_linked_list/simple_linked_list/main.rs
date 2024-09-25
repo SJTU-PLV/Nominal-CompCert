@@ -18,6 +18,12 @@ fn push(l: Box<Data>, v: i32) -> Box<Data> {
     return l;
 }
 
+// For circular linked list
+fn create(v: i32) -> Box<Data>{
+    let head: Data = Data {val: v, next: empty_link()};
+    head = link_myself(head)
+}
+
 // GUARANTEE: the return value is equal to N in linked_list.c
 fn link_offset() -> u64{
     return 8;

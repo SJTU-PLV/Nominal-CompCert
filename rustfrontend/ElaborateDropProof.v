@@ -699,6 +699,15 @@ Hypothesis GE: match_stbls injp w se tse.
 Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce).
 
 
+Lemma match_stbls_incr : forall j m1 m2 MEM,
+    injp_acc w (injpw j m1 m2 MEM) ->
+    Genv.match_stbls j ge tge.
+Proof.
+  intros.
+  exploit CKLR.match_stbls_acc. 2: apply GE.
+  simpl. eauto. intro. simpl in H0. inv H0. eauto.
+Qed.
+
 Lemma comp_env_preserved:
   genv_cenv tge = genv_cenv ge.
 Proof.
@@ -2828,43 +2837,110 @@ Proof.
     
   Admitted.
 
-Lemma transf_initial_states q:
-  forall S1, initial_state ge q S1 ->
-  exists S2, RustIRsem.initial_state tge q S2 /\ match_states S1 S2.
+Lemma initial_states_simulation:
+  forall q1 q2 S1, match_query (cc_rs injp) w q1 q2 -> initial_state ge q1 S1 ->
+  exists S2, RustIRsem.initial_state tge q2 S2 /\ match_states S1 S2.
 Proof.
-Admitted. 
-
-Lemma transf_final_states:
-  forall S1 S2 r, match_states S1 S2 -> final_state S1 r -> RustIRsem.final_state S2 r.
+  intros ? ? ? Hq HS.
+  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
+  subst. 
+  inversion HS. clear HS. subst vf sg vargs m.
+  exploit find_funct_match;eauto. eapply match_stbls_proj.
+  eauto. eauto.
+  intros (tf & FIND & TRF).
+  (* inversion TRF to get tf *)
+  simpl in TRF. monadInv TRF.
+  eexists. split.
+  - replace (prog_comp_env prog) with (genv_cenv ge); auto.
+    erewrite <- comp_env_preserved.
+    econstructor. eauto.
+    (* type_of_function *)
+    { unfold type_of_function.
+      unfold transf_function in EQ.
+      monadInv EQ. destruct x2 as [[i1 i2] i3].
+      monadInv EQ2. simpl.
+      unfold type_of_function in H4. inv H4.
+      f_equal. }
+    (* fn_drop_glue *)
+    { unfold type_of_function.
+      unfold transf_function in EQ.
+      monadInv EQ. destruct x2 as [[i1 i2] i3].
+      monadInv EQ2. simpl. auto. }
+    eapply val_casted_inject_list;eauto.
+    (* sup_include *)
+    simpl. inv Hm. inv GE. simpl in *. auto.
+  - inv Hm; cbn in *.
+    econstructor.
+    2: { instantiate (1:= Hm0). rewrite <- H. reflexivity. }
+    all: eauto.
+    rewrite <- H in *. eauto.
+    rewrite <- H in *. eauto.
+    econstructor.
+Qed.                
+    
+Lemma final_states_simulation:
+  forall S R r1, match_states S R -> final_state S r1 ->
+  exists r2, RustIRsem.final_state R r2 /\ match_reply (cc_rs injp) w r1 r2.
 Proof.
-Admitted. 
+  intros. inv H0. inv H.
+  inv MCONT.
+  eexists. split. econstructor; split; eauto.
+  simpl.
+  econstructor. split.
+  eauto. econstructor. eauto.
+  constructor; eauto.
+Qed.
 
-Lemma transf_external:
-  forall S R q, match_states S R -> at_external ge S q ->
-  RustIRsem.at_external tge R q /\
-  forall r S', after_external S r S' ->
-  exists R', RustIRsem.after_external R r R' /\ match_states S' R'.
+
+Lemma external_states_simulation:
+  forall S R q1, match_states S R -> at_external ge S q1 ->
+  exists wx q2, RustIRsem.at_external tge R q2 /\ match_query (cc_rs injp) wx q1 q2 /\ match_stbls injp wx se tse /\
+  forall r1 r2 S', match_reply (cc_rs injp) wx r1 r2 -> after_external S r1 S' ->
+              exists R', RustIRsem.after_external R r2 R' /\ match_states S' R'.
 Proof.
-  intros S R q HSR Hq. destruct Hq; inv HSR.
-Qed. 
-
-Lemma transf_fundef_internal: 
-forall q se2,
-Genv.is_internal (Genv.globalenv se2 tprog) (cq_vf q) =
-Genv.is_internal (Genv.globalenv se2 prog) (cq_vf q). 
-Admitted. 
+  intros S R q1 HSR Hq1.
+  destruct Hq1; inv HSR.
+  exploit (match_stbls_acc injp). eauto. eauto. intros GE1.
+  (* target find external function *)  
+  simpl in H. exploit find_funct_match; eauto.
+  inv GE1. simpl in *. eauto.
+  intros (tf & TFINDF & TRFUN).
+  simpl in TRFUN. inv TRFUN. 
+  (* vf <> Vundef *)
+  assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
+  eexists (injpw j m tm Hm), _. intuition idtac.
+  - econstructor; eauto. admit.
+  - erewrite <- comp_env_preserved.
+    econstructor; eauto. constructor. 
+  - inv H1. destruct H0 as (wx' & ACC & REP). inv ACC. inv REP. inv H12. eexists. split.
+    + econstructor; eauto.
+    + econstructor. instantiate (1 := f').
+      eauto. etransitivity; eauto.
+      econstructor; eauto.
+      (** TODO: match_stacks_incr  *)
+Admitted.
 
 End PRESERVATION.
 
 Theorem transl_program_correct prog tprog:
    match_prog prog tprog ->
-   forward_simulation (cc_id) (cc_id) (semantics prog) (RustIRsem.semantics tprog).
+   forward_simulation (cc_rs injp) (cc_rs injp) (semantics prog) (RustIRsem.semantics tprog).
 Proof.
-    fsim eapply forward_simulation_plus; simpl in *. 
-    - inv MATCH. simpl. auto. 
-    - intros. inv H. eapply transf_fundef_internal; eauto. 
-    - intros. inv H. eapply transf_initial_states. eauto.  
-    - intros. exploit transf_final_states; eauto. 
-    - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
-    - eauto using step_simulation.
-Admitted.
+  fsim eapply forward_simulation_plus; simpl in *. 
+  - inv MATCH. simpl. auto. 
+  - intros. inv H. simpl.
+    assert (GE1: Genv.match_stbls (mi injp w) se1 se2).
+    { eapply match_stbls_proj.
+      eapply match_stbls_acc; eauto. reflexivity. }    
+    eapply is_internal_match; eauto.
+    intros. destruct f; simpl in H.
+    monadInv H. auto. inv H. auto.
+  (* initial state *)
+  - eapply initial_states_simulation;eauto.
+  (* final state *)
+  - eapply final_states_simulation; eauto.
+  (* external state *)
+  - eapply external_states_simulation; eauto.
+  (* step *)
+  - eapply step_simulation;eauto.
+Qed.

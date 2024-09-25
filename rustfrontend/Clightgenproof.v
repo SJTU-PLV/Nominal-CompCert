@@ -1243,78 +1243,6 @@ Proof.
   intro. inv H.  congruence.
 Qed.
 
-(* move to RustOp *)
-Lemma val_casted_to_ctype: forall ty v,
-    val_casted v ty ->
-    Cop.val_casted v (to_ctype ty).
-Proof.
-  destruct ty; intros v CAST; simpl in *; inv CAST; econstructor.
-  unfold cast_int_int. auto.
-  auto.
-Qed.
-
-Lemma val_casted_list_to_ctype: forall tyl vl,
-    val_casted_list vl tyl ->
-    Cop.val_casted_list vl (to_ctypelist tyl).
-Proof.
-  induction tyl; simpl; intros vl CAST; inv CAST; econstructor; eauto.
-  eapply val_casted_to_ctype. auto.  
-Qed.
-
-Lemma val_casted_inject: forall ty v1 v2 j,
-    val_casted v1 ty ->
-    Val.inject j v1 v2 ->
-    val_casted v2 ty.
-Proof.
-  destruct ty; intros v1 v2 j CAST INJ; inv CAST; inv INJ; econstructor; auto.
-Qed.
-
-Lemma val_casted_inject_list: forall tyl vl1 vl2 j,
-    val_casted_list vl1 tyl ->
-    Val.inject_list j vl1 vl2 ->
-    val_casted_list vl2 tyl.
-Proof.
-  induction tyl; intros vl1 vl2 j CAST INJ; inv CAST; inv INJ; econstructor; eauto.
-  eapply val_casted_inject; eauto.
-Qed.
-
-
-Lemma initial_states_simulation:
-  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
-             exists R, Clight.initial_state tge q2 R /\ match_states S R.
-Proof.
-  intros ? ? ? Hq HS.
-  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
-  subst. 
-  inversion HS. clear HS. subst vf sg vargs m.
-  exploit find_funct_match;eauto. eapply inj_stbls_match. eauto. eauto.
-  intros (tf & FIND & TRF).
-  (* inversion TRF to get tf *)
-  inv TRF.
-  eexists. split.
-  - assert (SIG: signature_of_type targs tres tcc = Ctypes.signature_of_type (to_ctypelist targs) (to_ctype tres) tcc).
-    { unfold signature_of_type, Ctypes.signature_of_type. f_equal.
-      eapply typlist_of_typelist_to_ctype.
-      eapply rettype_of_type_to_ctype. }      
-    rewrite SIG. econstructor. eauto.
-    (* type of function *)
-    { unfold Clight.type_of_function. 
-      inv H0; try congruence.
-      unfold type_of_function in H4. inv H4.
-      f_equal.
-      rewrite H9.
-      eapply type_of_params_to_ctype.
-      rewrite H2. auto.
-      auto. }        
-    (* val_casted_list *)
-    eapply val_casted_list_to_ctype.
-    eapply val_casted_inject_list;eauto.
-    (* sup include *)
-    simpl. inv Hm. inv GE. simpl in *. auto.
-  - econstructor; eauto. econstructor.
-    inv Hm. simpl. reflexivity.
-Qed.
-
 Lemma Clight_list_norepet: forall f, 
   list_norepet (var_names (fn_params f) ++ var_names (fn_vars f))
   -> list_norepet
@@ -3921,11 +3849,56 @@ Proof.
     inv MSTMT. inv H. generalize (MCONT m tm nil). intros. inv H. inv H0. 
     eexists. split. eapply plus_one. eapply step_break_loop1. econstructor; eauto. 
     econstructor. auto. simpl. auto. instantiate (1:=g). auto. 
-Qed. 
+Qed.
+
+Lemma map_typ_of_type_eq_typlist_of_typelist: forall tyl,
+    map typ_of_type (type_list_of_typelist tyl) = typlist_of_typelist tyl.
+Proof.
+  induction tyl; auto.
+  simpl. f_equal. auto.
+Qed.
+
+Lemma initial_states_simulation:
+  forall q1 q2 S, match_query (cc_rust_c inj) w q1 q2 -> initial_state ge q1 S ->
+             exists R, Clight.initial_state tge q2 R /\ match_states S R.
+Proof.
+  intros ? ? ? Hq HS.
+  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
+  subst. 
+  inversion HS. clear HS. subst vf sg vargs m.
+  exploit find_funct_match;eauto. eapply inj_stbls_match. eauto. eauto.
+  intros (tf & FIND & TRF).
+  (* inversion TRF to get tf *)
+  inv TRF.
+  eexists. split.
+  - unfold signature_of_rust_signature. simpl.
+    assert (SIG: mksignature (map typ_of_type (type_list_of_typelist targs)) (rettype_of_type tres) tcc = Ctypes.signature_of_type (to_ctypelist targs) (to_ctype tres) tcc).
+    { unfold signature_of_type, Ctypes.signature_of_type. f_equal.
+      erewrite <- typlist_of_typelist_to_ctype.
+      eapply map_typ_of_type_eq_typlist_of_typelist.
+    eapply rettype_of_type_to_ctype. }
+    erewrite SIG. econstructor. eauto.
+    (* type of function *)
+    { unfold Clight.type_of_function. 
+      inv H0; try congruence.
+      unfold type_of_function in H4. inv H4.
+      f_equal.
+      rewrite H9.
+      eapply type_of_params_to_ctype.
+      rewrite H2. auto.
+      auto. }
+    (* val_casted_list *)
+    eapply val_casted_list_to_ctype.
+    eapply val_casted_inject_list;eauto.
+    (* sup include *)
+    simpl. inv Hm. inv GE. simpl in *. auto.
+  - econstructor; eauto. econstructor.
+    inv Hm. simpl. reflexivity.
+Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
-  exists r2, Clight.final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
+  exists r2, Clight.final_state R r2 /\ match_reply (cc_rust_c inj) w r1 r2.
 Proof.
   intros. inv H0. inv H.
   generalize (MCONT m tm nil). intros MCONT1.
@@ -3940,8 +3913,8 @@ Qed.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, Clight.at_external tge R q2 /\ cc_c_query inj wx q1 q2 /\ match_stbls inj wx se tse /\
-  forall r1 r2 S', match_reply (cc_c inj) wx r1 r2 -> after_external S r1 S' ->
+  exists wx q2, Clight.at_external tge R q2 /\ cc_rust_c_mq inj wx q1 q2 /\ match_stbls inj wx se tse /\
+  forall r1 r2 S', match_reply (cc_rust_c inj) wx r1 r2 -> after_external S r1 S' ->
   exists R', Clight.after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros S R q1 HSR Hq1.
@@ -3955,21 +3928,32 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eexists (injw j (Mem.support m) (Mem.support tm)), _. intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto. constructor. auto.
+  - assert (SIG: signature_of_type targs tres cconv =
+                   signature_of_rust_signature {|
+                       rs_sig_generic_origins := orgs;
+                       rs_sig_origins_relation := org_rels;
+                       rs_sig_args := type_list_of_typelist targs;
+                       rs_sig_res := tres;
+                       rs_sig_cc := cconv;
+                       rs_sig_comp_env := ge |}).
+    { unfold signature_of_type, signature_of_rust_signature. simpl.
+      f_equal. symmetry.
+      eapply map_typ_of_type_eq_typlist_of_typelist. }
+    rewrite SIG.
+    econstructor; eauto. constructor. auto.
   - inv H3. destruct H2 as (wx' & ACC & REP). inv ACC. inv REP. inv H10. eexists. split.
     + econstructor; eauto.
     + econstructor. instantiate (1 := f').
       eapply match_cont_inj_incr; eauto.
       auto. etransitivity; eauto.
-      auto.
-      
+      auto.      
 Qed.
 
 End PRESERVATION.
 
 Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_c inj) (cc_c inj) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
+  forward_simulation (cc_rust_c inj) (cc_rust_c inj) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
 Proof.
   fsim eapply forward_simulation_plus. 
   - inv MATCH. auto.
@@ -3987,5 +3971,4 @@ Proof.
   - eapply external_states_simulation; eauto.
   (* step *)
   - eapply step_simulation;eauto.
-
 Qed.

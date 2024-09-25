@@ -170,6 +170,41 @@ Definition access_mode (ty: type) : mode :=
   | Tvariant _ _ => By_copy
 end.
 
+
+(** To C types *)
+
+(* What Tbox corresponds to? *)
+(** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
+Option<reference> -> C pointer *)
+Fixpoint to_ctype (ty: type) : Ctypes.type :=
+  match ty with
+  | Tunit => Ctypes.type_int32s  (* unit is set to zero *)
+  (* | Tbox _  => None *)
+  | Tint sz si => Ctypes.Tint sz si noattr
+  | Tlong si => Ctypes.Tlong si noattr
+  | Tfloat fz => Ctypes.Tfloat fz noattr
+  | Tstruct _ id  => Ctypes.Tstruct id noattr
+  (* variant = Struct {tag: .. ; f: union} *)
+  | Tvariant _ id => Ctypes.Tstruct id noattr
+  | Treference _ _ ty
+  | Tbox ty => Tpointer (to_ctype ty) noattr
+      (* match (to_ctype ty) with *)
+      (* | Some ty' =>  *)
+      (*     Some (Ctypes.Tpointer ty' attr) *)
+      (* | _ => None *)
+  (* end *)
+  | Tarray ty sz => Ctypes.Tarray (to_ctype ty) sz noattr
+  | Tfunction _ _ tyl ty cc =>
+      Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
+  end
+    
+with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
+       match tyl with
+       | Tnil => Ctypes.Tnil
+       | Tcons ty tyl =>
+           Ctypes.Tcons (to_ctype ty) (to_ctypelist tyl)
+       end.
+
 (** Composite  *)
 
 Inductive struct_or_variant : Set :=  Struct : struct_or_variant | TaggedUnion : struct_or_variant.
@@ -1922,12 +1957,12 @@ Require Import Memory Values.
 Require Import LanguageInterface.
 
 Record rust_signature : Type := mksignature {
-  sig_generic_origins: list origin;
-  sig_origins_relation: list origin_rel;
-  sig_args: list type;
-  sig_res: type;
-  sig_cc: calling_convention;
-  sig_comp_env: composite_env;
+  rs_sig_generic_origins: list origin;
+  rs_sig_origins_relation: list origin_rel;
+  rs_sig_args: list type;
+  rs_sig_res: type;
+  rs_sig_cc: calling_convention;
+  rs_sig_comp_env: composite_env;
 }.
   
 Record rust_query :=
@@ -1974,6 +2009,41 @@ Program Definition cc_rs (R: cklr): callconv li_rs li_rs :=
     match_senv := match_stbls R;
     match_query := cc_rs_query R;
     match_reply := (<> cc_rs_reply R)%klr;
+  |}.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+Qed.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
+
+(** Simulation convention between Rust and C *)
+
+Definition signature_of_rust_signature (sig: rust_signature) : signature :=
+  mksignature (map typ_of_type sig.(rs_sig_args)) (rettype_of_type sig.(rs_sig_res)) sig.(rs_sig_cc).
+
+Inductive cc_rust_c_mq R (w: world R): rust_query -> c_query -> Prop :=
+| cc_rust_c_mq_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+  Val.inject (mi R w) vf1 vf2 ->
+  Val.inject_list (mi R w) vargs1 vargs2 ->
+  match_mem R w m1 m2 ->
+  vf1 <> Vundef ->
+  (* how to relate signature? *)
+  cc_rust_c_mq R w (rsq vf1 sg vargs1 m1) (cq vf2 (signature_of_rust_signature sg) vargs2 m2).
+
+
+Inductive cc_rust_c_mr R (w: world R): rust_reply -> c_reply -> Prop :=
+| cc_rust_c_mr_intro vres1 vres2 m1' m2':
+  Val.inject (mi R w) vres1 vres2 ->
+  match_mem R w m1' m2' ->
+  cc_rust_c_mr R w (rsr vres1 m1') (cr vres2 m2').
+
+Program Definition cc_rust_c (R: cklr): callconv li_rs li_c :=
+  {|
+    ccworld := world R;
+    match_senv := match_stbls R;
+    match_query := cc_rust_c_mq R;
+    match_reply := (<> cc_rust_c_mr R)%klr;
   |}.
 Next Obligation.
   intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.

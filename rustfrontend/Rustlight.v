@@ -77,39 +77,6 @@ Definition typeof (e: expr) : type :=
   | Emoveplace _ ty => ty
   | Epure pe => typeof_pexpr pe
     end.
-
-
-(* What Tbox corresponds to? *)
-(** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
-Option<reference> -> C pointer *)
-Fixpoint to_ctype (ty: type) : Ctypes.type :=
-  match ty with
-  | Tunit => Ctypes.type_int32s  (* unit is set to zero *)
-  (* | Tbox _  => None *)
-  | Tint sz si => Ctypes.Tint sz si noattr
-  | Tlong si => Ctypes.Tlong si noattr
-  | Tfloat fz => Ctypes.Tfloat fz noattr
-  | Tstruct _ id  => Ctypes.Tstruct id noattr
-  (* variant = Struct {tag: .. ; f: union} *)
-  | Tvariant _ id => Ctypes.Tstruct id noattr
-  | Treference _ _ ty
-  | Tbox ty => Tpointer (to_ctype ty) noattr
-      (* match (to_ctype ty) with *)
-      (* | Some ty' =>  *)
-      (*     Some (Ctypes.Tpointer ty' attr) *)
-      (* | _ => None *)
-  (* end *)
-  | Tarray ty sz => Ctypes.Tarray (to_ctype ty) sz noattr
-  | Tfunction _ _ tyl ty cc =>
-      Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
-  end
-    
-with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
-       match tyl with
-       | Tnil => Ctypes.Tnil
-       | Tcons ty tyl =>
-           Ctypes.Tcons (to_ctype ty) (to_ctypelist tyl)
-       end.
                                   
 
 Inductive statement : Type :=

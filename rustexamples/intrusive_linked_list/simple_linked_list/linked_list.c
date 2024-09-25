@@ -23,8 +23,15 @@ struct Data* push_front(struct Data* l, struct Data* n){
     return n;
 }
 
+struct Data* link_myself(struct Data* l){
+    Link* link = (unsigned char*)l + link_offset();
+    link->next = link;
+    return l;
+}
+
 Link empty_link(){
-    Link l = {.next = NULL};
+    Link l;
+    l.next = NULL;
     return l;
 }
 

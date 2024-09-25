@@ -289,3 +289,39 @@ Inductive val_casted_list: list val -> typelist -> Prop :=
   | vcl_cons: forall v1 vl ty1 tyl,
       val_casted v1 ty1 -> val_casted_list vl tyl ->
       val_casted_list (v1 :: vl) (Tcons ty1 tyl).
+
+
+(* move to RustOp *)
+Lemma val_casted_to_ctype: forall ty v,
+    val_casted v ty ->
+    Cop.val_casted v (to_ctype ty).
+Proof.
+  destruct ty; intros v CAST; simpl in *; inv CAST; econstructor.
+  unfold cast_int_int. auto.
+  auto.
+Qed.
+
+Lemma val_casted_list_to_ctype: forall tyl vl,
+    val_casted_list vl tyl ->
+    Cop.val_casted_list vl (to_ctypelist tyl).
+Proof.
+  induction tyl; simpl; intros vl CAST; inv CAST; econstructor; eauto.
+  eapply val_casted_to_ctype. auto.  
+Qed.
+
+Lemma val_casted_inject: forall ty v1 v2 j,
+    val_casted v1 ty ->
+    Val.inject j v1 v2 ->
+    val_casted v2 ty.
+Proof.
+  destruct ty; intros v1 v2 j CAST INJ; inv CAST; inv INJ; econstructor; auto.
+Qed.
+
+Lemma val_casted_inject_list: forall tyl vl1 vl2 j,
+    val_casted_list vl1 tyl ->
+    Val.inject_list j vl1 vl2 ->
+    val_casted_list vl2 tyl.
+Proof.
+  induction tyl; intros vl1 vl2 j CAST INJ; inv CAST; inv INJ; econstructor; eauto.
+  eapply val_casted_inject; eauto.
+Qed.
