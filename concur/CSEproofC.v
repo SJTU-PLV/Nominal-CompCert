@@ -2031,7 +2031,7 @@ Proof.
   destruct w' as [se'' [tt' w']]. simpl in ACCI, tt'.
   exists (se'', (tt', w') ), q2. repeat apply conj; eauto. constructor.
   intros. destruct gw'' as [tt'' gw'']. destruct H0. destruct H0.
-  simpl in gw'', tt'', H0, H3.
+  simpl in gw'', tt'', H3.
   exploit Hk; eauto. 
   intros (st2 & A & B & C).
   exists st2. repeat apply conj; eauto.

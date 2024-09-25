@@ -1534,7 +1534,7 @@ Qed.
 Lemma transf_external_states:
   forall gw S R q1, match_states gw S R -> at_external ge S q1 ->
   exists wx q2, at_external tge R q2 /\ gw *-> wx /\ GS.match_query (c_injp) wx q1 q2 /\ GS.match_senv (c_injp) wx se tse /\
-  forall r1 r2 S' gw'', wx o-> gw'' /\ GS.match_reply (c_injp) gw'' r1 r2 -> after_external S r1 S' ->
+  forall r1 r2 S' gw'', wx o-> gw'' -> GS.match_reply (c_injp) gw'' r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states gw'' S' R'.
 Proof.
   intros gw S R q1 MSTATE AT_EXT.
@@ -1552,9 +1552,9 @@ Proof.
     + eapply match_stacks_match_stbls; eauto.
     + eapply match_stacks_bound1; eauto.
     + eapply match_stacks_bound2; eauto.
-  - inv H2. inv H1. inv H3. eexists. split.
+  - inv H2. inv H1. inv H0. eexists. split.
     + econstructor; eauto.
-    + cbn in *. inv H5.
+    + cbn in *. inv H6.
       econstructor; eauto. cbn.
       destruct H10 as [[A B] [C ?]].
       destruct H11 as [[D E] [F ?]].

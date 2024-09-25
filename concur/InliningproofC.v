@@ -1781,7 +1781,7 @@ Qed.
 Lemma transf_external_states:
   forall gw S R q1, match_states gw S R -> at_external ge S q1 ->
   exists wx q2, at_external tge R q2 /\ gw *-> wx /\ GS.match_query (c_injp) wx q1 q2 /\ match_senv (cc_c injp) wx se tse /\
-  forall r1 r2 S' gw'', wx o-> gw'' /\ GS.match_reply (c_injp) gw'' r1 r2 -> after_external S r1 S' ->
+  forall r1 r2 S' gw'', wx o-> gw'' -> GS.match_reply (c_injp) gw'' r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states gw'' S' R'.
 Proof.
   intros gw S R q1 HSR Hq1.
@@ -1797,7 +1797,7 @@ Proof.
     + eapply match_stacks_globalenvs; eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. rewrite <- H5 in ACCE. inv ACCE. destruct H16 as [? [X ?]]. eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. rewrite <- H5 in ACCE. inv ACCE. destruct H17 as [? [X ?]]. eauto.
-  - inv H1.  inv H3. inv H6. simpl in *. inv H2.
+  - inv H1. inv H2. inv H4. simpl in *. inv H0.
     eexists; split; econstructor; eauto.
     eapply match_stacks_sup_include with (Mem.support m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f) (m1 := m) (m1' := m'); eauto.

@@ -2541,7 +2541,7 @@ Qed.
 Lemma transl_external_states:
   forall gw  S R q1, match_states gw S R -> Csharpminor.at_external ge S q1 ->
   exists wx q2, Cminor.at_external tge R q2 /\ gw *-> wx /\ GS.match_query (c_injp) wx q1 q2 /\ GS.match_senv (c_injp) wx se tse /\
-  forall r1 r2 S' gw'', wx o-> gw'' /\ GS.match_reply (c_injp) gw'' r1 r2 -> Csharpminor.after_external S r1 S' ->
+  forall r1 r2 S' gw'', wx o-> gw'' -> GS.match_reply (c_injp) gw'' r1 r2 -> Csharpminor.after_external S r1 S' ->
   exists R', Cminor.after_external R r2 R' /\ match_states gw'' S' R'.
 Proof.
   intros gw S R q1 HSR Hq1.
@@ -2558,18 +2558,17 @@ Proof.
       rewrite <- H3 in ACCE. inv ACCE. destruct H14 as [_ H14]. inversion H14. auto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
       rewrite <- H3 in ACCE. inv ACCE. destruct H15 as [_ H15]. inversion H15. auto.
-  - 
-    inv H1. inv H2. inv H3. inv H12. clear Hm4 Hm5 Hm6.
+  - inv H1. inv H4. inv H2. inv H. clear Hm4 Hm5 Hm6.
     simpl in *. eexists. split. clear Hm1.
     + econstructor; eauto.
-    + econstructor; eauto. etransitivity; eauto. instantiate (1:= Hm').
+    + econstructor; eauto. etransitivity; eauto. instantiate (1:= Hm1).
       econstructor; eauto.
       reflexivity.
       apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
       eapply match_callstack_external_call; eauto.
-      inversion Hm'. inv mi_thread. auto.
-      apply H9. apply H10.
-      destruct H9 as [[X ?]]. auto. destruct H10 as [[X ?]]. auto.
+      inversion Hm1. inv mi_thread. auto.
+      apply H12. apply H13.
+      destruct H12 as [[X ?]]. auto. destruct H13 as [[X ?]]. auto.
 Qed.
 
 End TRANSLATION.

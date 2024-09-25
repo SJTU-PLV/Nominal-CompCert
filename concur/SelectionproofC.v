@@ -834,39 +834,41 @@ Proof.
 Qed.
 
 Lemma sel_builtin_default_correct:
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k (Hm: Mem.extends m1 m1'),
   Cminor.eval_exprlist ge sp e1 m1 al vl ->
   external_call ef ge vl m1 t v m2 ->
-  env_lessdef e1 e1' -> Mem.extends m1 m1' ->
-  exists e2' m2',
+  env_lessdef e1 e1' ->
+  exists e2' m2' Hm',
      plus step tge (State f (sel_builtin_default optid ef al) k sp e1' m1')
                  t (State f Sskip k sp e2' m2')
   /\ env_lessdef (set_optvar optid v e1) e2'
-  /\ Mem.extends m2 m2'.
+  /\ ext_acci (extw m1 m1' Hm) (extw m2 m2' Hm').
 Proof.
   intros. unfold sel_builtin_default.
   exploit sel_builtin_args_correct; eauto. intros (vl' & A & B).
-  exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & _).
-  econstructor; exists m2'; split.
+  exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & G & I).
+  econstructor. exists m2', F; split.
   apply plus_one.
   econstructor. eexact A. eexact D.
-  split; auto. apply sel_builtin_res_correct; auto.
+  split; auto. apply sel_builtin_res_correct; auto. constructor; eauto using external_call_tid, external_call_support.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
 Qed. 
 
 Lemma sel_builtin_correct:
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k (Hm: Mem.extends m1 m1'),
   Cminor.eval_exprlist ge sp e1 m1 al vl ->
   external_call ef ge vl m1 t v m2 ->
-  env_lessdef e1 e1' -> Mem.extends m1 m1' ->
-  exists e2' m2',
+  env_lessdef e1 e1' ->
+  exists e2' m2' Hm',
      plus step tge (State f (sel_builtin optid ef al) k sp e1' m1')
                  t (State f Sskip k sp e2' m2')
   /\ env_lessdef (set_optvar optid v e1) e2'
-  /\ Mem.extends m2 m2'.
+  /\ ext_acci (extw m1 m1' Hm) (extw m2 m2' Hm').
 Proof.
   intros. 
   exploit sel_exprlist_correct; eauto. intros (vl' & A & B).
-  exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & _).
+  exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & G & I).
   unfold sel_builtin.
   destruct ef; eauto using sel_builtin_default_correct.
   destruct (lookup_builtin_function name sg) as [bf|] eqn:LKUP; eauto using sel_builtin_default_correct.
@@ -874,12 +876,18 @@ Proof.
   destruct optid as [id|]; eauto using sel_builtin_default_correct.
 - destruct (sel_known_builtin bf (sel_exprlist al)) as [a|] eqn:SKB; eauto using sel_builtin_default_correct.
   exploit eval_sel_known_builtin; eauto. intros (v'' & U & V).
-  econstructor; exists m2'; split.
+  econstructor; exists m2', F; split.
   apply plus_one. econstructor. eexact U.
   split; auto. apply set_var_lessdef; auto. apply Val.lessdef_trans with v'; auto.
-- exists e1', m2'; split.
+  constructor; eauto using external_call_tid, external_call_support.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. congruence.
+- exists e1', m2', F; split.
   eapply plus_two. constructor. constructor. auto.
-  simpl; auto.  
+  simpl; auto.  split. auto.
+  constructor; eauto using external_call_tid, external_call_support.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. congruence.
 Qed.
 
 (** If-conversion *)
@@ -1265,6 +1273,53 @@ Proof.
   eapply Mem.perm_free_2; eauto.
 Qed.
 
+Lemma ext_acci_store : forall m m' tm tm' Hm chunk b ofs v1 v2 Hm',
+    Mem.store chunk m b ofs v1 = Some m' ->
+    Mem.store chunk tm b ofs v2 = Some tm' ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. constructor; eauto;
+    try erewrite <- Mem.support_store; eauto;
+    try red; intros; eauto with mem.
+Qed.
+
+Lemma ext_acci_storev : forall m m' tm tm' Hm chunk a1 a2 v1 v2 Hm',
+    Mem.storev chunk m a1 v1 = Some m' ->
+    Mem.storev chunk tm a2 v2 = Some tm' ->
+    Val.lessdef a1 a2 ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. inv H1; try inv H.
+  destruct a2; inv H0. inv H2. eapply ext_acci_store; eauto.
+Qed.
+(*
+Lemma ext_acci_storebytes : forall m m' tm tm' Hm b ofs vs1 vs2 Hm',
+    Mem.storebytes m b ofs vs1 = Some m' ->
+    Mem.storebytes tm b ofs vs2 = Some tm' ->
+    Val.lessdef_list vs1 vs2 ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. constructor; eauto;
+    try erewrite <- Mem.support_free; eauto;
+    try red; intros; eauto with mem.
+  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
+  destruct H2. subst.
+  eapply Mem.perm_free_2; eauto.
+Qed.
+*)
+Lemma ext_acci_alloc : forall m m' tm tm' Hm b1 b2 lo1 hi1 lo2 hi2 Hm',
+    Mem.alloc m lo1 hi1 = (m', b1) ->
+    Mem.alloc tm lo2 hi2 = (tm', b2) ->
+    ext_acci (extw m tm Hm) (extw m' tm' Hm').
+Proof.
+  intros. apply Mem.support_alloc in H as S1. apply Mem.support_alloc in H0 as S2.
+  constructor; eauto. rewrite S1. eauto. rewrite S2. reflexivity.
+  rewrite S1. eauto with mem. rewrite S2. eauto with mem.
+  red. intros. eauto with mem.
+  red. intros. eauto with mem.
+  red. intros. eauto with mem.
+Qed.
+
 Lemma sel_step_correct:
   forall S1 wp t S2, Cminor.step ge S1 t S2 ->
   forall ttop T1, match_states wp S1 T1 -> wt_state ge ttop S1 ->
@@ -1298,7 +1353,8 @@ Proof.
   exploit Mem.storev_extends; eauto. intros [m2' [P Q]].
   left; econstructor; split.
   apply plus_one; eapply eval_store; eauto.
-  econstructor; eauto.
+  econstructor; eauto. instantiate (1:= Q).
+  etransitivity. eauto. eapply ext_acci_storev; eauto.
 - (* Scall *)
   exploit classify_call_correct; eauto.
   destruct (classify_call (prog_defmap cunit) a) as [ | id | ef].
@@ -1339,10 +1395,11 @@ Proof.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   eapply match_callstate with (cunit := cunit'); eauto.
-  eapply call_cont_commut; eauto.
+  eapply call_cont_commut; eauto. instantiate (1:= Q). etransitivity. eauto. eapply ext_acci_free; eauto.
+  erewrite <- stackspace_function_translated; eauto.
 - (* Sbuiltin *)
-  exploit sel_builtin_correct; eauto. intros (e2' & m2' & P & Q & R).
-  left; econstructor; split. eexact P. econstructor; eauto.
+  exploit sel_builtin_correct; eauto. intros (e2' & m2' & Hm' & P & Q & R).
+  left; econstructor; split. eexact P. econstructor; eauto. etransitivity; eauto.
 - (* Seq *)
   left; econstructor; split.
   apply plus_one; constructor.
@@ -1394,6 +1451,8 @@ Proof.
   left; econstructor; split.
   apply plus_one; econstructor. simpl; eauto.
   econstructor; eauto. eapply call_cont_commut; eauto.
+  etransitivity. eauto. instantiate (1:= Q). eapply ext_acci_free; eauto.
+  erewrite <- stackspace_function_translated; eauto.
 - (* Sreturn Some *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
   erewrite <- stackspace_function_translated in P by eauto.
@@ -1401,6 +1460,8 @@ Proof.
   left; econstructor; split.
   apply plus_one; econstructor; eauto.
   econstructor; eauto. eapply call_cont_commut; eauto.
+  etransitivity. eauto. instantiate (1:= Q). eapply ext_acci_free; eauto.
+  erewrite <- stackspace_function_translated; eauto.
 - (* Slabel *)
   left; econstructor; split. apply plus_one; constructor. econstructor; eauto.
 - (* Sgoto *)
@@ -1426,20 +1487,25 @@ Proof.
   econstructor; simpl; eauto.
   apply match_cont_other; auto.
   apply set_locals_lessdef. apply set_params_lessdef; auto.
+  etransitivity. eauto. instantiate (1:= B). eapply ext_acci_alloc; eauto.
 - congruence.
 - (* external call *)
   assert (f = External ef) by congruence; subst.
   destruct TF as (hf & HF & TF).
   monadInv TF.
   exploit external_call_mem_extends; eauto.
-  intros [vres' [m2 [A [B [C D]]]]].
+  intros [vres' [m2 [A [B [C [D E]]]]]].
   left; econstructor; split.
   apply plus_one; econstructor; eauto.
-  econstructor; eauto.
+  econstructor; eauto. etransitivity. eauto. instantiate (1:= C).
+  constructor; eauto using external_call_tid, external_call_support.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
 - (* external call turned into a Sbuiltin *)
   assert (ef0 = ef) by congruence; subst.
-  exploit sel_builtin_correct; eauto. intros (e2' & m2' & P & Q & R).
+  exploit sel_builtin_correct; eauto. intros (e2' & m2' & Hm' & P & Q & R).
   left; econstructor; split. eexact P. econstructor; eauto.
+  etransitivity; eauto.
 - (* return *)
   inv MC.
   left; econstructor; split.
@@ -1450,51 +1516,52 @@ Proof.
 Qed.
 
 Lemma sel_initial_states:
-  forall w q1 q2 S, match_query (cc_c ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
-  exists R, initial_state tge q2 R /\ match_states S R.
+  forall w q1 q2 S, GS.match_query (c_ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
+  exists R, initial_state tge q2 R /\ match_states (get w) S R.
 Proof.
   intros [c d Hm] _ _ S [vf vf' sg vargs1 vargs2 m1 m2 Hf Hvargs Hm'] Hq1. inv Hq1.
   CKLR.uncklr.
   exploit functions_translated; eauto. intros (cu & f' & A & B & C).
   setoid_rewrite <- (sig_function_translated _ (Internal f) f'); eauto.
+  inv Hm'.
   econstructor; split.
   - destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - econstructor; eauto.
-    constructor. inv Hm'. auto.
+    constructor. instantiate (1:= Hm). reflexivity.
 Qed.
 
 Lemma sel_external_states:
-  forall S R q1, match_states S R -> Cminor.at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ match_query (cc_c ext) wx q1 q2 /\ se = se /\
-  forall r1 r2 S', match_reply (cc_c ext) wx r1 r2 -> Cminor.after_external S r1 S' ->
-  exists R', after_external R r2 R' /\ match_states S' R'.
+  forall gw S R q1, match_states gw S R -> Cminor.at_external ge S q1 ->
+  exists wx q2, at_external tge R q2 /\ ext_acci gw (get wx) /\ GS.match_query (c_ext) wx q1 q2 /\ se = se /\
+  forall r1 r2 S' gw'', (get wx) o-> gw'' -> GS.match_reply (c_ext) (CallconvBig.set wx gw'') r1 r2 -> Cminor.after_external S r1 S' ->
+  exists R', after_external R r2 R' /\ match_states gw'' S' R'.
 Proof.
   intros. inv H0. inv H.
   2: { assert (ef = EF_external name sg) by congruence; subst. discriminate. }
   eapply functions_translated in H1 as (cu & f'' & A & B & C); eauto.
-  eexists (extw m m' ME), _. intuition idtac.
+  eexists (extw m m' Hm), _. intuition idtac.
   - rewrite A in TFIND. inv TFIND. destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - destruct LF; try discriminate.
     econstructor; CKLR.uncklr; eauto. constructor.
     destruct v; cbn in *; congruence.
-  - destruct H as ([ ] & _ & H). destruct H. CKLR.uncklr. inv H0.
-    eexists; split; econstructor; eauto. inv H1. auto.
+  - destruct H0. CKLR.uncklr. inv H2. inv H1.
+    eexists; split; econstructor; eauto. simpl in H3. rewrite H3. reflexivity.
 Qed.
 
 Lemma sel_final_states:
-  forall w S R r1, match_states S R -> Cminor.final_state S r1 ->
-  exists r2, final_state R r2 /\ match_reply (cc_c ext) w r1 r2.
+  forall wp S R r1, match_states wp S R -> Cminor.final_state S r1 ->
+  exists r2 wp', final_state R r2 /\ (get w) o-> wp' /\ ext_acci wp wp' /\ GS.match_reply (c_ext) (CallconvBig.set w wp') r1 r2.
 Proof.
   intros. inv H0. inv H. inv MC.
-  eexists. split. econstructor; eauto.
-  eexists. split; econstructor; CKLR.uncklr; eauto.
-  instantiate (1:= extw m m' ME). constructor.
+  eexists. exists (extw m m' Hm). split. econstructor; eauto.
+  split. reflexivity. split. auto.
+  econstructor; CKLR.uncklr; eauto.
+  constructor.
 Qed.
 
 End PRESERVATION.
-
 
 Lemma eventually_restrict: forall n prog se1 S P I I_inv,
     eventually prog se1 n S P ->
@@ -1511,9 +1578,10 @@ Proof.
     eapply IHn; eauto.
 Qed.
 
+Require Import InvariantC.
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext)
+  GS.forward_simulation (wt_c @ c_ext)
     (Cminor.semantics prog)
     (CminorSel.semantics tprog).
 Proof.
@@ -1521,7 +1589,11 @@ Proof.
   eapply source_invariant_fsim; eauto using cminor_wt, wt_prog.
   revert MATCH.
   set (MS := match_states prog tprog).
-  fsim apply forward_simulation_eventually_star with (measure := measure )(match_states := fun S T => MS se1 S T /\ exists sg, wt_state (Genv.globalenv se1 prog) (sig_res sg) S);
+  intros MATCH. constructor.
+  eapply GS.Forward_simulation.
+  + try fsim_skel MATCH.
+  + intros se1 se2 w Hse Hse1. simpl in w.
+  eapply GS.forward_simulation_eventually_star with (measure := measure )(match_states := fun wp S T => MS se1 wp S T /\ exists sg, wt_state (Genv.globalenv se1 prog) (sig_res sg) S);
   try destruct Hse.
 - destruct 1. CKLR.uncklr. destruct H; try congruence.
   eapply (Genv.is_internal_match_id MATCH).
@@ -1532,10 +1604,10 @@ Proof.
   intros (T & P & Q). 
   exists T. split. cbn. eauto. split. unfold MS. eauto.
   exists sg. eauto.
-- intros S1 S2 r1 (M & W) (Hr1 & _).
-  eapply sel_final_states; eauto.
-- intros S1 S2 q1 (M & W) (Hq1 & _). cbn in *.
-  edestruct sel_external_states as (wx & q2 & Hq2 & Hq & _ & Hr); eauto.
+- intros wp S1 S2 r1 (M & W) (Hr1 & _).
+  eapply sel_final_states; eauto. 
+- intros wp S1 S2 q1 (M & W) (Hq1 & _). cbn in *.
+  edestruct sel_external_states as (wx & q2 & Hq2 & ACI & Hq & _ & Hr); eauto.
   exists wx, q2. intuition auto.
   edestruct Hr as (s2' & Hs2' & Hs'); eauto.
   exists s2'. split. eauto. split. eauto. 

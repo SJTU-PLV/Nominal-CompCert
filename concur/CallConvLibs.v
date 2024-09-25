@@ -156,13 +156,13 @@ Qed.
 
 (** * Definition of new extend, including some internal (and? external) accessibilities for composing with injp *)
 Require Import Extends.
-
+(*
 Definition free_preserved_ext (m1 m1' m2': mem) : Prop :=
   forall b ofs, fst b <> Mem.tid (Mem.support m1) ->
            Mem.perm m1 b ofs Max Nonempty ->
            ~ Mem.perm m1' b ofs Max Nonempty ->
            ~ Mem.perm m2' b ofs Max Nonempty.
-
+*)
 Inductive ext_acci : relation ext_world :=
     ext_acci_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
                      (m1' m2' : mem) (Hm' : Mem.extends m1' m2')

@@ -3310,7 +3310,7 @@ Qed.
 Lemma external_states_simulation:
   forall gw S R q1, match_states gw S R -> at_external ge S q1 ->
   exists wx q2, at_external tge R q2 /\ gw *-> wx /\ cc_c_query injp wx q1 q2 /\ match_stbls injp wx se tse /\
-  forall r1 r2 S' gw'', wx o-> gw'' /\ (cc_c_reply injp) gw'' r1 r2 -> after_external S r1 S' ->
+  forall r1 r2 S' gw'', wx o-> gw'' -> (cc_c_reply injp) gw'' r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states gw'' S' R'.
 Proof.
   intros gw S R q1 HSR Hq1.
@@ -3330,15 +3330,15 @@ Proof.
     + inv GE. eapply Mem.sup_include_trans; eauto.
       rewrite <- H2 in ACCE. inv ACCE. destruct H14 as [_ H14]. inversion H14. auto.
   - inv H0.
-    inv H1. inv H2. inv H11. eexists. split.
+    inv H1. inv H3. inv H. eexists. split.
     + econstructor; eauto.
-    + inversion H8. inversion H9. econstructor; eauto.
+    + inversion H11. inversion H12. simpl in *. econstructor; eauto.
       intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
-      eapply match_cont_extcall; eauto. simpl. inversion Hm'. inv mi_thread. auto.
+      eapply match_cont_extcall; eauto. simpl. inversion Hm2. inv mi_thread. auto.
       eapply Mem.unchanged_on_support; eauto.
       eapply Mem.unchanged_on_support; eauto.
       simpl. etransitivity; eauto.
-      instantiate (1:= Hm').
+      instantiate (1:= Hm1).
       constructor; eauto. simpl. reflexivity.
 Qed.
 

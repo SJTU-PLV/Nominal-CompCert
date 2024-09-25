@@ -2868,7 +2868,7 @@ Proof.
     eapply transf_final_states; eauto.
   - intros gw s1 s2 q1 Hs (Hq1 & [? ?] & ? & Hx & WTS & WTQ). cbn in Hx. subst.
     edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
-    exists wx, qx2. intuition auto. destruct H5 as (Hs1' & _).
+    exists wx, qx2. intuition auto. destruct H6 as (Hs1' & _).
     edestruct H4 as (st2' & ? & ?); eauto.
   - intros s1 t s1' (Hs1' & [xse ?] & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
     eapply transf_step_correct; eauto.

@@ -778,7 +778,7 @@ Opaque loadind.
   generalize (transf_function_no_overflow _ _ H3); intro NOOV.
   exploit builtin_args_match; eauto. intros [vargs' [P Q]].
   exploit external_call_mem_extends; eauto.
-  intros [vres' [m2' [A [B [C D]]]]].
+  intros [vres' [m2' [A [B [C [D E]]]]]].
   left. econstructor; split. apply plus_one.
   eapply exec_step_builtin. eauto. eauto.
   eapply find_instr_tail; eauto.
@@ -1015,7 +1015,7 @@ Transparent destroyed_at_function_entry.
   exploit extcall_arguments_match; eauto.
   intros [args' [C D]].
   exploit external_call_mem_extends; eauto.
-  intros [res' [m2' [P [Q [R S]]]]].
+  intros [res' [m2' [P [Q [R [S T]]]]]].
   left; econstructor; split.
   apply plus_one. eapply exec_step_external; eauto.
   inv ATPC. auto. destruct S.

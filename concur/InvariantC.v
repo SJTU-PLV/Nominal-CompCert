@@ -62,7 +62,7 @@ Proof.
     exists wA, q. repeat apply conj; cbn; eauto.
     + constructor. auto.
     + constructor. auto.
-    + intros r' r'' s' t [Hr'] Hs'. inv H0.
+    + intros r' r'' s' t t' [Hr'] Hs'.
       exists s'. split; eauto.
       econstructor.
       eapply Hr; eauto.
@@ -147,7 +147,7 @@ Proof.
     - intros tt s _ q [Hs] Hx.
       edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
       eexists wA, q. intuition eauto 10 using rel_inv_intro.
-      destruct H4. exists s1'. intuition eauto 20 using rel_inv_intro.
+      destruct H2. exists s1'. intuition eauto 20 using rel_inv_intro.
     - intros s t s' STEP a b [Hs].
       assert (IS w s') by (eapply preserves_step; eauto).
       exists s'. eauto 10 using rel_inv_intro.

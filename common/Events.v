@@ -652,6 +652,11 @@ Definition free_preserved j m1 m1' m2' :=
     Mem.perm m1 b1 ofs1 Max Nonempty -> ~ Mem.perm m1' b1 ofs1 Max Nonempty ->
     ~ Mem.perm m2' b2 (ofs1 + delta) Max Nonempty.
 
+Definition free_preserved_ext (m1 m1' m2': mem) : Prop :=
+  forall b ofs, fst b <> Mem.tid (Mem.support m1) ->
+           Mem.perm m1 b ofs Max Nonempty ->
+           ~ Mem.perm m1' b ofs Max Nonempty ->
+           ~ Mem.perm m2' b ofs Max Nonempty.
 
 Definition new_block_local m1 m2 :=
   forall b, ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
@@ -711,7 +716,8 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
        sem ge vargs' m1' t vres' m2'
     /\ Val.lessdef vres vres'
     /\ Mem.extends m2 m2'
-    /\ Mem.unchanged_on_tl (loc_out_of_bounds m1) m1' m2';
+    /\ Mem.unchanged_on_tl (loc_out_of_bounds m1) m1' m2'
+    /\ free_preserved_ext m1 m2 m2';
 
 (** External calls must commute with memory injections,
   in the following sense. *)
@@ -826,7 +832,7 @@ Proof.
 (* mem extends *)
 - inv H. inv H1. inv H6. inv H4.
   exploit volatile_load_extends; eauto. intros [v' [A B]].
-  exists v'; exists m1'; intuition. constructor; auto.
+  exists v'; exists m1'; intuition. constructor; auto. red. intros. congruence.
 (* mem injects *)
 - inv H0. inv H2. inv H7. inversion H5; subst.
   exploit volatile_load_inject; eauto. intros [v' [A B]].
@@ -982,6 +988,7 @@ Proof.
 - inv H. inv H1. inv H6. inv H7. inv H4.
   exploit volatile_store_extends; eauto. intros [m2' [A [B C]]].
   exists Vundef; exists m2'; intuition. constructor; auto.
+  red. intros. inv H2. congruence. intro. apply H4. eauto with mem.
 (* mem inject *)
 - inv H0. inv H2. inv H7. inv H8. inversion H5; subst.
   exploit volatile_store_inject; eauto. intros [m2' [A [B [C D]]]].
@@ -1073,7 +1080,7 @@ Proof.
   intros [m2' [C D]].
   exists (Vptr b Ptrofs.zero); exists m2'; intuition.
   econstructor; eauto.
-  eapply UNCHANGED; eauto.
+  eapply UNCHANGED; eauto. red. intros. intro. apply H4. eauto with mem.
 (* mem injects *)
 - inv H0. inv H2. inv H8.
   assert (SZ: v' = Vptrofs sz).
@@ -1168,11 +1175,12 @@ Proof.
   assert (Mem.perm m1 b i Max Nonempty).
   { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
     eapply Mem.free_range_perm. eexact H4. eauto. }
-  tauto.
+  tauto. red. intros. eapply Mem.perm_free_inv in H1; eauto. destruct H1 as [[X Y]|X]; try congruence.
+  subst b0. eapply Mem.perm_free_2; eauto.
 + inv H1. inv H5. replace v2 with Vnullptr.
   exists Vundef; exists m1'; intuition auto.
   constructor. split. eauto.
-  apply Mem.unchanged_on_refl.
+  apply Mem.unchanged_on_refl. red. intros. congruence.
   unfold Vnullptr in *; destruct Archi.ptr64; inv H3; auto.
 (* mem inject *)
 - inv H0.
@@ -1282,13 +1290,13 @@ Proof.
   exists Vundef; exists m2'.
   split. econstructor; eauto.
   split. constructor.
-  split. auto. split. erewrite <- Mem.support_storebytes; eauto.
+  split. auto. split. split. erewrite <- Mem.support_storebytes; eauto.
   eapply Mem.storebytes_unchanged_on; eauto. unfold loc_out_of_bounds; intros.
   assert (Mem.perm m1 bdst i Max Nonempty).
   apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
   eapply Mem.storebytes_range_perm; eauto.
   erewrite list_forall2_length; eauto.
-  tauto.
+  tauto. red. intros. elim H10. eauto with mem.
 - (* injections *)
   intros. inv H0. inv H2. inv H14. inv H15. inv H11. inv H12.
   destruct (zeq sz 0).
@@ -1399,7 +1407,7 @@ Proof.
 - inv H.
   exists Vundef; exists m1'; intuition.
   econstructor; eauto.
-  eapply eventval_list_match_lessdef; eauto.
+  eapply eventval_list_match_lessdef; eauto. red. intros. congruence.
 (* mem injects *)
 - inv H0.
   exists f; exists Vundef; exists m1'; intuition.
@@ -1447,7 +1455,7 @@ Proof.
 - inv H. inv H1. inv H6.
   exists v2; exists m1'; intuition.
   econstructor; eauto.
-  eapply eventval_match_lessdef; eauto.
+  eapply eventval_match_lessdef; eauto. red. intros. congruence.
 (* mem inject *)
 - inv H0. inv H2. inv H7.
   exists f; exists v'; exists m1'; intuition.
@@ -1493,7 +1501,7 @@ Proof.
 (* mem extends *)
 - inv H.
   exists Vundef; exists m1'; intuition.
-  econstructor; eauto.
+  econstructor; eauto. red. intros. congruence.
 (* mem injects *)
 - inv H0.
   exists f; exists Vundef; exists m1'; intuition.
@@ -1548,7 +1556,7 @@ Proof.
   destruct (bsem vargs') as [vres'|] eqn:?; try contradiction.
   exists vres', m1'; intuition auto using Mem.extends_refl, Mem.unchanged_on_refl_tl.
   constructor; auto.
-  apply val_inject_lessdef; auto.
+  apply val_inject_lessdef; auto. red. intros. congruence.
 (* mem injects *)
 - inv H0. fold bsem in H3.
   specialize (bs_inject _ bsem _ _ _ H2).
