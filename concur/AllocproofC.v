@@ -2552,9 +2552,6 @@ Proof.
   destruct loc_result; cbn in *; intuition congruence.
 Qed.
 
-Compute GS.gworld (c_ext @ cc_c_locset).
-Compute GS.ccworld (c_ext @ cc_c_locset).
-
 Definition local_set (w: GS.ccworld (c_ext @ cc_c_locset)) (wp: ext_world) :=
   (fst w, (wp, snd (snd w))).
 
