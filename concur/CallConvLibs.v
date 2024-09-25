@@ -273,9 +273,10 @@ Proof.
     + red. intros. apply MPD2. auto. apply MPD3. apply SUP2. auto. auto.
 Qed.
 
+Lemma ext_acci_acce : forall w1 w2, ext_acci w1 w2 -> ext_acce w1 w2.
+Proof. intros. inv H. constructor; eauto. Qed.
 
-
-
+Hint Resolve ext_acci_acce : core.
 
 Program Instance ext_world_id : World ext_world :=
     {
@@ -328,6 +329,15 @@ Program Definition mach_ext : callconv li_mach li_mach :=
     match_senv w := eq;
     match_query := cc_mach_mq ext;
     match_reply := cc_mach_mr ext;    
+  |}.
+
+Program Definition asm_ext : callconv li_asm li_asm :=
+   {|
+    ccworld := ext_world;
+    ccworld_world := ext_world_id;
+    match_senv w := eq;
+    match_query := cc_asm_match ext;
+    match_reply := cc_asm_match ext;    
   |}.
 
 (** Big Problem : bring lower cklrs to C level *)

@@ -1220,7 +1220,8 @@ Inductive match_states: ext_world -> CminorSel.state -> RTL.state -> Prop :=
         (TF: tr_fun tf map f ngoto nret rret)
         (TK: tr_cont tf.(fn_code) map k ncont nexits ngoto nret rret cs)
         (ME: match_env map e nil rs)
-        (MEXT: ext_acci wp (extw m tm Hm)),
+        (ACI: ext_acci wp (extw m tm Hm))
+        (ACE: ext_acce w (extw m tm Hm)),
       match_states wp (CminorSel.State f s k sp e m)
                    (RTL.State cs tf sp ns rs tm)
   | match_callstate:
@@ -1228,14 +1229,16 @@ Inductive match_states: ext_world -> CminorSel.state -> RTL.state -> Prop :=
         (MS: match_stacks k cs)
         (LF: Val.lessdef vf tvf)
         (LD: Val.lessdef_list args targs)
-        (MEXT: ext_acci wp (extw m tm Hm)),
+        (ACI: ext_acci wp (extw m tm Hm))
+        (ACE: ext_acce w (extw m tm Hm)),
       match_states wp (CminorSel.Callstate vf args k m)
                    (RTL.Callstate cs tvf targs tm)
   | match_returnstate:
       forall v tv k m tm cs wp Hm
         (MS: match_stacks k cs)
         (LD: Val.lessdef v tv)
-        (MEXT: ext_acci wp (extw m tm Hm)),
+        (ACI: ext_acci wp (extw m tm Hm))
+        (ACE: ext_acce w (extw m tm Hm)),
       match_states wp (CminorSel.Returnstate v k m)
                    (RTL.Returnstate cs tv tm).
 
@@ -1318,11 +1321,11 @@ Proof.
   assert (fn_stacksize tf = fn_stackspace f).
     inv TF. auto.
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
+  exploit ext_acci_free. apply H0. eauto. intro ACCI.  
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn. eauto.
   rewrite H3. eauto.
-  econstructor; auto. etransitivity. eauto. instantiate (1:= H5).
-  eapply ext_acci_free; eauto.
+  econstructor; auto. etransitivity. eauto. instantiate (1:= H5). eauto. etransitivity; eauto.
 
   (* assign *)
   inv TS.
@@ -1331,7 +1334,7 @@ Proof.
   econstructor; split.
   right; split. eauto. Lt_state.
   econstructor; eauto. constructor.
-  etransitivity; eauto.
+  etransitivity; eauto. etransitivity; eauto.
 
   (* store *)
   inv TS.
@@ -1344,13 +1347,14 @@ Proof.
     apply list_map_exten. intros. apply K. auto.
   edestruct eval_addressing_lessdef as [vaddr' [ ]]; eauto.
   edestruct Mem.storev_extends as [tm''' [ ]]; eauto.
+  exploit ext_acci_storev. apply H2. eauto. eauto. intro ACCI.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact F. reflexivity.
   eapply exec_Istore with (a := vaddr'); eauto.
   traceEq.
-  econstructor; eauto. constructor.
-  etransitivity. eauto. etransitivity. eauto. etransitivity. eauto.
-  instantiate (1:= H7). eapply ext_acci_storev; eauto.
+  econstructor; eauto. constructor.  instantiate (1:= H7).
+  do 2 etransitivity; eauto.
+  do 2 etransitivity; eauto.
 
   (* call *)
   inv TS; inv H.
@@ -1366,7 +1370,9 @@ Proof.
   apply sig_transl_function; auto.
   traceEq.
   econstructor; auto. econstructor; eauto.
-  simpl. rewrite J. eauto. simpl; auto. etransitivity. eauto. etransitivity. eauto. eauto.
+  simpl. rewrite J. eauto. simpl; auto.
+  etransitivity; eauto. etransitivity; eauto.
+  etransitivity; eauto. etransitivity; eauto.
   (* direct *)
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [Hm'' [E [F [G [J Y]]]]]]].
@@ -1379,7 +1385,8 @@ Proof.
   traceEq.
   econstructor; auto. econstructor; eauto.
   cbn. unfold Genv.symbol_address. cbn in H4. rewrite H4. auto.
-  etransitivity; eauto.
+  instantiate (1:= Hm'').
+  etransitivity; eauto. etransitivity; eauto.
 
   (* tailcall *)
   inv TS; inv H.
@@ -1392,6 +1399,7 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
+  exploit ext_acci_free. apply H3. eauto. intro ACCI.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
   eapply exec_Itailcall; eauto. simpl. rewrite J. eauto. simpl; auto.
@@ -1400,8 +1408,10 @@ Proof.
   traceEq.
   econstructor; auto.
   simpl. rewrite J. eauto. simpl; auto.
-  etransitivity; eauto. etransitivity. eauto. etransitivity. eauto.
-  instantiate (1:= H4). eapply ext_acci_free; eauto.
+  instantiate (1:= H4).
+  do 2 etransitivity; eauto.
+  do 2 etransitivity; eauto. 
+
   (* direct *)
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [Hm'' [E [F [G [J Y]]]]]]].
@@ -1409,6 +1419,7 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
+  exploit ext_acci_free. apply H3. eauto. intro ACCI.
   econstructor; split.
   left; eapply plus_right. eexact E.
   eapply exec_Itailcall; eauto.
@@ -1417,9 +1428,9 @@ Proof.
   rewrite H; eauto.
   traceEq.
   econstructor; auto.
-  simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto.
-  etransitivity. eauto. etransitivity. eauto. instantiate (1:= H4).
-  eapply ext_acci_free; eauto.
+  simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto. instantiate (1:= H4).
+  etransitivity; eauto. etransitivity; eauto.
+  etransitivity; eauto. etransitivity; eauto.
 
   (* builtin *)
   inv TS.
@@ -1432,16 +1443,18 @@ Proof.
   intros (vargs'' & X & Y).
   assert (Z: Val.lessdef_list vl vargs'') by (eapply Val.lessdef_list_trans; eauto).
   edestruct external_call_mem_extends as [tv [tm'' [A [B [C [D I]]]]]]; eauto.
+  assert (ACCI: ext_acci (extw m tm' Hm') (extw m' tm'' C)).
+  econstructor; eauto using external_call_tid, external_call_support; try (red; intros; congruence).
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
   econstructor; split.
   left. eapply plus_right. eexact E.
   eapply exec_Ibuiltin; eauto.
   traceEq.
   econstructor; eauto. constructor.
   eapply match_env_update_res; eauto.
-  etransitivity. eauto. etransitivity. eauto. instantiate (1:= C).
-  econstructor; eauto using external_call_tid, external_call_support; try (red; intros; congruence).
-  red. intros. eapply external_call_max_perm; eauto.
-  red. intros. eapply external_call_max_perm; eauto.
+  etransitivity. eauto. etransitivity. eauto. instantiate (1:= C). eauto.
+  etransitivity. eauto. etransitivity; eauto.
 
   (* seq *)
   inv TS.
@@ -1454,7 +1467,8 @@ Proof.
   exploit transl_condexpr_correct; eauto. intros [rs' [tm' [Hm' [A [B [C D]]]]]].
   econstructor; split.
   left. eexact A.
-  destruct b; econstructor; eauto. etransitivity; eauto. etransitivity; eauto.
+  destruct b; econstructor; eauto. instantiate (1:= Hm').
+  etransitivity; eauto.  etransitivity; eauto.  etransitivity; eauto.  etransitivity; eauto.
 
   (* loop *)
   inversion TS; subst.
@@ -1494,18 +1508,20 @@ Proof.
   intros (nd & rs' & tm' & Hm' & A & B & C & D).
   econstructor; split.
   right; split. eexact A. Lt_state.
-  econstructor; eauto. constructor; auto. etransitivity; eauto.
+  econstructor; eauto. constructor; auto.
+  etransitivity; eauto. etransitivity; eauto.
 
   (* return none *)
   inv TS.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
+  exploit ext_acci_free. apply H. apply H3. intro ACCI.
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn; eauto.
   rewrite H2; eauto.
-  econstructor; auto. etransitivity. eauto. instantiate (1:= H4).
-  eapply ext_acci_free; eauto.
+  econstructor; auto. etransitivity. eauto.  instantiate (1:= H4). eauto.
+  etransitivity; eauto.
 
   (* return some *)
   inv TS.
@@ -1514,12 +1530,13 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm'' [ ]]; eauto.
+  exploit ext_acci_free. apply H0. eauto. intro ACCI.
   econstructor; split.
   left; eapply plus_right. eexact A. eapply exec_Ireturn; eauto.
   rewrite H4; eauto. traceEq.
   simpl. econstructor; auto. etransitivity. eauto.
-  etransitivity. eauto. instantiate (1:= H6).
-  eapply ext_acci_free; eauto.
+  etransitivity. eauto. instantiate (1:= H6). eauto.
+  etransitivity; eauto. etransitivity; eauto.
 
   (* label *)
   inv TS.
@@ -1548,23 +1565,27 @@ Proof.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
   edestruct Mem.alloc_extends as [tm' [ ]]; eauto; try apply Z.le_refl.
+  exploit ext_acci_alloc. apply H. eauto. intro ACCI.
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
   econstructor; eauto.
   inversion MS; subst; econstructor; eauto.
-  etransitivity. eauto. instantiate (1:= H6). eapply ext_acci_alloc; eauto.
+  etransitivity. eauto. instantiate (1:= H6). eauto.
+  etransitivity; eauto.
 
   (* external call *)
   exploit functions_translated; eauto. intros [tf' [P TF]].
   monadInv TF.
   edestruct external_call_mem_extends as [tvres [tm' [A [B [C [D E]]]]]]; eauto.
-  econstructor; split.
-  left; apply plus_one. eapply exec_function_external; eauto.
-  econstructor; auto. etransitivity. eauto. instantiate (1:= C).
+  assert (ACCI: ext_acci (extw m tm Hm) (extw m' tm' C)).
   econstructor; eauto using external_call_tid, external_call_support; try (red; intros; congruence).
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  econstructor; split.
+  left; apply plus_one. eapply exec_function_external; eauto.
+  econstructor; auto. etransitivity. eauto. instantiate (1:= C). eauto.
+  etransitivity; eauto.
   
   (* return *)
   inv MS.
@@ -1581,10 +1602,11 @@ Proof.
   intros. inv H0. inv H. uncklr.
   exploit functions_translated; eauto. intros [tf [A B]].
   setoid_rewrite <- (sig_transl_function (Internal f)); eauto.
-  monadInv B. inv H8.
+  monadInv B. destruct w eqn: Hw. inv H8. clear Hm1 Hm2.
   econstructor; split.
   - econstructor; eauto.
   - econstructor; eauto. constructor. reflexivity.
+    rewrite Hw. reflexivity.
 Qed.
 
 
@@ -1593,7 +1615,7 @@ Lemma transl_final_states:
   exists r2 wp', RTL.final_state R r2 /\ (get w) o-> wp' /\ ext_acci wp wp' /\ GS.match_reply (c_ext) wp' r1 r2.
 Proof.
   intros. inv H0. inv H. inv MS.
-  eexists. exists (extw m tm Hm). split. constructor; auto. split. reflexivity.
+  eexists. exists (extw m tm Hm). split. constructor; auto. split. auto.
   split. auto.
   econstructor; uncklr; eauto. constructor.
 Qed.
@@ -1614,7 +1636,8 @@ Proof.
     destruct v; cbn in *; congruence.
   - inv H0. inv H2. inv H4. uncklr.
     eexists. split. econstructor; eauto. econstructor; eauto. simpl in H0.
-    rewrite <- H0. reflexivity.
+    rewrite <- H0. reflexivity. etransitivity. eauto.
+    simpl in H0. rewrite H0. auto.
 Qed.
 
 End CORRECTNESS.

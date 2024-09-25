@@ -319,7 +319,8 @@ Inductive match_states: ext_world -> state -> state -> Prop :=
         (STACKS: match_stackframes s s')
         (SP: fst sp = local_tid)
         (RLD: regs_lessdef rs rs')
-        (MLD: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)),
       match_states wp (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (State s' (transf_function f) (Vptr sp Ptrofs.zero) pc rs' m')
   | match_states_call:
@@ -328,6 +329,7 @@ Inductive match_states: ext_world -> state -> state -> Prop :=
       Val.lessdef vf vf' ->
       Val.lessdef_list args args' ->
       ext_acci wp (extw m m' Hm) ->
+      ext_acce w (extw m m' Hm) ->
       match_states wp (Callstate s vf args m)
                    (Callstate s' vf' args' m')
   | match_states_return:
@@ -335,21 +337,23 @@ Inductive match_states: ext_world -> state -> state -> Prop :=
       match_stackframes s s' ->
       Val.lessdef v v' ->
       ext_acci wp (extw m m' Hm) ->
+      ext_acce w (extw m m' Hm) ->
       match_states wp (Returnstate s v m)
                    (Returnstate s' v' m')
   | match_states_interm:
       forall s sp pc rs m s' m' f r v' wp Hm
         (STACKS: match_stackframes s s')
         (SP: fst sp = local_tid)
-        (MLD: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)),
       is_return_spec f pc r ->
       f.(fn_stacksize) = 0 ->
       Val.lessdef (rs#r) v' ->
       match_states wp (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (Returnstate s' v' m').
 
-Lemma ext_acci_local_tid : forall m tm Hm,
-    ext_acci w (extw m tm Hm) ->
+Lemma ext_acce_local_tid : forall m tm Hm,
+    ext_acce w (extw m tm Hm) ->
     Mem.tid (Mem.support m) = local_tid.
 Proof.
   intros. unfold local_tid. inv H. eauto.
@@ -441,10 +445,11 @@ Proof.
   intros [a' [ADDR' ALD]].
   exploit Mem.storev_extends. 2: eexact H1. eauto. eauto. apply RLD.
   intros [m'1 [STORE' MLD']].
+  exploit ext_acci_storev. apply H1. eauto. eauto. intro ACCI.
   left. exists (State s' (transf_function f) (Vptr sp0 Ptrofs.zero) pc' rs' m'1); split.
   eapply exec_Istore with (a := a'); eauto.
-  econstructor; eauto. etransitivity. eauto. instantiate (1:= MLD').
-  eapply ext_acci_storev; eauto.
+  econstructor; eauto. etransitivity. eauto. instantiate (1:= MLD'). eauto.
+  etransitivity; eauto.
 
 - (* call *)
   exploit (ros_address_translated ros); eauto. intros FEXT.
@@ -459,28 +464,32 @@ Proof.
   eapply exec_Itailcall; eauto. apply sig_preserved.
   exploit Mem.free_right_extends; eauto.
   rewrite stacksize_preserved. rewrite H7. intros. extlia. intro Hm'.
-  econstructor; eauto. eapply match_stackframes_tail; eauto. apply regs_lessdef_regs; auto.
-  etransitivity. eauto. instantiate (1:= Hm').
+  assert (ACCI: ext_acci (extw m m' Hm) (extw m m'' Hm')).
   constructor; eauto; try (red; intros; congruence);
     try (erewrite <- Mem.support_free; eauto).
   red. intros. eauto with mem.
+  econstructor; eauto. eapply match_stackframes_tail; eauto. apply regs_lessdef_regs; auto.
+  etransitivity; eauto.  etransitivity; eauto.
+
+  
 + (* call that remains a call *)
   left. exists (Callstate (Stackframe res (transf_function f) (Vptr sp0 Ptrofs.zero) pc' rs' :: s')
                           (ros_address tge ros rs') (rs'##args) m'); split.
   eapply exec_Icall; eauto. apply sig_preserved.
   econstructor. constructor; auto.
-  apply ros_address_translated; auto. apply regs_lessdef_regs; auto. eauto.
+  apply ros_address_translated; auto. apply regs_lessdef_regs; auto. eauto. eauto.
 
 - (* tailcall *)
   exploit (ros_address_translated ros); eauto. intros FEXT.
   exploit functions_translated; eauto using ros_address_translated. intro FIND'.
   exploit Mem.free_parallel_extends; eauto. intros [m'1 [FREE EXT]].
+  exploit ext_acci_free. apply H2. eauto. intro ACCI.
   TransfInstr.
   left. eexists (Callstate s' _ (rs'##args) m'1); split.
   eapply exec_Itailcall; eauto. apply sig_preserved.
   rewrite stacksize_preserved; auto.
   econstructor; auto.  apply regs_lessdef_regs; auto. instantiate (1:= EXT).
-  etransitivity. eauto. eapply ext_acci_free; eauto.
+  etransitivity; eauto.   etransitivity; eauto. 
 
 - (* builtin *)
   TransfInstr.
@@ -488,12 +497,14 @@ Proof.
   intros (vargs' & P & Q).
   exploit external_call_mem_extends; eauto.
   intros [v' [m'1 [A [B [C [D E]]]]]].
+  assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m'1 C)).
+  econstructor; eauto using external_call_tid, external_call_support.
+  red. intros. eauto using external_call_max_perm.
+  red. intros. eauto using external_call_max_perm.
   left. exists (State s' (transf_function f) (Vptr sp0 Ptrofs.zero) pc' (regmap_setres res v' rs') m'1); split.
   eapply exec_Ibuiltin; eauto.
-  econstructor; eauto. apply set_res_lessdef; auto. etransitivity. eauto.
-  instantiate (1:= C). econstructor; eauto using external_call_tid, external_call_support.
-  red. intros. eauto using external_call_max_perm.
-  red. intros. eauto using external_call_max_perm.
+  econstructor; eauto. apply set_res_lessdef; auto.
+  etransitivity; eauto. etransitivity; eauto.
 
 - (* cond *)
   TransfInstr.
@@ -514,34 +525,40 @@ Proof.
   TransfInstr.
   left. exists (Returnstate s' (regmap_optget or Vundef rs') m'1); split.
   apply exec_Ireturn; auto. rewrite stacksize_preserved; auto.
+  exploit  ext_acci_free. apply H0. eauto. intro ACCI.
   econstructor. eauto.
   destruct or; simpl. apply RLD. constructor.
-  etransitivity. eauto. instantiate (1:= EXT).
-  eapply ext_acci_free; eauto.
+  etransitivity. eauto. instantiate (1:= EXT). eauto.
+  etransitivity; eauto.
 
 - (* eliminated return None *)
   assert (or = None) by congruence. subst or.
   right. split. simpl. lia. split. auto.
   exploit Mem.free_left_extends; eauto. intro Hm'.
-  econstructor. eauto.
-  simpl. constructor. instantiate (1:= Hm').
-  etransitivity. eauto.
+  assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m'0 Hm')).
   constructor; eauto; try (red; intros; congruence);
     try (erewrite <- Mem.support_free; eauto).
   red. intros. eauto with mem.
   red. intros. elim H2. eapply Mem.perm_free_inv in H3; eauto.
   destruct H3; try congruence. destruct H3. subst b.
-  erewrite ext_acci_local_tid; eauto.
-  red. intros. elim H4. eauto with mem.
+  erewrite ext_acce_local_tid; eauto.
+  econstructor. eauto.
+  simpl. constructor. instantiate (1:= Hm').
+  etransitivity; eauto.  etransitivity; eauto.
   
-
-
 - (* eliminated return Some *)
   assert (or = Some r) by congruence. subst or.
   right. split. simpl. lia. split. auto.
-  constructor. auto.
-  simpl. auto.
-  eapply Mem.free_left_extends; eauto.
+  exploit Mem.free_left_extends; eauto. intro Hm'.
+  assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m'0 Hm')).
+  constructor; eauto; try (red; intros; congruence);
+    try (erewrite <- Mem.support_free; eauto).
+  red. intros. eauto with mem.
+  red. intros. elim H2. eapply Mem.perm_free_inv in H3; eauto.
+  destruct H3; try congruence. destruct H3. subst b.
+  erewrite ext_acce_local_tid; eauto.
+  econstructor. eauto. simpl. auto.
+  etransitivity; eauto.  etransitivity; eauto.
 
 - (* internal call *)
   exploit functions_translated; eauto. intro FIND'.
@@ -554,25 +571,34 @@ Proof.
           fn_params (transf_function f) = fn_params f).
     unfold transf_function. destruct (zeq (fn_stacksize f) 0 && option_eq zeq (cc_vararg (sig_cc (fn_sig f))) None); auto.
   destruct H0 as [EQ1 [EQ2 EQ3]].
+  exploit ext_acci_alloc. apply H. eauto. intro ACCI.
   left. econstructor; split.
   eapply exec_function_internal; eauto. rewrite EQ1; eauto.
-  rewrite EQ2. rewrite EQ3. constructor; auto.
-  apply regs_lessdef_init_regs. auto.
+  rewrite EQ2. rewrite EQ3. econstructor; eauto.
+  apply Mem.alloc_result in H. rewrite H.
+  eapply ext_acce_local_tid. eauto.
+  apply regs_lessdef_init_regs. auto. instantiate (1:= EXT).
+  etransitivity; eauto.  etransitivity; eauto.
 
 - (* external call *)
   exploit functions_translated; eauto. intro FIND'.
   exploit external_call_mem_extends; eauto.
-  intros [res' [m2' [A [B [C D]]]]].
+  intros [res' [m2' [A [B [C [D E]]]]]].
+  assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m2' C)).
+  econstructor; eauto using external_call_tid, external_call_support.
+  red. intros. eauto using external_call_max_perm.
+  red. intros. eauto using external_call_max_perm.
   left. exists (Returnstate s' res' m2'); split.
   simpl. econstructor; eauto.
-  constructor; auto.
+  econstructor; eauto. etransitivity; eauto.
+  etransitivity; eauto.
 
 - (* returnstate *)
   inv H2.
 + (* synchronous return in both programs *)
   left. econstructor; split.
   apply exec_return.
-  constructor; auto. apply set_reg_lessdef; auto.
+  econstructor; eauto. apply set_reg_lessdef; auto.
 + (* return instr in source program, eliminated because of tailcall *)
   right. split. unfold measure. simpl length.
   change (S (length s) * (niter + 2))%nat
@@ -584,42 +610,46 @@ Proof.
 Qed.
 
 Lemma transf_initial_states:
-  forall w q1 q2 st1, match_query (cc_c ext) w q1 q2 -> initial_state ge q1 st1 ->
-  exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
+  forall q1 q2 st1, GS.match_query (c_ext) w q1 q2 -> initial_state ge q1 st1 ->
+  exists st2, initial_state tge q2 st2 /\ match_states (get w) st1 st2.
 Proof.
   intros. destruct H. inv H0. CKLR.uncklr.
   destruct H as [vf | ]; try discriminate.
   exploit functions_translated; eauto. intro FIND.
+  destruct w eqn: Hw. inv H2.
   exists (Callstate nil vf vargs2 m2); split.
   setoid_rewrite <- (sig_preserved (Internal f)). econstructor; eauto.
-  constructor; auto. constructor. inv H2. auto.
+  econstructor; eauto. constructor. simpl. reflexivity.
+  rewrite Hw. reflexivity.
 Qed.
 
 Lemma transf_final_states:
-  forall w st1 st2 r1, match_states st1 st2 -> final_state st1 r1 ->
-  exists r2, final_state st2 r2 /\ match_reply (cc_c ext) w r1 r2.
+  forall wp st1 st2 r1, match_states wp st1 st2 -> final_state st1 r1 ->
+                   exists r2 wp', final_state st2 r2 /\ (get w) o-> wp' /\ ext_acci wp wp' /\
+                                                               GS.match_reply (c_ext) (CallconvBig.set w wp') r1 r2.
 Proof.
   intros. inv H0. inv H. inv H3.
-  eexists; split.
+  eexists. exists (extw m m' Hm). split.
   - constructor.
-  - exists (extw m m' H6). split; constructor; CKLR.uncklr; cbn; auto. constructor.
+  - split. auto. split. auto. constructor; CKLR.uncklr; cbn; auto. constructor.
 Qed.
 
 Lemma transf_external_states:
-  forall st1 st2 q1, match_states st1 st2 -> at_external ge st1 q1 ->
-  exists w q2, at_external tge st2 q2 /\ match_query (cc_c ext) w q1 q2 /\ se = se /\
-  forall r1 r2 st1', match_reply (cc_c ext) w r1 r2 -> after_external st1 r1 st1' ->
-  exists st2', after_external st2 r2 st2' /\ match_states st1' st2'.
+  forall wp st1 st2 q1, match_states wp st1 st2 -> at_external ge st1 q1 ->
+  exists wx q2, at_external tge st2 q2 /\ ext_acci wp (get wx) /\  GS.match_query (c_ext) wx q1 q2 /\ se = se /\
+  forall r1 r2 st1' wp'', (get wx) o-> wp'' -> GS.match_reply (c_ext) (CallconvBig.set w wp'') r1 r2 -> after_external st1 r1 st1' ->
+  exists st2', after_external st2 r2 st2' /\ match_states wp'' st1' st2'.
 Proof.
-  intros st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
+  intros wp st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
   exploit functions_translated; eauto. intro FIND'.
-  exists (extw m m' H8). eexists. intuition idtac.
+  exists (extw m m' Hm). eexists. intuition idtac.
   - econstructor; eauto.
   - destruct H6; try discriminate.
     constructor; CKLR.uncklr; auto. constructor.
     destruct v; cbn in *; congruence.
-  - inv H1. destruct H0 as ([ ] & [ ] & H0). inv H0. CKLR.uncklr.
-    exists (Returnstate s' vres2 m2'); split; constructor; eauto. inv H9. auto.
+  - inv H1. inv H0. inv H5. CKLR.uncklr.
+    exists (Returnstate s' vres2 m2'). split. econstructor; eauto.
+    inv H2. econstructor; eauto. reflexivity. etransitivity. eauto. constructor; eauto.
 Qed.
 
 End PRESERVATION.
@@ -629,13 +659,18 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_c ext) (cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
+  GS.forward_simulation (c_ext) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  fsim eapply forward_simulation_opt with (measure := measure); destruct Hse.
+  intros MATCH. constructor.
+  eapply GS.Forward_simulation.
+  + try fsim_skel MATCH.
+  + intros se1 se2 w Hse Hse1. eapply GS.forward_simulation_opt with (measure := measure); destruct Hse.
   - destruct 1. CKLR.uncklr. destruct H; try congruence.
     eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
   - eapply transf_initial_states; eauto.
   - eapply transf_final_states; eauto.
   - eapply transf_external_states; eauto.
-  - eapply transf_step_correct; eauto.
+  - intros. exploit transf_step_correct; eauto. apply H.
+    auto.
+  + auto using well_founded_ltof.
 Qed.

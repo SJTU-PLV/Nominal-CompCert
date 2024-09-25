@@ -1082,7 +1082,8 @@ Inductive match_states: ext_world -> Cminor.state -> CminorSel.state -> Prop :=
         (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
         (MC: match_cont cunit hf (known_id f) env k k')
         (LD: env_lessdef e e')
-        (ME: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)), 
       match_states wp
         (Cminor.State f s k sp e m)
         (State f' s' k' sp e' m')
@@ -1094,14 +1095,16 @@ Inductive match_states: ext_world -> Cminor.state -> CminorSel.state -> Prop :=
         (MC: match_call_cont k k')
         (LF: Val.lessdef vf vf')
         (LD: Val.lessdef_list args args')
-        (ME: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)), 
       match_states wp
         (Cminor.Callstate vf args k m)
         (Callstate vf' args' k' m')
   | match_returnstate: forall v v' k k' m m' wp Hm
         (MC: match_call_cont k k')
         (LD: Val.lessdef v v')
-        (ME: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)), 
       match_states wp
         (Cminor.Returnstate v k m)
         (Returnstate v' k' m')
@@ -1115,7 +1118,8 @@ Inductive match_states: ext_world -> Cminor.state -> CminorSel.state -> Prop :=
         (FIND: Genv.find_funct ge vf = Some (External ef))
         (NI: ef_inline ef = true)
         (LDE: env_lessdef e e')
-        (ME: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)), 
       match_states wp
         (Cminor.Callstate vf args (Cminor.Kcall optid f sp e k) m)
         (State f' (sel_builtin optid ef al) k' sp e' m')
@@ -1127,7 +1131,8 @@ Inductive match_states: ext_world -> Cminor.state -> CminorSel.state -> Prop :=
         (MC: match_cont cunit hf (known_id f) env k k')
         (LDV: Val.lessdef v v')
         (LDE: env_lessdef (set_optvar optid v e) e')
-        (ME: ext_acci wp (extw m m' Hm)),
+        (ACI: ext_acci wp (extw m m' Hm))
+        (ACE: ext_acce w (extw m m' Hm)), 
       match_states wp
         (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
         (State f' Sskip k' sp e' m').
@@ -1276,12 +1281,13 @@ Proof.
   inv H.
 - (* skip call *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
+  exploit ext_acci_free. apply H0. apply A. intro ACI1.
   left; econstructor; split.
   apply plus_one; econstructor. eapply match_is_call_cont; eauto.
   erewrite stackspace_function_translated; eauto.
   econstructor; eauto. eapply match_is_call_cont; eauto.
-  etransitivity. eauto. instantiate (1:= B).
-  eapply ext_acci_free; eauto.
+  instantiate (1:= B).
+  etransitivity; eauto. etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* assign *)
   exploit sel_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
@@ -1291,10 +1297,12 @@ Proof.
   exploit sel_expr_correct. try apply LINK. try apply HF. eexact H. eauto. eauto. intros [vaddr' [A B]].
   exploit sel_expr_correct. try apply LINK. try apply HF. eexact H0. eauto. eauto. intros [v' [C D]].
   exploit Mem.storev_extends; eauto. intros [m2' [P Q]].
+  exploit  ext_acci_storev. apply H1. eauto. eauto. intro ACCI.
   left; econstructor; split.
   apply plus_one; eapply eval_store; eauto.
   econstructor; eauto. instantiate (1:= Q).
-  etransitivity. eauto. eapply ext_acci_storev; eauto.
+  etransitivity; eauto. etransitivity. eauto.
+  eapply ext_acci_acce; eauto.
 - (* Scall *)
   exploit classify_call_correct; eauto.
   destruct (classify_call (prog_defmap cunit) a) as [ | id | ef].
@@ -1326,6 +1334,8 @@ Proof.
   exploit sel_expr_correct; eauto. intros [vf' [A B]].
   exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
   exploit functions_translated; eauto. intros (cunit' & fd' & E & F & G).
+  exploit ext_acci_free. apply H3.  erewrite <- stackspace_function_translated; eauto.
+  intro ACCI.
   left; econstructor; split.
   apply plus_one.
   exploit classify_call_correct. eexact LINK. eauto. eauto.
@@ -1335,11 +1345,12 @@ Proof.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   eapply match_callstate with (cunit := cunit'); eauto.
-  eapply call_cont_commut; eauto. instantiate (1:= Q). etransitivity. eauto. eapply ext_acci_free; eauto.
-  erewrite <- stackspace_function_translated; eauto.
+  eapply call_cont_commut; eauto. instantiate (1:= Q). etransitivity; eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* Sbuiltin *)
   exploit sel_builtin_correct; eauto. intros (e2' & m2' & Hm' & P & Q & R).
   left; econstructor; split. eexact P. econstructor; eauto. etransitivity; eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* Seq *)
   left; econstructor; split.
   apply plus_one; constructor.
@@ -1387,21 +1398,23 @@ Proof.
   econstructor; eauto.
 - (* Sreturn None *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
+  exploit ext_acci_free. apply H. eauto. intro ACCI.
   erewrite <- stackspace_function_translated in P by eauto.
   left; econstructor; split.
   apply plus_one; econstructor. simpl; eauto.
   econstructor; eauto. eapply call_cont_commut; eauto.
-  etransitivity. eauto. instantiate (1:= Q). eapply ext_acci_free; eauto.
-  erewrite <- stackspace_function_translated; eauto.
+  etransitivity. eauto. instantiate (1:= Q). eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* Sreturn Some *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
+  exploit ext_acci_free. apply H0. eauto. intro ACCI.
   erewrite <- stackspace_function_translated in P by eauto.
   exploit sel_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
   apply plus_one; econstructor; eauto.
   econstructor; eauto. eapply call_cont_commut; eauto.
-  etransitivity. eauto. instantiate (1:= Q). eapply ext_acci_free; eauto.
-  erewrite <- stackspace_function_translated; eauto.
+  etransitivity. eauto. instantiate (1:= Q). eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* Slabel *)
   left; econstructor; split. apply plus_one; constructor. econstructor; eauto.
 - (* Sgoto *)
@@ -1422,12 +1435,14 @@ Proof.
   monadInv TF. generalize EQ; intros TF; monadInv TF.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2' [A B]].
+  exploit ext_acci_alloc. apply H. eauto. intro ACCI.
   left; econstructor; split.
   apply plus_one; econstructor; simpl; eauto.
   econstructor; simpl; eauto.
   apply match_cont_other; auto.
   apply set_locals_lessdef. apply set_params_lessdef; auto.
-  etransitivity. eauto. instantiate (1:= B). eapply ext_acci_alloc; eauto.
+  etransitivity. eauto. instantiate (1:= B). eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - congruence.
 - (* external call *)
   assert (f = External ef) by congruence; subst.
@@ -1435,17 +1450,19 @@ Proof.
   monadInv TF.
   exploit external_call_mem_extends; eauto.
   intros [vres' [m2 [A [B [C [D E]]]]]].
-  left; econstructor; split.
-  apply plus_one; econstructor; eauto.
-  econstructor; eauto. etransitivity. eauto. instantiate (1:= C).
+  assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m2 C)).
   constructor; eauto using external_call_tid, external_call_support.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  left; econstructor; split.
+  apply plus_one; econstructor; eauto.
+  econstructor; eauto. etransitivity. eauto. instantiate (1:= C). eauto.
+  etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* external call turned into a Sbuiltin *)
   assert (ef0 = ef) by congruence; subst.
   exploit sel_builtin_correct; eauto. intros (e2' & m2' & Hm' & P & Q & R).
   left; econstructor; split. eexact P. econstructor; eauto.
-  etransitivity; eauto.
+  etransitivity; eauto. etransitivity. eauto. eapply ext_acci_acce; eauto.
 - (* return *)
   inv MC.
   left; econstructor; split.
@@ -1456,19 +1473,19 @@ Proof.
 Qed.
 
 Lemma sel_initial_states:
-  forall w q1 q2 S, GS.match_query (c_ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
+  forall q1 q2 S, GS.match_query (c_ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states (get w) S R.
 Proof.
-  intros [c d Hm] _ _ S [vf vf' sg vargs1 vargs2 m1 m2 Hf Hvargs Hm'] Hq1. inv Hq1.
+  intros _ _ S [vf vf' sg vargs1 vargs2 m1 m2 Hf Hvargs Hm'] Hq1. inv Hq1.
   CKLR.uncklr.
   exploit functions_translated; eauto. intros (cu & f' & A & B & C).
   setoid_rewrite <- (sig_function_translated _ (Internal f) f'); eauto.
-  inv Hm'.
+  destruct w eqn: Hw. inv Hm'. clear Hm1 Hm2.
   econstructor; split.
   - destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - econstructor; eauto.
-    constructor. instantiate (1:= Hm). reflexivity.
+    constructor. instantiate (1:= Hm). reflexivity. rewrite Hw. reflexivity.
 Qed.
 
 Lemma sel_external_states:
@@ -1488,6 +1505,7 @@ Proof.
     destruct v; cbn in *; congruence.
   - destruct H0. CKLR.uncklr. inv H2. inv H1.
     eexists; split; econstructor; eauto. simpl in H3. rewrite H3. reflexivity.
+    etransitivity. eauto. simpl in H3. rewrite H3. auto.
 Qed.
 
 Lemma sel_final_states:
@@ -1496,7 +1514,7 @@ Lemma sel_final_states:
 Proof.
   intros. inv H0. inv H. inv MC.
   eexists. exists (extw m m' Hm). split. econstructor; eauto.
-  split. reflexivity. split. auto.
+  split. auto. split. auto.
   econstructor; CKLR.uncklr; eauto.
   constructor.
 Qed.
@@ -1533,7 +1551,7 @@ Proof.
   eapply GS.Forward_simulation.
   + try fsim_skel MATCH.
   + intros se1 se2 w Hse Hse1. simpl in w.
-  eapply GS.forward_simulation_eventually_star with (measure := measure )(match_states := fun wp S T => MS se1 wp S T /\ exists sg, wt_state (Genv.globalenv se1 prog) (sig_res sg) S);
+  eapply GS.forward_simulation_eventually_star with (measure := measure )(match_states := fun wp S T => MS w se1 wp S T /\ exists sg, wt_state (Genv.globalenv se1 prog) (sig_res sg) S);
   try destruct Hse.
 - destruct 1. CKLR.uncklr. destruct H; try congruence.
   eapply (Genv.is_internal_match_id MATCH).
