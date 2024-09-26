@@ -76,7 +76,8 @@ Inductive pointer_tid (tid : nat) : val -> Prop :=
                                           
 Inductive cc_stacking_injp_mq: (cc_stacking_world injp) -> _ -> _ -> Prop :=
 | cc_stacking_mq_intro vf1 vf2 sg ls1 m1 sp2 ra2 rs2 m2 f
-      (SPL: pointer_tid (Mem.tid (Mem.support m1)) sp2)
+    (SPL: pointer_tid (Mem.tid (Mem.support m1)) sp2)
+    (RA: ra2 <> Vundef)
       (Hm: Mem.inject f m1 m2):
       vf1 <> Vundef -> Val.inject f vf1 vf2 ->
       (forall r, Val.inject f (ls1 (Locations.R r)) (rs2 r)) ->
@@ -1530,7 +1531,8 @@ Inductive match_stacks (j: meminj):
        list Linear.stackframe -> list stackframe -> signature -> Prop :=
   | match_stacks_base: forall ra sg
         (TY_SP: Val.has_type (init_sp2) Tptr)
-        (TY_RA: Val.has_type ra Tptr),
+        (TY_RA: Val.has_type ra Tptr)
+        (RAN: ra <> Vundef),
       sg = stk_sg w \/ tailcall_possible sg ->
       inject_incr (init_j) j ->
       init_m2 = init_m2' ->
@@ -1551,6 +1553,7 @@ Inductive match_stacks (j: meminj):
         (TID: fst sp' = local_t)
         (NEWSP: ~ Mem.valid_block init_m1 sp /\ ~ Mem.valid_block init_m2 sp')
         (TY_RA: Val.has_type ra Tptr)
+        (RAN: ra <> Vundef)
         (AGL: agree_locs f ls (parent_locset cs))
         (ARGS: forall ofs ty,
            In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
@@ -2428,6 +2431,7 @@ Proof.
   econstructor; eauto.
   econstructor; eauto with coqlib.
   unfold Val.offset_ptr. destruct fb; constructor; eauto.
+  destruct fb; try inv FIND. simpl. congruence.
   intros; red.
     apply Z.le_trans with (size_arguments (Linear.funsig f')); auto.
     apply loc_arguments_bounded; auto.
@@ -2796,6 +2800,7 @@ Proof.
     econstructor; eauto.
     + exploit match_stacks_parent_sp; eauto. unfold local_t, init_m1.
       inv ACCE. destruct H7 as [[_ X] _]. congruence.
+    + inv STACKS. simpl. eauto. simpl. eauto.
     + destruct vf; cbn in *; try congruence.
     + eapply init_args_agree_outgoing_arguments; eauto. apply SEP.
     + rewrite <- sep_assoc in SEP. destruct SEP as ((_ & _ & DISJ) & _ & _).

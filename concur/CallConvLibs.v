@@ -374,10 +374,160 @@ Qed.
 
 Infix "@" := GS.cc_compose (at level 30, right associativity).
 
-Inductive match12_stacking : injp_world -> (injp_world * unit) -> Prop :=
-|match12_stacking_intro : forall f m1 m2 Hm Hm' t,
-    match12_stacking (injpw f m1 m2 Hm) ((injpw f m1 m2 Hm'),t).
+Inductive match12_stacking : injp_world -> (injp_world * (val * signature)) -> Prop :=
+|match12_stacking_intro : forall f m1 m2 m3 Hm Hm' sg sp,
+    args_removed sg sp m3 m2 ->
+    match12_stacking (injpw f m1 m3 Hm) ((injpw f m1 m2 Hm'),(sp, sg)).
 
+Record cc_lm_world :=
+  lmw {
+    lmw_sg : signature;
+    lmw_rs : Mach.regset;
+    lmw_m : mem;
+    lmw_sp : val;
+    }.
+
+Inductive cc_locset_mach_mq: cc_lm_world -> locset_query -> mach_query -> Prop :=
+  cc_locset_mach_mq_intro sg vf m_ rs sp ra m (Hra:ra <> Vundef):
+    args_removed sg sp m m_ ->
+    pointer_tid (Mem.tid (Mem.support m)) sp ->
+    Val.has_type sp Tptr ->
+    Val.has_type ra Tptr ->
+    cc_locset_mach_mq
+      (lmw sg rs m sp)
+      (lq vf sg (make_locset rs m sp) m_)
+      (mq vf sp ra rs m).
+
+Inductive cc_locset_mach_mr: cc_lm_world -> locset_reply -> mach_reply -> Prop :=
+  cc_locset_mach_mr_intro sg rs ls' m'_ sp m rs' m':
+    (forall r, In r (regs_of_rpair (loc_result sg)) -> rs' r = ls' (R r)) ->
+    (forall r, is_callee_save r = true -> rs' r = rs r) ->
+    Mem.unchanged_on (not_init_args (size_arguments sg) sp) m'_ m' ->
+    Mem.unchanged_on (loc_init_args (size_arguments sg) sp) m m' ->
+    Mem.support m'_ = Mem.support m' ->
+    (forall b ofs k p, loc_init_args (size_arguments sg) sp b ofs ->
+                       ~ Mem.perm m'_ b ofs k p) ->
+    (*Mem.extends m'_ m' ->*)
+    cc_locset_mach_mr (lmw sg rs m sp) (lr ls' m'_) (mr rs' m').
+
+Definition cc_lm_gworld : Type := val * signature.
+
+Program Instance cc_lm_lens : Lens (cc_lm_world) (cc_lm_gworld) :=
+  {
+    get := fun w => (lmw_sp w, lmw_sg w);
+    set := fun w gw => lmw (snd gw) (lmw_rs w) (lmw_m w) (fst gw);
+  }.
+Next Obligation.
+  destruct a. reflexivity.
+Qed.
+Next Obligation.
+  destruct t. reflexivity.
+Qed.
+
+Program Instance LMworld : World cc_lm_world :=
+  {
+    w_state := cc_lm_gworld;
+    w_lens := cc_lm_lens;
+    w_acci := fun _ _ => True;
+    w_acce := eq;
+  }.
+
+Program Definition cc_locset_mach: GS.callconv li_locset li_mach :=
+  {|
+    ccworld := cc_lm_world;
+    ccworld_world := LMworld;
+    match_senv _ := eq;
+    match_query := cc_locset_mach_mq;
+    match_reply := cc_locset_mach_mr;
+  |}.
+
+Lemma free_right_inj':
+  forall f m1 m2 b lo hi m2',
+  Mem.mem_inj f m1 m2' ->
+  Mem.free m2 b lo hi = Some m2' ->
+  Mem.mem_inj f m1 m2.
+Proof.
+  intros. exploit Mem.free_result; eauto. intro FREE. inversion H.
+  assert (PERM:
+    forall b1 b2 delta ofs k p,
+    f b1 = Some (b2, delta) ->
+    Mem.perm m1 b1 ofs k p -> Mem.perm m2 b2 (ofs + delta) k p).
+  intros. eapply Mem.perm_free_3; eauto.
+  constructor.
+(* perm *)
+  auto.
+(* align *)
+  eapply mi_align; eauto.
+(* mem_contents *)
+  intros. rewrite FREE in mi_memval; simpl. eauto.
+Qed.
+
+Lemma free_right_inject:
+  forall f m1 m2 b lo hi m2',
+  Mem.inject f m1 m2' ->
+  Mem.free m2 b lo hi = Some m2' ->
+  Mem.inject f m1 m2.
+Proof.
+  intros. inversion H. constructor.
+  inv mi_thread. constructor; auto.
+  erewrite <- (Mem.support_free _ _ _ _ _ H0); eauto.
+(* inj *)
+  eapply free_right_inj'; eauto.
+(* freeblocks *)
+  auto.
+(* mappedblocks *)
+  eauto with mem.
+(* no overlap *)
+  auto.
+(* representable *)
+  auto.
+(* perm inv *)
+  intros. eapply Mem.perm_free_inv in H2; eauto. destruct H2.
+  right. intro. destruct H2. subst b2. eapply Mem.perm_free_2. eauto. eauto. eapply Mem.perm_inject; eauto.
+  eapply mi_perm_inv; eauto with mem.
+Qed.
+
+Lemma inject_removed_inject : forall m1 m2 m3 sg sp j,
+    Mem.inject j m1 m2 ->
+    args_removed sg sp m3 m2 ->
+    Mem.inject j m1 m3.
+Proof.
+  intros. inv H0. eauto.
+  eapply free_right_inject; eauto.
+Qed.
+
+Lemma args_removed_support : forall sg sp m m',
+    args_removed sg sp m m' -> Mem.support m' = Mem.support m.
+Proof.
+  intros. inv H. auto. erewrite Mem.support_free; eauto.
+Qed.
+
+Lemma args_removed_unchanged_on : forall sg sp m m_,
+    args_removed sg sp m m_ ->
+    Mem.unchanged_on (not_init_args (size_arguments sg) sp) m_ m.
+Proof.
+  intros. inv H. eauto with mem.
+  eapply Mem.free_unchanged_on'; eauto.
+  intros. intro. red in H4. apply H4. constructor. auto.
+Qed.
+
+Lemma args_removed_noperm : forall sg sp m m_,
+    args_removed sg sp m m_ ->
+    (forall b ofs k p, loc_init_args (size_arguments sg) sp b ofs -> ~ Mem.perm m_ b ofs k p).
+Proof.
+  intros. inv H. rewrite H1 in H0. inv H0. extlia.
+  inv H0.
+  eapply Mem.perm_free_2; eauto.
+Qed.
+
+Lemma args_removed_acci: forall f m1 m2 m3 f' m1' m3' sg sp Hm13 Hm13' Hm12,
+    injp_acci (injpw f m1 m3 Hm13) (injpw f' m1' m3' Hm13') ->
+    args_removed sg sp m3 m2 ->
+    exists m2' Hm12',
+      args_removed sg sp m3' m2' /\
+        injp_acci (injpw f m1 m2 Hm12) (injpw f' m1' m2' Hm12').
+Admitted.
+                                                                                                                 
 Lemma Stackingtrans : cctrans (cc_stacking_injp) (locset_injp @ cc_locset_mach).
 Proof.
   constructor.
@@ -386,93 +536,162 @@ Proof.
     destruct w2 as [se [[sig wx] [sig' rs]]].
     destruct Hse as [Hse1 Hse2]. simpl in Hse1, Hse2. inv Hse2.
     destruct Hq as [q1' [Hq1 Hq2]]. inv Hq2. simpl in Hq1. inv Hq1.
-    inv H9. simpl in H4, Hse1, H8.
-    set (rs2 := (make_locset rs lmw_m lmw_sp)).
-    inv H5.
-    + (*no stack-allocated arguments *)
-      red in H.
-    exists (stkw injp (injpw f m1 m_ Hm) sig' ls1 lmw_sp m_).
+    inv H10. simpl in H5, Hse1, H9.
+    set (rs2 := (make_locset rs lmw_m0 lmw_sp0)). rename m_ into m2.
+    rename lmw_m0 into m3.
+    assert (Hm13 : Mem.inject f m1 m3). eapply inject_removed_inject; eauto.
+    exists (stkw injp (injpw f m1 m3 Hm13) sig' ls1 lmw_sp0 m3).
     repeat apply conj; eauto.
-    -- econstructor; eauto. admit. (*to de added in LM*)
-       intros. apply H8. constructor. constructor; eauto with mem.
-       split. intro. extlia. intros. exfalso. admit.
-       intros. rewrite H in H0. inv H0. extlia.
-    -- simpl. constructor.
-    -- intros. inv H0. simpl in H1, H3.
-       exists (wp1', tt). simpl. repeat apply conj; eauto.
-       simpl.  inv H1. constructor; eauto.
-       simpl. inv H2. constructor; eauto.
-       inv H3.
-       set (ls2' := make_locset rs2' m2' lmw_sp).
-       exists (lr ls2' m2'). split.
-       constructor; eauto. constructor.
-       constructor; eauto.
-
-       red in H8.
-       intros. specialize (H8 (R r)) as HH.
-       exploit HH. constructor.
-       intro VINJ1.
-       exploit H16. eauto. intro VINJ2. simpl in VINJ1.
-       admit. (** need fix, about callee-save regs *)
-       eauto with mem.
-       intros. rewrite H in H0. inv H0. extlia.
-    +
-      assert (Hm' : Mem.inject f m1 lmw_m). admit.
-      (** It is correct *)
-      simpl in Hse1.
-     exists (stkw injp (injpw f m1 lmw_m Hm') sig' ls1 (Vptr sb sofs) lmw_m).
-     repeat apply conj; eauto.
-     -- inv Hse1. constructor; eauto. erewrite <- Mem.support_free; eauto.
-     -- econstructor; eauto. admit. (*to de added in LM*)
-       intros. apply H8. constructor. constructor; eauto with mem.
-       split. intros. do 2 eexists. split. reflexivity. split.
-       eapply Mem.free_range_perm. eauto. eauto.
-       intros. exploit H2; eauto. intros [v Hv]. exists v. split. auto.
-       exploit H8. eapply loc_external_arg. eauto.
-       simpl. setoid_rewrite Hv. simpl. auto.
-       intros. red. intros. inv H3.
-       intro. exploit Mem.perm_inject. eauto. apply Hm1. eauto.
-       replace (ofs - delta + delta) with ofs by lia.
-       intros.
-       eapply Mem.perm_free_2; eauto. 
-    -- simpl. admit. (** match should contain [args_removed] *)
-    -- intros. inv H3. simpl in H5, H11.
-       exists (wp1', tt). simpl. repeat apply conj; eauto.
-       ++ admit. (** todo *)
-       ++ admit. (** todo *)
-       ++ admit. (** todo *)
-  - red. intros. simpl in wp1, wp2, w1.
-    inv H0. inv H. cbn in H1. inv H2.
+    + inv Hse1. econstructor; eauto. erewrite <- args_removed_support; eauto.
+    + econstructor; eauto. erewrite inject_tid; eauto.
+      intros. apply H9. constructor. constructor; eauto with mem.
+      -- split. intros. inv H3. rewrite H0 in H. extlia.
+      intros. inv H6. do 2 eexists. split. reflexivity.
+      split. eapply Mem.free_range_perm. eauto. eauto.
+      intros. inv H3.  apply tailcall_possible_reg in H. inv H. eauto.
+      exploit H4; eauto. intros [v Hv]. exists v. split. auto.
+      exploit H9. eapply loc_external_arg. eauto.
+      simpl. setoid_rewrite Hv. simpl. auto.
+      -- intros. inv H3. rewrite H0 in H. inv H. extlia. inv H.
+         red. intros. intro. exploit Mem.perm_inject. apply H. apply Hm.
+         eauto. eapply Mem.perm_free_2; eauto. lia.
+    + econstructor; eauto.
+    + intros r1 r2 wp1 wp2 wp1' MATCH ACE ACI MR.
+      inv MATCH. simpl in ACE. rename f0 into f'. rename m0 into m1'.
+      rename m4 into m2'. rename m5 into m3'.
+      destruct wp1' as [f'' m1'' m3'' Hm13''].
+      (* exploit args_removed_acci; eauto. intros (m2'' & Hm12'' & REMOVE & ACCI). *)
+      assert (exists m2'', args_removed sig' lmw_sp0 m3'' m2'').
+      admit. destruct H0 as [m2'' REMOVE].
+      assert (Hm12'' : Mem.inject f'' m1'' m2''). admit.
+      (*memory construction, should be correct *)      
+      exists ((injpw f'' m1'' m2'' Hm12''), (lmw_sp0, sig')). repeat apply conj; simpl; eauto.
+      -- simpl.
+         { clear - H3 REMOVE ACE.
+           inv H3; inv REMOVE. inv ACE. constructor; eauto.
+           rewrite H in H2. inv H2. rewrite H3 in H1. inv H1.
+           inv ACE. constructor; eauto.
+           - red. intros. admit. (*ok*)
+           - red. intros.
+             eapply Mem.perm_free_4 in H4 as NOTI. 2: eauto.
+             eauto with mem.
+           - inv H18. split; eauto. erewrite Mem.support_free; eauto.
+             rewrite (Mem.support_free _ _ _ _ _ H5). auto.
+             inv unchanged_on_e'. constructor; eauto.
+             erewrite Mem.support_free. 2: eauto.
+             rewrite (Mem.support_free _ _ _ _ _ H5). auto.
+             admit. admit. (*ok*)
+           - red. intros. exploit H20; eauto. intros [A B].
+             split; eauto with mem.
+         }
+      -- simpl.
+         
+         admit. (*ACCI, should be ok*)
+      -- inv MR.
+        set (ls2' := make_locset rs2' m2' lmw_sp0).
+        exists (lr ls2' m2''). split.
+        constructor; eauto. constructor.
+        constructor; eauto. admit. (** The problem : how to protect callee-save regs *)
+        eapply args_removed_unchanged_on; eauto.
+        erewrite args_removed_support; eauto.
+        intros. eapply args_removed_noperm; eauto.
+  - red. intros. inv H2. inv H0. simpl in H1, H.
+    rename f0 into f'. rename m0 into m1'. rename m4 into m3'.
+    assert (exists m2', args_removed sg0 sp2 m3' m2' /\ Mem.inject f' m1' m2').
+    admit. destruct H0 as [m2' [REMOVE' Hm12']]. (*construction, should be ok*)
     (* Compute ccworld (locset_injp @ cc_locset_mach). *)
-    exists (se2, (sg, (injpw f m1 m2 Hm), (lmw sg rs2 m2 sp2))).
-    repeat apply conj; eauto.
-    + simpl. inv H1. constructor; eauto.
-    + simpl. auto.
-    + simpl. auto.
-    + simpl. set (ls2 := make_locset rs2 m2 sp2).
-      exists (lq vf2 sg ls2 m2). split.
-      constructor; eauto. red. intros; simpl; eauto.
-      inv H. eauto. inv H6. admit. 
-      constructor.
-      constructor; eauto. admit.
-      (** seems to be right here *)
-    + intros. simpl in H. destruct wp2' as [wp2' a]. destruct a. destruct H.
-      inv H2. simpl in H. exists wp2'. simpl in H0.
-      simpl. split. auto. split. admit.
-      destruct wp2'. constructor.
+    exists (se2, (sg0, (injpw f' m1' m2' Hm12'), (lmw sg0 rs2 m3' sp2))).
+    repeat apply conj; simpl; eauto.
+    + admit. (** problem? using different sg and sp *)
+    + simpl. split. inv H. constructor; eauto. erewrite args_removed_support; eauto.
+      reflexivity.
+    + simpl. set (ls2' := make_locset rs2 m3' sp2).
+      exists (lq vf2 sg0 ls2' m2'). split.
+      econstructor; eauto.
+      -- simpl. red. intros. inv H0. simpl. apply H5. destruct H6 as [A [B C]].
+         exploit C; eauto. intros [v [D E]]. simpl. setoid_rewrite D.
+         rauto.
+      -- constructor.
+      -- unfold ls2'. econstructor; eauto.
+         erewrite <- inject_tid; eauto.
+    + intros r1 r2 [[f'' m1'' m2'' Hm12''] [sp3 sg3]].
+      intros [ACE b]. simpl in ACE, b. inv b. intros [r2' [Hr1 Hr2]].
+      inv Hr1. inv Hr2. inv H10. simpl in H0. rename m' into m3''.
+      rename m1'0 into m1''. rename m2'0 into m2''.
+      assert (Hm13'' : Mem.inject f'' m1'' m3'').
+      {
+        eapply CA.inject_unchanged_on_inject; eauto.
+        eapply CA.not_init_args_dec. intros. red. intros. intro. exploit Mem.perm_inject; eauto.
+        eapply H23. destruct (loc_init_args_dec  (size_arguments sg3) sp3 b ofs).
+        replace (ofs - delta + delta) with ofs. eauto. lia. elim H10. auto.
+      }
+      exists ((injpw f'' m1'' m3'' Hm13'')).
+      repeat apply conj; eauto.
+      -- admit. (*acce, similar*)
+      -- econstructor; eauto.
+         intros. rewrite H17. eauto. eauto.
+         intros. rewrite H18.
+         eapply Values.val_inject_incr. 2: eauto. inv ACE. eauto. eauto.
+         intros. red. intros. specialize (H7 _ _ H10).
+         intro. exploit Mem.perm_inject. 2: eapply Hm12''. apply H11. eauto. replace (ofs - delta + delta) with ofs by lia.
+         eapply H23; eauto.
+      -- econstructor; eauto.
+         admit.
+         (** another problem : shall we unify the 2unchanged_on with args_removed? Maybe the "unchanged_on + noperm relation" is enough?*)
 Admitted.
 (** Seems can be proved? *)
 
 
+Inductive match12_LM_ext : GS.gworld (cc_locset_mach @ mach_ext) -> (GS.gworld (locset_ext @ cc_locset_mach)) -> Prop  :=
+      |match12_LM_ext_intro sp sg _m1 m1 m3 m3_ Hm1 Hm2:
+        args_removed sg sp _m1 m1 ->
+        args_removed sg sp m3 m3_ ->
+        match12_LM_ext (sp, sg, extw _m1 m3 Hm1) (extw m1 m3_ Hm2, (sp, sg)).
 (** We have to change cc_locset_mach. But the problem is how? *)
 Lemma LM_trans_ext : cctrans (cc_locset_mach @ mach_ext) (locset_ext @ cc_locset_mach).
 Proof.
-  constructor. econstructor.
+  constructor. econstructor. instantiate (1:= match12_LM_ext).
   - red. intros [se' [[sg a] [sg' rs]]] se1 se2 q1 q2.
     intros [Hse1 Hse2] [q1' [Hq1 Hq2]].
     simpl in a. inv Hse1. inv Hse2. inv Hq1. inv Hq2.
-    simpl in H1, H, H0.
-    (* Compute (ccworld (cc_locset_mach @ mach_ext)). *)
+    simpl in H1, H, H0. rename m2 into m3_.
+    rename lmw_m0 into m3. rename lmw_sp0 into sp. inv H1. rename rs into rs3.
+    (* set (rs2 := fun r => ls1 (R r)). *)
+    assert (exists rs2 _m1, args_removed sg sp _m1 m1 /\ Mem.extends _m1 m3 /\ ls1 = make_locset rs2 _m1 sp).
+    admit. destruct H1 as [rs2 [_m1 [REMOVE [Hm13 Hls1]]]].
+    (* Compute (ccworld (cc_locset_mach @ mach_ext)).  *)
+    exists (se2, ((lmw sg rs2 _m1 sp, (extw _m1 m3 Hm13)))). repeat apply conj; eauto.
+    + constructor. constructor. constructor.
+    +      (*m3'0 and rs'0 are the result of modifying rs and m3 by values in ls1*)
+      eexists. split. simpl. rewrite Hls1.
+      econstructor; eauto. erewrite Mem.mext_sup; eauto.
+      econstructor; eauto. inversion H13. congruence.
+      simpl. reflexivity.
+      reflexivity.
+      intros. simpl. assert (Hrs2: rs2 = fun r => ls1 (R r)). admit. rewrite Hrs2.
+      apply H0. constructor. constructor.
+    + simpl. constructor; eauto.
+    + intros r1 r2 [[sp0 sg0] wp1] [wp2 [sp1 sg1]] [[sp00 sg00] wp1'] MATCH [ACE1 ACE2] [ACI1 ACI2] Hr. simpl in *.
+      inversion ACE1. subst sp00 sg00. clear ACE1 ACI1. inversion MATCH. subst sp2 sg2 wp1 wp2 sp1 sg1.
+      rename m0 into m1'. rename _m0 into _m1'. rename m2 into m3'. rename m3_0 into m3'_.
+      destruct (wp1') as [_m1'' m3'' Hm13'']. destruct Hr as [r2' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H11.
+      rename m' into _m1''. rename m2 into m3''. rename m'_ into m1''.
+      assert (exists m3''_, Mem.extends m1'' m3''_ /\ args_removed sg sp m3'' m3''_). admit.
+      destruct H1 as [m3''_ [Hm1'' REMOVE'']].
+      exists (extw m1'' m3''_ Hm1'', (sp, sg)). repeat apply conj; eauto.
+      -- simpl. admit.
+      -- simpl. admit.
+      -- simpl. exists (lr ls' m3''_). split. econstructor; eauto.
+         simpl. red. intros. reflexivity. constructor. econstructor; eauto.
+         admit.
+         admit.
+         admit. (*ok*)
+         admit. (* why we need this ?? *)
+         eapply args_removed_support; eauto.
+         admit. (*can be derived from args_removed *)
+  - red. intros [[sp sg] wp1] [wp2 [sp1 sg1]] [sex [[sgx rsx mx] [m0 tm0 hm0]]] se1 se2 q1 q2 Hse [q1' [Hq1 Hq2]] ACI MATCH.
+    inv MATCH. inv Hse. inv H. inv H0. inv Hq1. inv Hq2. simpl in H11, H13, H16, H17. inv H18.
+    destruct ACI as [ACI1 ACI2]. simpl in ACI1, ACI2. rename mx into _m1'. rename m4 into m3'.
     Abort.
 (*    exists (se2,((lmw sg rs lmw_m vf2),tt)).
     repeat apply conj; eauto.
