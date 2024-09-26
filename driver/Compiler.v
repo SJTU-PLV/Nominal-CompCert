@@ -32,7 +32,7 @@ Require Import Asmrel.
 Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
-Require Import CA.
+Require Import CA RA.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy (*Cexec*).
@@ -93,7 +93,7 @@ Require Asmgenproof.
 Require Import Compopts.
 
 (** Rust frontend *)
-Require Rusttypes.
+Require Import Rusttypes.
 Require Rustsyntax.
 Require Rustlight.
 Require RustIR.
@@ -104,6 +104,10 @@ Require InitAnalysis.
 Require ElaborateDrop.
 Require BorrowCheckPolonius.
 Require Clightgen.
+
+(** Proof of Rust frontend  *)
+Require Clightgenproof.
+Require ElaborateDropProof.
 
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.
@@ -219,7 +223,18 @@ Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
                                  end)
   @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
   @@@ transf_clight_program.
-  
+
+(* For ownership language, we just consider Rustlight as the source
+language and remove the borrow checking passes *)
+Definition transf_rustlight_program (p: Rustlight.program) : res Asm.program :=
+  OK p
+  !@@ time "Rustlight to RustIR" RustIRgen.transl_program
+  (** TODO: insert a move checking pass here ! *)
+  @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
+  @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
+  @@@ transf_clight_program.
+
+
 (** The following lemmas help reason over compositions of passes. *)
 
 Lemma print_identity:
@@ -299,6 +314,7 @@ Definition CompCertO's_passes :=
   ::: mkpass Stackingproof.match_prog
   ::: mkpass Asmgenproof.match_prog
   ::: pass_nil _.
+
 
 (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
@@ -430,7 +446,7 @@ Definition cc_compcert : callconv li_c li_asm :=
        cc_asm injp.
 
 (** The C-level simulation convention *)
-Definition cc_c_level : callconv li_c li_c := ro @ wt_c @ injp.
+Definition cc_c_level : callconv li_c li_c := ro @ wt_c @ cc_c injp.
 
 Definition cc_compcert_cod : callconv li_c li_asm :=
   ro @ wt_c @ cc_c injp @
@@ -448,7 +464,7 @@ Proof.
   rewrite (commute_around cc_mach_asm).
   rewrite (commute_around cc_locset_mach).
   rewrite (commute_around cc_c_locset).
-  rewrite <- (cc_compose_assoc injp).
+  rewrite <- (cc_compose_assoc (cc_c injp)).
   rewrite <- cc_c_compose.
   rewrite injp_injp_eq.
   reflexivity.
@@ -496,7 +512,7 @@ Proof.
     rewrite <- lessdef_c_cklr, cc_compose_assoc.
     rewrite <- (cc_compose_assoc wt_c lessdef_c).
     rewrite (inv_dup wt_c), (cc_compose_assoc wt_c), (cc_compose_assoc wt_c).
-    rewrite (commute_around (_@_) (R2:= injp)).
+    rewrite (commute_around (_@_) (R2:= cc_c injp)).
     do 4 rewrite (commute_around _ (R2 := _ inj)).
     reflexivity.
   }
@@ -548,30 +564,30 @@ Proof.
   rewrite (commute_around (wt_c @ lessdef_c)), cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
-  rewrite <- (cc_compose_assoc inj).
+  rewrite <- (cc_compose_assoc (cc_c inj)).
   rewrite <- (cc_compose_assoc wt_c).
   rewrite (inv_drop _ wt_c), !cc_compose_assoc.
   (* move the wt_c to top level *)
   rewrite <- (lessdef_c_cklr ext) , cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
-  rewrite <- (cc_compose_assoc inj).
+  rewrite <- (cc_compose_assoc (cc_c inj)).
   rewrite !wt_R_refinement. rewrite cc_compose_assoc.
-  rewrite <- (cc_compose_assoc injp).
+  rewrite <- (cc_compose_assoc (cc_c injp)).
   rewrite wt_R_refinement. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
 
   (* manully compose the cklrs into a single injp *)
-  rewrite <- (cc_compose_assoc inj), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c inj)), <- cc_c_compose.
   rewrite inj_ext.
-  rewrite <- (cc_compose_assoc inj), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c inj)), <- cc_c_compose.
   rewrite inj_ext.
-  rewrite <- (cc_compose_assoc ext), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c ext)), <- cc_c_compose.
   rewrite ext_inj.
-  rewrite <- (cc_compose_assoc injp), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c injp)), <- cc_c_compose.
   rewrite injp_inj.
-  rewrite <- (cc_compose_assoc injp), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c injp)), <- cc_c_compose.
   rewrite injp_injp_eq.
-  rewrite <- (cc_compose_assoc injp), <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c injp)), <- cc_c_compose.
   rewrite injp_inj.
   reflexivity.
 Qed.
@@ -778,7 +794,145 @@ Proof.
   eapply compose_forward_simulations. eauto.
   apply RTLrel.semantics_rel.
 Qed.
+
+
+(** Simulation convention of the rust compiler *)
+
+(* Definition of ro and wt for rust interface  *)
+
+Inductive sound_rust_query ge m: rust_query -> Prop :=
+  sound_rust_query_intro vf sg vargs:
+    sound_memory_ro ge m ->
+    sound_rust_query ge m (rsq vf sg vargs m).
+
+Inductive sound_rust_reply m: rust_reply -> Prop :=
+  sound_rust_reply_intro res tm:
+    ro_acc m tm ->
+    sound_rust_reply m (rsr res tm).
+
+Definition ro_rs : invariant li_rs :=
+  {|
+    symtbl_inv '(row ge m) := eq ge;
+    query_inv '(row ge m) := sound_rust_query ge m;
+    reply_inv '(row ge m) := sound_rust_reply m;
+  |}.
+
+(* TODO: semantics invariant of borrow and move check. For now, we
+just copy wt_c. *)
+Definition wt_rs : invariant li_rs :=
+  {|
+    symtbl_inv :=
+      fun '(se, sg) => eq se;
+    query_inv :=
+      fun '(se, sg) q =>
+        sg = rsq_sg q /\ Val.has_type_list (rsq_args q) (map typ_of_type (rs_sig_args sg));
+    reply_inv :=
+      fun '(se, sg) r =>
+        Val.has_type (rsr_retval r) (proj_rettype (rettype_of_type (rs_sig_res sg)));
+  |}.
+
+Definition cc_rust_compcert: callconv li_rs li_asm :=
+  ro_rs @ wt_rs @
+  cc_rust_asm_injp @
+  cc_asm injp.
   
+Instance commut_rust_c R:
+  Commutes cc_rust_c (cc_rs R) (cc_c R).
+Admitted.
+
+Instance commut_rust_c_ro:
+  Commutes cc_rust_c ro_rs ro.
+Admitted.
+
+
+(** Rust-level typing constraints *)
+
+Inductive lessdef_rs_mq: rust_query -> rust_query -> Prop :=
+  lessdef_rs_mq_intro vf sg args_ args m:
+    Val.lessdef_list args_ args ->
+    lessdef_rs_mq (rsq vf sg args_ m) (rsq vf sg args m).
+
+Inductive lessdef_rs_mr: rust_reply -> rust_reply -> Prop :=
+  lessdef_rs_mr_intro res_ res m:
+    Val.lessdef res_ res ->
+    lessdef_rs_mr (rsr res_ m) (rsr res m).
+
+Program Definition lessdef_rs : callconv li_rs li_rs :=
+  {|
+    ccworld := unit;
+    match_senv _ := eq;
+    match_query _ := lessdef_rs_mq;
+    match_reply _ := lessdef_rs_mr;
+  |}.
+
+Instance commut_rust_c_wt:
+  Commutes cc_rust_c wt_rs wt_c.
+Admitted.
+
+Instance commut_rust_c_lessdef:
+  Commutes cc_rust_c lessdef_rs lessdef_c.
+Admitted.
+
+Theorem wt_rs_R_refinement R:
+  ccref (cc_rs R @ (wt_rs @ lessdef_rs)) ((wt_rs @ lessdef_rs) @ cc_rs R).
+Proof.
+Admitted.
+
+Instance commut_wt_rs (R : cklr):
+  Commutes (wt_rs @ lessdef_rs) (cc_rs R) (cc_rs R).
+Proof.
+Admitted.
+
+Lemma trans_injp_rors_outgoing:
+  ccref ((ro_rs @ (cc_rs injp)) @ (ro_rs @ (cc_rs injp))) (ro_rs @ (cc_rs injp)).
+Proof.
+Admitted.
+
+Lemma lessdef_rs_cklr R:
+  cceqv (lessdef_rs @ cc_rs R) (cc_rs R).
+Proof.
+Admitted.
+  
+Lemma cc_rust_collapse:
+  ccref
+    (ro_rs @                    (* Self simulation of Rustlight *)
+       cc_rs injp @             (* RustIRgen *)
+       cc_rs injp @             (* Elaborate drop *)
+       (cc_rs inj @ cc_rust_c) @  (* Clightgen *)       
+       cc_compcert)             (* CompCertO *)
+    cc_rust_compcert.
+Proof.
+  unfold cc_compcert, cc_rust_compcert.
+  rewrite cc_compose_assoc.
+  (* merge top-level injp and inj *)
+  rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_injp_eq.
+  rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_inj.
+  (* move ro to the top *)
+  rewrite cc_cainjp__injp_ca.
+  rewrite cc_compose_assoc.
+  rewrite injp_injp at 2. rewrite cc_c_compose, cc_compose_assoc.
+  rewrite <- (cc_compose_assoc _ cc_c_asm).
+  rewrite cc_injpca_cainjp.
+  rewrite <- lessdef_c_cklr, cc_compose_assoc, <- (cc_compose_assoc wt_c).
+  rewrite (commute_around (wt_c @ lessdef_c)).
+  rewrite !(commute_around cc_rust_c).
+  rewrite <- !(cc_compose_assoc ro_rs).
+  rewrite <- (cc_compose_assoc (ro_rs @ cc_rs injp)).
+  rewrite trans_injp_rors_outgoing.
+  rewrite cc_compose_assoc.
+  (* move wt_c to the top *)
+  rewrite cc_compose_assoc.
+  rewrite !(commute_around cc_rust_c).
+  rewrite <- (cc_compose_assoc wt_rs), <- (cc_compose_assoc (cc_rs injp)).
+  rewrite wt_rs_R_refinement.
+  rewrite !cc_compose_assoc, <- (cc_compose_assoc lessdef_rs).
+  rewrite lessdef_rs_cklr.
+  (* merge injp, cc_rust_c and cc_c_asm_injp *)
+  (* TODO: define cc_rust_asm *)
+  (* erewrite <- (commute_around cc_rust_c). *)
+Admitted.
+
+
 (** ** Composition of passes *)
 
 Theorem clight_semantic_preservation:

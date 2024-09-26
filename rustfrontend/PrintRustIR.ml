@@ -195,7 +195,7 @@ let print_cfg_body_debug pp (body, entry, cfg) mayinit mayuninit =
 let print_cfg_debug ce pp id f  =
   match generate_cfg f.fn_body with
   | Errors.OK(entry, cfg) ->
-    (match analyze ce f with
+    (match analyze ce f cfg entry with
     | Errors.OK ((mayinit, mayuninit), _) ->
       fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
       (* Print variables and their types *)

@@ -881,13 +881,21 @@ Proof.
   eapply me_envs. eauto.
 Qed.
 
-Lemma match_envs_flagm_incr: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 thi2
+Lemma match_envs_flagm_incr_bounds: forall j own le m lo hi1 hi2 tle flagm tm tlo thi1 thi2
    (MENV: match_envs_flagm j own le m lo hi1 tle flagm tm tlo thi1)
    (INCR: Mem.sup_include hi1 hi2)
    (TINCR: Mem.sup_include thi1 thi2),
     match_envs_flagm j own le m lo hi2 tle flagm tm tlo thi2.
-Admitted.
-
+Proof.
+  intros. inv MENV.
+  econstructor; eauto.
+  inv me_envs0; econstructor; eauto.
+  intros. exploit me_range0;eauto.
+  intros (A & B). split; auto.
+  intros. exploit me_trange0;eauto.
+  intros (A & B). split; auto.
+Qed.  
+  
 (* unused *)
 (* Lemma match_envs_flagm_bound_unchanged: forall j own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi , *)
 (*     match_envs_flagm j own le m1 lo hi tle flagm tm1 tlo thi -> *)
@@ -1031,6 +1039,51 @@ Proof.
     inv INJ.
     econstructor; auto. inv INJP.
     eapply H12. auto.
+Qed.
+
+
+Lemma match_cont_incr_bounds: forall k tk j1 an fm body cfg pc cont brk nret m1 tm1 lo tlo lo' tlo'
+    (MCONT: match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)
+    (INCL1: Mem.sup_include lo lo')
+    (INCL2: Mem.sup_include tlo tlo'),
+    match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo' tlo'.
+Proof.
+  induction 1; try econstructor; eauto.
+  inv MSTK. econstructor;eauto.
+  eapply match_envs_flagm_incr_bounds; eauto.
+  eapply match_envs_flagm_incr_bounds; eauto.
+Qed.
+
+
+
+Lemma match_stacks_injp_acc: forall k tk j1 j2 m1 m2 tm1 tm2 lo tlo Hm1 Hm2
+    (MCONT: match_stacks j1 k tk m1 tm1 lo tlo)
+    (INJP: injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2))
+    (INCL1: Mem.sup_include lo (Mem.support m1))
+    (INCL2: Mem.sup_include tlo (Mem.support tm1)),
+    match_stacks j2 k tk m2 tm2 lo tlo.
+Proof.
+  intros. inv MCONT.
+  econstructor.
+  assert (SUP1: Mem.sup_include lo0 (Mem.support m1)).
+  { eapply Mem.sup_include_trans. eapply me_incr.
+    eapply me_envs; eauto. auto. }
+  assert (SUP2: Mem.sup_include tlo0 (Mem.support tm1)).
+  { eapply Mem.sup_include_trans. eapply me_tincr.
+    eapply me_envs; eauto. auto. }
+  econstructor; eauto.
+  eapply match_cont_injp_acc; eauto.
+  eapply match_envs_flagm_injp_acc; eauto.
+Qed.
+  
+Lemma match_stacks_incr_bounds: forall k tk j1 m1 tm1 lo tlo lo' tlo'
+    (MCONT: match_stacks j1 k tk m1 tm1 lo tlo)
+    (INCL1: Mem.sup_include lo lo')
+    (INCL2: Mem.sup_include tlo tlo'),
+    match_stacks j1 k tk m1 tm1 lo' tlo'.
+Proof.
+  intros. inv MCONT; econstructor; eauto.
+  eapply match_envs_flagm_incr_bounds; eauto.
 Qed.
 
 (** Only support m1 unchanged: because we cannot ensure that the
@@ -2692,7 +2745,7 @@ Proof.
     intros. simpl. intros. intro. subst.
     eapply me_trange. eapply me_envs; eauto. eauto. auto.
     (* match_envs_flagm *)
-    eapply match_envs_flagm_incr. eauto.
+    eapply match_envs_flagm_incr_bounds. eauto.
     auto.
     eapply Mem.sup_include_trans. eauto.
     eapply Mem.unchanged_on_support. eauto.
@@ -2822,7 +2875,7 @@ Proof.
     auto.
     etransitivity; eauto.
     (* this function match_envs_flagm *)    
-    eapply match_envs_flagm_incr with (hi1 := Mem.support m1) (thi1:= Mem.support tm2); eauto.
+    eapply match_envs_flagm_incr_bounds with (hi1 := Mem.support m1) (thi1:= Mem.support tm2); eauto.
     econstructor; auto.
     (* prove wf_flagm *)
     intros. eapply WFFLAGM.
@@ -2909,16 +2962,24 @@ Proof.
   (* vf <> Vundef *)
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eexists (injpw j m tm Hm), _. intuition idtac.
-  - econstructor; eauto. admit.
+  - econstructor; eauto. 
   - erewrite <- comp_env_preserved.
     econstructor; eauto. constructor. 
   - inv H1. destruct H0 as (wx' & ACC & REP). inv ACC. inv REP. inv H12. eexists. split.
     + econstructor; eauto.
     + econstructor. instantiate (1 := f').
       eauto. etransitivity; eauto.
+      instantiate (1 := Hm5).
       econstructor; eauto.
-      (** TODO: match_stacks_incr  *)
-Admitted.
+      exploit match_stacks_injp_acc; eauto.
+      instantiate (1 := Hm5). instantiate (1 := Hm1).
+      econstructor; eauto.
+      intros MSTK1.
+      exploit match_stacks_incr_bounds. eauto.
+      eapply Mem.unchanged_on_support; eauto.
+      eapply Mem.unchanged_on_support; eauto.
+      auto.
+Qed.
 
 End PRESERVATION.
 

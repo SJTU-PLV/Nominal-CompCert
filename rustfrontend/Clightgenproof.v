@@ -253,7 +253,7 @@ Let dropm := ctx.(clgen_dropm).
 Let glues := ctx.(clgen_glues).
 
 Hypothesis TRANSL: match_prog prog tprog.
-Variable w: inj_world.
+Variable w : inj_world.
 
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
@@ -3859,13 +3859,15 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2 S, match_query (cc_rust_c inj) w q1 q2 -> initial_state ge q1 S ->
+  forall q1 q2 S, match_query (cc_rs inj @ cc_rust_c) (se, w, tt) q1 q2 -> initial_state ge q1 S ->
              exists R, Clight.initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros ? ? ? Hq HS.
-  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq.
+  intros ? ? ? (qi & Hq1 & Hq2) HS.
+  inversion Hq1 as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq1.
+  inversion Hq2.
+  rewrite <- H0 in H1. inv H1.
   subst. 
-  inversion HS. clear HS. subst vf sg vargs m.
+  inversion HS. clear HS. subst.
   exploit find_funct_match;eauto. eapply inj_stbls_match. eauto. eauto.
   intros (tf & FIND & TRF).
   (* inversion TRF to get tf *)
@@ -3898,23 +3900,23 @@ Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
-  exists r2, Clight.final_state R r2 /\ match_reply (cc_rust_c inj) w r1 r2.
+  exists r2, Clight.final_state R r2 /\ match_reply (cc_rs inj @ cc_rust_c) (se, w, tt) r1 r2.
 Proof.
   intros. inv H0. inv H.
   generalize (MCONT m tm nil). intros MCONT1.
   inv MCONT1.
   eexists. split. econstructor; split; eauto.
   simpl.
-  econstructor. split.
-  eauto. econstructor. eauto.
-  constructor; eauto.
+  eexists. split. econstructor; split; eauto.
+  econstructor. eauto. econstructor. eauto.
+  econstructor. 
 Qed.
 
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, Clight.at_external tge R q2 /\ cc_rust_c_mq inj wx q1 q2 /\ match_stbls inj wx se tse /\
-  forall r1 r2 S', match_reply (cc_rust_c inj) wx r1 r2 -> after_external S r1 S' ->
+  exists wx q2, Clight.at_external tge R q2 /\ match_query (cc_rs inj @ cc_rust_c) wx q1 q2 /\ match_senv (cc_rs inj @ cc_rust_c) wx se tse /\
+  forall r1 r2 S', match_reply (cc_rs inj @ cc_rust_c) wx r1 r2 -> after_external S r1 S' ->
   exists R', Clight.after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros S R q1 HSR Hq1.
@@ -3926,7 +3928,7 @@ Proof.
   intros (tf & TFINDF & TRFUN). inv TRFUN. 
   (* vf <> Vundef *)
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
-  eexists (injw j (Mem.support m) (Mem.support tm)), _. intuition idtac.
+  eexists (tse, injw j (Mem.support m) (Mem.support tm), tt), _. intuition idtac.
   - econstructor; eauto.
   - assert (SIG: signature_of_type targs tres cconv =
                    signature_of_rust_signature {|
@@ -3940,8 +3942,14 @@ Proof.
       f_equal. symmetry.
       eapply map_typ_of_type_eq_typlist_of_typelist. }
     rewrite SIG.
-    econstructor; eauto. constructor. auto.
-  - inv H3. destruct H2 as (wx' & ACC & REP). inv ACC. inv REP. inv H10. eexists. split.
+    econstructor; eauto. constructor.
+    econstructor. eauto. eauto.
+    econstructor. eauto. auto.
+    econstructor.
+  - simpl. split; auto.
+  - inv H3. destruct H2 as (wx' & ACC & REP). inv ACC. inv REP.
+    destruct H2. inv H2.
+    inv H3. inv H12. eexists. split.
     + econstructor; eauto.
     + econstructor. instantiate (1 := f').
       eapply match_cont_inj_incr; eauto.
@@ -3953,22 +3961,36 @@ End PRESERVATION.
 
 Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_rust_c inj) (cc_rust_c inj) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
+  forward_simulation (cc_rs inj @ cc_rust_c) (cc_rs inj @ cc_rust_c) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
 Proof.
-  fsim eapply forward_simulation_plus. 
+  set (ms := fun wj s s' => match_states prog tprog wj s s').
+  fsim eapply forward_simulation_plus with (match_states := ms (snd (fst w))).
+    (* try destruct w as [[sei wj] ut], Hse; subst. *)
   - inv MATCH. auto.
-  - intros. destruct Hse, H. simpl.
+  - intros. destruct w as [[sei w] ut].
+    destruct H as (qi & Hq1 & Hq2).
+    destruct Hse as (Hs1 & Hs2).
+    inv Hq1. inv Hq2.
+    simpl in *. subst.
     eapply is_internal_match. eapply MATCH.
-    eauto.
+    eapply match_stbls_proj with (c:=inj) (w:= w).
+    simpl. auto.
     (* tr_fundef relates internal function to internal function *)
     intros. inv H3; auto.
     auto. auto.
   (* initial state *)
-  - eapply initial_states_simulation; eauto. 
+  - destruct w as [[sei w] ut].
+    eapply initial_states_simulation; eauto.
+    destruct Hse. simpl in *. subst. auto.
   (* final state *)
-  - eapply final_states_simulation; eauto.
+  - destruct w as [[sei w] ut].
+    eapply final_states_simulation with (se := sei); eauto.
   (* external state *)
-  - eapply external_states_simulation; eauto.
+  - destruct w as [[sei w] ut].
+    eapply external_states_simulation; eauto.
+    destruct Hse. simpl in *. subst. auto.
   (* step *)
-  - eapply step_simulation;eauto.
+  - destruct w as [[sei w] ut].
+    eapply step_simulation;eauto.
+    destruct Hse. simpl in *. subst. auto.
 Qed.

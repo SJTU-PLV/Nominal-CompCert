@@ -1987,7 +1987,8 @@ Canonical Structure li_rs :=
   |}.
 
 (** Rust calling convention *)
-Require Import CKLR.
+Require Import CKLR CKLRAlgebra.
+Require Import CallconvAlgebra.
 
 Inductive cc_rs_query R (w: world R): relation rust_query :=
   | cc_rs_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
@@ -2017,37 +2018,36 @@ Next Obligation.
   intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
-(** Simulation convention between Rust and C *)
+(** Simulation convention between Rust and C (only transform signature) *)
 
 Definition signature_of_rust_signature (sig: rust_signature) : signature :=
   mksignature (map typ_of_type sig.(rs_sig_args)) (rettype_of_type sig.(rs_sig_res)) sig.(rs_sig_cc).
 
-Inductive cc_rust_c_mq R (w: world R): rust_query -> c_query -> Prop :=
-| cc_rust_c_mq_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
-  Val.inject (mi R w) vf1 vf2 ->
-  Val.inject_list (mi R w) vargs1 vargs2 ->
-  match_mem R w m1 m2 ->
-  vf1 <> Vundef ->
+Inductive cc_rust_c_mq: rust_query -> c_query -> Prop :=
+| cc_rust_c_mq_intro vf sg vargs m:
   (* how to relate signature? *)
-  cc_rust_c_mq R w (rsq vf1 sg vargs1 m1) (cq vf2 (signature_of_rust_signature sg) vargs2 m2).
+  cc_rust_c_mq (rsq vf sg vargs m) (cq vf (signature_of_rust_signature sg) vargs m).
 
+Inductive cc_rust_c_mr: rust_reply -> c_reply -> Prop :=
+| cc_rust_c_mr_intro vres m:
+  cc_rust_c_mr (rsr vres m) (cr vres m).
 
-Inductive cc_rust_c_mr R (w: world R): rust_reply -> c_reply -> Prop :=
-| cc_rust_c_mr_intro vres1 vres2 m1' m2':
-  Val.inject (mi R w) vres1 vres2 ->
-  match_mem R w m1' m2' ->
-  cc_rust_c_mr R w (rsr vres1 m1') (cr vres2 m2').
-
-Program Definition cc_rust_c (R: cklr): callconv li_rs li_c :=
+Program Definition cc_rust_c: callconv li_rs li_c :=
   {|
-    ccworld := world R;
-    match_senv := match_stbls R;
-    match_query := cc_rust_c_mq R;
-    match_reply := (<> cc_rust_c_mr R)%klr;
+    ccworld := unit;
+    match_senv _ := eq;
+    match_query _ := cc_rust_c_mq;
+    match_reply _ := cc_rust_c_mr;
   |}.
-Next Obligation.
-  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
-Qed.
+
+(* Properties of cc_rs *)
+Global Instance cc_rs_ref:
+  Monotonic (@cc_rs) (subcklr ++> ccref).
+Proof.
+Admitted.
+
+Lemma cc_rs_compose R12 R23:
+  cceqv (cc_rs (R12 @ R23)) (cc_rs R12 @ cc_rs R23).
+Proof.
+Admitted.
+
