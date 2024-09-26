@@ -520,7 +520,11 @@ Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
+  split.
+  intros.
   eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros.
+  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
 Qed.
 
 (** ** Calling convention from [li_locset] *)

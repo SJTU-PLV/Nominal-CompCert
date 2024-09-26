@@ -65,8 +65,10 @@ Next Obligation.
 Qed.
 Next Obligation.
   inv H.
-  eapply Genv.valid_for_match in H2.
-  apply H2. eauto.
+  eapply Genv.valid_for_match in H1.
+  split; intros.
+  apply H1. auto.
+  apply H1. auto.
 Qed.
 
 

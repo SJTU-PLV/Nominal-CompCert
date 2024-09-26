@@ -2015,7 +2015,11 @@ Next Obligation.
   intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  split.
+  intros.
+  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros.
+  eapply match_stbls_proj in H. erewrite Genv.valid_for_match; eauto.
 Qed.
 
 (** Simulation convention between Rust and C (only transform signature) *)
@@ -2039,6 +2043,9 @@ Program Definition cc_rust_c: callconv li_rs li_c :=
     match_query _ := cc_rust_c_mq;
     match_reply _ := cc_rust_c_mr;
   |}.
+Next Obligation.
+  split; auto.
+Defined.
 
 (* Properties of cc_rs *)
 Global Instance cc_rs_ref:

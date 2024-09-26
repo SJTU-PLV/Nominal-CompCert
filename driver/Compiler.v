@@ -864,6 +864,9 @@ Program Definition lessdef_rs : callconv li_rs li_rs :=
     match_query _ := lessdef_rs_mq;
     match_reply _ := lessdef_rs_mr;
   |}.
+Next Obligation.
+  split; auto.
+Defined.
 
 Instance commut_rust_c_wt:
   Commutes cc_rust_c wt_rs wt_c.

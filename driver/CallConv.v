@@ -359,6 +359,9 @@ Program Definition lessdef_c : callconv li_c li_c :=
     match_query _ := lessdef_c_mq;
     match_reply _ := lessdef_c_mr;
   |}.
+Next Obligation.
+  split; auto.
+Defined.
 
 Lemma lessdef_c_cklr R:
   cceqv (lessdef_c @ cc_c R) (cc_c R).
@@ -435,6 +438,9 @@ Program Definition lessdef_loc :=
     match_query := lessdef_loc_mq;
     match_reply := lessdef_loc_mr;
   |}.
+Next Obligation.
+  split; auto.
+Defined.
 
 Lemma lessdef_loc_cklr R:
   cceqv (lessdef_loc @ cc_locset R) (cc_locset R).
@@ -649,6 +655,9 @@ Program Definition cc_locset_mach: callconv li_locset li_mach :=
     match_query := cc_locset_mach_mq;
     match_reply := cc_locset_mach_mr;
   |}.
+Next Obligation.
+  split; auto.
+Defined.
 
 (** ** Commutation property *)
 

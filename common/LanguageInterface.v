@@ -59,7 +59,7 @@ Record callconv {li1 li2} :=
     match_senv_valid_for:
       forall w se1 se2 sk,
         match_senv w se1 se2 ->
-        Genv.valid_for sk se1 ->
+        Genv.valid_for sk se1 <->
         Genv.valid_for sk se2;
   }.
 
@@ -78,7 +78,7 @@ Program Definition cc_id {li}: callconv li li :=
     match_reply w := eq;
   |}.
 Solve All Obligations with
-  cbn; intros; subst; auto.
+  cbn; intros; subst; try split; auto.
 
 Notation "1" := cc_id : cc_scope.
 
@@ -104,8 +104,12 @@ Next Obligation.
   etransitivity; eauto using match_senv_public_preserved.
 Qed.
 Next Obligation.
-  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
-  eauto using match_senv_valid_for.
+  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23].
+  split; intros H.
+  erewrite <- match_senv_valid_for. 2: eauto.
+  erewrite <- match_senv_valid_for; eauto.
+  eapply match_senv_valid_for; eauto.
+  eapply match_senv_valid_for; eauto.
 Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
@@ -169,5 +173,10 @@ Next Obligation.
   intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros. split.
+  intros. erewrite <- Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eauto.
+  intros. 
+  eapply Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eauto.
 Qed.

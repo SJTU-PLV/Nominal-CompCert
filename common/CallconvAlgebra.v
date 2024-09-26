@@ -516,9 +516,19 @@ Section STAR.
   Qed.
   Next Obligation.
     induction w.
-    - inv H; auto.
-    - destruct X as [[sei x1] x2], H as [? ?].
-      eauto using match_senv_valid_for.
+    - split.
+      inv H; auto.
+      inv H; auto.
+    - split.
+      destruct X as [[sei x1] x2], H as [? ?].
+      (* eauto using match_senv_valid_for. *)
+      intros.
+      erewrite <- match_senv_valid_for. 2: eauto.
+      erewrite <- match_senv_valid_for. 2: eauto.
+      auto.
+      intros.
+      erewrite match_senv_valid_for. 2: eauto.
+      auto.      
   Qed.
 
   (** *** Properties *)

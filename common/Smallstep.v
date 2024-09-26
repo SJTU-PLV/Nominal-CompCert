@@ -1182,7 +1182,7 @@ Proof.
   1: { congruence. }
   intros se1 se3 [[se2 w] w'] (Hse12 & Hse23) Hse1. cbn in *.
   assert (Hse2: Genv.valid_for (skel L2) se2).
-  { rewrite <- Hsk. eapply match_senv_valid_for; eauto. }
+  { rewrite <- Hsk. erewrite <- match_senv_valid_for; eauto. }
   constructor.
 - (* valid query *)
   intros q1 q3 (q2 & Hq12 & Hq23).
@@ -1925,7 +1925,7 @@ Proof.
   - (* LTS *)
     intros se1 se3 [[se2 wB12] wB23] [Hse12 Hse23] Hse1. cbn. clear ms.
     assert (Hse2: Genv.valid_for (skel L2) se2).
-    { erewrite <- bsim_skel by eauto. eapply match_senv_valid_for; eauto. }
+    { erewrite <- bsim_skel by eauto. erewrite <- match_senv_valid_for; eauto. }
     destruct H12 as [index12 order12 ms12 Hsk12 Hlts12 Hwf12]; cbn.
     destruct H23 as [index23 order23 ms23 Hsk23 Hlts23 Hwf23]; cbn.
     specialize (Hlts12 se1 se2 wB12 Hse12 Hse1).

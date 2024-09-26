@@ -73,6 +73,10 @@ Program Definition cc_c_asm : callconv li_c li_asm :=
     match_query := cc_c_asm_mq;
     match_reply := cc_c_asm_mr
   |}.
+Next Obligation.
+  split; auto.
+Defined.
+
 
 Definition rs_to_mrs (rs : regset) :=
   fun r: mreg => rs (preg_of r).
@@ -192,8 +196,10 @@ Next Obligation.
 Qed.
 Next Obligation.
   inv H.
-  eapply Genv.valid_for_match in H2.
-  apply H2. eauto.
+  eapply Genv.valid_for_match in H1.
+  split; intros.
+  apply H1. auto.
+  apply H1. auto.
 Qed.
 
 

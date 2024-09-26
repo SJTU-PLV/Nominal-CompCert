@@ -545,7 +545,7 @@ Proof.
   (* rechable not stuck *)
 Admitted.
 
-(** End of this general compose_safety  *)
+(** End of this unfinished general compose_safety  *)
 
 
 (* similar to ccref *)
@@ -597,11 +597,10 @@ Section SAFETY_PRESERVATION.
 Context {li1 li2} (cc: callconv li1 li2).
 Context (L1: semantics li1 li1) (L2: semantics li2 li2).
 Context (I1: invariant li1) (I2: invariant li2).
-Context (se1 se2: Genv.symtbl) (ccw: ccworld cc).
 
-Hypothesis BSIM_INV: bsim_invariant cc I1 I2.
+(* Hypothesis BSIM_INV: bsim_invariant cc I1 I2. *)
 
-Lemma module_safety_preservation:
+Lemma module_safety_preservation_se se1 se2 ccw:
   match_senv cc ccw se1 se2 ->
   module_safe_se L1 I1 I1 safe se1 ->
   backward_simulation cc cc L1 L2 ->
@@ -669,4 +668,18 @@ Proof.
   (* intros bsim_prop. inv bsim_prop. *)
 Admitted.
 
+Lemma module_safety_preservation:  
+  module_safe L1 I1 I1 not_stuck ->
+  backward_simulation cc cc L1 L2 ->
+  module_safe L2 (inv_cc I1 cc) (inv_cc I1 cc) not_stuck.
+Proof.
+  intros SAFE SIM.
+  red. intros se2 VSE2.
+  red. intros (wI1 & wcc) (se1 & SYM1 & MSE).
+  assert (VSE1: Genv.valid_for (skel L1) se1).
+  (* { eapply Genv.valid_for_match. *)
+  (*   Genv.valid_for *)
+  (*   match_senv_valid_for *)
+Admitted.    
+    
 End SAFETY_PRESERVATION.

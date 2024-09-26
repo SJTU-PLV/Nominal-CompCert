@@ -1347,6 +1347,10 @@ Program Definition cc_mach_asm : callconv li_mach li_asm :=
     match_query '(rs, nb) := cc_mach_asm_mq rs nb;
     match_reply '(rs, nb) := cc_mach_asm_mr rs nb;
   |}.
+Next Obligation.
+  split; auto.
+Qed.
+
 
 (** ** CKLR simulation convention *)
 
@@ -1369,7 +1373,11 @@ Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
+  split.
+  intros.
   eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros.
+  eapply match_stbls_proj in H. erewrite Genv.valid_for_match; eauto.
 Qed.
 
 Instance cc_asm_ref:

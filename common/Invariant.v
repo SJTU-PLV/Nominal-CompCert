@@ -101,7 +101,7 @@ Program Coercion cc_inv {li} (I: invariant li): callconv li li :=
     match_reply w := rel_inv (reply_inv I w);
   |}.
 Solve All Obligations with
-  cbn; intros; destruct H; auto.
+  cbn; try split; intros; destruct H; auto.
 
 (** With this, an invariant preservation proof can itself be lifted
   into a self-simulation by the invariant calling conventions. *)
@@ -136,6 +136,16 @@ Proof.
     constructor.
     eapply preserves_step; eauto.
 Qed.
+
+(** * Calling conventions as invariants *)
+
+Definition inv_cc {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invariant liB :=
+  {|
+    inv_world := (inv_world IA * ccworld cc);
+    symtbl_inv '(wA, wcc) se2 := exists se1, symtbl_inv IA wA se1 /\ match_senv cc wcc se1 se2;
+    query_inv '(wA, wcc) q2 := exists q1, query_inv IA wA q1 /\ match_query cc wcc q1 q2;
+    reply_inv '(wA, wcc) r2 := exists r1, reply_inv IA wA r1 /\ match_reply cc wcc r1 r2;
+  |}.
 
 
 (** * Invariant-based simulation proof methods *)

@@ -576,10 +576,11 @@ Proof.
     assert (match_senv (cc_c inj) w se tse).
     inv GE. constructor; eauto.
     eapply match_senv_valid_for in H1; eauto.
-    unfold skel in H1.
+    generalize ((proj1 H1) VALID). intros VH1.
+    unfold skel in VH1.
     rewrite match_prog_def0.
     rewrite H0.
-    rewrite (Genv.find_def_symbol id gd H1).
+    rewrite (Genv.find_def_symbol id gd VH1).
     intros (b' & SYM & DEF').
     eauto.
   - subst.
