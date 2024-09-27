@@ -10,10 +10,10 @@ Require Import Invariant.
 
 (** Module safety : similar to the preservation of invariant in LTS *)
 
-Definition safe {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
-  (exists r, final_state L s r)
-  \/ (exists q, at_external L s q)
-  \/ (exists t, exists s', Step L s t s').
+(* efinition safe {liA liB st} (L: lts liA liB st) (s: st) : Prop := *)
+ (*  (exists r, final_state L s r) *)
+ (*  \/ (exists q, at_external L s q) *)
+ (*  \/ (exists t, exists s', Step L s t s'). *)
 
 Definition not_stuck {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
   (exists r, final_state L s r)
@@ -31,6 +31,7 @@ Definition not_stuck {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
 incoming query and reply *)
 Inductive reachable {liA liB st} (IA: invariant liA) (IB: invariant liB) (L: lts liA liB st) (wI: inv_world IB) (s: st) : Prop :=
 | initial_reach: forall q s0 t
+    (VQ: valid_query L q = true)
     (WT: query_inv IB wI q)
     (INIT: initial_state L q s0)
     (STEP: Star L s0 t s),
@@ -57,6 +58,17 @@ Proof.
     eapply star_right; eauto.
   - eapply external_reach; eauto.
     eapply star_right; eauto.
+Qed.
+
+Lemma star_reachable {liA liB st} IA IB (L: lts liA liB st) s1 t s2 w:
+  Star L s1 t s2 ->
+  reachable IA IB L w s1 ->
+  reachable IA IB L w s2.
+Proof.
+  induction 1.
+  auto.
+  intros. eapply IHstar.
+  eapply step_reachable; eauto.
 Qed.
 
 
@@ -456,6 +468,15 @@ Proof.
     exploit (@final_progress li); eauto. eapply SAFE; eauto.
 Qed.
 
+(** Properties of lts_safe  *)
+
+Lemma lts_safe_reachable_safe {li1 li2 S} se (L: lts li1 li2 S) I1 I2 w : forall s,
+    lts_safe se L I1 I2 not_stuck w ->
+    reachable I1 I2 L w s ->
+    safe L s.
+Admitted.
+
+
 (** Unfinished: The following code is a more general module_safety
 property which supports different invariant in incoming side and
 outgoing side *)
@@ -552,40 +573,46 @@ Admitted.
 Record bsim_invariant {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) : Type :=
   {
     (* incoming_query2 and outgoing_query2 are used to establish
-    match_states between rechable states *)
-    incoming_query2: forall w2 se1 se2 ccw q2,
+    match_states between reachable states *)
+    incoming_query2: forall w2 se2,
       symtbl_inv I2 w2 se2 ->
-      match_senv cc ccw se1 se2 ->
-      query_inv I2 w2 q2 ->
-      exists w1 q1, symtbl_inv I1 w1 se1 /\
-                 query_inv I1 w1 q1 /\
-                 match_query cc ccw q1 q2 /\
-                 (* outgoing_reply1 is embedded here because it is
-                 stated in w2. It is used to establish progress
-                 properties *)
-                 forall r1 r2, reply_inv I1 w1 r1 ->
-                          match_reply cc ccw r1 r2 ->
-                          reply_inv I2 w2 r2;
+      exists ccw w1 se1,
+        match_senv cc ccw se1 se2
+        /\ symtbl_inv I1 w1 se1
+        /\ (forall q2, query_inv I2 w2 q2 ->
+                 exists q1, match_query cc ccw q1 q2
+                       /\ query_inv I1 w1 q1
+                       /\ (* outgoing_reply1 is embedded here because it is
+                            stated in w2. It is used to establish progress
+                            properties *)
+                         forall r1 r2, reply_inv I1 w1 r1 ->
+                                  match_reply cc ccw r1 r2 ->
+                                  reply_inv I2 w2 r2);
 
-    outgoing_query2: forall w2 ccw q1 q2,
+    (** So ugly! used to establish reachable_match *)
+    outgoing_query2: forall w1 w2 ccw q1 q2 r2,
       query_inv I2 w2 q2 ->
       match_query cc ccw q1 q2 ->
-      exists w1, query_inv I1 w1 q1 /\
-              (* incoming_reply2 is embedded here *)
-              forall r2, reply_inv I2 w2 r2 ->
-                    exists r1, reply_inv I1 w1 r1 /\
-                            match_reply cc ccw r1 r2;
-    
-    (* outgoing_query1 and outgoing_reply1 are used to establish
-    progress properties *)
-    outgoing_query1: forall w1 ccw q1 q2,
       query_inv I1 w1 q1 ->
+      (* incoming_reply2 is embedded here *)
+      reply_inv I2 w2 r2 ->
+      exists r1, reply_inv I1 w1 r1 /\
+              match_reply cc ccw r1 r2;
+    
+    (* outgoing_query1 and incoming_reply1 are used to establish
+    progress properties *)
+    outgoing_query1: forall w1 ccw q1 q2 se1 se2,
+      query_inv I1 w1 q1 ->
+      symtbl_inv I1 w1 se1 ->
       match_query cc ccw q1 q2 ->
-      exists w2, query_inv I2 w2 q2 /\
-              (* incoming_reply1 is embedded here *)
-              forall r1, reply_inv I1 w1 r1 ->
-                    exists r2, reply_inv I2 w2 r2 /\
-                            match_reply cc ccw r1 r2;    
+      match_senv cc ccw se1 se2 ->
+      exists w2 , query_inv I2 w2 q2
+                /\ symtbl_inv I2 w2 se2
+                /\ (* why here is incoming_reply2 ??? to establish after_external progress *)
+                  forall r2, reply_inv I2 w2 r2 ->
+                        exists r1, reply_inv I1 w1 r1
+                              /\ match_reply cc ccw r1 r2;    
+    
   }.
 
 
@@ -596,16 +623,16 @@ Section SAFETY_PRESERVATION.
 
 Context {li1 li2} (cc: callconv li1 li2).
 Context (L1: semantics li1 li1) (L2: semantics li2 li2).
-Context (I1: invariant li1) (I2: invariant li2).
+Context (I1 : invariant li1) (I2: invariant li2).
 
-(* Hypothesis BSIM_INV: bsim_invariant cc I1 I2. *)
+Hypothesis BSIM_INV: bsim_invariant cc I1 I2.
 
-Lemma module_safety_preservation_se se1 se2 ccw:
-  match_senv cc ccw se1 se2 ->
-  module_safe_se L1 I1 I1 safe se1 ->
-  backward_simulation cc cc L1 L2 ->
-  module_safe_se L2 I2 I2 safe se2.
-Proof.
+(* Lemma module_safety_preservation_se se1 se2 ccw: *)
+(*   match_senv cc ccw se1 se2 -> *)
+(*   module_safe_se L1 I1 I1 safe se1 -> *)
+(*   backward_simulation cc cc L1 L2 -> *)
+(*   module_safe_se L2 I2 I2 safe se2. *)
+(* Proof. *)
   (* (** Test2  *) *)
   (* intros MSENV SAFE [BSIM]. *)
   (* destruct BSIM as [index order match_states SKEL PROP WF]. *)
@@ -666,20 +693,174 @@ Proof.
   (* (* use bsim_lts *) *)
   (* inv BSIM. generalize (bsim_lts se1 se2 ccw MSENV VSE1). *)
   (* intros bsim_prop. inv bsim_prop. *)
+(* Admitted. *)
+
+
+
+Section BSIM.
+  
+Context se1 se2 wcc (w1: inv_world I1) (w2: inv_world I2) bsim_index bsim_order bsim_match_states            
+  (BSIMP: bsim_properties cc cc se1 se2 wcc (L1 se1) (L2 se2) bsim_index bsim_order (bsim_match_states se1 se2 wcc)).
+
+Context (MENV: match_senv cc wcc se1 se2).
+
+Hypothesis (INQ: forall q2 : query li2,
+               query_inv I2 w2 q2 ->
+               exists q1 : query li1,
+                 match_query cc wcc q1 q2 /\
+                   query_inv I1 w1 q1 /\
+                   (forall (r1 : reply li1) (r2 : reply li2),
+                       reply_inv I1 w1 r1 -> match_reply cc wcc r1 r2 -> reply_inv I2 w2 r2)).
+
+Let match_states := bsim_match_states se1 se2 wcc.
+
+Lemma bsim_simulation_star_under_lts_safe: forall s2 t s2',
+    Star (L2 se2) s2 t s2' ->
+    forall i s1, match_states i s1 s2 ->
+            exists i', exists s1', Star (L1 se1) s1 t s1' /\ match_states i' s1' s2'.
 Admitted.
 
+Lemma bsim_reachable_match: forall s2,
+    reachable I2 I2 (L2 se2) w2 s2 ->
+    lts_safe se1 (L1 se1) I1 I1 not_stuck w1 ->
+    exists s1 i, reachable I1 I1 (L1 se1) w1 s1
+            /\ bsim_match_states se1 se2 wcc i s1 s2
+            /\ (forall (r1 : reply li1) (r2 : reply li2),
+                       reply_inv I1 w1 r1 -> match_reply cc wcc r1 r2 -> reply_inv I2 w2 r2).
+Proof.
+  induction 1; intros SAFE.
+  (* initial_reach *)
+  - exploit INQ; eauto.
+    intros (q1 & MQ & QINV1 & FINAL).    
+    assert (VQ1: valid_query (L1 se1) q1 = true).
+    { erewrite <- bsim_match_valid_query; eauto. }
+    (* initial_match *)
+    edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+    (* L1 is not stuck in initial states *)
+    exploit (@initial_progress li1); eauto.
+    intros (s1 & INIT1).
+    exploit EXIST; eauto. intros INIT2.
+    exploit MATCH. eapply INIT1. eapply INIT.
+    intros (s1' & INIT1' & (i & MATCH')).
+    (* prove bsim_simulation_star *)
+    exploit bsim_simulation_star_under_lts_safe; eauto.
+    intros (i' & s1'' & STAR1 & MATCH'').
+    exists s1'', i'. split.
+    eapply star_reachable. eauto.
+    eapply initial_reach; eauto.
+    eapply star_refl. auto.
+  (* external reach *)
+  - exploit IHreachable; eauto.
+    intros (s1' & i1 & REACH1 & MATCH1 & FINAL).
+    (* external_simulation *)
+    exploit (@bsim_match_external li1); eauto.
+    eapply lts_safe_reachable_safe; eauto.
+    intros (wcc' & s1'' & q1 & STAR1 & ATEXT1 & MQ1 & MSE1 & AFEXT1).
+    eapply star_reachable in STAR1; eauto.
+    (* external_progress in L1 *)
+    exploit (@external_progress li1); eauto.
+    intros (w1' & SYM1 & QINV1 & AFEXT2).    
+    (* get the reply *)
+    generalize (@outgoing_query2 li1 li2 cc I1 I2 BSIM_INV  _ _ _ _ _ _ WTQ MQ1 QINV1 WTR).
+    intros (r1 & RINV1 & MR).
+    (* construct after_external state in L1 *)
+    exploit AFEXT2; eauto.
+    intros (s1''' & AFEXT1'').
+    (* construct the matched after_external state *)
+    exploit AFEXT1; eauto.
+    intros [EXIST MATCH].
+    exploit MATCH; eauto.
+    intros (s1'0 & AFEXT'0 & (i & MATCH')).
+    (* prove bsim_simulation_star *)
+    exploit bsim_simulation_star_under_lts_safe; eauto.
+    intros (i' & s1''0 & STAR2 & MATCH'').
+    exists s1''0, i'. split; auto.
+    eapply star_reachable. eauto.
+    eapply external_reach; eauto.
+    eapply star_refl.
+Qed.
+
+    
+End BSIM.
+  
 Lemma module_safety_preservation:  
   module_safe L1 I1 I1 not_stuck ->
   backward_simulation cc cc L1 L2 ->
-  module_safe L2 (inv_cc I1 cc) (inv_cc I1 cc) not_stuck.
+  module_safe L2 I2 I2 not_stuck.
 Proof.
-  intros SAFE SIM.
+  intros SAFE [BSIM].
   red. intros se2 VSE2.
-  red. intros (wI1 & wcc) (se1 & SYM1 & MSE).
+  red. intros w2 SYM2.
+  (* construct se1 *)
+  generalize (@incoming_query2 li1 li2 cc I1 I2 BSIM_INV _ _ SYM2).
+  intros (wcc & w1 & se1 & MSE & SYM1 & INQ).   
   assert (VSE1: Genv.valid_for (skel L1) se1).
-  (* { eapply Genv.valid_for_match. *)
-  (*   Genv.valid_for *)
-  (*   match_senv_valid_for *)
-Admitted.    
+  { eapply match_senv_valid_for; eauto.
+    erewrite bsim_skel; eauto. }
+  exploit SAFE; eauto.
+  intros LTSSAFE1.
+  destruct BSIM.
+  generalize (bsim_lts se1 se2 wcc MSE VSE1). intros BSIMP.
+  econstructor.
+  (* reachable_safe *)
+  - intros s2 REACH2.
+    exploit bsim_reachable_match; eauto.
+    intros (s1 & i & REACH1 & MATCH & FINAL).
+    (* s1 is not_stuck *)
+    exploit (@reachable_safe li1); eauto.
+    (** NOTSTUCK1 is useless because one step in target program may
+    correspond to multiple steps in source program, so the property of
+    only one step not stuck in source program is not useful *)
+    intros NOTSTUCK1.
+    (* We use bsim_progress! *)
+    eapply bsim_progress; eauto.
+    eapply lts_safe_reachable_safe; eauto.
+  (* initial progress *)
+  - intros q2 VQ QINV2.
+    exploit INQ; eauto.
+    intros (q1 & MQ & QINV1 & FINAL).
+    assert (VQ1: valid_query (L1 se1) q1 = true).
+    { erewrite <- bsim_match_valid_query; eauto. }
+    (* initial_match *)
+    edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+    (* L1 is not stuck in initial states *)
+    exploit (@initial_progress li1); eauto.
+    intros (s1 & INIT). eapply EXIST. eauto.
+  (* external_progress *)
+  - intros s2 q2 REACH2 ATEXT2.
+    exploit bsim_reachable_match; eauto.
+    intros (s1 & i & REACH1 & MATCH & FINAL).
+    (* external_simulation *)
+    exploit (@bsim_match_external li1); eauto.
+    eapply lts_safe_reachable_safe; eauto.
+    intros (wcc' & s1'' & q1 & STAR1 & ATEXT1 & MQ1 & MSE1 & AFEXT1).
+    eapply star_reachable in STAR1; eauto.
+    (* q1 is well-typed *)
+    exploit (@external_progress li1);eauto.
+    intros (w1' & SYM1' & QINV1 & AFEXT1').
+    (* construct w2 and q2 *)
+    generalize (@outgoing_query1 li1 li2 cc I1 I2 BSIM_INV  _ _ _ _ _ _ QINV1 SYM1' MQ1 MSE1).
+    intros (w2' & se2' & QINV2 & AFEXT2').
+    exists w2'. repeat apply conj; auto.
+    (* after external *)
+    intros r2 RINV2.
+    exploit AFEXT2'; eauto.
+    intros (r1 & RINV1 & MR).
+    exploit AFEXT1; eauto.
+    intros [EXIST MATCHEXT].
+    exploit AFEXT1'; eauto. intros (s1' & A).    
+    eapply EXIST. eauto.
+  (* final_progress *)
+  - intros s r REACH2 FS2.
+    exploit bsim_reachable_match; eauto.
+    intros (s1 & i & REACH1 & MATCH & FINAL).
+    (* final_simulation *)
+    edestruct (@bsim_match_final_states li1) as (s1' & r1 & STAR & FS1 & MR); eauto.
+    eapply lts_safe_reachable_safe; eauto.
+    eapply FINAL; eauto.
+    eapply final_progress. eauto.
+    eapply star_reachable; eauto.
+    auto.
+Qed.    
     
 End SAFETY_PRESERVATION.
