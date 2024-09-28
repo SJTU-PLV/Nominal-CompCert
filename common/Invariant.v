@@ -139,12 +139,30 @@ Qed.
 
 (** * Calling conventions as invariants *)
 
-Definition inv_cc {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invariant liB :=
+Definition invcc_in {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invariant liB :=
   {|
     inv_world := (inv_world IA * ccworld cc);
-    symtbl_inv '(wA, wcc) se2 := exists se1, symtbl_inv IA wA se1 /\ match_senv cc wcc se1 se2;
-    query_inv '(wA, wcc) q2 := exists q1, query_inv IA wA q1 /\ match_query cc wcc q1 q2;
+    symtbl_inv '(wA, wcc) se2 := exists se1, symtbl_inv IA wA se1
+                                        /\ match_senv cc wcc se1 se2;
+    query_inv '(wA, wcc) q2 := exists q1, query_inv IA wA q1
+                                     /\ match_query cc wcc q1 q2; 
     reply_inv '(wA, wcc) r2 := exists r1, reply_inv IA wA r1 /\ match_reply cc wcc r1 r2;
+  |}.
+
+
+Definition invcc_out {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invariant liB :=
+  {|
+    inv_world := inv_world IA;
+    symtbl_inv wA se2 := exists se1 wcc, symtbl_inv IA wA se1
+                                    /\ match_senv cc wcc se1 se2;
+    query_inv wA q2 := forall w q1, match_query cc w q1 q2 ->
+                               query_inv IA wA q1;
+    (* A requirement for target incoming reply? It is equivalent to a
+    requirement for outgoing reply of the linked module *)
+    reply_inv _ r2 :=  forall w wA q1 q2, match_query cc w q1 q2 ->
+                                     query_inv IA wA q1 ->
+                                     exists r1, match_reply cc w r1 r2
+                                           /\ reply_inv IA wA r1;
   |}.
 
 

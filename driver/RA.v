@@ -7,6 +7,71 @@ Require Import Locations CallConv.
 Require Import Inject InjectFootprint.
 Require Import CA Rusttypes.
 
+(** Structual convention between Rust and assembly (RA) *)
+
+Record cc_ra_world :=
+  raw{
+      raw_sg : signature;
+      raw_rs : regset;
+      raw_m : mem
+    }.
+
+Inductive cc_rust_asm_mq : cc_ra_world -> rust_query -> query li_asm -> Prop:=
+  cc_rust_asm_mq_intro rsg args m (rs: regset) tm (ls : Locmap.t):
+    let sp := rs#SP in let ra := rs#RA in let vf := rs#PC in
+    let sg := signature_of_rust_signature rsg in
+    args = (map (fun p => Locmap.getpair p ls) (loc_arguments sg)) ->
+    ls = make_locset_rs rs tm sp ->
+    args_removed sg sp tm m ->
+    Val.has_type sp Tptr ->
+    Val.has_type ra Tptr ->
+    valid_blockv (Mem.support tm) sp ->
+    vf <> Vundef -> ra <> Vundef ->
+    cc_rust_asm_mq
+      (raw sg rs tm)
+      (rsq vf rsg args m)
+      (rs,tm).
+
+Inductive cc_rust_asm_mr : cc_ra_world -> rust_reply -> reply li_asm -> Prop :=
+  cc_rust_asm_mr_intro sg res tm m' tm' (rs rs' :regset) :
+     let sp := rs#SP in
+     res = rs_getpair (map_rpair preg_of (loc_result sg)) rs' ->
+     (forall r, is_callee_save r = true -> rs' (preg_of r) = rs (preg_of r)) ->
+     Mem.unchanged_on (not_init_args (size_arguments sg) sp) m' tm' ->
+     Mem.unchanged_on (loc_init_args (size_arguments sg) sp) tm tm' ->
+     Mem.support m' = Mem.support tm' ->
+     (forall b ofs k p, loc_init_args (size_arguments sg) sp b ofs ->
+                       ~ Mem.perm m' b ofs k p) ->
+     rs'#SP = rs#SP -> rs'#PC = rs#RA ->
+     cc_rust_asm_mr
+       (raw sg rs tm)
+       (rsr res m')
+       (rs', tm').
+
+Program Definition cc_rust_asm : callconv li_rs li_asm :=
+  {|
+    match_senv _ := eq;
+    match_query := cc_rust_asm_mq;
+    match_reply := cc_rust_asm_mr
+  |}.
+Next Obligation.
+  split; auto.
+Defined.
+
+Lemma cc_ra_rcca:
+  ccref cc_rust_asm (cc_rust_c @ cc_c_asm).
+Admitted.
+
+
+Lemma cc_rcca_ra:
+  ccref (cc_rust_c @ cc_c_asm) cc_rust_asm.
+Admitted.
+
+Lemma cc_ra_rcca_equiv:
+  cceqv cc_rust_asm (cc_rust_c @ cc_c_asm).
+Proof. split. apply cc_ra_rcca. apply cc_rcca_ra. Qed.
+    
+
 (** Definition of cc_rust_asm_injp (RAinjp) as the general calling
 convention between Rust and assembly.  The memory and arguments are
 related by some injection function. *)
@@ -72,19 +137,19 @@ Next Obligation.
 Qed.
 
 
-(** cc_rust_asm_injp ≡ cc_rust_c @ cc_c_asm_injp *)
+(** cc_rust_asm_injp ≡ cc_rs injp @ cc_rust_asm *)
 
-Lemma cc_rainjp__rc_cainjp :
-  ccref (cc_rust_asm_injp) (cc_rust_c @ cc_c_asm_injp).
+Lemma cc_rainjp_injpra :
+  ccref (cc_rust_asm_injp) (cc_rs injp @ cc_rust_asm).
 Proof.
 Admitted.
 
-Lemma cc_rc_cainjp_rainjp :
-  ccref (cc_rust_c @ cc_c_asm_injp) (cc_rust_asm_injp).
+Lemma cc_injpra_rainjp :
+  ccref (cc_rs injp @ cc_rust_asm) (cc_rust_asm_injp).
 Proof.
 Admitted.
 
-Theorem rainjp__rc_cainjp_equiv :
-  cceqv (cc_rust_asm_injp) (cc_rust_c @ cc_c_asm_injp).
-Proof. split. apply cc_rainjp__rc_cainjp. apply cc_rc_cainjp_rainjp. Qed.  
+Theorem rainjp_injpra_equiv :
+  cceqv (cc_rust_asm_injp) (cc_rs injp @ cc_rust_asm).
+Proof. split. apply cc_rainjp_injpra. apply cc_injpra_rainjp. Qed.  
 

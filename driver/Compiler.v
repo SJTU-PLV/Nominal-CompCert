@@ -913,9 +913,6 @@ Proof.
   (* move ro to the top *)
   rewrite cc_cainjp__injp_ca.
   rewrite cc_compose_assoc.
-  rewrite injp_injp at 2. rewrite cc_c_compose, cc_compose_assoc.
-  rewrite <- (cc_compose_assoc _ cc_c_asm).
-  rewrite cc_injpca_cainjp.
   rewrite <- lessdef_c_cklr, cc_compose_assoc, <- (cc_compose_assoc wt_c).
   rewrite (commute_around (wt_c @ lessdef_c)).
   rewrite !(commute_around cc_rust_c).
@@ -930,12 +927,46 @@ Proof.
   rewrite wt_rs_R_refinement.
   rewrite !cc_compose_assoc, <- (cc_compose_assoc lessdef_rs).
   rewrite lessdef_rs_cklr.
-  (* merge injp, cc_rust_c and cc_c_asm_injp *)
-  (* TODO: define cc_rust_asm *)
-  (* erewrite <- (commute_around cc_rust_c). *)
-Admitted.
+  (* merge injp, cc_rust_c and cc_c_asm_injp *)  
+  rewrite <- (cc_compose_assoc cc_rust_c), cc_rcca_ra.
+  rewrite <- (cc_compose_assoc (cc_rs injp)), cc_injpra_rainjp.
+  reflexivity.
+Qed.
 
+Lemma cc_rust_expand:
+  ccref
+    cc_rust_compcert
+    (ro_rs @                    (* Self simulation of Rustlight *)
+       cc_rs injp @             (* RustIRgen *)
+       cc_rs injp @             (* Elaborate drop *)
+       (cc_rs inj @ cc_rust_c) @  (* Clightgen *)
+       (** may be we should not use cc_compcert because it contains
+       some self-simulation invariant which is not belong to the
+       compiler *)
+       cc_compcert)             (* CompCertO *)
+.
+Proof.
+  unfold cc_rust_compcert, cc_compcert.
+  rewrite !cc_compose_assoc.
+  (* move inj to top *)
+  rewrite injp__injp_inj_injp at 1.
 
+  (* (* construct cainjp *) *)
+  (* rewrite cc_rainjp_injpra. rewrite injp_injp at 1. *)
+  (* rewrite cc_rs_compose. *)
+  (* rewrite !cc_compose_assoc. *)
+  (* rewrite cc_ra_rcca, cc_compose_assoc. *)
+  
+  (* commut_rust_c *)
+  (* (* push down wt_rs *) *)
+  (* rewrite <- lessdef_rs_cklr at 1. *)
+  (* rewrite <- !(cc_compose_assoc wt_rs). *)
+  (* assert (A: ccref ((wt_rs @ lessdef_rs) @ cc_rs injp) (cc_rs injp @ (wt_rs @ lessdef_rs))). *)
+  (* apply commut_wt_rs. rewrite A. *)
+  
+  (* rewrite cc_ra_rcca, cc_compose_assoc. *)
+Admitted.  
+  
 (** ** Composition of passes *)
 
 Theorem clight_semantic_preservation:

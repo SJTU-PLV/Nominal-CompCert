@@ -15,12 +15,12 @@ Require Import Inject InjectFootprint.
 
 (** Definition of CA, the pure structure calling convention between C and assembly.
 In CA, the only difference between the source and target memories is the outgoing arguments *)
-Record cc_ca_world :=
-  caw{
-      caw_sg : signature;
-      caw_rs : regset;
-      caw_m : mem
-    }.
+  Record cc_ca_world :=
+    caw{
+        caw_sg : signature;
+        caw_rs : regset;
+        caw_m : mem
+      }.
 
 Definition make_locset_rs (rs: regset) (m:mem) (sp: val) (l:loc):=
   match l with
