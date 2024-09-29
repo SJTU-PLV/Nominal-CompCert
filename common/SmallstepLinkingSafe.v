@@ -183,7 +183,7 @@ Record lts_invariant_preserves {liA liB S} (L: lts liA liB S) (IA: invariant liA
       Step L s t s' ->
       IS w s';
     preserves_initial_state q s:
-      (* valid_query L q = true -> *)
+      valid_query L q = true ->
       query_inv IB w q ->
       initial_state L q s ->
       IS w s;
@@ -225,6 +225,7 @@ Record lts_invariant_progress {liA liB S} se (L: lts liA liB S) (IA: invariant l
 
 
 Record module_safe_components {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) :=
+  Module_safe_components
   {
     msafe_invariant: inv_world IB -> state L -> Prop;
 
@@ -238,6 +239,22 @@ Record module_safe_components {liA liB} (L: semantics liA liB) (IA: invariant li
       Genv.valid_for (skel L) se ->
       lts_invariant_progress se (L se) IA IB msafe_invariant wB;
   }.
+
+(* For some specific example, we need to fix the symbol table *)
+Record module_safe_se_components {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) se :=
+  Module_safe_se_components
+  {
+    msafe_se_invariant: inv_world IB -> state L -> Prop;
+
+    msafe_se_preservation: forall wB,
+      symtbl_inv IB wB se ->
+      lts_invariant_preserves (L se) IA IB msafe_se_invariant wB;
+
+    msafe_se_progress: forall wB,
+      symtbl_inv IB wB se ->
+      lts_invariant_progress se (L se) IA IB msafe_se_invariant wB;
+  }.
+
 
 Lemma star_preserves_invariant {liA liB S} (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB): forall w s t s' IS (PRE: lts_invariant_preserves L IA IB IS w),
     IS w s ->
@@ -285,6 +302,31 @@ Proof.
     eapply reachable_preserves_invariant; eauto.
 Qed.
 
+Lemma module_safe_se_components_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) se:
+  module_safe_se_components L IA IB se ->
+  module_safe_se L IA IB not_stuck se.
+Proof.
+  intros SAFE. inv SAFE.
+  red. intros w WTSE.
+  exploit msafe_se_preservation0; eauto. intros PRE.
+  exploit msafe_se_progress0; eauto. intros PRO.
+  constructor.
+  (* reachable not stuck *)
+  - intros s REACH.
+    eapply reachable_preserves_invariant with (IS:= msafe_se_invariant0) in REACH; auto.
+    eapply progress_internal_state; eauto.
+  (* initial_progress *)
+  - eapply progress_initial_state; eauto.
+  (* external_progress *)
+  - intros s q REACH.
+    eapply progress_external_state; eauto.
+    eapply reachable_preserves_invariant; eauto.
+  (* final_progress *)
+  - intros s r REACH.
+    eapply progress_final_state; eauto.
+    eapply reachable_preserves_invariant; eauto.
+Qed.
+  
 
 (* Propeties of reachable state in composed semantics *)
 Section REACH.

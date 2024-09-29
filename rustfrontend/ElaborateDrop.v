@@ -266,10 +266,6 @@ Fixpoint init_drop_flags (mayinit mayuninit universe: PathsMap.t) (flags: list (
       OK (Ssequence init stmt)
   end.
 
-(* instance of [get_an] *)
-Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t)) (pc: node) : PathsMap.t * PathsMap.t * PathsMap.t :=
-  let '(mayinit, mayuninit, universe) := an in
-  (mayinit!!pc, mayuninit!!pc, universe).
 
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do (entry, cfg) <- generate_cfg f.(fn_body);

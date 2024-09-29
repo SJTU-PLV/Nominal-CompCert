@@ -91,39 +91,33 @@ Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node
   | _, _ => Errors.Error (msg "Error in initialize analysis")
   end.
 
+(* instance of [get_an] *)
+Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t)) (pc: node) : PathsMap.t * PathsMap.t * PathsMap.t :=
+  let '(mayinit, mayuninit, universe) := an in
+  (mayinit!!pc, mayuninit!!pc, universe).
+
 (** Definitions of must_owned and may_owned used in Drop elaboration *)
 
-Definition must_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id initmap in
-  let uninit := PathsMap.get id uninitmap in
-  let universe := PathsMap.get id universemap in
-  let mustinit := Paths.diff init uninit in
-  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *)
-  Paths.for_all (fun p' => Paths.mem p' mustinit)
-    (Paths.filter (fun p' => is_prefix p' p) universe).
+(* Definition must_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool := *)
+(*   let id := local_of_place p in *)
+(*   let init := PathsMap.get id initmap in *)
+(*   let uninit := PathsMap.get id uninitmap in *)
+(*   let universe := PathsMap.get id universemap in *)
+(*   let mustinit := Paths.diff init uninit in *)
+(*   (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *) *)
+(*   Paths.for_all (fun p' => Paths.mem p' mustinit) *)
+(*     (Paths.filter (fun p' => is_prefix p' p) universe). *)
 
-(* place that needs drop flag *)
-Definition may_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id initmap in
-  let uninit := PathsMap.get id uninitmap in
-  let universe := PathsMap.get id universemap in
-  let mayinit := Paths.inter init uninit in
-  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mayinit *)
-  Paths.for_all (fun p' => Paths.mem p' mayinit)
-    (Paths.filter (fun p' => is_prefix p' p) universe).
-
-(* Used in static move checking *)
-Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id initmap in
-  let uninit := PathsMap.get id uninitmap in
-  let universe := PathsMap.get id universemap in
-  let mustinit := Paths.diff init uninit in
-  (* ∀ p' ∈ universe, is_prefix p p' → must_owned p' *)
-  Paths.for_all (must_owned initmap uninitmap universemap)
-    (Paths.filter (is_prefix p) universe).
+(* (* place that needs drop flag *) *)
+(* Definition may_owned (initmap uninitmap universemap: PathsMap.t) (p: place) : bool := *)
+(*   let id := local_of_place p in *)
+(*   let init := PathsMap.get id initmap in *)
+(*   let uninit := PathsMap.get id uninitmap in *)
+(*   let universe := PathsMap.get id universemap in *)
+(*   let mayinit := Paths.inter init uninit in *)
+(*   (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mayinit *) *)
+(*   Paths.for_all (fun p' => Paths.mem p' mayinit) *)
+(*     (Paths.filter (fun p' => is_prefix p' p) universe). *)
 
 (* static version of is_init *)
 Definition must_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
@@ -140,6 +134,18 @@ Definition may_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
   let uninit := PathsMap.get id uninitmap in
   let mayinit := Paths.inter init uninit in
   Paths.mem p mayinit.
+
+(* Used in static move checking *)
+Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
+  let id := local_of_place p in
+  let init := PathsMap.get id initmap in
+  let uninit := PathsMap.get id uninitmap in
+  let universe := PathsMap.get id universemap in
+  let mustinit := Paths.diff init uninit in
+  (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
+  Paths.for_all (must_init initmap uninitmap) (Paths.filter (is_prefix p) universe).
+
+
 
 (* move it to a new file *)
 

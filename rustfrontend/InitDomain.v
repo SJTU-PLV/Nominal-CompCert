@@ -114,16 +114,20 @@ Fixpoint own_path_box (p: place) (ty: type) :=
   end.
 
 (* place [p] owns a memory location and we need to check its value is
-initialized *)
+initialized. If we only consider move checking and the program is
+syntactically well-typed , no need to do this check *)
 Fixpoint place_owns_loc (p: place) : bool :=
   match p with
   | Plocal _ _ => true
   (* What about x: &mut Box<i32> ? We must check that p is an owned
   chain! *)
-  | Pderef p' (Tbox _) => place_owns_loc p'
+  | Pderef p' _ =>
+      match typeof_place p' with
+      | Tbox _ =>  place_owns_loc p'
+      | _ => false
+      end
   | Pfield p' _ _ => place_owns_loc p'
   | Pdowncast p' _ _ => place_owns_loc p'
-  | _ => false
   end.
 
 (** The core function of adding a place [p] to the whole set [l] *)

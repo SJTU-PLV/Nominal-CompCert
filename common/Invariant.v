@@ -165,6 +165,15 @@ Definition invcc_out {liA liB} (IA: invariant liA) (cc: callconv liA liB) : inva
                                            /\ reply_inv IA wA r1;
   |}.
 
+(** Compose two invariants *)
+Definition inv_compose {li} (I1 I2: invariant li) : invariant li :=
+  {|
+    inv_world := (inv_world I1 * inv_world I2);
+    symtbl_inv '(w1, w2) se := symtbl_inv I1 w1 se /\ symtbl_inv I2 w2 se;
+    query_inv '(w1, w2) q := query_inv I1 w1 q /\ query_inv I2 w2 q;
+    reply_inv '(w1, w2) r := reply_inv I1 w1 r /\ reply_inv I2 w2 r;
+  |}.
+
 
 (** * Invariant-based simulation proof methods *)
 
