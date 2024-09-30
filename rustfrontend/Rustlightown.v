@@ -115,11 +115,11 @@ Definition is_owned (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
   let universe := PathsMap.get id own.(own_universe) in
-  (* ∀ p' ∈ universe, is_prefix p' p → p' ∈ mustinit *)
+  (* ∀ p' ∈ universe, is_prefix p' p \/ is_shallow_prefix p p' → p' ∈ mustinit *)
   Paths.for_all (fun p' => Paths.mem p' init)
-    (Paths.filter (fun p' => is_prefix p' p) universe).
+    (Paths.filter (fun p' => is_prefix p' p || is_shallow_prefix p p') universe).
 
-(* It is only used fpr place that is in the universe (e.g., the place obtained from split_drop_places) *)
+(* It is only used for place that is in the universe (e.g., the place obtained from split_drop_places) *)
 Definition is_init (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
