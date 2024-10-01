@@ -70,21 +70,24 @@ Definition generate_place_map {A} (l: list (place * A)) : PTree.t (list (place *
 
 Section INIT_UNINIT.
 
-Variable (maybeInit maybeUninit: PMap.t PathsMap.t).
+Variable (maybeInit maybeUninit: PMap.t IM.t).
 Variable universe : PathsMap.t.
 
 Definition generate_drop_flags_at (ce: composite_env) (f: function) (pc: node) (instr: instruction) : list (place * ident) :=
-  match instr with
-  | Isel sel _ =>
-      let mayinit := maybeInit!!pc in
-      let mayuninit := maybeUninit!!pc in
-      match select_stmt f.(fn_body) sel with
-      | Some (Sdrop p) =>
-          generate_drop_flags_for mayinit mayuninit universe ce p
-      | _ => []
+  match maybeInit!!pc, maybeUninit!!pc with
+  | IM.State mayinit, IM.State mayuninit =>
+      match instr with
+      | Isel sel _ =>
+          match select_stmt f.(fn_body) sel with
+          | Some (Sdrop p) =>
+              generate_drop_flags_for mayinit mayuninit universe ce p
+          | _ => []
+          end
+      | _ => []     
       end
-  | _ => []
+  | _, _ => []
   end.
+
 
 Definition generate_drop_flags (ce: composite_env) (f: function) (cfg: rustcfg) : Errors.res (list (place * ident)) :=
   let flags := concat (map snd (PTree.elements (PTree.map (generate_drop_flags_at ce f) cfg))) in
@@ -209,25 +212,31 @@ Fixpoint add_dropflag_list universeMap (l: list place) (flag: bool) : Errors.res
 
 (* Instance of transl_stmt in the transl_on_cfg. [an] is (mayinit,
 mayuninit, universe) *)
-Definition elaborate_stmt (an: PathsMap.t * PathsMap.t * PathsMap.t) (stmt: statement) : Errors.res statement :=
-  let '(mayinit, mayuninit, universe) := an in
-  match stmt with
-  | Sdrop p =>
-      elaborate_drop_for mayinit mayuninit universe ce m p
-  | Sassign p e
-  | Sassign_variant p _ _ e
-  | Sbox p e =>
-      let deinit := moved_place e in
-      do stmt1 <- add_dropflag_option universe deinit false;
-      do stmt2 <- add_dropflag universe p true;
-      OK (Ssequence stmt1 (Ssequence stmt2 stmt))
-  | Scall p e el =>
-      let mvpaths := moved_place_list el in
-      do stmt1 <- add_dropflag_list universe mvpaths false;
-      do stmt2 <- add_dropflag universe p true;
-      OK (Ssequence (Ssequence stmt1 stmt) stmt2)
-  | _ => OK stmt
+Definition elaborate_stmt (an: IM.t * IM.t * PathsMap.t) (stmt: statement) : Errors.res statement :=
+  let '(mayInit, mayUninit, universe) := an in
+  match mayInit, mayUninit with
+  | IM.State mayinit, IM.State mayuninit =>      
+      match stmt with
+      | Sdrop p =>
+          elaborate_drop_for mayinit mayuninit universe ce m p
+      | Sassign p e
+      | Sassign_variant p _ _ e
+      | Sbox p e =>
+          let deinit := moved_place e in
+          do stmt1 <- add_dropflag_option universe deinit false;
+          do stmt2 <- add_dropflag universe p true;
+          OK (Ssequence stmt1 (Ssequence stmt2 stmt))
+      | Scall p e el =>
+          let mvpaths := moved_place_list el in
+          do stmt1 <- add_dropflag_list universe mvpaths false;
+          do stmt2 <- add_dropflag universe p true;
+          OK (Ssequence (Ssequence stmt1 stmt) stmt2)
+      | _ => OK stmt
+      end
+  (* impossible *)
+  | _, _ => OK stmt
   end.
+      
 
 End ELABORATE.
 
@@ -266,6 +275,13 @@ Fixpoint init_drop_flags (mayinit mayuninit universe: PathsMap.t) (flags: list (
       OK (Ssequence init stmt)
   end.
 
+Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
+  match mayInit, mayUninit with
+  | IM.State mayinit, IM.State mayuninit =>      
+      init_drop_flags mayinit mayuninit universe flags
+  | _, _ =>
+      Error (msg "impossible in init_drop_flags_bot")
+  end.
 
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do (entry, cfg) <- generate_cfg f.(fn_body);
@@ -282,7 +298,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let entry_init := mayinit!!entry in
   let entry_uninit := mayuninit!!entry in
   (* init drop flags: if no flags, it would be a Sskip *)
-  do init_stmt <- init_drop_flags entry_init entry_uninit universe flags;
+  do init_stmt <- init_drop_flags_bot entry_init entry_uninit universe flags;
   let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
   Errors.OK (mkfunction f.(fn_generic_origins)
                         f.(fn_origins_relation)

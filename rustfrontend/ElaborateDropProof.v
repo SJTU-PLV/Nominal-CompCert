@@ -463,7 +463,7 @@ Proof.
 Qed.
 
 (* analysis result and flag map types *)
-Definition AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
+Definition AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
 Definition FM : Type := PTree.t (list (place * ident)).
 
 Definition match_glob (ctx: composite_env) (gd tgd: globdef fundef type) : Prop :=
@@ -658,24 +658,24 @@ Inductive match_split_drop_places flagm : own_env -> list (place * bool) -> stat
 
 (* Invariant of generate_drop_flags *)
 
-Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit: PMap.t PathsMap.t) (universe: PathsMap.t) :=
-  forall pc next p p1 sel drops,
+Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uninit: PMap.t IM.t) (universe: PathsMap.t) :=
+  forall pc next p p1 sel drops mayinit mayuninit,
     cfg ! pc = Some (Isel sel next) ->
     select_stmt body sel = Some (Sdrop p) ->
     split_drop_place ce (PathsMap.get (local_of_place p) universe) p (typeof_place p) = OK drops ->
     In p1 (map fst drops) ->
     get_dropflag_temp flagm p1 = None ->
+    get_IM_state init!!pc uninit!!pc (Some (mayinit, mayuninit)) ->
     (* must owned *)
-    (must_init init!!pc uninit!!pc p1 = true \/
+    (must_init mayinit mayuninit p1 = true \/
        (* must unowned *)
-       may_init init!!pc uninit!!pc p1 = false).
+       may_init mayinit mayuninit p1 = false).
 
 (** IMPORTANT TODO  *)
 Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
     (GEN: generate_drop_flags mayinitMap mayuninitMap universe ce f cfg = OK flags),
     sound_flagm ce f.(fn_body) cfg (generate_place_map flags) mayinitMap mayuninitMap universe.
 Admitted.
-
 
 
 Section PRESERVATION.
@@ -971,7 +971,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (INJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (MCONT: match_cont j an flagm body cfg k tk pc cont brk nret m tm bound tbound),
     match_cont j an flagm body cfg (Kdropcall id (Vptr b ofs) st membs k) (RustIRsem.Kdropcall id (Vptr tb tofs) st membs tk) pc cont brk nret m tm bound tbound
-| match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe entry
+| match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe entry mayinit mayuninit
     (** Do we need match_stacks here?  *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
@@ -980,7 +980,8 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
     (ORDERED: move_ordered_split_places_spec own1 (map fst l))
-    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
+    (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
+    (OWN: sound_own own2 mayinit mayuninit universe)
     (MOVESPLIT: move_split_places own1 l = own2),
     (* source program: from dropplace to droopstate, target: from
     state to dropstate. So Kdropplace matches Kcall *)
@@ -989,15 +990,16 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
 with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> sup -> Prop :=
 | match_stacks_stop: forall m tm bound tbound,
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
-| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry stmt
+| match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry stmt mayinit mayuninit
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* own2 is built after the function call *)
-    (AFTER: own2 = init_place own1 p)                  
-    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe)
+    (AFTER: own2 = init_place own1 p)
+    (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
+    (OWN: sound_own own2 mayinit mayuninit universe)
     (STMT: add_dropflag flagm ce universe p true = OK stmt),
     match_stacks j (Kcall p f le own1 k) (RustIRsem.Kcall (Some p) tf tle (RustIRsem.Kseq stmt tk)) m tm hi thi
 .
@@ -1158,7 +1160,7 @@ Qed.
 
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
-  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi entry
+  forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi entry mayinit mayuninit
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MSTMT: match_stmt (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg s ts pc next cont brk nret)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
@@ -1169,11 +1171,12 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
     (* Put sound_own here which may be inevitable due to the
     flow-insensitiveness of RustIR semantics.*)
-    (SOUNDOWN: sound_own own maybeInit!!pc maybeUninit!!pc universe)
+    (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
+    (SOUNDOWN: sound_own own mayinit mayuninit universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
-| match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi entry
+| match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi entry mayinit mayuninit
     (AN: analyze ce f cfg entry= OK (maybeInit, maybeUninit, universe))
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MDPS: match_drop_place_state st ts1)
@@ -1187,7 +1190,8 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     (* small-step move_place to simulate big-step move_place in
     transfer. maybe difficult to prove *)
     (MOVESPLIT: move_split_places own1 l = own2)
-    (OWN: sound_own own2 maybeInit!!next maybeUninit!!next universe)
+    (IM: get_IM_state maybeInit!!next maybeUninit!!next (Some (mayinit, mayuninit)))
+    (OWN: sound_own own2 mayinit mayuninit universe)
     (BOUND: Mem.sup_include hi (Mem.support m))
     (TBOUND: Mem.sup_include thi (Mem.support tm)),
     match_states (Dropplace f st l k e own1 m) (RustIRsem.State tf ts1 (RustIRsem.Kseq ts2 tk) te tm)
@@ -2228,6 +2232,7 @@ Proof.
       eapply match_envs_flagm_sync_step; eauto.
       auto.
       eauto.
+      inv IM. econstructor.
       auto.
       auto. eapply Mem.sup_include_trans. eauto.
       eapply Mem.unchanged_on_support. eauto.      
@@ -2282,7 +2287,10 @@ Proof.
     etransitivity; eauto.
     (* match_envs_flagm *)
     eapply match_envs_flagm_injp_acc; eauto.
-    auto. eauto. auto.
+    auto. eauto.
+    (* get_IM *)
+    inv IM. econstructor.
+    auto.
     (* sup include *)
     inv MINJ1. inv H10. inv H11.
     eapply Mem.sup_include_trans; eauto.
@@ -2523,7 +2531,10 @@ Lemma step_simulation:
 Proof. 
   induction 1; intros; inv MS.
   (* step_assign *)
-  - inv MSTMT. simpl in TR. monadInv TR.
+  - inv MSTMT. simpl in TR. inv IM.
+    rewrite <- H4 in TR. rewrite <- H5 in TR.
+    rename H4 into GETINIT. rename H5 into GETUNINIT.
+    monadInv TR.
     set (own2:=(move_place_option own1 (moved_place e))).
     set (own3:=(own_transfer_assign own2 p)).
     (* evaluate x *)
@@ -2609,24 +2620,30 @@ Proof.
     assert (SUP3: Mem.sup_include thi (Mem.support tm4)).
     { eapply Mem.sup_include_trans. eauto.
       erewrite <- assign_loc_support. eapply Mem.sup_include_refl.
-      eauto. }      
-    econstructor; eauto. econstructor.
-    etransitivity. eauto. eauto.
-    (* sound_own *)
-    exploit analyze_succ; eauto. simpl. eauto.
+      eauto. }
+    (* construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
     instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
-    unfold transfer. rewrite SEL. rewrite STMT.
     exploit move_option_place_sound; eauto.
     instantiate (1 := (moved_place e)). intros SOUND1.
     exploit init_place_sound; eauto.
-    intros (mayinit3 & mayuninit3 & A & B & C). subst.
-    auto.    
+    intros (mayinit3 & mayuninit3 & A & B).
+    (* end of construct *)    
+    econstructor; eauto. econstructor.
+    etransitivity. eauto. eauto.
   (* step_assign_variant *)
   - admit.
   (* step_box *)
   - admit.
   (* step_to_dropplace *)
   - inv MSTMT. simpl in TR.
+    generalize IM as IM1. intros. inv IM.
+    rewrite <- H0 in TR. rewrite <- H in TR.
+    rename H0 into GETINIT. rename H into GETUNINIT.
     unfold elaborate_drop_for in TR.
     (** sound_own property *)
     assert (UNIEQ: PathsMap.eq (own_universe own) universe0) by admit.
@@ -2652,7 +2669,16 @@ Proof.
       eapply split_complete. eauto.
       erewrite is_prefix_same_local. eauto.
       auto. auto.
-      eapply split_ordered; eauto. }    
+      eapply split_ordered; eauto. }
+    (* construct sound_own and get_IM *)
+    exploit analyze_succ. 1-3: eauto. simpl. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    instantiate (1 := (move_split_places own drops)).    
+    (** sound_own: this proof is important. Make it a lemma!  *)
+    eapply sound_own_after_drop; eauto.    
+    intros (mayinit3 & mayuninit3 & A & B).
+    (* match_states *)
     econstructor; eauto.
     econstructor.
     (* match_split_drop_places *)
@@ -2668,21 +2694,12 @@ Proof.
     intros. eapply must_init_sound; eauto.
     exploit split_sound; eauto.
     eapply (in_map fst)in H. eauto.
-    intros (A & B).
+    intros (C & D).
     erewrite <- is_prefix_same_local; eauto.
     intros. eapply must_not_init_sound; eauto.
     eapply sound_own_universe; eauto.
     intros. eapply SFLAGM; eauto.
-    eapply in_map_iff. exists (p0, full). auto.    
-    (* move_ordered_split_places_spec *)
-    (* use analyze_succ *)
-    exploit analyze_succ; eauto. simpl. eauto.
-    instantiate (1 := (move_split_places own drops)).
-    unfold transfer. rewrite SEL. rewrite STMT.
-    (** sound_own: this proof is important. Make it a lemma!  *)
-    eapply sound_own_after_drop; eauto.    
-    intros (mayinit3 & mayuninit3 & A & B & C). subst.
-    auto.
+    eapply in_map_iff. exists (p0, full). auto. 
   (* step_in_dropplace *)
   - eapply step_dropplace_simulation. eauto.
     econstructor; eauto.
@@ -2694,7 +2711,11 @@ Proof.
   (* step_storagedead *)
   - admit.
   (* step_call *)
-  - inv MSTMT. simpl in TR. monadInv TR.
+  - inv MSTMT. simpl in TR.
+    generalize IM as IM1. intros. inv IM.
+    rewrite <- H6 in TR. rewrite <- H7 in TR.
+    rename H6 into GETINIT. rename H7 into GETUNINIT.
+    monadInv TR.
     (* evaluate drop flag list of arguments *)
     exploit eval_dropflag_list_match; eauto.
     eapply PathsMap.eq_sym. eapply sound_own_universe; eauto.
@@ -2747,6 +2768,16 @@ Proof.
     admit.
     eapply star_refl.
     1-5: eauto.
+    (* construct sound_own and get_IM *)
+    exploit analyze_succ. 1-3: eauto.
+    simpl. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    instantiate (1 := (init_place (move_place_list own1 (moved_place_list al)) p)).
+    exploit move_place_list_sound; eauto.
+    intros SOUND1.
+    exploit init_place_sound; eauto.        
+    intros (mayinit3 & mayuninit3 & GIM & SO).     
     (* match_states *)
     econstructor; eauto.
     (* match_stacks *)
@@ -2761,17 +2792,6 @@ Proof.
     auto.
     eapply Mem.sup_include_trans. eauto.
     eapply Mem.unchanged_on_support. eauto.
-    (** sound_own *)
-    exploit analyze_succ; eauto.
-    simpl. eauto.
-    instantiate (1 := (init_place (move_place_list own1 (moved_place_list al)) p)).
-    2: { intros (mayinit3 & mayuninit3 & A & B & C). subst. auto. }
-    unfold transfer. rewrite SEL.
-    rewrite STMT.
-    exploit move_place_list_sound; eauto.
-    instantiate (1 := (moved_place_list al)).
-    intros SOUND1.
-    exploit init_place_sound; eauto.    
   (** DIFFICULT: step_internal_function *)
   - simpl in  FIND.
     assert (GE1: Genv.match_stbls j se tse).
@@ -2790,7 +2810,7 @@ Proof.
     intros (nret & MSTMT & IEND).
     (* own_env in function entry is sound *)
     exploit sound_function_entry. simpl. eauto.
-    eauto. eauto. intros OWNENTRY.        
+    eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
     (** TODO: construct function entry in target program *)
     inv ENTRY.
     (* alloc the same variables and parameters in source and target *)
@@ -2824,6 +2844,8 @@ Proof.
     (* require that init_own is equal to entry analysis result *)
     rename x4 into init_stmts. rename x3 into body.
     (* construct the state after the initialization of drop flags *)
+    unfold init_drop_flags_bot in *. generalize GIM as GIM1. intros. inv GIM.
+    rewrite <- H3 in EQ3. rewrite <- H4 in EQ3. clear H3 H4.
     exploit eval_init_drop_flags_wf; eauto.
     eapply me_tinj; eauto.
     (* norepet of drop_flags *)
