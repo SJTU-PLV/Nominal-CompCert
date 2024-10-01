@@ -1568,7 +1568,7 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
    (MINJ: Mem.inject j1 m1 tm1)
    (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
    (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
-   (STMT: init_drop_flag init uninit universe p id = OK stmt)
+   (STMT: init_drop_flag init uninit p id = OK stmt)
    (OWN: sound_own own init uninit universe)
    (IN: Paths.In p (PathsMap.get (local_of_place p) universe)),
   exists tm2 v,
@@ -1609,7 +1609,7 @@ Qed.
 
 (* no injp_acc *)
 Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e m1 lo hi te tm1 tlo thi own tf k
-  (STMT: init_drop_flags init uninit universe flags = OK init_stmt)
+  (STMT: init_drop_flags init uninit flags = OK init_stmt)
   (OWN: sound_own own init uninit universe)
   (MINJ: Mem.inject j1 m1 tm1)
   (WF: forall p id, In (p, id) flags ->

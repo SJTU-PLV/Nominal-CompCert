@@ -145,7 +145,7 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
   Paths.for_all (must_init initmap uninitmap) (Paths.filter (is_prefix p) universe).
 
-
+Definition dominators_must_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
 
 (* move it to a new file *)
 

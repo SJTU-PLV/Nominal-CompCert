@@ -243,7 +243,7 @@ End ELABORATE.
 
 Local Open Scope error_monad_scope.
 
-Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
+Definition init_drop_flag (mayinit mayuninit: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
   if must_init mayinit mayuninit p then
     OK (set_dropflag flag true)
   else
@@ -266,19 +266,19 @@ Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (p: place) (f
   (* | _, _ => Sskip *)
   (* end. *)
 
-Fixpoint init_drop_flags (mayinit mayuninit universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
+Fixpoint init_drop_flags (mayinit mayuninit: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
   match flags with
   | nil => OK Sskip
   | (p, flag) :: flags' =>
-      do stmt <- init_drop_flags mayinit mayuninit universe flags';
-      do init <- init_drop_flag mayinit mayuninit universe p flag;
+      do stmt <- init_drop_flags mayinit mayuninit flags';
+      do init <- init_drop_flag mayinit mayuninit p flag;
       OK (Ssequence init stmt)
   end.
 
-Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
+Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (flags: list (place * ident)) : Errors.res statement :=
   match mayInit, mayUninit with
   | IM.State mayinit, IM.State mayuninit =>      
-      init_drop_flags mayinit mayuninit universe flags
+      init_drop_flags mayinit mayuninit flags
   | _, _ =>
       Error (msg "impossible in init_drop_flags_bot")
   end.
@@ -298,13 +298,13 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let entry_init := mayinit!!entry in
   let entry_uninit := mayuninit!!entry in
   (* init drop flags: if no flags, it would be a Sskip *)
-  do init_stmt <- init_drop_flags_bot entry_init entry_uninit universe flags;
+  do init_stmt <- init_drop_flags_bot entry_init entry_uninit flags;
   let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
   Errors.OK (mkfunction f.(fn_generic_origins)
                         f.(fn_origins_relation)
                         f.(fn_drop_glue)
                         f.(fn_return)
-                        f.(fn_callconv)                        
+                        f.(fn_callconv)
                         (f.(fn_vars) ++ flag_vars)
                         f.(fn_params)
                         (Ssequence init_stmt stmt))

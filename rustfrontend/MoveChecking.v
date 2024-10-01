@@ -6,11 +6,12 @@ Require Import Lattice Kildall.
 Require Import Rusttypes Rustlight Rustlightown RustIR.
 Require Import Errors.
 Require Import InitDomain InitAnalysis RustIRcfg.
+
 Import ListNotations.
 Local Open Scope error_monad_scope.
 
 Section INIT.
-            
+
 Variable init uninit universe: PathsMap.t.
   
 Fixpoint move_check_pexpr (pe : pexpr) : bool :=
@@ -39,26 +40,31 @@ Definition move_check_assign (p : place) :=
 
 End INIT.
 
-Definition move_check_stmt (an : PathsMap.t * PathsMap.t * PathsMap.t) (stmt : statement) : Errors.res statement :=
-  let '(mayinit, mayuninit, universe) := an in
-  match stmt with
-  | Sassign p0 e
-  | Sassign_variant p0 _ _ e
-  | Sbox p0 e =>
-     if move_check_expr mayinit mayuninit universe e
-     then
-       if move_check_assign mayinit mayuninit p0
-      then OK stmt
-       else Error (msg "move_check_assign error")
-     else Error (msg "move_check_expr error")
-  | Scall p0 _ el =>
-      if move_check_exprlist mayinit mayuninit universe el
-      then
-        if move_check_assign mayinit mayuninit p0
-        then OK stmt
-      else Error (msg "move_check_assign error")
-      else Error (msg "move_check_exprlist error")
-  | _ => OK stmt
+Definition move_check_stmt (an : IM.t * IM.t * PathsMap.t) (stmt : statement) : Errors.res statement :=
+  let '(mayInit, mayUninit, universe) := an in
+  match mayInit, mayUninit with
+  | IM.State mayinit, IM.State mayuninit =>      
+      match stmt with
+      | Sassign p0 e
+      | Sassign_variant p0 _ _ e
+      | Sbox p0 e =>
+          if move_check_expr mayinit mayuninit universe e
+          then
+            if move_check_assign mayinit mayuninit p0
+            then OK stmt
+            else Error (msg "move_check_assign error")
+          else Error (msg "move_check_expr error")
+      | Scall p0 _ el =>
+          if move_check_exprlist mayinit mayuninit universe el
+          then
+            if move_check_assign mayinit mayuninit p0
+            then OK stmt
+            else Error (msg "move_check_assign error")
+          else Error (msg "move_check_exprlist error")
+      | _ => OK stmt
+      end
+  (* impossible *)
+  | _, _ => OK stmt
   end.
 
 Definition move_check_function (ce: composite_env) (f: function) : Errors.res unit :=
