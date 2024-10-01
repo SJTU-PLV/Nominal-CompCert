@@ -254,6 +254,105 @@ Fixpoint add_place_list S (l: list place) (m: PathsMap.t) : PathsMap.t :=
       add_place_list S l' (add_place S p m)
   end.
 
+(** Top-level init domain for analysis which contains bot to represent
+impossible cases *)
+
+Module IM <: SEMILATTICE.
+
+  Inductive t' := Bot | State (m: PathsMap.t).
+  Definition t := t'.
+
+  Definition eq (x y: t) :=
+    match x, y with
+    | Bot, Bot => True
+    | State m1, State m2 =>
+        PathsMap.eq m1 m2
+    | _, _ => False
+    end.
+
+  Lemma eq_refl: forall x, eq x x.
+  Proof.
+    destruct x; simpl. auto. eapply PathsMap.eq_refl.
+  Qed.
+  
+  Lemma eq_sym: forall x y, eq x y -> eq y x.
+  Proof.
+    destruct x, y; simpl; auto.
+    intros. eapply PathsMap.eq_sym. auto.
+  Qed.
+  
+  Lemma eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
+  Proof.
+    destruct x, y, z; simpl; try tauto.
+    intros. eapply PathsMap.eq_trans; eauto.
+  Qed.
+
+  Definition beq (x y: t) : bool :=
+    match x, y with
+    | Bot, Bot => true
+    | State m1, State m2 => PathsMap.beq m1 m2
+    | _, _ => false
+    end.
+
+  Lemma beq_correct: forall x y, beq x y = true -> eq x y.
+  Proof.
+    destruct x, y; simpl; intros.
+    auto.
+    congruence.
+    congruence.
+    eapply PathsMap.beq_correct. auto.
+  Qed.
+
+  Definition ge (x y: t) : Prop :=
+    match x, y with
+    | _, Bot => True
+    | Bot, _ => False
+    | State m1, State m2 => PathsMap.ge m1 m2
+    end.
+
+  Lemma ge_refl: forall x y, eq x y -> ge x y.
+  Proof.
+    destruct x, y; simpl; try tauto.
+    intros. eapply PathsMap.ge_refl. auto.
+  Qed.
+  
+  Lemma ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
+  Proof.
+    destruct x, y, z; simpl; try tauto.
+    intros. eapply PathsMap.ge_trans; eauto.    
+  Qed.
+
+  Definition bot : t := Bot.
+  Lemma ge_bot: forall x, ge x bot.
+  Proof.
+    destruct x; simpl; auto.
+  Qed.
+
+  Definition lub (x y: t) : t :=
+    match x, y with
+    | Bot, _ => y
+    | _, Bot => x
+    | State m1, State m2 => State (PathsMap.lub m1 m2)
+    end.
+
+  Lemma ge_lub_left: forall x y, ge (lub x y) x.
+  Proof.
+    destruct x, y.
+    apply ge_refl; apply eq_refl.
+    simpl. auto.
+    apply ge_refl; apply eq_refl.
+    simpl. eapply PathsMap.ge_lub_left.
+  Qed.
+  Lemma ge_lub_right: forall x y, ge (lub x y) y.
+  Proof.
+    destruct x, y.
+    apply ge_refl; apply eq_refl.
+    apply ge_refl; apply eq_refl.
+    simpl. auto.
+    simpl. eapply PathsMap.ge_lub_right.
+  Qed.
+
+End IM.
 
 (* split places for drop statement based on the places appear in the
 universe *)

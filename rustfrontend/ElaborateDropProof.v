@@ -2436,6 +2436,87 @@ Proof.
     econstructor; eauto.
 Admitted.
 
+(** To move  *)
+Lemma sound_own_after_drop: forall own drops init uninit universe p
+    (SOUND: sound_own own init uninit universe)
+    (SPEC: split_drop_place_spec (PathsMap.get (local_of_place p) (own_universe own)) p drops)
+    (ORDER: move_ordered_split_places_spec own (map fst drops)),
+    sound_own (move_split_places own drops) (remove_place p init) (add_place universe p uninit) universe.
+Proof.
+  intros.
+  (* move_ordered_split_places_spec *)
+  (** sound_own: this proof is important. Make it a lemma!  *)
+  assert (SOWN: sound_own (move_split_places own drops) (remove_place p init) (add_place universe p uninit) universe). 
+  { exploit (move_split_places_uncheck_sound drops own); eauto.
+    intros (INITGE & UNINITGE & UNIEQ1).      
+    constructor.
+    + (* step1 *)
+      assert (STEP1: PathsMap.ge (move_split_places_uncheck own.(own_init) drops) (own_init (move_split_places own drops))) by auto.
+      eapply PathsMap.ge_trans. 2: eapply STEP1.
+      (* step2: one-time remove and recursively remove *)
+      assert (STEP2: PathsMap.ge (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init)  (map fst drops))) (move_split_places_uncheck (own_init own) drops)).
+      { red. intros id.
+        unfold remove_paths_in.
+        (* reduce the steps of PathsMap.set in move_split_places_uncheck *)
+        assert (A: PathsMap.ge (PathsMap.set (local_of_place p) (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops) (own_init own)) (move_split_places_uncheck (own_init own) drops)).
+        { (* require that all places in drops are children of p *)
+          eapply filter_move_split_places_ge.
+          intros. symmetry. eapply is_prefix_same_local.
+          eapply split_sound; eauto. eapply in_map_iff. exists (p0,b). auto. }
+        eapply LPaths.ge_trans.
+        2 : eapply A.
+        assert (CORE: LPaths.ge (Paths.diff (PathsMap.get (local_of_place p) (own_init own))
+                                   (collect_children_in (own_init own)  (map fst drops)))
+                        (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops)).
+        { (* any place in filter_split_places_uncheck is not a child of any place in drops (can be proved by induction), so this place is not in the collect_children_in. *)
+          red. red. intros a IN.
+          eapply Paths.diff_3.
+          eapply filter_split_places_uncheck_unchange; eauto.
+          (* prove by contradiction *)
+          intros IN1.
+          exploit collect_children_in_exists; eauto.
+          intros (p' & IN' & PRE).                      
+          exploit (filter_split_places_subset_collect_children drops a p'); eauto.
+          intros. congruence. }
+        (* unable to use setoid_rewrite *)
+        red. do 2 rewrite PathsMap.gsspec.
+        destruct (peq id (local_of_place p)); subst. auto.
+        apply LPaths.ge_refl. apply LPaths.eq_refl.
+      }        
+      eapply PathsMap.ge_trans. 2: eapply STEP2.
+      (* step3 *)
+      { red. intros id. unfold remove_paths_in, remove_place.
+        assert (CORE: LPaths.ge (Paths.filter (fun elt : Paths.elt => negb (is_prefix p elt))
+             (PathsMap.get (local_of_place p) init)) (Paths.diff (PathsMap.get (local_of_place p) (own_init own)) (collect_children_in (own_init own) (map fst drops))) ).
+        { red. red. intros a.
+          intros IN.
+          eapply Paths.diff_1 in IN as IN1.
+          eapply Paths.diff_2 in IN as IN2.
+          eapply Paths.filter_3. red. solve_proper.
+          eapply sound_own_init; eauto.
+          (* key of proof: [a] is not a children of p *)
+          apply Is_true_eq_true. apply negb_prop_intro.
+          red. intros ISPRE. eapply IN2. clear IN2.
+          eapply Is_true_eq_true in ISPRE.
+          (** TODO: show that a is in the universe and use
+          split_drop_complete to show a ∈ drops *)
+          eapply Paths.union_2 in IN1.
+          eapply own_consistent in IN1; eauto.
+          exploit split_complete; eauto. intros IN2.
+          eapply collect_children_in_implies. eauto.
+          apply is_prefix_refl.
+          eapply Paths.diff_1. erewrite <- is_prefix_same_local; eauto. }
+        red. do 2 rewrite PathsMap.gsspec.
+        destruct (peq id (local_of_place p)); subst. auto.
+        eapply sound_own_init; eauto. }
+      (* uninit part: maybe easy? because there are less places to be
+      added in own_env side *)
+      + admit.
+      (* universe equal *)
+      + eapply PathsMap.eq_trans; eauto. eapply sound_own_universe; eauto.
+Admitted.
+
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
     exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
@@ -2592,83 +2673,14 @@ Proof.
     intros. eapply must_not_init_sound; eauto.
     eapply sound_own_universe; eauto.
     intros. eapply SFLAGM; eauto.
-    eapply in_map_iff. exists (p0, full). auto.
+    eapply in_map_iff. exists (p0, full). auto.    
     (* move_ordered_split_places_spec *)
-    (** sound_own: this proof is important. Make it a lemma!  *)
-    assert (SOWN: sound_own (move_split_places own drops) (remove_place p maybeInit!!pc) (add_place universe0 p maybeUninit!!pc) universe0). 
-    { exploit (move_split_places_uncheck_sound drops own); eauto.
-      intros (INITGE & UNINITGE & UNIEQ1).      
-      constructor.
-      + (* step1 *)
-        assert (STEP1: PathsMap.ge (move_split_places_uncheck own.(own_init) drops) (own_init (move_split_places own drops))) by auto.
-        eapply PathsMap.ge_trans. 2: eapply STEP1.
-        (* step2: one-time remove and recursively remove *)
-        assert (STEP2: PathsMap.ge (remove_paths_in own.(own_init) (local_of_place p) (collect_children_in own.(own_init)  (map fst drops))) (move_split_places_uncheck (own_init own) drops)).
-        { red. intros id.
-          unfold remove_paths_in.
-          (* reduce the steps of PathsMap.set in move_split_places_uncheck *)
-          assert (A: PathsMap.ge (PathsMap.set (local_of_place p) (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops) (own_init own)) (move_split_places_uncheck (own_init own) drops)).
-          { (* require that all places in drops are children of p *)
-            eapply filter_move_split_places_ge.
-            intros. symmetry. eapply is_prefix_same_local.
-            eapply split_sound; eauto. eapply in_map_iff. exists (p0,b). auto. }
-          eapply LPaths.ge_trans.
-          2 : eapply A.
-          assert (CORE: LPaths.ge (Paths.diff (PathsMap.get (local_of_place p) (own_init own))
-                                     (collect_children_in (own_init own)  (map fst drops)))
-                          (filter_split_places_uncheck (PathsMap.get (local_of_place p) (own_init own)) drops)).
-          { (* any place in filter_split_places_uncheck is not a child of any place in drops (can be proved by induction), so this place is not in the collect_children_in. *)
-            red. red. intros a IN.
-            eapply Paths.diff_3.
-            eapply filter_split_places_uncheck_unchange; eauto.
-            (* prove by contradiction *)
-            intros IN1.
-            exploit collect_children_in_exists; eauto.
-            intros (p' & IN' & PRE).                      
-            exploit (filter_split_places_subset_collect_children drops a p'); eauto.
-            
-            intros. congruence. }
-          (* unable to use setoid_rewrite *)
-          red. do 2 rewrite PathsMap.gsspec.
-          destruct (peq id (local_of_place p)); subst. auto.
-          apply LPaths.ge_refl. apply LPaths.eq_refl.
-        }
-        
-        eapply PathsMap.ge_trans. 2: eapply STEP2.
-      (* step3 *)
-      { red. intros id. unfold remove_paths_in, remove_place.
-        assert (CORE: LPaths.ge (Paths.filter (fun elt : Paths.elt => negb (is_prefix p elt))
-             (PathsMap.get (local_of_place p) maybeInit !! pc)) (Paths.diff (PathsMap.get (local_of_place p) (own_init own)) (collect_children_in (own_init own) (map fst drops))) ).
-        { red. red. intros a.
-          intros IN.
-          eapply Paths.diff_1 in IN as IN1.
-          eapply Paths.diff_2 in IN as IN2.
-          eapply Paths.filter_3. red. solve_proper.
-          eapply sound_own_init; eauto.
-          (* key of proof: [a] is not a children of p *)
-          apply Is_true_eq_true. apply negb_prop_intro.
-          red. intros ISPRE. eapply IN2. clear IN2.
-          eapply Is_true_eq_true in ISPRE.
-          (** TODO: show that a is in the universe and use
-          split_drop_complete to show a ∈ drops *)
-          eapply Paths.union_2 in IN1.
-          eapply own_consistent in IN1; eauto.
-          exploit split_complete; eauto. intros IN2.
-          eapply collect_children_in_implies. eauto.
-          apply is_prefix_refl.
-          eapply Paths.diff_1. erewrite <- is_prefix_same_local; eauto. }
-        red. do 2 rewrite PathsMap.gsspec.
-        destruct (peq id (local_of_place p)); subst. auto.
-        eapply sound_own_init; eauto. }
-      (* uninit part: maybe easy? because there are less places to be
-      added in own_env side *)
-      + admit.
-      (* universe equal *)
-      + eapply PathsMap.eq_trans; eauto. eapply sound_own_universe; eauto. }
     (* use analyze_succ *)
     exploit analyze_succ; eauto. simpl. eauto.
     instantiate (1 := (move_split_places own drops)).
-    unfold transfer. rewrite SEL. rewrite STMT. auto.
+    unfold transfer. rewrite SEL. rewrite STMT.
+    (** sound_own: this proof is important. Make it a lemma!  *)
+    eapply sound_own_after_drop; eauto.    
     intros (mayinit3 & mayuninit3 & A & B & C). subst.
     auto.
   (* step_in_dropplace *)

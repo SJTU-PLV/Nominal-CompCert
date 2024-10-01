@@ -13,58 +13,58 @@ Local Open Scope list_scope.
 
 
 (* S is the whole set, flag = true indicates that it computes the MaybeInit set *)
-Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (pc: node) (before: PathsMap.t) : PathsMap.t :=
-  (* This condition complicates the proof. Maybe we can prove that
-  transfer bot = bot *)
-  (* if PathsMap.beq before PathsMap.bot then PathsMap.bot *)
-  (* else *)
-    match cfg ! pc with
-    | None => PathsMap.bot
-    | Some (Inop _) => before
-    | Some (Icond _ _ _) => before
-    | Some Iend => before
-    | Some (Isel sel _) =>
-        match select_stmt f.(fn_body) sel with
-        | None => PathsMap.bot
-        | Some s =>
-        match s with
-        | Sassign p e
-        | Sassign_variant p _ _ e
-        | Sbox p e =>
-            let p' := moved_place e in
-            if flag then
-              add_place S p (remove_option p' before)
-            else
-              remove_place p (add_option S p' before)
-        | Scall p _ al =>
-            let pl := moved_place_list al in
-            if flag then
-              add_place S p (remove_place_list pl before)
-            else
-              remove_place p (add_place_list S pl before)
-        | Sreturn (Some e) =>
-            let p' := moved_place e in
-            if flag then
-              remove_option p' before
-            else
-              add_option S p' before
-        | Sdrop p =>
-            if flag then
-              remove_place p before
-            else
-              add_place S p before
-        | _ => before
-        end
-        end
-    end.
+Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (pc: node) (before: IM.t) : IM.t :=
+  match before with
+  | IM.Bot => IM.Bot
+  | IM.State before =>
+      match cfg ! pc with
+      | None => IM.Bot
+      | Some (Inop _) => IM.State before
+      | Some (Icond _ _ _) => IM.State before
+      | Some Iend => IM.State before
+      | Some (Isel sel _) =>
+          match select_stmt f.(fn_body) sel with
+          | None => IM.Bot
+          | Some s =>
+              match s with
+              | Sassign p e
+              | Sassign_variant p _ _ e
+              | Sbox p e =>
+                  let p' := moved_place e in
+                  if flag then
+                    IM.State (add_place S p (remove_option p' before))
+                  else
+                    IM.State (remove_place p (add_option S p' before))
+              | Scall p _ al =>
+                  let pl := moved_place_list al in
+                  if flag then
+                    IM.State (add_place S p (remove_place_list pl before))
+                  else
+                    IM.State (remove_place p (add_place_list S pl before))
+              | Sreturn (Some e) =>
+                  let p' := moved_place e in
+                  if flag then
+                    IM.State (remove_option p' before)
+                  else
+                    IM.State (add_option S p' before)
+              | Sdrop p =>
+                  if flag then
+                    IM.State (remove_place p before)
+                  else
+                    IM.State (add_place S p before)
+              | _ => IM.State before
+              end
+          end
+      end
+  end.
 
-Module DS := Dataflow_Solver(PathsMap)(NodeSetForward).
+Module DS := Dataflow_Solver(IM)(NodeSetForward).
 
 Local Open Scope error_monad_scope.
 
 (* The analyze returns the MaybeInit and MaybeUninit sets along with
 the universe set *)
-Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node) : Errors.res (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t) :=
+Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node) : Errors.res (PMap.t IM.t * PMap.t IM.t * PathsMap.t) :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
@@ -78,21 +78,26 @@ Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node
   let maybeUninit := add_place_list whole vl empty_pathmap in
   (* generate selector-based CFG for analysis *)
   (* do (entry, cfg) <- generate_cfg f.(fn_body); *)
-  let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry maybeInit in
-  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry maybeUninit in
+  let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry (IM.State maybeInit) in
+  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry (IM.State maybeUninit) in
   match initMap, uninitMap with
   (* we only want the PTree because [None] represent the unreachable node *)
   | Some initMap, Some uninitMap =>
       (** check consistence  *)
-      if PathsMap.beq whole (PathsMap.lub initMap!!entry uninitMap!!entry) then
-        Errors.OK (initMap, uninitMap, whole)
-      else
-        Errors.Error (msg "consistence checking error in analyze")                     
+      match initMap!!entry, uninitMap!!entry with
+      | IM.State einit, IM.State euninit =>
+          if PathsMap.beq whole (PathsMap.lub einit euninit) then
+            Errors.OK (initMap, uninitMap, whole)
+          else
+            Errors.Error (msg "consistence checking error in analyze")
+      | _, _ =>
+          Errors.Error (msg "Entry is bot in initialize analysis")
+      end
   | _, _ => Errors.Error (msg "Error in initialize analysis")
   end.
 
 (* instance of [get_an] *)
-Definition get_init_info (an: (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t)) (pc: node) : PathsMap.t * PathsMap.t * PathsMap.t :=
+Definition get_init_info (an: (PMap.t IM.t * PMap.t IM.t * PathsMap.t)) (pc: node) : IM.t * IM.t * PathsMap.t :=
   let '(mayinit, mayuninit, universe) := an in
   (mayinit!!pc, mayuninit!!pc, universe).
 
@@ -265,12 +270,127 @@ Proof.
   eapply Paths.inter_3; auto.
 Qed.
 
+Lemma sound_own_bot_any: forall own universe init uninit,
+    sound_own own PathsMap.bot PathsMap.bot universe ->
+    sound_own own init uninit universe.
+Proof.
+  intros. inv H.
+  constructor.
+  eapply PathsMap.ge_trans. eapply PathsMap.ge_bot. auto.
+  eapply PathsMap.ge_trans. eapply PathsMap.ge_bot. auto.
+  auto.
+Qed.
+
+
+Lemma ge_bot_remove_place: forall s1 s2 p,
+    PathsMap.ge PathsMap.bot s1 ->
+    PathsMap.ge s2 (remove_place p s1).
+Proof.
+  intros. unfold remove_place.
+  eapply PathsMap.ge_trans. eapply PathsMap.ge_trans. eapply PathsMap.ge_bot.
+  eapply H.
+  unfold remove_place.
+  red. intros. red. erewrite PathsMap.gsspec.
+  destruct peq. subst.
+  red. intros. eapply Paths.filter_1; eauto.
+  red. solve_proper.
+  eapply LPaths.ge_refl.
+  eapply LPaths.eq_refl.
+Qed.
+
+
+Lemma sound_own_bot_move_place: forall own universe init uninit p,
+    sound_own own PathsMap.bot PathsMap.bot universe ->
+    sound_own (move_place own p) init uninit universe.
+Proof.
+  intros. inv H.
+  unfold move_place.
+  constructor; simpl.
+  - eapply ge_bot_remove_place. auto.
+  - unfold add_place.
+    red. intros. red.
+    erewrite PathsMap.gsspec.
+    destruct peq. subst.
+    + red. intros.
+      eapply Paths.union_1 in H.
+      destruct H.
+      * exfalso. eapply Paths.empty_1.
+        eapply sound_own_uninit0. eauto.
+      * eapply Paths.filter_1 in H.
+        eapply own_consistent in H.
+        eapply Paths.union_1 in H.
+        destruct H.
+        -- exfalso. eapply Paths.empty_1.
+           eapply sound_own_init0. eauto.
+        -- exfalso. eapply Paths.empty_1.
+           eapply sound_own_uninit0. eauto.
+        -- red. solve_proper.
+    + eapply LPaths.ge_trans. eapply LPaths.ge_bot.
+      eapply sound_own_uninit0.
+  - auto.
+Qed.
+
+
+Lemma sound_own_bot_init_place: forall own universe init uninit p,
+    sound_own own PathsMap.bot PathsMap.bot universe ->
+    sound_own (init_place own p) init uninit universe.
+Proof.
+  intros. inv H.
+  unfold init_place.
+  constructor; simpl.
+  - unfold add_place.
+    red. intros. red.
+    erewrite PathsMap.gsspec.
+    destruct peq. subst.
+    + red. intros.
+      eapply Paths.union_1 in H.
+      destruct H.
+      * exfalso. eapply Paths.empty_1.
+        eapply sound_own_init0. eauto.
+      * eapply Paths.filter_1 in H.
+        eapply own_consistent in H.
+        eapply Paths.union_1 in H.
+        destruct H.
+        -- exfalso. eapply Paths.empty_1.
+           eapply sound_own_init0. eauto.
+        -- exfalso. eapply Paths.empty_1.
+           eapply sound_own_uninit0. eauto.
+        -- red. solve_proper.
+    + eapply LPaths.ge_trans. eapply LPaths.ge_bot.
+      eapply sound_own_init0.
+  - eapply ge_bot_remove_place; auto.
+  - auto.
+Qed.
+
+
+(* Definition ifbot (s1 s2: PathsMap.t) := if PathsMap.beq s1 PathsMap.bot then PathsMap.bot else s2. *)
+
 Lemma move_place_sound: forall own init uninit universe p
     (OWN: sound_own own init uninit universe),
-    sound_own (move_place own p) (remove_place p init) (add_place universe p uninit) universe.
+    sound_own (move_place own p) (ifbot init (remove_place p init)) (ifbot uninit (add_place universe p uninit)) universe.
 Proof.
   intros. inv OWN.
-  constructor.
+  unfold ifbot.
+  destruct (PathsMap.beq init PathsMap.bot) eqn: IBOT;
+    destruct (PathsMap.beq uninit PathsMap.bot) eqn: UNBOT.
+  (* bot are bot *)
+  - eapply PathsMap.beq_correct in IBOT. eapply PathsMap.beq_correct in UNBOT.
+    eapply PathsMap.eq_sym in IBOT. eapply PathsMap.eq_sym in UNBOT.
+    eapply PathsMap.ge_refl in IBOT. eapply PathsMap.ge_refl in UNBOT.
+    eapply sound_own_bot_move_place.
+    constructor.
+    eapply PathsMap.ge_trans. eapply IBOT. eauto.
+    eapply PathsMap.ge_trans. eapply UNBOT. eauto.
+    auto.
+  - eapply PathsMap.beq_correct in IBOT.
+    eapply PathsMap.eq_sym in IBOT.
+    eapply PathsMap.ge_refl in IBOT.
+    clear UNBOT.
+    constructor.
+    + eapply ge_bot_remove_place. eapply PathsMap.ge_trans; eauto.
+    +       
+      
+    + 
   - unfold move_place, remove_place, add_place.
     simpl. red. intros.
     red.
@@ -359,6 +479,9 @@ Proof.
 Qed.
 
 
+
+
+      
 (** ** Semantic invariant *)
 
 (* relation of moveing split places *)
@@ -512,6 +635,15 @@ Proof.
   - eapply IHk. eauto.
 Qed.
 
+Lemma transfer_bot: forall n flag f cfg universe,
+    PathsMap.eq (transfer universe flag f cfg n PathsMap.bot) PathsMap.bot.
+Proof.
+  intros. unfold transfer.
+  destruct (cfg!n). 2: eapply PathsMap.eq_refl.
+  destruct i; try eapply PathsMap.eq_refl.
+Admitted.
+
+  
 (* use fixpoint_soulution to prove that the final abstract env
 approximates more than the abstract env computed by transfer
 function *)
@@ -545,6 +677,7 @@ Proof.  (* use fixpoint_solution *)
   split.
   - eapply DS.fixpoint_solution; eauto.
     (** TODO: transfer bot to bot *)
+    intros.
     admit.
   - eapply DS.fixpoint_solution; eauto.
     admit.
@@ -676,7 +809,9 @@ Proof.
     unfold transfer. rewrite SEL. rewrite STMT.
     (* maybe easy *)
     unfold own_check_expr, own_check_assign in *.
-    admit.
+    
+    
+    
   (* step_assign_variant *)
   - inv TRSTMT. inv TRFUN.
     eapply sound_state_succ with (pc1:= pc); eauto.
@@ -716,6 +851,11 @@ Proof.
     econstructor.
     (* prove sound_own *)
     unfold transfer. rewrite SEL. rewrite STMT.
+    move_place_sound
+    
+    Lemma 
+    
+admit.    
     auto.
   (* step_storagedead *)
   - inv TRSTMT. inv TRFUN.

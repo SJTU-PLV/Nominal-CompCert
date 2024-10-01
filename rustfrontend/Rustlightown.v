@@ -84,6 +84,7 @@ Record own_env :=
             LPaths.eq (Paths.union (PathsMap.get id own_init) (PathsMap.get id own_uninit)) (PathsMap.get id own_universe);
           own_disjoint: forall id,
             LPaths.eq (Paths.inter (PathsMap.get id own_init) (PathsMap.get id own_uninit)) Paths.empty;
+                        
           (* The following two properties require move checking to guarantee *)
           
           (* ∀ p ∈ I → ∀ p' ∈ W, is_prefix p' p → p' ∈ I *)
@@ -105,6 +106,17 @@ Record own_env :=
           (*                                  else True) universe) uninit; *)
     }.
 
+Lemma PathsMap_beq_bot: forall s,
+    PathsMap.beq PathsMap.bot s = true ->
+    s = PathsMap.bot.
+Proof.
+  intros. unfold PathsMap.beq, PTree.beq in H.
+  simpl in H.
+  destruct s; try congruence.
+  auto.
+Qed.
+
+
 Definition in_universe (own: own_env) (p: place) : bool :=
   let id := local_of_place p in
   let universe := PathsMap.get id own.(own_universe) in
@@ -124,43 +136,6 @@ Definition is_init (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
   Paths.mem p init.
-
-(** Unused: A owned place is deep owned **xor** shallow owned *)
-
-Definition is_deep_owned (own: own_env) (p: place) : bool :=
-  (* p is owned and no p's children in the universe *)
-  is_owned own p &&
-    let id := local_of_place p in
-    let universe := PathsMap.get id own.(own_universe) in
-    Paths.for_all (fun p' => negb (is_prefix_strict p p')) universe.
-
-Definition is_shallow_owned (own: own_env) (p: place) : bool :=
-  is_owned own p &&
-    (* There is some p's children in the universe, which means that
-    p's ownership may be split. So we only consider p as a partial
-    owned place *)
-    let id := local_of_place p in
-    let universe := PathsMap.get id own.(own_universe) in
-    Paths.exists_ (fun p' => is_prefix_strict p p') universe.
-
-(* check that parents of p are not in uninit (slightly different from
-   the condition in is_owned) *)
-Definition prefix_is_owned (own: own_env) (p: place) : bool :=
-  forallb (is_owned own) (parent_paths p).
-  (* let id := local_of_place p in *)
-  (* let uninit := PathsMap.get id own.(own_uninit) in *)
-  (* (* no p's prefix in uninit *) *)
-  (* Paths.for_all (fun p' => negb (is_prefix_strict p' p)) uninit. *)
-
-Lemma prefix_owned_implies: forall p p' own,
-    prefix_is_owned own p = true ->
-    is_prefix_strict p' p = true ->
-    is_owned own p' = true.
-Proof.
-  intros p p' own POWN PFX.
-  eapply forallb_forall in POWN; eauto.
-  eapply proj_sumbool_true in PFX. auto.
-Qed.  
   
 
 Definition check_movable (own: own_env) (p: place) : bool :=
@@ -316,6 +291,7 @@ Next Obligation.
   - auto.
 Defined.
 
+
 Definition move_place_option (own: own_env) (p: option place) : own_env :=
   match p with
   | None => own
@@ -405,11 +381,11 @@ Definition place_dominator_own (own: own_env) (p: place) : bool :=
 
 (* We can use the following function to ensure that the block place
 [p] resides in is in the domain of abstracter *)
-Definition place_dominator_shallow_own (own: own_env) (p: place) : bool :=
-  match place_dominator p with
-  | Some p' => is_shallow_owned own p'
-  | None => true
-  end.
+(* Definition place_dominator_shallow_own (own: own_env) (p: place) : bool := *)
+(*   match place_dominator p with *)
+(*   | Some p' => is_shallow_owned own p' *)
+(*   | None => true *)
+(*   end. *)
 
 
 (* initialize a place *)

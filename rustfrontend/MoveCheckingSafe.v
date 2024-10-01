@@ -842,18 +842,20 @@ Lemma place_dominator_shallow_own_shallow_prefix: forall own p p',
     place_dominator_shallow_own own p' = true.
 Admitted.
 
-Section BORCHK.
+Section MOVE_CHECK.
 
 Variable prog: program.
-Variable w: inv_world wt_rs.
+Variable w: wt_rs_world.
 Variable se: Genv.symtbl.
 Hypothesis VALIDSE: Genv.valid_for (erase_program prog) se.
-Hypothesis INV: symtbl_inv wt_rs w se.
 Let L := semantics prog se.
 Let ge := globalenv se prog.
 
 (* composite environment *)
 Let ce := ge.(genv_cenv).
+
+Let AN : Type := (PMap.t PathsMap.t * PMap.t PathsMap.t * PathsMap.t).
+Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae move_check_stmt body cfg s s.
 
 Hypothesis CONSISTENT: composite_env_consistent ce.
 
@@ -946,14 +948,15 @@ Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
   end.
 
 (* Every former element is the children of letter elements *)
+(** TODO: maybe we need a more precise definition  *)
 Inductive sound_split_fully_own_place : list place -> Prop :=
 | sound_split_fully_nil: sound_split_fully_own_place []
 | sound_split_fully_cons: forall p l
-    (CHILDREN: Forall (fun p' => is_prefix p p' = false) l) 
+    (CHILDREN: Forall (fun p' => is_prefix p p' = false) l)
     (SOUND: sound_split_fully_own_place l),
     sound_split_fully_own_place (p::l).
 
-(* May be difficult: algebraic property of split_drop_place *)
+(* (* May be difficult: algebraic property of split_drop_place *) *)
 Inductive sound_split_drop_place (own: own_env) : list (place * bool) -> Prop :=
 | sound_split_drop_nil: sound_split_drop_place own []
 | sound_split_drop_cons_full: forall p l,
@@ -970,31 +973,31 @@ Inductive sound_split_drop_place (own: own_env) : list (place * bool) -> Prop :=
     sound_split_drop_place own ((p, false) :: l)
 .
 
-Lemma split_drop_place_sound: forall ce own p universe drops
-    (WF: wf_own_env own)
-    (UNI: (own_universe own) ! (local_of_place p) = Some universe)
-    (SPLIT: split_drop_place ce universe p (typeof_place p) = OK drops),
-  sound_split_drop_place own drops.
-Admitted.
+(* Lemma split_drop_place_sound: forall ce own p universe drops *)
+(*     (WF: wf_own_env own) *)
+(*     (UNI: (own_universe own) ! (local_of_place p) = Some universe) *)
+(*     (SPLIT: split_drop_place ce universe p (typeof_place p) = OK drops), *)
+(*   sound_split_drop_place own drops. *)
+(* Admitted. *)
 
 
-(* Inductive sound_drop_fully_owned (own: own_env) : option drop_place_state -> Prop := *)
-(* | sound_drop_fully_owned_none: sound_drop_fully_owned own None *)
-(* | sound_drop_fully_owned_comp: forall p l *)
-(*     (* drop the head place does not affect the ownership status in the *)
-(*     rest of the list *) *)
-(*     (SOUND: sound_split_fully_own_place l) *)
-(*     (OWN: forallb (is_owned own) l = true) *)
-(*     (MOVE: check_movable own p = true) *)
-(*     (* we should show that move out p should not affect the ownership *)
-(*     of l *) *)
-(*     (SEP: Forall (fun elt => is_prefix p elt = false) l), *)
-(*     sound_drop_fully_owned own (Some (drop_fully_owned_comp p l)) *)
-(* | sound_drop_fully_owned_box: forall l *)
-(*     (SOUND: sound_split_fully_own_place l) *)
-(*     (OWN: forallb (is_owned own) l = true), *)
-(*     sound_drop_fully_owned own (Some (drop_fully_owned_box l)) *)
-(* . *)
+Inductive sound_drop_fully_owned (own: own_env) : option drop_place_state -> Prop :=
+| sound_drop_fully_owned_none: sound_drop_fully_owned own None
+| sound_drop_fully_owned_comp: forall p l
+    (* drop the head place does not affect the ownership status in the *)
+(*     rest of the list *)
+    (FO: sound_split_fully_own_place l)
+    (OWN: forallb (is_owned own) l = true)
+    (MOVE: check_movable own p = true)
+    (* we should show that move out p should not affect the ownership *)
+(*     of l *)
+    (SEP: Forall (fun elt => is_prefix p elt = false) l),
+    sound_drop_fully_owned own (Some (drop_fully_owned_comp p l))
+| sound_drop_fully_owned_box: forall l
+    (FO: sound_split_fully_own_place l)
+    (OWN: forallb (is_owned own) l = true),
+    sound_drop_fully_owned own (Some (drop_fully_owned_box l))
+.
 
 (* combine sound_drop_fully_owned, sound_split_drop_place and require
 that st and ps are disjoint *)
@@ -1022,93 +1025,115 @@ Inductive sound_drop_place (own: own_env) (ps: list (place * bool)) : option dro
 (* Soundness of continuation: the execution of current function cannot
 modify the footprint maintained by the continuation *)
 
-Inductive sound_cont (m: mem) : fp_frame -> cont -> Prop :=
-| sound_Kstop:
-  sound_cont m fpf_emp Kstop
-| sound_Kseq: forall s k fpf
-    (SOUND: sound_cont m fpf k),
-    sound_cont m fpf (Kseq s k)
-| sound_Kloop: forall s k fpf
-    (SOUND: sound_cont m fpf k),
-    sound_cont m fpf (Kloop s k)
-| sound_Kcall: forall p f e own k fpm fpf
-    (MM: mmatch ce fpm m e own)
-    (SOUND: sound_cont m fpf k)
-    (WF: wf_own_env own),
-    sound_cont m (fpf_func e fpm fpf) (Kcall p f e own k)
-| sound_Kdropplace: forall f e own k fpm fpf ps st    
-    (MM: mmatch ce fpm m e own)
-    (SOUND: sound_cont m fpf k)
-    (DP: sound_drop_place own ps st)
-    (WF: wf_own_env own),
-    sound_cont m (fpf_func e fpm fpf) (Kdropplace f st ps e own k)
-| sound_Kdropstate: forall k fpf st co fp ofs b membs fpl id
+Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node -> option node -> node -> mem -> fp_frame -> Prop :=
+| sound_Kstop: forall an body cfg nret m
+    (RET: cfg ! nret = Some Iend),
+    sound_cont an body cfg Kstop nret None None nret m fpf_emp
+| sound_Kseq: forall an body cfg s k pc next cont brk nret m fpf
+    (MSTMT: match_stmt an body cfg s pc next cont brk nret)
+    (MCONT: sound_cont an body cfg k next cont brk nret m fpf),
+    sound_cont an body cfg (Kseq s k) next cont brk nret m fpf
+| sound_Kloop: forall an body cfg s k body_start loop_jump_node exit_loop nret contn brk m fpf
+    (START: cfg ! loop_jump_node = Some (Inop body_start))
+    (MSTMT: match_stmt an body cfg s body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
+    (MCONT: sound_cont an body cfg k exit_loop contn brk nret m fpf),
+    sound_cont an body cfg (Kloop s k)loop_jump_node (Some loop_jump_node) (Some exit_loop) nret m fpf
+| sound_Kcall: forall an body cfg k nret f e own p m fpf
+    (MSTK: sound_stacks (Kcall p f e own k) m fpf)
+    (RET: cfg ! nret = Some Iend),
+    sound_cont an body cfg (Kcall p f e own k) nret None None nret m fpf
+| sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
+    (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc cont brk nret m fpf)
+    (MM: mmatch ce fpm m e own1)
+    (WF: wf_own_env own1)
+    (** DP may be wrong *)
+    (DP: sound_drop_place own1 ps st)
+    (MOVESPLIT: move_split_places own1 ps = own2)
+    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe),
+    sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg (Kdropplace f st ps e own1 k) pc cont brk nret m (fpf_func e fpm fpf)
+| sound_Kdropcall: forall an body cfg k pc cont brk nret fpf st co fp ofs b membs fpl id m
     (CO: ce ! id = Some co)
     (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) st fp)
     (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
-    (SOUND: sound_cont m fpf k),
-    sound_cont m (fpf_drop fp fpl fpf) (Kdropcall id (Vptr b ofs) st membs k)
-.
+    (SOUND: sound_cont an body cfg k pc cont brk nret m fpf),
+    sound_cont an body cfg (Kdropcall id (Vptr b ofs) st membs k) pc cont brk nret m (fpf_drop fp fpl fpf)
 
+with sound_stacks : cont -> mem -> fp_frame -> Prop :=
+| sound_stacks_stop: forall m,
+    sound_stacks Kstop m fpf_emp
+| sound_stacks_call: forall f nret cfg pc contn brk k own1 own2 p e m maybeInit maybeUninit universe entry fpm fpf
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
+    (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc contn brk nret m fpf)
+    (MM: mmatch ce fpm m e own1)
+    (WF: wf_own_env own1)
+    (* own2 is built after the function call *)
+    (AFTER: own2 = init_place own1 p)                  
+    (OWN: sound_own own2 maybeInit!!pc maybeUninit!!pc universe),
+    sound_stacks (Kcall p f e own1 k) m (fpf_func e fpm fpf).
+    
 
 (** TODO: add syntactic well typedness in the sound_state and
 sound_cont *)
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f s k e own m (* entry cfg pc instr *) (* ae Σ Γ Δ *) fpm fpf flat_fp sg
-    (* (CFG: generate_cfg f.(fn_body) = OK (entry, cfg)) *)
-    (* (INSTR: cfg ! pc = Some instr) *)
-    (* (MSTMT: match_instr_stmt f.(fn_body) instr s k) *)
-    (* (CHK: borrow_check ce f = OK ae) *)
-    (* (AS: ae ! pc = Some (AE.State Σ Γ Δ)) *)
+| sound_regular_state: forall f cfg entry maybeInit maybeUninit universe s pc next cont brk nret k e own m fpm fpf flat_fp sg
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
+    (STMT: match_stmt (maybeInit, maybeUninit, universe) f.(fn_body) cfg s pc next cont brk nret)
+    (CONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k next cont brk nret m fpf)
+    (SOUNDOWN: sound_own own maybeInit!!pc maybeUninit!!pc universe)
     (MM: mmatch ce fpm m e own)
-    (CONT: sound_cont m fpf k)
     (FLAT: flat_fp = flat_fp_frame (fpf_func e fpm fpf))
     (* footprint is separated *)
     (NOREP: list_norepet flat_fp)
-    (ACC: rsw_acc (snd w) (rsw sg flat_fp m))
+    (ACC: rsw_acc w (rsw sg flat_fp m))
     (* we need to maintain the well-formed invariant of own_env *)
     (WF: wf_own_env own),
     sound_state (State f s k e own m)
-| sound_dropplace: forall f st drops k e own m fpm fpf flat_fp sg
-    (MM: mmatch ce fpm m e own)
-    (CONT: sound_cont m fpf k)
+| sound_dropplace: forall f cfg entry maybeInit maybeUninit universe next cont brk nret st drops k e own1 own2 m fpm fpf flat_fp sg
+    (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
+    (CONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k next cont brk nret m fpf)
+    (MM: mmatch ce fpm m e own1)
     (FLAT: flat_fp = flat_fp_frame (fpf_func e fpm fpf))
     (NOREP: list_norepet flat_fp)
-    (ACC: rsw_acc (snd w) (rsw sg flat_fp m))
-    (* every place in the drop_fully_owned state is owned *)
-    (DP: sound_drop_place own drops st)
-    (WF: wf_own_env own),
+    (ACC: rsw_acc w (rsw sg flat_fp m))
+    (* every place in the drop_fully_owned state is owned: this may be
+    wrong because it does not consider own is changing *)
+    (DP: sound_drop_place own1 drops st)
+    (WF: wf_own_env own1)
+    (MOVESPLIT: move_split_places own1 drops = own2)
+    (SOUNDOWN: sound_own own2 maybeInit!!next maybeUninit!!next universe),
     (* no need to maintain borrow check domain in dropplace? But how
     to record the pc and next statement? *)
-    sound_state (Dropplace f st drops k e own m)
-| sound_dropstate: forall id co fp fpl b ofs st m membs k fpf flat_fp sg
+    sound_state (Dropplace f st drops k e own1 m)
+| sound_dropstate: forall an body cfg next cont brk nret id co fp fpl b ofs st m membs k fpf flat_fp sg
     (CO: ce ! id = Some co)
     (* The key is how to prove semantics well typed can derive the
     following two properties *)
     (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) st fp)
     (* all the remaining members are semantically well typed *)
     (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
-    (CONT: sound_cont m fpf k)
+    (CONT: sound_cont an body cfg k next cont brk nret m fpf)
     (FLAT: flat_fp = flat_fp_frame (fpf_drop fp fpl fpf))
     (NOREP: list_norepet flat_fp)
-    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
+    (ACC: rsw_acc w (rsw sg flat_fp m)),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
 | sound_callstate: forall vf fd orgs org_rels tyargs tyres cconv m fpl args fpf k flat_fp sg
     (FUNC: Genv.find_funct ge vf = Some fd)
     (FUNTY: type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv)
     (* arguments are semantics well typed *)
     (WT: sem_wt_val_list ce m fpl args (type_list_of_typelist tyargs))
-    (CONT: sound_cont m fpf k)
+    (STK: sound_stacks k m fpf)
     (FLAT: flat_fp = flat_fp_frame fpf)
-    (NOREP: list_norepet flat_fp)
-    (ACC: rsw_acc (snd w) (rsw sg flat_fp m)),
+    (* also disjointness of fpl and fpf *)
+    (NOREP: list_norepet (flat_fp ++ concat (map footprint_flat fpl)))
+    (ACC: rsw_acc w (rsw sg flat_fp m)),
     sound_state (Callstate vf args k m)
 | sound_returnstate: forall sg flat_fp m k retty rfp v
-    (ACC: rsw_acc (snd w) (rsw sg flat_fp m))
+    (ACC: rsw_acc w (rsw sg flat_fp m))
     (* For now, all function must have return type *)
     (RETY: typeof_cont_call (rs_sig_res sg) k = Some retty)
     (WT: sem_wt_val ce m rfp v retty)
-    (SEP: list_disjoint flat_fp (footprint_flat rfp)),
+    (SEP: list_norepet (flat_fp ++ (footprint_flat rfp))),
     sound_state (Returnstate v k m)
 .
 
