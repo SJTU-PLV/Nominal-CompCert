@@ -147,10 +147,13 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
   Paths.for_all (must_init initmap uninitmap universemap) (Paths.filter (is_prefix p) universe).
 
-(* Definition dominators_must_init (initmap uninitmap: PathsMap.t) (p: place) : bool := *)
+(* Do we need to check that all the dominators of p is must_init (in
+init set and in universe) ? *)
+Definition dominators_must_init (initmap uninitmap universe: PathsMap.t) (p: place) : bool :=
+  forallb (must_init initmap uninitmap universe) (place_dominators p).
+
 
 (* move it to a new file *)
-
 
 (** * Soundness of Initial Analysis *)
 

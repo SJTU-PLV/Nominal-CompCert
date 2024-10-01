@@ -16,7 +16,12 @@ Variable init uninit universe: PathsMap.t.
   
 Fixpoint move_check_pexpr (pe : pexpr) : bool :=
   match pe with
-  | Eplace p _ | Ecktag p _ => must_movable init uninit universe p
+  | Eplace p _
+  | Ecktag p _ =>
+      (* dominators are init means that the location if p is valid;
+      the children of p is init means that the value of p is
+      semantically wel-typed *)
+      dominators_must_init init uninit universe p && must_movable init uninit universe p
   | Eref _ _ _ _ => false
   | Eunop _ pe0 _ => move_check_pexpr pe0
   | Ebinop _ pe1 pe2 _ => move_check_pexpr pe1 && move_check_pexpr pe2
@@ -33,10 +38,7 @@ Definition move_check_exprlist (l : list expr) :=
   forallb move_check_expr l.
           
 Definition move_check_assign (p : place) :=
-  match place_dominator p with
-  | Some p' => must_init init uninit p'
-  | None => true
-  end.
+  dominators_must_init init uninit universe p.
 
 End INIT.
 
@@ -50,14 +52,14 @@ Definition move_check_stmt (an : IM.t * IM.t * PathsMap.t) (stmt : statement) : 
       | Sbox p0 e =>
           if move_check_expr mayinit mayuninit universe e
           then
-            if move_check_assign mayinit mayuninit p0
+            if move_check_assign mayinit mayuninit universe p0
             then OK stmt
             else Error (msg "move_check_assign error")
           else Error (msg "move_check_expr error")
       | Scall p0 _ el =>
           if move_check_exprlist mayinit mayuninit universe el
           then
-            if move_check_assign mayinit mayuninit p0
+            if move_check_assign mayinit mayuninit universe p0
             then OK stmt
             else Error (msg "move_check_assign error")
           else Error (msg "move_check_exprlist error")
