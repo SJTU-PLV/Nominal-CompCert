@@ -35,10 +35,10 @@ Fixpoint generate_drop_flags_for_splits (mayinit mayuninit universe: PathsMap.t)
   | nil => nil
   | p :: l' =>
       let flags := generate_drop_flags_for_splits mayinit mayuninit universe l' in
-      if must_init mayinit mayuninit p then
+      if must_init mayinit mayuninit universe p then
         (* this place must be init, no need for drop flag *)
         flags
-      else if may_init mayinit mayuninit p then
+      else if may_init mayinit mayuninit universe p then
         (* need drop flag *)
         let drop_flag := fresh_atom tt in
         (p, drop_flag) :: flags
@@ -160,7 +160,7 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
           (* need drop flag *)
           (Ssequence (generate_drop p full (Some id)) stmt)
       | None =>
-          if must_init mayinit mayuninit p then
+          if must_init mayinit mayuninit universe p then
             (Ssequence (generate_drop p full None) stmt)
           else
             (* this place must be uninit, no need to drop *)
@@ -243,12 +243,12 @@ End ELABORATE.
 
 Local Open Scope error_monad_scope.
 
-Definition init_drop_flag (mayinit mayuninit: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
-  if must_init mayinit mayuninit p then
+Definition init_drop_flag (mayinit mayuninit universe: PathsMap.t) (p: place) (flag: ident) : Errors.res statement :=
+  if must_init mayinit mayuninit universe p then
     OK (set_dropflag flag true)
   else
     (* impossible: return error *)
-    if may_init mayinit mayuninit p then
+    if may_init mayinit mayuninit universe p then
       Error (msg "impossible may_init in init_drop_flag")           
     else      
       (* how to show that must_init = false is must_unowed in function
@@ -266,19 +266,19 @@ Definition init_drop_flag (mayinit mayuninit: PathsMap.t) (p: place) (flag: iden
   (* | _, _ => Sskip *)
   (* end. *)
 
-Fixpoint init_drop_flags (mayinit mayuninit: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
+Fixpoint init_drop_flags (mayinit mayuninit universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
   match flags with
   | nil => OK Sskip
   | (p, flag) :: flags' =>
-      do stmt <- init_drop_flags mayinit mayuninit flags';
-      do init <- init_drop_flag mayinit mayuninit p flag;
+      do stmt <- init_drop_flags mayinit mayuninit universe flags';
+      do init <- init_drop_flag mayinit mayuninit universe p flag;
       OK (Ssequence init stmt)
   end.
 
-Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (flags: list (place * ident)) : Errors.res statement :=
+Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (universe: PathsMap.t) (flags: list (place * ident)) : Errors.res statement :=
   match mayInit, mayUninit with
   | IM.State mayinit, IM.State mayuninit =>      
-      init_drop_flags mayinit mayuninit flags
+      init_drop_flags mayinit mayuninit universe flags
   | _, _ =>
       Error (msg "impossible in init_drop_flags_bot")
   end.
@@ -298,7 +298,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let entry_init := mayinit!!entry in
   let entry_uninit := mayuninit!!entry in
   (* init drop flags: if no flags, it would be a Sskip *)
-  do init_stmt <- init_drop_flags_bot entry_init entry_uninit flags;
+  do init_stmt <- init_drop_flags_bot entry_init entry_uninit universe flags;
   let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
   Errors.OK (mkfunction f.(fn_generic_origins)
                         f.(fn_origins_relation)

@@ -120,20 +120,22 @@ Definition get_init_info (an: (PMap.t IM.t * PMap.t IM.t * PathsMap.t)) (pc: nod
 (*     (Paths.filter (fun p' => is_prefix p' p) universe). *)
 
 (* static version of is_init *)
-Definition must_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
+
+Definition must_init (initmap uninitmap universe: PathsMap.t) (p: place) : bool :=
   let id := local_of_place p in
   let init := PathsMap.get id initmap in
   let uninit := PathsMap.get id uninitmap in
   let mustinit := Paths.diff init uninit in
-  Paths.mem p mustinit.
+  (* We also check p is in the universe to do some validation *)
+  Paths.mem p mustinit && Paths.mem p (PathsMap.get (local_of_place p) universe).
 
 (* place that needs drop flag *)
-Definition may_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
+Definition may_init (initmap uninitmap universe: PathsMap.t) (p: place) : bool :=
   let id := local_of_place p in
   let init := PathsMap.get id initmap in
   let uninit := PathsMap.get id uninitmap in
   let mayinit := Paths.inter init uninit in
-  Paths.mem p mayinit.
+  Paths.mem p mayinit && Paths.mem p (PathsMap.get (local_of_place p) universe).
 
 (* Used in static move checking *)
 Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
@@ -143,9 +145,9 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   let universe := PathsMap.get id universemap in
   let mustinit := Paths.diff init uninit in
   (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
-  Paths.for_all (must_init initmap uninitmap) (Paths.filter (is_prefix p) universe).
+  Paths.for_all (must_init initmap uninitmap universemap) (Paths.filter (is_prefix p) universe).
 
-Definition dominators_must_init (initmap uninitmap: PathsMap.t) (p: place) : bool :=
+(* Definition dominators_must_init (initmap uninitmap: PathsMap.t) (p: place) : bool := *)
 
 (* move it to a new file *)
 
@@ -226,11 +228,13 @@ Record sound_own (own: own_env) (init uninit universe: PathsMap.t) : Type :=
 init/uninit may be contain some places not in the universe *)
 Lemma must_init_sound (own: own_env) (init uninit universe: PathsMap.t) p:
   sound_own own init uninit universe ->
-  Paths.In p (PathsMap.get (local_of_place p) universe) ->
-  must_init init uninit p = true ->
+  (* Paths.In p (PathsMap.get (local_of_place p) universe) -> *)
+  must_init init uninit universe p = true ->
   is_init own p = true.
 Proof.
-  intros OWN UNI IN. unfold is_init, must_init in *.  
+  intros OWN IN. unfold is_init, must_init in *.
+  eapply andb_true_iff in IN. destruct IN as (IN & UNI).
+  eapply Paths.mem_2 in UNI.
   eapply Paths.mem_2 in IN.
   generalize IN. intros IN1.
   eapply Paths.diff_1 in IN.
@@ -246,11 +250,13 @@ Qed.
   
 Lemma must_not_init_sound (own: own_env) (init uninit universe: PathsMap.t) p:
     sound_own own init uninit universe ->
-    must_init init uninit p = false ->
-    may_init init uninit p = false ->
+    must_init init uninit universe p = false ->
+    may_init init uninit universe p = false ->
     is_init own p = false.
 Proof.
   intros. unfold must_init, may_init, is_init in *.
+  destruct (Paths.mem p (PathsMap.get (local_of_place p) universe)) eqn: UNI.
+  erewrite  andb_true_r in *.
   destruct (Paths.mem p (PathsMap.get (local_of_place p) (own_init own))) eqn: MEM; auto.
   eapply Paths.mem_2 in MEM.
   eapply sound_own_init in MEM; eauto.
@@ -263,6 +269,12 @@ Proof.
   eapply H1.
   eapply Paths.mem_1.
   eapply Paths.inter_3; auto.
+  (* not int universe *)
+  eapply not_true_iff_false. intro.
+  eapply not_true_iff_false in UNI. eapply UNI.
+  eapply Paths.mem_1. eapply Paths.mem_2 in H2.
+  eapply sound_own_universe. eauto.
+  eapply own_consistent. eapply Paths.union_2. auto.
 Qed.
 
 

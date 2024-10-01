@@ -667,9 +667,9 @@ Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uni
     get_dropflag_temp flagm p1 = None ->
     get_IM_state init!!pc uninit!!pc (Some (mayinit, mayuninit)) ->
     (* must owned *)
-    (must_init mayinit mayuninit p1 = true \/
+    (must_init mayinit mayuninit universe p1 = true \/
        (* must unowned *)
-       may_init mayinit mayuninit p1 = false).
+       may_init mayinit mayuninit universe p1 = false).
 
 (** IMPORTANT TODO  *)
 Lemma generate_flag_map_sound: forall mayinitMap mayuninitMap universe ce f cfg flags
@@ -1226,7 +1226,7 @@ Inductive wf_split_drop_places flagm (init uninit universe: PathsMap.t) : own_en
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 | wf_sdp_must: forall own b l p
     (FLAG: get_dropflag_temp flagm p = None)
-    (OWN: must_init init uninit p = is_init own p)
+    (OWN: must_init init uninit universe p = is_init own p)
     (WF: wf_split_drop_places flagm init uninit universe (if is_init own p then (move_place own p) else own) l),
     wf_split_drop_places flagm init uninit universe own ((p,b)::l)
 .
@@ -1237,17 +1237,17 @@ Lemma ordered_split_drop_places_wf:
   forall drops own init uninit universe flagm
     (ORDER: split_places_ordered (map fst drops))
     (OWN: forall p full, In (p, full) drops ->
-                    must_init init uninit p = true ->
+                    must_init init uninit universe p = true ->
                     is_init own p = true)
-    (NOTOWN: forall p, must_init init uninit p = false ->
-                  may_init init uninit p = false ->
+    (NOTOWN: forall p, must_init init uninit universe p = false ->
+                  may_init init uninit universe p = false ->
                   is_init own p = false)
     (UNI: PathsMap.eq universe (own_universe own))
     (FLAG: forall p full,
         In (p, full) drops ->
         get_dropflag_temp flagm p = None ->
-        must_init init uninit p = true
-        \/ may_init init uninit p = false),
+        must_init init uninit universe p = true
+        \/ may_init init uninit universe p = false),
     wf_split_drop_places flagm init uninit universe own drops.
 Proof.
   induction drops; simpl; intros.
@@ -1282,7 +1282,7 @@ Proof.
   - exploit FLAG. left; eauto.
     auto. intros MOWN.
     eapply wf_sdp_must. eauto. 2: auto.
-    destruct (must_init init uninit p) eqn: MUSTOWN.
+    destruct (must_init init uninit universe p) eqn: MUSTOWN.
     + symmetry. eapply OWN; eauto.
     + destruct MOWN. congruence.
       symmetry. eapply NOTOWN.
@@ -1306,7 +1306,7 @@ Proof.
     inv WFDROPS.
     auto. congruence.
   - inv WFDROPS. congruence.
-    destruct (must_init init uninit p) eqn: MUST.
+    destruct (must_init init uninit universe p) eqn: MUST.
     (* must_owned = true *)
     + rewrite <- OWN in WF.
       econstructor; auto.
@@ -1568,7 +1568,7 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
    (MINJ: Mem.inject j1 m1 tm1)
    (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
    (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
-   (STMT: init_drop_flag init uninit p id = OK stmt)
+   (STMT: init_drop_flag init uninit universe p id = OK stmt)
    (OWN: sound_own own init uninit universe)
    (IN: Paths.In p (PathsMap.get (local_of_place p) universe)),
   exists tm2 v,
@@ -1582,7 +1582,7 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
 Proof.
   intros.  
   unfold init_drop_flag in STMT.
-  destruct (must_init init uninit p) eqn: MUST.
+  destruct (must_init init uninit universe p) eqn: MUST.
   - inv STMT.
     exploit (eval_set_drop_flag true); eauto.
     instantiate (1 := k). instantiate (1 := tf).
@@ -1593,7 +1593,7 @@ Proof.
     eapply star_step. eauto.
     eapply star_refl. auto.
     erewrite must_init_sound; eauto.
-  - destruct (may_init init uninit p) eqn: MAY; try congruence.
+  - destruct (may_init init uninit universe p) eqn: MAY; try congruence.
     inv STMT.
     exploit (eval_set_drop_flag false); eauto.
     instantiate (1 := k). instantiate (1 := tf).
@@ -1609,7 +1609,7 @@ Qed.
 
 (* no injp_acc *)
 Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e m1 lo hi te tm1 tlo thi own tf k
-  (STMT: init_drop_flags init uninit flags = OK init_stmt)
+  (STMT: init_drop_flags init uninit universe flags = OK init_stmt)
   (OWN: sound_own own init uninit universe)
   (MINJ: Mem.inject j1 m1 tm1)
   (WF: forall p id, In (p, id) flags ->
@@ -2692,10 +2692,12 @@ Proof.
     eapply split_ordered. eauto.
     (* use sound_own properties, prove p0 is in the universe *)
     intros. eapply must_init_sound; eauto.
-    exploit split_sound; eauto.
-    eapply (in_map fst)in H. eauto.
-    intros (C & D).
-    erewrite <- is_prefix_same_local; eauto.
+    (* The following comment code is used to prove in_universe but it
+    is useless now *)
+    (* exploit split_sound; eauto. *)
+    (* eapply (in_map fst)in H. eauto. *)
+    (* intros (C & D). *)
+    (* erewrite <- is_prefix_same_local; eauto. *)
     intros. eapply must_not_init_sound; eauto.
     eapply sound_own_universe; eauto.
     intros. eapply SFLAGM; eauto.
