@@ -362,7 +362,8 @@ Definition own_check_exprlist (own: own_env) (l: list expr) : bool :=
 
 
 (* The dominator of a place [p]: the place's demonator decide the
-location of this place *)
+location of this place (e.g., if p is of type enum, then it is the
+dominator of all its downcast *)
 
 Fixpoint place_dominator (p: place) : option place :=
   match p with
@@ -376,7 +377,7 @@ Fixpoint place_dominators (p: place) : list place :=
   match p with
   | Pderef p' _ => p' :: place_dominators p'
   | Pfield p' _ _ => place_dominators p'
-  | Pdowncast p' _ _ => place_dominators p'
+  | Pdowncast p' _ _ => p' :: place_dominators p'
   | Plocal _ _ => nil
   end.
 
@@ -518,7 +519,7 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK delta ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
-| eval_Pdowncast: forall  p ty b ofs fofs id fid fty co orgs tag,
+| eval_Pdowncast: forall  p b ofs fofs id fid fty co orgs tag,
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
@@ -527,7 +528,7 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
     variant_field_offset ce fid (co_members co) = OK fofs ->
     (* fty and ty must be equal? *)
-    eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr fofs))
+    eval_place (Pdowncast p fid fty) b (Ptrofs.add ofs (Ptrofs.repr fofs))
 | eval_Pderef: forall p ty l ofs l' ofs',
     eval_place p l ofs ->
     deref_loc (typeof_place p) m l ofs (Vptr l' ofs') ->

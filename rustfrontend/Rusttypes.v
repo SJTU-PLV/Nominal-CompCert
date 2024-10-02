@@ -551,6 +551,46 @@ Fixpoint field_tag' (fid: ident) (ms: members) (pos: Z) : option Z :=
 Definition field_tag (fid: ident) (ms:members) : option Z :=
   field_tag' fid ms 0.
 
+Lemma field_tag_offset: forall ms id n n1 n2,
+    field_tag' id ms n1 = Some n ->
+    field_tag' id ms (n1 + n2) = Some (n + n2).
+Proof.
+  induction ms; intros.
+  - simpl in H. inv H.
+  - destruct a. simpl in H.
+    destruct (Pos.eqb id id0) eqn: EQ. inv H.
+    simpl. rewrite EQ. f_equal.
+    simpl. rewrite EQ.
+    rewrite Z.add_shuffle0. eapply IHms.
+    auto.
+Qed.
+
+Lemma field_tag_pos': forall ms id n1 n2,
+    n1 >= 0 ->
+    field_tag' id ms n1 = Some n2 ->
+    n2 >= 0.
+Proof.
+  induction ms; simpl; intros.
+  inv H0.
+  destruct a.
+  destruct (Pos.eqb id id0) eqn: EQ. inv H0.
+  lia.
+  eapply IHms. 2: eauto.
+  lia.
+Qed.
+
+
+Lemma field_tag_pos: forall ms id n,
+    field_tag id ms= Some n ->
+    n >= 0.
+Proof.
+  unfold field_tag. intros. 
+  eapply field_tag_pos'; eauto.
+  lia.
+Qed.
+
+
+    
 Fixpoint type_tag' (ty: type) (ms: members) (pos: Z) {struct ms} : option (ident * Z) :=
   match ms with
   | nil => None
@@ -943,6 +983,30 @@ Fixpoint field_type (id: ident) (ms: members) {struct ms} : res type :=
   | nil => Error (MSG "Unknown field " :: CTX id :: nil)
   | m :: ms => if ident_eq id (name_member m) then OK (type_member m) else field_type id ms
   end.
+
+Lemma field_type_implies_field_tag: forall ms id ty,
+    field_type id ms = OK ty ->
+    exists tag, field_tag id ms = Some tag
+           /\ list_nth_z ms tag = Some (Member_plain id ty).
+Proof.
+  induction ms; intros.
+  - simpl in H. inv H.
+  - simpl in H. destruct ident_eq.
+    + subst. inv H.
+      exists 0. destruct a. simpl. split.
+      unfold field_tag, field_tag'. rewrite Pos.eqb_refl.
+      auto. auto.
+    + generalize (IHms id ty H). intros (tag & A & B).
+      exists (tag + 1). destruct a. simpl in *. split.
+      * unfold field_tag, field_tag'.
+        eapply Pos.eqb_neq in n. rewrite n.
+        fold field_tag'. eapply field_tag_offset.
+        auto.
+      * generalize (field_tag_pos ms id tag A). intros GE.
+        destruct zeq. lia.
+        rewrite <- B. f_equal.
+        lia.
+Qed.
 
 (** [field_offset env id fld] returns the byte offset for field [id]
   in a structure whose members are [fld].  It also returns a
