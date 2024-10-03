@@ -124,26 +124,28 @@ Definition in_universe (own: own_env) (p: place) : bool :=
 
 (* is_owned means that the location of p is initialized (assuming that
 the location of p is valid) *)
-Definition is_owned (own: own_env) (p: place): bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id own.(own_init) in
-  let universe := PathsMap.get id own.(own_universe) in
-  (* ∀ p' ∈ universe, is_prefix p' p \/ is_shallow_prefix p p' → p' ∈ mustinit *)
-  Paths.for_all (fun p' => Paths.mem p' init)
-    (Paths.filter (fun p' => is_shallow_prefix p p') universe).
+(* Definition is_owned (own: own_env) (p: place): bool := *)
+(*   let id := local_of_place p in *)
+(*   let init := PathsMap.get id own.(own_init) in *)
+(*   let universe := PathsMap.get id own.(own_universe) in *)
+(*   (* ∀ p' ∈ universe, is_prefix p' p \/ is_shallow_prefix p p' → p' ∈ mustinit *) *)
+(*   Paths.for_all (fun p' => Paths.mem p' init) *)
+(*     (Paths.filter (fun p' => is_shallow_prefix p p') universe). *)
 
 (* It is only used for place that is in the universe (e.g., the place obtained from split_drop_places) *)
 Definition is_init (own: own_env) (p: place): bool :=
   let id := local_of_place p in
   let init := PathsMap.get id own.(own_init) in
   Paths.mem p init.
-  
 
-Definition check_movable (own: own_env) (p: place) : bool :=
+
+Definition is_movable (own: own_env) (p: place) : bool :=
   (* the place itself and its children are all owned *)
   let id := local_of_place p in
-  let universe := PathsMap.get id (own_universe own) in  
-  Paths.for_all (is_owned own) (Paths.filter (is_prefix p) universe).
+  let universe := PathsMap.get id (own_universe own) in
+  (** Only check those in the universe  *)
+  Paths.exists_ (is_prefix p) universe &&
+  Paths.for_all (is_init own) (Paths.filter (is_prefix p) universe).
 
 
 Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
@@ -156,7 +158,7 @@ Fixpoint own_check_pexpr (own: own_env) (pe: pexpr) : bool :=
         (* copy/reference a place also requires that the place is
         movable (all its children are owned, otherwise it is not
         memory safe because the unowned block may be deallocated *)
-        check_movable own p
+        is_movable own p
       else
         (* This checking is left for borrow checker *)
         true
@@ -344,7 +346,7 @@ Definition own_check_expr (own: own_env) (e: expr) : bool :=
          partial owned *)
       (* remove p from init and add p and its children to uninit *)      
       let p := valid_owner p in
-      check_movable own p
+      is_movable own p
   | Epure pe =>
       true
   end.
@@ -383,11 +385,11 @@ Fixpoint place_dominators (p: place) : list place :=
 
 (* A place's dominator is owned means that this place is the owner of
 the location it resides in *)
-Definition place_dominator_own (own: own_env) (p: place) : bool :=
-  match place_dominator p with
-  | Some p' => is_owned own p'
-  | None => true
-  end.
+(* Definition place_dominator_own (own: own_env) (p: place) : bool := *)
+(*   match place_dominator p with *)
+(*   | Some p' => is_owned own p' *)
+(*   | None => true *)
+(*   end. *)
 
 (* We can use the following function to ensure that the block place
 [p] resides in is in the domain of abstracter *)
@@ -410,10 +412,10 @@ Defined.
 Next Obligation.
 Admitted.
 
-Definition own_check_assign (own: own_env) (p: place) : bool :=
-  (* check that the dominator of p is owned (initialized) because we
-  need to compute the address of [p] *)
-  place_dominator_own own p.
+(* Definition own_check_assign (own: own_env) (p: place) : bool := *)
+(*   (* check that the dominator of p is owned (initialized) because we *)
+(*   need to compute the address of [p] *) *)
+(*   place_dominator_own own p. *)
 
 Lemma is_init_in_universe: forall p own,
     is_init own p = true ->

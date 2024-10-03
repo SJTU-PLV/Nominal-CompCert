@@ -145,6 +145,7 @@ Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) :
   let universe := PathsMap.get id universemap in
   let mustinit := Paths.diff init uninit in
   (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
+  Paths.exists_ (is_prefix p) universe &&
   Paths.for_all (must_init initmap uninitmap universemap) (Paths.filter (is_prefix p) universe).
 
 (* Do we need to check that all the dominators of p is must_init (in

@@ -30,7 +30,7 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
   
 Definition move_check_expr (e : expr) :=
   match e with
-  | Emoveplace p _ => must_movable init uninit universe p
+  | Emoveplace p _ => dominators_must_init init uninit universe p && must_movable init uninit universe p
   | Epure pe => move_check_pexpr pe
   end.
 
