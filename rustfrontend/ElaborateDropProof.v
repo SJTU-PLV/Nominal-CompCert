@@ -921,8 +921,37 @@ Lemma alloc_drop_flags_match: forall j1 m1 tm1 e1 lo hi te1 tlo thi (flags: list
     /\ match_envs j1 e1 m1 lo hi te2 tm2 tlo (Mem.support tm2).
 Admitted.
 
+Lemma alloc_variables_range:
+  forall ge id b ty e m vars e' m',
+  alloc_variables ge e m vars e' m' ->
+  e'!id = Some(b, ty) -> e!id = Some(b, ty) \/ ~sup_In b (Mem.support m) /\ sup_In b (Mem.support m').
+Proof.
+Admitted. 
+
+Lemma alloc_variables_support:
+  forall ge e m vars e' m',
+  alloc_variables ge e m vars e' m' -> Mem.sup_include (Mem.support m) (Mem.support m').
+Proof.
+  induction 1.
+  apply Mem.sup_include_refl.
+  eapply Mem.sup_include_trans; eauto. exploit Mem.support_alloc; eauto.
+  intros EQ. unfold sup_incr in EQ.
+  apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ.
+  apply Mem.sup_include_refl. apply IHalloc_variables.
+Qed.
+
+Lemma alloc_variables_injective:
+  forall ge id1 b1 ty1 id2 b2 ty2 e m vars e' m',
+  alloc_variables ge e m vars e' m' ->
+  (e!id1 = Some(b1, ty1) -> e!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2) ->
+  (forall id b ty, e!id = Some(b, ty) -> sup_In b (Mem.support m)) ->
+  (e'!id1 = Some(b1, ty1) -> e'!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2).
+Proof.
+Admitted. 
+
+
 (* allocate the same variables inject *)
-Lemma alloc_variables_match: forall e1 te1 m1 tm1 vars e2 m2 lo hi tlo thi j1 Hm1
+Lemma alloc_variables_match: forall vars e1 te1 m1 tm1  e2 m2 lo hi tlo thi j1 Hm1
     (ALLOC: alloc_variables ge e1 m1 vars e2 m2)
     (MENV: match_envs j1 e1 m1 lo hi te1 tm1 tlo thi)
     (INCL: Mem.sup_include hi (Mem.support m1))
@@ -931,7 +960,43 @@ Lemma alloc_variables_match: forall e1 te1 m1 tm1 vars e2 m2 lo hi tlo thi j1 Hm
     alloc_variables tge te1 tm1 vars te2 tm2
     /\ match_envs j2 e2 m2 lo (Mem.support m2) te2 tm2 tlo (Mem.support tm2)
     /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2).
+Proof. 
+    induction 1; intros.
+    - admit. 
+    - exploit IHALLOC; eauto. 
+      econstructor; intros. 
+      (* exploit alloc_variables_range; eauto. intros [A|B]. *)
+      admit. 
+      (*  *)
+      intros. eapply alloc_variables_injective. eauto.
+      intros. eauto. intros. 
+       
+      
+  
 Admitted.
+
+(* 
+H0: alloc_variables ge empty_env m (fn_params f ++ fn_vars f) e m1
+H1: bind_parameters ge e m1 (fn_params f) vargs m'
+
+
+j1: meminj
+tm1: mem
+Hm1: Mem.inject j1 m1 tm1
+te1: env
+ALLOC1: alloc_variables tge empty_env tm (fn_params f ++ fn_vars f) te1 tm1
+MENV1: match_envs j1 e m1 (Mem.support m) (Mem.support m1) te1 tm1 (Mem.support tm) (Mem.support tm1)
+INJP1: injp_acc (injpw j m tm Hm) (injpw j1 m1 tm1 Hm1) *)
+
+(* Lemma alloc_variables_match_empty: forall m e m1 vars hi thi m tm
+    (ALLOC: alloc_variables ge empty_env m vars e m1)
+    (INCL: Mem.sup_include hi (Mem.support m))
+    (TINCL: Mem.sup_include thi (Mem.support tm)),
+  exists tm2 te2,
+    alloc_variables tge empty_env tm1 vars te2 tm2
+    /\ match_envs e empty m2 lo (Mem.support n) te2 tm2 tlo (Mem.support tm2)  *)
+
+
 
 Lemma alloc_variables_app: forall ce m1 m2 m3 l1 l2 e1 e2 e3,
     alloc_variables ce e1 m1 l1 e2 m2 ->
@@ -1486,8 +1551,20 @@ Qed.
 (* same as that in SimplLocalProof *)
 Lemma assign_loc_support: forall ge ty m b ofs v m',
     assign_loc ge ty m b ofs v m' -> Mem.support m' = Mem.support m.
-Admitted.
+Proof.
+    induction 1.
+    simpl in H0. eapply Mem.support_store; eauto.
+    eapply Mem.support_storebytes; eauto.
+Qed.
+  
 
+Lemma assign_loc_max_perm:
+  forall ge ty m loc ofs  v m',
+    assign_loc ge ty m loc ofs  v m' ->
+    injp_max_perm_decrease m m'.
+Proof.
+  intros. inv H; red; intros; eauto with mem.
+Qed.
 
 Lemma assign_loc_injp_acc: forall f ty m loc ofs v m' tm loc' ofs' v' Hm,
     assign_loc ge ty m loc ofs v m' ->
@@ -1496,9 +1573,17 @@ Lemma assign_loc_injp_acc: forall f ty m loc ofs v m' tm loc' ofs' v' Hm,
     exists f' tm' Hm',
       assign_loc tge ty tm loc' ofs' v' tm'
       /\ injp_acc (injpw f m tm Hm) (injpw f' m' tm' Hm').
-Admitted.
+Proof. 
+  intros. 
+  inv H.
+  - inv H0. exploit Mem.storev_mapped_inject; eauto.  
+    intros (tm' & A & B).  
+    exists f.  eexists. exists B. split. econstructor; eauto. 
+    econstructor; eauto. eapply Mem.ro_unchanged_store. eauto. 
+    eapply Mem.ro_unchanged_store. eauto. 
+  Admitted. 
 
-
+    
 Lemma type_to_drop_member_state_eq: forall id ty,
     type_to_drop_member_state ge id ty = type_to_drop_member_state tge id ty.
 Proof.
@@ -2815,13 +2900,14 @@ Proof.
     eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
     (** TODO: construct function entry in target program *)
     inv ENTRY.
+    
     (* alloc the same variables and parameters in source and target *)
     exploit alloc_variables_match; eauto.
     eapply match_empty_envs.
     eapply Mem.sup_include_refl.
-    instantiate (1 := tm). eapply Mem.sup_include_refl.
+    instantiate (1 := tm). eapply Mem.sup_include_refl. 
     unfold wm2. destruct w.
-    inv MINJ. eapply Mem.unchanged_on_support.  eauto.    
+    inv MINJ. eapply Mem.unchanged_on_support. eauto.    
     instantiate (1 := Hm).
     intros (j1 & tm1 & Hm1 & te1 & ALLOC1 & MENV1 & INJP1).
     (* alloc drop flag in the target program *)
