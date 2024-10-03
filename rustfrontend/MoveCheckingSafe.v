@@ -917,23 +917,14 @@ Qed.
 (*     bmatch m b (ofs + ofs') p' own (typeof_place p'). *)
 (* Admitted. *)
 
-Record mmatch (m: mem) (e: env) (own: own_env): Prop :=
-  { mmatch_shallow: forall p b ofs fp,
-      place_footprint e p b ofs fp ->
-      is_init own p = true ->
-      bmatch m b ofs fp (typeof_place p);
+Definition mmatch (m: mem) (e: env) (own: own_env): Prop :=
+  forall p b ofs fp,
+    place_footprint e p b ofs fp ->
+    is_init own p = true ->
+    bmatch m b ofs fp (typeof_place p)
+    /\ (is_full own.(own_universe) p = true ->
+       sem_wt_loc ce m fp b ofs (typeof_place p)).
 
-    mmatch_deep: forall p b ofs fp,
-      place_footprint e p b ofs fp ->      
-      is_movable own p = true ->
-      sem_wt_loc ce m fp b ofs (typeof_place p);
-  }.
-      
-  (* forall p b ofs fp, *)
-  (*   place_footprint e p b ofs fp -> *)
-  (*   (* We only consider the initialized place *) *)
-  (*   is_owned own p = true -> *)
-  (*   bmatch m b ofs fp (typeof_place p). *)
 
 Record wf_env (e: env) : Prop := {
     wf_env_footprint: forall id b ty,
@@ -1426,10 +1417,10 @@ Proof.
     (** Prove that p is_owned  *)
     unfold dominators_must_init in POWN. simpl in POWN.
     eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).
-    exploit mmatch_shallow. eauto. eauto.    
-    eapply must_init_sound; eauto.
+    exploit MM. eauto.
+    eapply must_init_sound; eauto.        
     (* inversion of bmatch *)
-    intros BM. rewrite H in BM. inv BM.
+    intros (BM & FULL). rewrite H in BM. inv BM.
     (* rewrite some redundant premises *)
     rewrite H0 in CO. inv CO.
     simpl in H1. rewrite H1 in TAG. inv TAG. rewrite Int.unsigned_repr in H2.
@@ -1477,9 +1468,9 @@ Proof.
     eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).    
     exploit IHEVAL; eauto.
     intros (fp & phl & FP & POP & GFM).
-    exploit mmatch_shallow. eauto. eauto.    
+    exploit MM. eauto.
     eapply must_init_sound; eauto.
-    intros BM. destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
+    intros (BM & FULL). destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
     inv WT2. inv BM.
     exists fp0, (phl++[ph_deref]). repeat apply conj.
     (* prove ofs' = 0 *)
@@ -1644,93 +1635,91 @@ Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs init uninit universe
     (PFP: place_footprint ce fpm e p b ofs fp),
     sem_wt_loc ce m fp b ofs (typeof_place p)
 .
-Admitted.
-(** *** In the new definition of mmatch, no need to prove this lemma! *)
 (* with movable_struct_field_sem_wt: forall fpm m e own p orgs id ofs fpl fid fty co n ffp fofs b init uninit universe *)
 (*         (MM: mmatch ce fpm m e own) *)
 (*         (PTY: typeof_place p = Tstruct orgs id) *)
 (*         (PFP: place_footprint ce fpm e p b ofs (fp_struct fpl)) *)
 (*         (POWN: must_movable init uninit universe p = true) *)
-(*         (SOUND: sound_own own init uninit universe)         *)
+(*         (SOUND: sound_own own init uninit universe) *)
 (*         (CO: ce ! id = Some co) *)
 (*         (TAG: field_tag fid (co_members co) = Some n) *)
 (*         (FTY: field_type fid (co_members co) = OK fty) *)
 (*         (FFP: list_nth_z fpl n = Some ffp) *)
 (*         (FOFS: field_offset ce fid co.(co_members) = OK fofs), *)
 (*     sem_wt_loc ce m ffp b (ofs + fofs) fty. *)
-(* Proof. *)
-(*   (* prove the first lemma *) *)
+Proof.
+  (* prove the first lemma *)
  
-(*   induction fp using strong_footprint_ind; intros. *)
+  induction fp using strong_footprint_ind; intros.
 
-(*   (* induction fp; intros. *) *)
-(*   (* empty footprint *) *)
-(*   - assert (OWN: is_owned own p = true). *)
-(*     { eapply must_movable_is_owned; eauto. } *)
-(*     exploit MM. eauto. auto. *)
-(*     intros BM. inv BM. *)
-(*     eapply sem_wt_base; eauto. *)
-(*   (* fp_box *) *)
-(*   - assert (OWN: is_owned own p = true). *)
-(*     { eapply must_movable_is_owned; eauto. } *)
-(*     exploit MM. eauto. auto. *)
-(*     intros BM. inv BM. *)
-(*     econstructor. simpl. eauto. *)
-(*     eauto. *)
-(*     econstructor; auto. *)
-(*     (* To prove the heap block is semantically well typed, use I.H. *) *)
-(*     replace ty with (typeof_place (Pderef p ty)) by auto. *)
-(*     eapply IHfp. eauto. *)
-(*     (* prove *p is movable *) *)
-(*     2: eauto. *)
-(*     eapply must_movable_prefix. eauto. eauto. *)
-(*     unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence. *)
-(*     (* prove place_footprint *)     *)
-(*     econstructor. eauto. *)
-(*     eapply place_footprint_wt in PFP. inv PFP. *)
-(*     rewrite <- H in H0. inv H0. auto. *)
-(*   (* fp_struct *) *)
-(*   - assert (OWN: is_owned own p = true). *)
-(*     { eapply must_movable_is_owned; eauto. } *)
-(*     exploit MM. eauto. auto. *)
-(*     intros BM. inv BM. *)
-(*     eapply sem_wt_struct. eauto. *)
-(*     intros. exploit FMATCH. 1-3: eauto. *)
-(*     intros (ffp1 & NTH & BM1). *)
-(*     replace fty with (typeof_place (Pfield p fid fty)) by auto. *)
-(*     eapply H. eapply list_nth_z_in. eauto. *)
-(*     eauto. 2: eauto. *)
-(*     eapply must_movable_prefix. eauto. eauto. *)
-(*     unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence. *)
-(*     (* place_footprint *) *)
-(*     econstructor; eauto. *)
-(*     (* wt_footprint *) *)
-(*     eapply place_footprint_wt in PFP. *)
-(*     inv PFP. rewrite <- H2 in H6. inv H6. *)
-(*     exploit WFFP; eauto. *)
-(*     intros (fp & NTH1 & WT). *)
-(*     rewrite NTH in NTH1. inv NTH1. *)
-(*     rewrite H3 in NTH. inv NTH. auto. *)
-(*     (* eapply movable_struct_field_sem_wt; eauto. *) *)
-(*   (* fp_enum *) *)
-(*   - assert (OWN: is_owned own p = true). *)
-(*     { eapply must_movable_is_owned; eauto. } *)
-(*     exploit MM. eauto. auto. *)
-(*     intros BM. inv BM.     *)
-(*     eapply sem_wt_enum. 1-2: eauto. *)
-(*     intros. replace fty with (typeof_place (Pdowncast p fid fty)) by auto. *)
-(*     eapply IHfp. eauto. *)
-(*     (* Pdowncast is movable *) *)
-(*     2: eauto. *)
-(*     eapply must_movable_prefix. eauto. eauto. *)
-(*     unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence. *)
-(*     (* place_footprint *) *)
-(*     econstructor; eauto. *)
-(*     (* wt_footprint *) *)
-(*     eapply place_footprint_wt in PFP. inv PFP. *)
-(*     rewrite <- H in H3. inv H3. *)
-(*     eapply WFFP; eauto.   *)
-(* Qed. *)
+  (* induction fp; intros. *)
+  (* empty footprint *)
+  - assert (OWN: is_owned own p = true).
+    { eapply must_movable_is_; eauto. }
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    eapply sem_wt_base; eauto.
+  (* fp_box *)
+  - assert (OWN: is_owned own p = true).
+    { eapply must_movable_is_owned; eauto. }
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    econstructor. simpl. eauto.
+    eauto.
+    econstructor; auto.
+    (* To prove the heap block is semantically well typed, use I.H. *)
+    replace ty with (typeof_place (Pderef p ty)) by auto.
+    eapply IHfp. eauto.
+    (* prove *p is movable *)
+    2: eauto.
+    eapply must_movable_prefix. eauto. eauto.
+    unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence.
+    (* prove place_footprint *)
+    econstructor. eauto.
+    eapply place_footprint_wt in PFP. inv PFP.
+    rewrite <- H in H0. inv H0. auto.
+  (* fp_struct *)
+  - assert (OWN: is_owned own p = true).
+    { eapply must_movable_is_owned; eauto. }
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    eapply sem_wt_struct. eauto.
+    intros. exploit FMATCH. 1-3: eauto.
+    intros (ffp1 & NTH & BM1).
+    replace fty with (typeof_place (Pfield p fid fty)) by auto.
+    eapply H. eapply list_nth_z_in. eauto.
+    eauto. 2: eauto.
+    eapply must_movable_prefix. eauto. eauto.
+    unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence.
+    (* place_footprint *)
+    econstructor; eauto.
+    (* wt_footprint *)
+    eapply place_footprint_wt in PFP.
+    inv PFP. rewrite <- H2 in H6. inv H6.
+    exploit WFFP; eauto.
+    intros (fp & NTH1 & WT).
+    rewrite NTH in NTH1. inv NTH1.
+    rewrite H3 in NTH. inv NTH. auto.
+    (* eapply movable_struct_field_sem_wt; eauto. *)
+  (* fp_enum *)
+  - assert (OWN: is_owned own p = true).
+    { eapply must_movable_is_owned; eauto. }
+    exploit MM. eauto. auto.
+    intros BM. inv BM.
+    eapply sem_wt_enum. 1-2: eauto.
+    intros. replace fty with (typeof_place (Pdowncast p fid fty)) by auto.
+    eapply IHfp. eauto.
+    (* Pdowncast is movable *)
+    2: eauto.
+    eapply must_movable_prefix. eauto. eauto.
+    unfold is_prefix. simpl. destruct place_eq at 2. simpl. intuition. congruence.
+    (* place_footprint *)
+    econstructor; eauto.
+    (* wt_footprint *)
+    eapply place_footprint_wt in PFP. inv PFP.
+    rewrite <- H in H3. inv H3.
+    eapply WFFP; eauto.
+Qed.
 
 (** IMPORTANT TODO  *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own phs

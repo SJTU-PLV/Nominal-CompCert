@@ -374,6 +374,7 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
       (* p in universe indicates that p is fully owned/moved (no p's
       children mentioned in this function) *)
       if Paths.mem p universe then
+        (** The return true relies on the properties of collect function *)
         OK [(p, true)]
       else
         match get_composite ce id with
@@ -439,6 +440,12 @@ Inductive split_places_ordered : list place -> Prop :=
     split_places_ordered (p :: l)
 .
 
+Definition is_full_internal (universe: Paths.t) (p: place) : bool :=
+  Paths.for_all (fun p1 => negb (is_prefix_strict p p1)) universe.
+  
+Definition is_full (universe: PathsMap.t) (p: place) : bool :=
+    let w := PathsMap.get (local_of_place p) universe in
+    is_full_internal w p.
 
 Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : Prop :=
   { split_sound: forall p, In p (map fst drops) -> Paths.In p universe /\ is_prefix r p = true;
@@ -449,7 +456,7 @@ Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place 
     split_correct_full: forall p,
       In (p,true) drops ->
       (* no p's children in universe if p is full *)
-      Paths.For_all (fun p1 => is_prefix_strict p p1 = false) universe;
+      is_full_internal universe p = true
   }.
 
 Lemma split_drop_place_meet_spec: forall ce universe p drops,
