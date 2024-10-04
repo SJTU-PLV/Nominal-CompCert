@@ -28,6 +28,19 @@ Definition type_deref (ty: type) : res type :=
 
 Definition typenv := PTree.t type.
 
+Definition scalar_type (ty: type) : bool :=
+  match ty with
+  | Tunit
+  | Tint _ _
+  | Tlong _
+  | Tfloat _
+  | Tfunction _ _ _ _ _
+  | Tarray _ _
+  | Treference _ _ _ => true
+  | _ => false
+  end.
+
+
 Section TYPING.
 
 Variable te: typenv.
@@ -58,10 +71,11 @@ Inductive wt_place : place -> Prop :=
 
 Inductive wt_expr: expr -> Prop :=
 | wt_move_place: forall p
-    (WT1: wt_place p),
-    wt_expr (Emoveplace p (typeof_place p))
+    (WT1: wt_place p)
+    (MOVE: scalar_type (typeof_place p) = false),
+    wt_expr (Emoveplace p (typeof_place p)).
 (** TODO: wt_pexpr  *)
-.
+
 
 End TYPING.
 
@@ -508,16 +522,6 @@ Fixpoint get_footprint (phl: list path) (fp: footprint) : option footprint :=
 (*              ~ footprint_equiv fp1 fp2 -> *)
 (*              footprint_disjoint fp1 fp2. *)
 
-Definition scalar_type (ty: type) : bool :=
-  match ty with
-  | Tunit
-  | Tint _ _
-  | Tlong _
-  | Tfloat _
-  | Tfunction _ _ _ _ _
-  | Tarray _ _ => true
-  | _ => false
-  end.
 
 (** * Definitions of semantics typedness (TODO: support user-defined semantics types) *)
 
@@ -1627,11 +1631,11 @@ Lemma move_place_mmatch: forall fpm1 m1 m2 e own1 own2 p b ofs fp
     exists fpm2, mmatch ce fpm2 m2 e own2.
 Admitted.
 
-Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs init uninit universe
+Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs
     (MM: mmatch ce fpm m e own)
-    (* p owns the ownership chain *)
-    (POWN: must_movable init uninit universe p = true)
-    (SOUND: sound_own own init uninit universe)
+    (TY: scalar_type (typeof_place p) = false)
+    (* p owns the ownership chain *)    
+    (POWN: is_movable own p = true)
     (PFP: place_footprint ce fpm e p b ofs fp),
     sem_wt_loc ce m fp b ofs (typeof_place p)
 .
