@@ -218,14 +218,40 @@ Definition is_support_prefix (p1 p2: place) : bool :=
 Definition is_prefix_strict (p1 p2: place) : bool :=
   in_dec place_eq p1 (parent_paths p2).
 
+Lemma In_place_no_refl: forall p, ~In p (parent_paths p).
+Proof.
+  unfold not. intros.  
+  induction p. 
+  - simpl in H. apply H.
+  - simpl in H. destruct H.
+    + apply IHp. 
+      rewrite H at 2. simpl. left. reflexivity.
+    + apply IHp. remember (Pfield p i t) as p'.
+Admitted.
+
+Lemma In_place_no_eql: forall p1 p2, In p1 (parent_paths p2) ->
+  p1 <> p2. 
+Proof.
+  intros. destruct (place_eq p1 p2).
+  - subst. apply In_place_no_refl in H. contradiction.
+  - apply n.
+Qed.
+
 Lemma In_place_trans: forall p3 p1 p2, In p1 (parent_paths p2) ->
 In p2 (parent_paths p3) -> In p1 (parent_paths p3).
 Proof.
-  induction p3 as [?|p3'|?|?].
-  - simpl in *. contradiction.
-  - simpl in *. intros. destruct H0 as [H0|H0].
-    + subst. right. eapply IHp3'. eapply H. 
-Admitted.
+  induction p3; 
+  simpl in *; try intros; auto.
+  - destruct H0. subst.
+    + auto.
+    + right. apply IHp3 with p2. apply H. apply H0.
+  - destruct H0. subst.
+    + auto.
+    + right. eapply IHp3. eapply H. apply H0.
+  - destruct H0. subst.
+    + auto.
+    + right. eapply IHp3. eapply H. apply H0.
+Qed.
 
 Lemma is_prefix_strict_trans p1 p2 p3:
   is_prefix_strict p1 p2 = true ->
@@ -270,15 +296,35 @@ Qed.
 Lemma is_prefix_strict_implies: forall p1 p2,
     is_prefix_strict p1 p2 = true ->
     is_prefix p1 p2 = true.
-Admitted.
+Proof.
+  intros. unfold is_prefix. unfold is_prefix_strict in H.
+  unfold orb. destruct (place_eq p1 p2).
+  - reflexivity.
+  - simpl. auto.
+Qed.
 
 Lemma is_prefix_strict_not_refl: forall p,
     is_prefix_strict p p = false.
-Admitted.
+Proof.
+  intros. unfold is_prefix_strict. destruct in_dec; cbn in *.
+  apply In_place_no_refl in i. contradiction.
+  reflexivity.
+Qed.
 
 Lemma is_prefix_strict_iff: forall p1 p2,
     is_prefix_strict p1 p2 = true <-> (is_prefix p1 p2 = true /\ p1 <> p2).
-Admitted.
+Proof.
+  intros. split; intros.
+  - split.
+    + apply is_prefix_strict_implies. apply H.
+    + unfold not. intros. subst. rewrite is_prefix_strict_not_refl in H.
+      discriminate.
+  - destruct H as [H1 H2].
+    unfold is_prefix_strict. unfold is_prefix in H1. unfold orb in H1.
+    destruct (place_eq p1 p2); simpl in *.
+    + contradiction.
+    + auto.
+Qed.
 
 Fixpoint local_of_place (p: place) :=
   match p with
@@ -291,7 +337,24 @@ Fixpoint local_of_place (p: place) :=
 Lemma is_prefix_same_local: forall p1 p2,
     is_prefix p1 p2 = true ->
     local_of_place p1 = local_of_place p2.
-Admitted.
+Proof.
+  intros. unfold is_prefix in H.
+  unfold orb in H. destruct (place_eq p1 p2); simpl in *.
+  - subst. reflexivity.
+  - destruct in_dec in H; cbn in *.
+    + induction p2. 
+      * simpl in i. contradiction.
+      * simpl in *. destruct i.
+        subst. reflexivity.
+        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.
+      * simpl in *. destruct i.
+        subst. reflexivity.
+        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.
+      * simpl in *. destruct i.
+        subst. reflexivity.
+        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.  
+    + discriminate.
+Qed.
 
 Definition is_sibling (p1 p2: place) : bool :=
   Pos.eqb (local_of_place p1) (local_of_place p2)
