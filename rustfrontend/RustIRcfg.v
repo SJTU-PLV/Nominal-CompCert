@@ -599,7 +599,7 @@ Lemma add_instr_next:
     add_instr (Inop n0) s = Res n s' R ->
     n0 = n.
 Proof.
-  intros. monadInv H. inversion R. subst. 
+  intros. monadInv H. inversion R. subst.
   Admitted.
 
 Lemma update_instr_at:
@@ -607,7 +607,10 @@ Lemma update_instr_at:
     (st_code s') ! n = Some i.
 Proof. 
   intros. unfold update_instr in H. 
-  Admitted. 
+  destruct (plt n (st_nextnode s)) eqn:E;
+  destruct (check_empty_node s n) eqn:E2; inversion H.
+  eapply PTree.gss.
+Qed. 
 
 Lemma ret_instr_at:
   forall (succ:positive) n s s' R, ret succ s = Res n s' R ->
@@ -745,7 +748,8 @@ Qed.
 
 Local Open Scope error_monad_scope.
 
-Definition set_stmt (pc: node) (body: statement) (sel: selector) (s: statement) : Errors.res statement :=
+Definition set_stmt (pc: node) (body: statement) (sel: selector) 
+(s: statement) : Errors.res statement :=
   match update_stmt body sel s with
   | Some body1 => OK body1
   | None =>
@@ -759,7 +763,8 @@ Context {AN: Type} {An: Type} (get_an: AN -> node -> An).
 Context (ae: AN).
 Context (transl_stmt: An -> statement -> Errors.res statement).
 
-Definition transl_on_instr (src: statement) (pc: node) (instr: instruction) : Errors.res statement :=
+Definition transl_on_instr (src: statement) (pc: node) (instr: instruction)
+ : Errors.res statement :=
   match instr with
   | Isel sel _ =>
       match select_stmt src sel with
@@ -773,15 +778,19 @@ Definition transl_on_instr (src: statement) (pc: node) (instr: instruction) : Er
   | _ => OK src
   end.
 
-Definition transl_on_cfg (src: statement) (cfg: rustcfg) : Errors.res statement :=
-  PTree.fold (fun body pc instr => do body' <- body; transl_on_instr body' pc instr) cfg (OK src).
+Definition transl_on_cfg (src: statement) (cfg: rustcfg) 
+: Errors.res statement :=
+  PTree.fold 
+  (fun body pc instr => 
+  do body' <- body; transl_on_instr body' pc instr) cfg (OK src).
 
 (* Translation relation between source statment and target statement *)
 
 Section SPEC.
 
 (* Dynamic elaboration of statement based on own_env *)
-Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -> node -> node -> option node -> option node -> node -> Prop :=
+Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> 
+statement -> node -> node -> option node -> option node -> node -> Prop :=
 | match_Sskip: forall pc cont brk endn,
     match_stmt body cfg Sskip Sskip pc pc cont brk endn
 | match_Sassign: forall pc next sel p e ts cont brk endn
@@ -843,13 +852,35 @@ Inductive match_stmt (body: statement) (cfg: rustcfg) : statement -> statement -
     match_stmt body cfg (Sreturn e) ts pc next cont brk endn
 .
 
+Lemma transl_Sskip :
+  forall entry cfg ts, generate_cfg Sskip = OK (entry, cfg) ->
+  transl_on_cfg Sskip cfg = OK ts -> ts = Sskip.
+Proof.
+  intros. unfold generate_cfg in H. 
+  destruct (generate_cfg' Sskip init_state) eqn:E.
+  - discriminate H.
+  - inversion H. subst. monadInv E.
+    unfold transl_on_cfg in H0. simpl in H0. 
+Admitted.
+
 (** How to prove? added a visited list (list of pc) in match_stmt *)
 Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
     (CFG: generate_cfg s = OK (entry, cfg))
     (TRANSL: transl_on_cfg s cfg = OK ts),
-  exists nret, match_stmt s cfg s ts entry nret None None nret
-          /\ cfg ! nret = Some Iend.
-Admitted.
+  exists nret, match_stmt s cfg s ts entry nret None None nret.
+Proof.
+  induction s; intros. 
+  (* Sskip    *)
+  exists entry.
+  assert(HT: ts = Sskip). apply (transl_Sskip entry cfg ts CFG TRANSL).
+  rewrite HT. econstructor.
+  (* Sassign *)
+  exists entry.
+  apply match_Sassign with nil.  
+  unfold generate_cfg in CFG. 
+  destruct (generate_cfg' (Sassign p e) init_state ).
+  discriminate. inversion CFG; subst; clear CFG. 
+  
 
 End SPEC.
 

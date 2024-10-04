@@ -16,9 +16,11 @@ Local Open Scope error_monad_scope.
 
 Inductive place : Type :=
 | Plocal : ident -> type -> place
-| Pfield : place -> ident -> type -> place (**r access a field of struct: p.(id)  *)
+| Pfield : place -> ident -> type -> place 
+(**r access a field of struct: p.(id)  *)
 | Pderef : place -> type -> place
-| Pdowncast: place -> ident -> type -> place (**r represent the location of a constructor *)
+| Pdowncast: place -> ident -> type -> place 
+(**r represent the location of a constructor *)
 .
 
 Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
@@ -216,18 +218,54 @@ Definition is_support_prefix (p1 p2: place) : bool :=
 Definition is_prefix_strict (p1 p2: place) : bool :=
   in_dec place_eq p1 (parent_paths p2).
 
+Lemma In_place_trans: forall p3 p1 p2, In p1 (parent_paths p2) ->
+In p2 (parent_paths p3) -> In p1 (parent_paths p3).
+Proof.
+  induction p3 as [?|p3'|?|?].
+  - simpl in *. contradiction.
+  - simpl in *. intros. destruct H0 as [H0|H0].
+    + subst. right. eapply IHp3'. eapply H. 
+Admitted.
+
 Lemma is_prefix_strict_trans p1 p2 p3:
   is_prefix_strict p1 p2 = true ->
   is_prefix_strict p2 p3 = true ->
   is_prefix_strict p1 p3 = true.
-Admitted.
+Proof.
+unfold is_prefix_strict. intros. 
+destruct in_dec in H; cbn in * |-.
+- destruct in_dec in H0; cbn in * |-.
+  + destruct in_dec.
+    * auto.
+    * apply (In_place_trans p3 p1 p2 i) in i0. contradiction.
+  + discriminate.
+- discriminate.
+Qed.
 
 Lemma is_prefix_refl: forall p, is_prefix p p = true.
-Admitted.
+Proof.
+  intros. unfold is_prefix. 
+  Print place_eq.
+  unfold orb. destruct (place_eq p p).
+  - simpl. reflexivity.
+  - simpl. destruct in_dec.
+    + auto.
+    + auto.
+Qed.
 
-
-Lemma is_prefix_trans: forall p1 p2 p3, is_prefix p1 p2 = true -> is_prefix p2 p3 = true -> is_prefix p1 p3 = true.
-Admitted.
+Lemma is_prefix_trans: forall p1 p2 p3, is_prefix p1 p2 = true -> 
+is_prefix p2 p3 = true -> is_prefix p1 p3 = true.
+Proof.
+  unfold is_prefix. intros. unfold orb in *. destruct (place_eq p1 p3).
+  - simpl. reflexivity.
+  - simpl. destruct (place_eq p1 p2); simpl in *.
+    + destruct (place_eq p2 p3); simpl in *.
+      * subst. contradiction.
+      * subst. auto.
+    + destruct (place_eq p2 p3); simpl in *.
+      * subst. auto.
+      * apply (is_prefix_strict_trans p1 p2 p3 H H0).
+Qed.
 
 Lemma is_prefix_strict_implies: forall p1 p2,
     is_prefix_strict p1 p2 = true ->
