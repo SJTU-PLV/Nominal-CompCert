@@ -378,7 +378,7 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
         OK [(p, true)]
       else
         match get_composite ce id with
-        | co_some _ i co P =>
+        | co_some i co P _ =>
             let children := map (fun elt => match elt with
                                          | Member_plain fid fty =>
                                              (Pfield p fid fty, fty) end)
@@ -388,7 +388,7 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
               do drops' <- rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) subfld fty;
               OK (drops' ++ drops) in
             fold_right foldf (OK nil) children
-        | co_none _ => Error[CTX id; MSG ": Unfound struct id in composite_env or wrong recursive data: split_drop_place"]
+        | co_none => Error[CTX id; MSG ": Unfound struct id in composite_env or wrong recursive data: split_drop_place"]
         end
   | Tvariant _ id =>
        if Paths.mem p universe then

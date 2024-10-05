@@ -880,7 +880,7 @@ Proof.
   unfold generate_cfg in CFG. 
   destruct (generate_cfg' (Sassign p e) init_state ).
   discriminate. inversion CFG; subst; clear CFG. 
-  
+Admitted.  
 
 End SPEC.
 

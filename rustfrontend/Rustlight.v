@@ -288,7 +288,6 @@ Qed.
 Lemma is_prefix_refl: forall p, is_prefix p p = true.
 Proof.
   intros. unfold is_prefix. 
-  Print place_eq.
   unfold orb. destruct (place_eq p p).
   - simpl. reflexivity.
   - simpl. destruct in_dec.

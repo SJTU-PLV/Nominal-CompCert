@@ -378,29 +378,33 @@ Qed.
 (*   eapply PTree_Properties.cardinal_remove;eauto. *)
 (* Defined. *)
 
+Inductive composite_result (ce: composite_env) (id: ident) : Type :=
+| co_none
+| co_some (id1: ident) (co: composite) (P: ce ! id1 = Some co) (Q: id = id1).
+
+Arguments co_none {ce id}.
+Arguments co_some {ce id}.
+
+Program Definition get_composite (ce: composite_env) (id: ident) : composite_result ce id :=
+  match ce ! id with
+  | None => co_none
+  | Some co => co_some id co _ _
+  end.
+
+
 (** Recursion borrowed from Inlining.v  *)
 Section OWN_TYPE.
 
 Variable ce: composite_env.
 
 Variable rec: forall (ce': composite_env), (PTree_Properties.cardinal ce' < PTree_Properties.cardinal ce)%nat -> type -> bool.
-
-Inductive composite_result : Type :=
-| co_none : composite_result
-| co_some (id: ident) (co: composite) (P: ce ! id = Some co).
-
-Program Definition get_composite (id: ident) : composite_result :=
-  match ce ! id with
-  | None => co_none
-  | Some co => co_some id co _
-  end.
-
+  
 Definition own_type' (ty: type) : bool :=
   match ty with
   | Tstruct _ id
   | Tvariant _ id =>
-      match get_composite id with
-      | co_some i co P =>
+      match get_composite ce id with
+      | co_some i co P Q =>
           let acc res m :=
             let own := (match m with
                         | Member_plain fid fty =>

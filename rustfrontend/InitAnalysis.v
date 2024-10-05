@@ -137,16 +137,16 @@ Definition may_init (initmap uninitmap universe: PathsMap.t) (p: place) : bool :
   let mayinit := Paths.inter init uninit in
   Paths.mem p mayinit && Paths.mem p (PathsMap.get (local_of_place p) universe).
 
-(* Used in static move checking *)
-Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool :=
-  let id := local_of_place p in
-  let init := PathsMap.get id initmap in
-  let uninit := PathsMap.get id uninitmap in
-  let universe := PathsMap.get id universemap in
-  let mustinit := Paths.diff init uninit in
-  (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *)
-  Paths.exists_ (is_prefix p) universe &&
-  Paths.for_all (must_init initmap uninitmap universemap) (Paths.filter (is_prefix p) universe).
+(** Used in static move checking: it is now defined in MoveChecking.v *)
+(* Definition must_movable (initmap uninitmap universemap: PathsMap.t) (p: place) : bool := *)
+(*   let id := local_of_place p in *)
+(*   let init := PathsMap.get id initmap in *)
+(*   let uninit := PathsMap.get id uninitmap in *)
+(*   let universe := PathsMap.get id universemap in *)
+(*   let mustinit := Paths.diff init uninit in *)
+(*   (* ∀ p' ∈ universe, is_prefix p p' → must_init p' *) *)
+(*   Paths.exists_ (is_prefix p) universe && *)
+(*   Paths.for_all (must_init initmap uninitmap universemap) (Paths.filter (is_prefix p) universe). *)
 
 (* Do we need to check that all the dominators of p is must_init (in
 init set and in universe) ? *)

@@ -24,37 +24,6 @@ Proof.
   eapply PTree_Properties.cardinal_remove. eauto.
 Qed.  
 
-Lemma place_neq_Pfield: forall p fid fty, p <> Pfield p fid fty.
-Proof.
-  induction p; intros; try congruence.
-Qed.
-
-Lemma test: forall p1 p2, is_prefix p1 p2 = true -> ~ In p2 (parent_paths p1).
-Proof.
-  induction p1.
-  - admit.
-  - intros. intro. simpl in *.
-    destruct H0. subst. unfold is_prefix in H.
-    destruct place_eq in H; subst.
-    eapply place_neq_Pfield. symmetry. eauto.    
-    erewrite orb_false_l in H.
-    eapply proj_sumbool_true in H.
-    eapply IHp1; eauto. unfold is_prefix.
-    eapply orb_true_intro. right. simpl. destruct place_eq; try congruence.
-    auto.    
-    eapply IHp1; eauto.
-    eapply is_prefix_trans. 2: eauto.
-    unfold is_prefix.
-    eapply orb_true_intro. right. simpl. destruct place_eq; try congruence.
-    auto.
- Admitted.    
-    
-Lemma is_prefix_not_refl: forall p, ~ In p (parent_paths p).
-Proof.
-  intros.
-  eapply test. apply is_prefix_refl.
-Qed.
-
 Lemma PTree_removeR {V: Type} : forall id v (m: PTree.t V),
     m ! id = Some v ->
     removeR (PTree.remove id m) m.
@@ -76,11 +45,16 @@ Section REC.
         else false
     | Tstruct _ id =>
         match get_composite ce id with
-        | co_some _ i co P =>
-            let fields_types := map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) co.(co_members) in
-            (** All sub-fields must be movable *)
-            forallb (fun '(fp, ft) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P) init uninit universe fp ft) fields_types
-        | co_none _ =>
+        | co_some i co P _ =>
+            if must_init init uninit universe p then
+              true                
+            else
+              (* the whole struct is not in the universe, so we must
+              check its sub-fields *)
+              let fields_types := map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) co.(co_members) in
+              (** All sub-fields must be movable *)
+              forallb (fun '(fp, ft) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P) init uninit universe fp ft) fields_types                      
+        | co_none =>
             (* type error *) false
         end
     | Tvariant _ id =>
@@ -94,7 +68,7 @@ Section REC.
     | Tunit
     | Tint _ _
     | Tlong _
-    | Tfloat _ => true
+    | Tfloat _ => must_init init uninit universe p
     (* other types are unsupported to move *)
     | _ => false
     end.
@@ -126,7 +100,7 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
       semantically wel-typed *)
       (** TODO: in the new must_movable definition, we need to only
       check the shallow init of this place with scalar type *)
-      dominators_must_init init uninit universe p && must_init init uninit universe p
+      dominators_must_init init uninit universe p && must_movable ce init uninit universe p
   | Eref _ _ _ _ => false
   | Eunop _ pe0 _ => move_check_pexpr pe0
   | Ebinop _ pe1 pe2 _ => move_check_pexpr pe1 && move_check_pexpr pe2

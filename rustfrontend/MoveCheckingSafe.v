@@ -13,6 +13,7 @@ Require Import RustIR RustIRcfg.
 Require Import Errors.
 Require Import InitDomain InitAnalysis.
 Require Import RustIRown MoveChecking.
+Require Import Wfsimpl.
 
 Import ListNotations.
 
@@ -1010,7 +1011,7 @@ Let ge := globalenv se prog.
 Let ce := ge.(genv_cenv).
 
 Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
-Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae move_check_stmt body cfg s s.
+Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) body cfg s s.
 
 Hypothesis CONSISTENT: composite_env_consistent ce.
 
@@ -1314,9 +1315,9 @@ Inductive sound_state: state -> Prop :=
 
 Lemma must_movable_prefix: forall p p' own init uninit universe
     (SOUND: sound_own own init uninit universe)
-    (INIT: must_movable init uninit universe p = true)
+    (INIT: must_movable ce init uninit universe p = true)
     (PRE: is_prefix p p' = true),
-    must_movable init uninit universe p' = true.
+    must_movable ce init uninit universe p' = true.
 Admitted.
 
 
@@ -1631,11 +1632,11 @@ Lemma move_place_mmatch: forall fpm1 m1 m2 e own1 own2 p b ofs fp
     exists fpm2, mmatch ce fpm2 m2 e own2.
 Admitted.
 
-Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs
-    (MM: mmatch ce fpm m e own)
-    (TY: scalar_type (typeof_place p) = false)
+Lemma movable_place_sem_wt: forall ce fp fpm m e own p b ofs init uninit universe
+    (MM: mmatch ce fpm m e own)    
     (* p owns the ownership chain *)    
-    (POWN: is_movable own p = true)
+    (POWN: must_movable ce init uninit universe p = true)
+    (SOUND: sound_own own init uninit universe)
     (PFP: place_footprint ce fpm e p b ofs fp),
     sem_wt_loc ce m fp b ofs (typeof_place p)
 .
@@ -1652,8 +1653,84 @@ Lemma movable_place_sem_wt: forall fp fpm m e own p b ofs
 (*         (FOFS: field_offset ce fid co.(co_members) = OK fofs), *)
 (*     sem_wt_loc ce m ffp b (ofs + fofs) fty. *)
 Proof.
-  (* prove the first lemma *)
- 
+  intros ce0; pattern ce0. apply well_founded_ind with (R := removeR).
+  eapply well_founded_removeR.
+  intros ce1 IH. intros. unfold must_movable, must_movable_fix in *.
+  erewrite unroll_Fix in *.
+  destruct (typeof_place p) eqn: PTY; simpl in POWN; try congruence.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & FULL). rewrite PTY in BM. inv BM.
+    econstructor; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & FULL). rewrite PTY in BM. inv BM.
+    econstructor; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & FULL). rewrite PTY in BM. inv BM.
+    econstructor; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & FULL). rewrite PTY in BM. inv BM.
+    econstructor; eauto.    
+  (* Tbox *)
+  - destruct (must_init init uninit universe p) eqn: PINIT; try congruence.
+    (* adhoc generalization *)
+    generalize dependent p. generalize dependent b.
+    generalize dependent fp. generalize dependent ofs.
+    induction t; intros; simpl in *; try congruence.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & FULL). rewrite PTY in BM. inv BM; simpl in *; try congruence.
+      econstructor. simpl. eauto. eauto.
+      econstructor; eauto.
+      assert (PFP1: place_footprint ce1 fpm e (Pderef p Tunit) b1 0 fp0).
+      { econstructor; eauto.
+        eapply place_footprint_wt in PFP. inv PFP. rewrite PTY in H.
+        inv H. auto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & FULL1). simpl in BM1. inv BM1; simpl in *; try congruence.
+      econstructor; simpl; eauto.
+    (* The same as Tunit case *)
+    + admit.
+    + admit.
+    + admit.
+    (* Induction case *)
+    + destruct (must_init init uninit universe (Pderef p (Tbox t))) eqn: INIT2; try congruence.
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & FULL). rewrite PTY in BM. inv BM; simpl in *; try congruence.
+      econstructor. simpl. eauto. eauto.
+      econstructor; eauto.
+      eapply IHt; eauto. simpl. auto.
+      econstructor; eauto.
+      eapply place_footprint_wt in PFP. inv PFP. rewrite PTY in H. inv H.
+      auto.
+    + (* destruct (ce1!i) eqn: CO. unfold get_composite in POWN. erewrite CO in POWN. *)
+      destruct (get_composite ce1 i) eqn: GCE; try congruence. subst.
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & FULL). rewrite PTY in BM. inv BM; simpl in *; try congruence.
+      rewrite P in *.
+      econstructor. simpl. eauto. eauto.
+      econstructor; eauto.
+      (* assert (PFP1: place_footprint ce1 fpm e (Pderef p Tunit) b1 0 fp0). *)
+      (* { econstructor; eauto. *)
+      (*   eapply place_footprint_wt in PFP. inv PFP. rewrite PTY in H. *)
+      (*   inv H. auto. } *)
+      (** Use IH  *)
+      destruct (must_init init uninit universe (Pderef p (Tstruct l id1))) eqn: INIT2; try congruence. admit.
+      (** Do not know how to prove  *)
+      admit.
+      simpl. rewrite P. auto.
+      (* eapply sem_wt_struct. *)
+      (* exploit IH. eapply PTree_removeR. eauto. *)
+      (* (* How to prove remove a composite does not invalidate mmatch *) *)
+
+      
+      
+      (* exploit MM. eauto. eapply must_init_sound; eauto. *)
+      (* intros (BM1 & FULL1). simpl in BM1. inv BM1; simpl in *; try congruence. *)
+      (* econstructor; simpl; eauto. *)
+    + admit.
+
+  (* Tstruct *)
+  - 
+      
   induction fp using strong_footprint_ind; intros.
 
   (* induction fp; intros. *)
