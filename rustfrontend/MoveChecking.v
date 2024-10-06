@@ -47,7 +47,10 @@ Section REC.
         match get_composite ce id with
         | co_some i co P _ =>
             if must_init init uninit universe p then
-              true                
+              (* This place must be full so that it is sem_wt *)
+              if is_full universe p then
+                true
+              else false
             else
               (* the whole struct is not in the universe, so we must
               check its sub-fields *)
@@ -61,7 +64,7 @@ Section REC.
         (* may be not required *)
         match ce ! id with
         | Some _ =>
-            must_init init uninit universe p
+            must_init init uninit universe p && is_full universe p
         | None => false
         end
     (* scalar type is movable if it is init *)
@@ -86,6 +89,20 @@ Definition must_movable_fix ce := Fix (@well_founded_removeR composite) must_mov
 
 Definition must_movable ce init uninit universe p := must_movable_fix ce init uninit universe p (typeof_place p).
 
+
+Definition scalar_type (ty: type) : bool :=
+  match ty with
+  | Tunit
+  | Tint _ _
+  | Tlong _
+  | Tfloat _
+  | Tfunction _ _ _ _ _
+  | Tarray _ _
+  | Treference _ _ _ => true
+  | _ => false
+  end.
+
+
 Section INIT.
 
 Variable ce: composite_env.
@@ -93,23 +110,34 @@ Variable init uninit universe: PathsMap.t.
   
 Fixpoint move_check_pexpr (pe : pexpr) : bool :=
   match pe with
-  | Eplace p _
+  | Eplace p ty =>
+      if scalar_type ty then
+        (* dominators are init means that the location if p is valid;
+           the children of p is init means that the value of p is
+           semantically wel-typed *)
+        dominators_must_init init uninit universe p && must_init init uninit universe p
+      else
+        (* For now only support copy a scalar type value *)
+        false
   | Ecktag p _ =>
-      (* dominators are init means that the location if p is valid;
-      the children of p is init means that the value of p is
-      semantically wel-typed *)
-      (** TODO: in the new must_movable definition, we need to only
-      check the shallow init of this place with scalar type *)
-      dominators_must_init init uninit universe p && must_movable ce init uninit universe p
+      (* type of p must be enum *)
+      match typeof_place p with
+      | Tvariant _ _ =>          
+          dominators_must_init init uninit universe p && must_init init uninit universe p
+      | _ => false
+      end
+  (** Eref is unsupported *)
   | Eref _ _ _ _ => false
   | Eunop _ pe0 _ => move_check_pexpr pe0
   | Ebinop _ pe1 pe2 _ => move_check_pexpr pe1 && move_check_pexpr pe2
   | _ => true
   end.
-  
+
 Definition move_check_expr (e : expr) :=
   match e with
-  | Emoveplace p _ => dominators_must_init init uninit universe p && must_movable ce init uninit universe p
+  | Emoveplace p _ =>
+      let p' := valid_owner p in
+      dominators_must_init init uninit universe p' && must_movable ce init uninit universe p'
   | Epure pe => move_check_pexpr pe
   end.
 

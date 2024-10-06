@@ -29,19 +29,6 @@ Definition type_deref (ty: type) : res type :=
 
 Definition typenv := PTree.t type.
 
-Definition scalar_type (ty: type) : bool :=
-  match ty with
-  | Tunit
-  | Tint _ _
-  | Tlong _
-  | Tfloat _
-  | Tfunction _ _ _ _ _
-  | Tarray _ _
-  | Treference _ _ _ => true
-  | _ => false
-  end.
-
-
 Section TYPING.
 
 Variable te: typenv.
@@ -368,11 +355,21 @@ with sem_wt_val (m: mem) : footprint -> val -> type -> Prop :=
 
 Definition find_fields (fid: ident) (fpl: list (ident * type * Z * footprint)) : option (ident * type * Z * footprint) :=
   find (fun '(fid', _, _, _) => if ident_eq fid fid' then true else false) fpl. 
-      
-
+              
+  
 Section COMP_ENV.
 
 Variable ce: composite_env.
+
+Definition member_footprint_rel (wtfp: type -> footprint -> Prop) (co: composite) (memb: member) (f: ident * type * Z * footprint) : Prop :=
+  let '(fid, fty, fofs, fp) := f in
+  match memb with
+  | Member_plain fid1 fty1 => fid = fid1 /\ fty = fty1
+                             /\ field_type fid co.(co_members) = OK fty
+                             /\ field_offset ce fid co.(co_members) = OK fofs
+                             /\ wtfp fty fp
+  end.
+
 
 (* Try to define wt_footprint *)
 
@@ -384,15 +381,19 @@ Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
     wt_footprint ce1 ty fp_emp
 | wt_fp_struct: forall orgs id fpl ce1 co
     (CO: ce1 ! id = Some co)
-    (WT: forall fid fty fofs,
+    (** TODO: combine WT1 and WT2 elegantly  *)
+    (WT1: forall fid fty fofs,
         field_type fid co.(co_members) = OK fty ->
         field_offset ce fid co.(co_members) = OK fofs ->
         (* For simplicity, use find_field instead of In predicate *)
-        exists ffp, find_fields fid fpl = Some (fid, fty, fofs, ffp)
+        exists ffp, In (fid, fty, fofs, ffp) fpl
                (* bound condition *)
-               /\ wt_footprint (PTree.remove id ce1) fty ffp),
-    (* (WT2: forall fid fty fofs ffp, *)
-    (*     In (fid, fty, fofs, ffp) fpl ->) *)
+               /\ wt_footprint (PTree.remove id ce1) fty ffp)
+    (WT2: forall fid fty fofs ffp,
+        In (fid, fty, fofs, ffp) fpl ->
+        field_type fid co.(co_members) = OK fty
+        /\ field_offset ce fid co.(co_members) = OK fofs
+        /\ wt_footprint (PTree.remove id ce1) fty ffp),
     wt_footprint ce1 (Tstruct orgs id) (fp_struct id fpl)
 | wt_fp_enum: forall orgs id tagz fid fty fofs fp ce1 co
     (CO: ce1 ! id = Some co)
@@ -450,7 +451,7 @@ Inductive place_footprint (e: env) : place -> block -> Z -> footprint -> Prop :=
     place_footprint e (Pderef p ty) b2 0 fp
 | place_footprint_field: forall p fp ofs b id fid fty fofs fpl
     (FP: place_footprint e p b ofs (fp_struct id fpl))
-    (FIND: find_fields fid fpl = Some (fid, fty, fofs, fp)),
+    (FIND: In (fid, fty, fofs, fp) fpl),
     place_footprint e (Pfield p fid fty) b (ofs + fofs) fp
 | place_footprint_enum: forall p fp fid fty tagz b ofs id fofs
     (FP: place_footprint e p b ofs (fp_enum id tagz fid fty fofs fp)),
@@ -532,7 +533,7 @@ Proof.
     (** Inversion of WTFP *)
     rewrite H in WTFP. inv WTFP; try congruence.
     eapply EXT in CO. rewrite H0 in CO. inv CO.
-    exploit WT; eauto. intros (ffp & INFPL & WTFP1).
+    exploit WT0; eauto. intros (ffp & INFPL & WTFP1).
     exists ffp, (PTree.remove id0 ce'). repeat apply conj; auto.
     econstructor; eauto.
     (** TODO: ce_extend trans and remove *)
@@ -658,18 +659,6 @@ Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit uni
     (EXTEND: ce_extends ce1 ce),
     sem_wt_loc m fp b ofs (typeof_place p)
 .
-(* with movable_struct_field_sem_wt: forall fpm m e own p orgs id ofs fpl fid fty co n ffp fofs b init uninit universe *)
-(*         (MM: mmatch ce fpm m e own) *)
-(*         (PTY: typeof_place p = Tstruct orgs id) *)
-(*         (PFP: place_footprint ce fpm e p b ofs (fp_struct fpl)) *)
-(*         (POWN: must_movable init uninit universe p = true) *)
-(*         (SOUND: sound_own own init uninit universe) *)
-(*         (CO: ce ! id = Some co) *)
-(*         (TAG: field_tag fid (co_members co) = Some n) *)
-(*         (FTY: field_type fid (co_members co) = OK fty) *)
-(*         (FFP: list_nth_z fpl n = Some ffp) *)
-(*         (FOFS: field_offset ce fid co.(co_members) = OK fofs), *)
-(*     sem_wt_loc ce m ffp b (ofs + fofs) fty. *)
 Proof.
   intros ce. intros c. pattern c. apply well_founded_ind with (R := removeR).
   eapply well_founded_removeR.
@@ -689,12 +678,98 @@ Proof.
     intros (BM & FULL). rewrite PTY in BM. inv BM.
     econstructor; eauto.
   (* Tbox *)
-  - admit.
+  - destruct (must_init init uninit universe p) eqn: INIT; try congruence.    
+    (* adhoc generalization *)
+    generalize dependent p. generalize dependent b.
+    generalize dependent fp. generalize dependent ofs.
+    induction t; intros; simpl in *; try congruence.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). rewrite PTY in *. inv BM; simpl in *; try congruence.
+      econstructor. simpl. eauto. eauto.
+      econstructor; eauto.
+      assert (PFP1: place_footprint fpm e (Pderef p Tunit) b1 0 fp0).
+      { econstructor; eauto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & WTLOC1). simpl in BM1. inv BM1; simpl in *; try congruence.
+      econstructor; simpl; eauto.
+    (* The same as Tunit case *)
+    + admit.
+    + admit.
+    + admit.
+    (* Induction case *)
+    + destruct (must_init init uninit universe (Pderef p (Tbox t))) eqn: INIT2; try congruence.
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & FULL). rewrite PTY in *. inv BM; simpl in *; try congruence.
+      inv WTFP.
+      econstructor. simpl. eauto. eauto.
+      econstructor; eauto.
+      eapply IHt; eauto. simpl. auto.
+      econstructor; eauto.
+    (* Tstruct *)
+    + destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
+      (* fp is not empty *)
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). rewrite PTY in *. inv BM; simpl in *; try congruence. inv WTFP.
+      clear GCO. eapply EXTEND in P. rewrite P in *.
+      econstructor. simpl. eauto. eauto. econstructor; eauto.
+      (* two cases *)
+      destruct (must_init init uninit universe (Pderef p (Tstruct l id1))) eqn: INIT1; try congruence.
+      (** Case1 check that p is full so we can derive sem_wt_loc by mmatch *)
+      destruct (is_full universe (Pderef p (Tstruct l id1))) eqn: FULL; try congruence.
+      (* construct footprint of Pderef p to use mmatch *)
+      assert (PFP1: place_footprint fpm e (Pderef p (Tstruct l id1)) b1 0 fp0).
+      { econstructor; eauto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & WTLOC1). simpl in *.
+      (* prove sem_wt_loc: first eliminate Tbox *)
+      eapply WTLOC1.      
+      erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
+      eauto.
+      (** Case2: p is not in the universe *)
+      erewrite forallb_forall in POWN.
+      (** Get the structure of fp by wt_footprint *)
+      inv WT; try congruence. 
+      eapply sem_wt_struct. intros.
+      replace fty with (typeof_place (Pfield (Pderef p (Tstruct l id1)) fid fty)) by auto.
+      (* strengthen the wt_footprint of struct to require that all
+    element in fpl is in the composite members *)
+      exploit WT2; eauto. intros (A & B & C).
+      eapply IH. instantiate (1 := (PTree.remove id1 ce1)).
+      eapply PTree_removeR. eauto. eauto.
+      assert (INMEM: In (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) (map (fun '(Member_plain fid fty) => (Pfield (Pderef p (Tstruct l id1)) fid fty, fty)) (co_members co))).
+      (** TODO *)
+      { admit. }
+      generalize (POWN (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) INMEM). eauto.
+      auto.
+      (* place_footprint *)
+      econstructor; eauto. econstructor. eauto.
+      (* wt_footprint *)
+      simpl. auto.
+      (* ce_extend *)
+      admit.
+    (* Tvariant *)
+    + destruct (ce1 ! i) eqn: CO; try congruence.      
+      eapply andb_true_iff in POWN. destruct POWN as (INIT1 & FULL).
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). rewrite PTY in *.
+      inv BM; simpl in *; try congruence.
+      econstructor. simpl. eauto.
+      eauto. econstructor; eauto.
+      cut (is_full own.(own_universe) (Pderef p (Tvariant l i)) = true).
+      eapply MM. econstructor. eauto.
+      eapply must_init_sound; eauto.
+      erewrite <- is_full_same; eauto.
+      eapply sound_own_universe; eauto.
+      
   (* Tstruct *)
   - destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
     destruct (must_init init uninit universe p) eqn: INIT; try congruence.
-    (** TODO: check that p is full so we can derive sem_wt_loc by mmatch *)
-    admit.
+    (** Case1 check that p is full so we can derive sem_wt_loc by mmatch *)
+    destruct (is_full universe p) eqn: FULL; try congruence.
+    exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & WTLOC). rewrite PTY in WTLOC. eapply WTLOC.
+    erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
+    (** Case2: p is not in the universe *)
     erewrite forallb_forall in POWN.
     (** Get the structure of fp by wt_footprint *)
     inv WTFP; try congruence.
@@ -702,6 +777,7 @@ Proof.
     replace fty with (typeof_place (Pfield p fid fty)) by auto.
     (* strengthen the wt_footprint of struct to require that all
     element in fpl is in the composite members *)
+    exploit WT2; eauto. intros (A & B & C).
     eapply IH. instantiate (1 := (PTree.remove id1 ce1)).
     eapply PTree_removeR. eauto. eauto.
     assert (INMEM: In (Pfield p fid fty, fty) (map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) (co_members co))).
@@ -710,13 +786,24 @@ Proof.
     generalize (POWN (Pfield p fid fty, fty) INMEM). eauto.
     auto.
     (* place_footprint *)
-    econstructor; eauto.
-    (* find_field *)
+    econstructor; eauto.    
+    (* wt_footprint *)
+    simpl. auto.
+    (* ce_extend *)
     admit.
-    simpl.
-    
-End COMP_ENV.
+  (* Tvariant *)
+  - destruct (ce1 ! i) eqn: CO; try congruence.
+    eapply andb_true_iff in POWN. destruct POWN as (INIT & FULL).
+    exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & WTLOC). rewrite PTY in BM.
+    inv BM; simpl in *; try congruence. 
+    inv WTFP.
+    rewrite PTY in WTLOC. eapply WTLOC.
+    erewrite <- is_full_same; eauto.
+    eapply sound_own_universe; eauto.
+Admitted.
 
+    
 (* Footprint used in interface (for now, it is just defined by
 support) *)
 Definition flat_footprint : Type := Mem.sup.
@@ -732,11 +819,11 @@ Definition flat_footprint_separated (fp1 fp2: flat_footprint) (m : mem) : Prop :
 Fixpoint footprint_flat (fp: footprint) : flat_footprint :=
   match fp with
   | fp_emp => nil
-  | fp_box b fp' =>
+  | fp_box b _ fp' =>
       b :: footprint_flat fp'
-  | fp_struct fpl =>
-      concat (map footprint_flat fpl)
-  | fp_enum _ fp =>
+  | fp_struct _ fpl =>
+      concat (map (fun '(_, _, _, fp) => footprint_flat fp) fpl)
+  | fp_enum _ _ _ _ _ fp =>
       footprint_flat fp
   end.
 

@@ -867,7 +867,8 @@ Admitted.
 Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
     (CFG: generate_cfg s = OK (entry, cfg))
     (TRANSL: transl_on_cfg s cfg = OK ts),
-  exists nret, match_stmt s cfg s ts entry nret None None nret.
+  exists nret, match_stmt s cfg s ts entry nret None None nret
+          /\ cfg ! nret = Some Iend.
 Proof.
   induction s; intros. 
   (* Sskip    *)
@@ -875,11 +876,11 @@ Proof.
   assert(HT: ts = Sskip). apply (transl_Sskip entry cfg ts CFG TRANSL).
   rewrite HT. econstructor.
   (* Sassign *)
-  exists entry.
-  apply match_Sassign with nil.  
-  unfold generate_cfg in CFG. 
-  destruct (generate_cfg' (Sassign p e) init_state ).
-  discriminate. inversion CFG; subst; clear CFG. 
+  (* exists entry. *)
+  (* apply match_Sassign with nil.   *)
+  (* unfold generate_cfg in CFG.  *)
+  (* destruct (generate_cfg' (Sassign p e) init_state ). *)
+  (* discriminate. inversion CFG; subst; clear CFG.  *)
 Admitted.  
 
 End SPEC.

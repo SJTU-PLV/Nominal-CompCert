@@ -3018,7 +3018,7 @@ Proof.
     monadInv EQ2.
     (* use transl_on_cfg_meet_spec to get match_stmt in fuction entry *)
     exploit (@transl_on_cfg_meet_spec AN); eauto. 
-    intros (nret & MSTMT ).
+    intros (nret & MSTMT & RET).
     (* own_env in function entry is sound *)
     exploit sound_function_entry. simpl. eauto.
     eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
