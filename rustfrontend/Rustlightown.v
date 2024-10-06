@@ -367,6 +367,7 @@ Definition own_check_exprlist (own: own_env) (l: list expr) : bool :=
 location of this place (e.g., if p is of type enum, then it is the
 dominator of all its downcast *)
 
+(* Unused *)
 Fixpoint place_dominator (p: place) : option place :=
   match p with
   | Pderef p' _ => Some p'
@@ -379,7 +380,9 @@ Fixpoint place_dominators (p: place) : list place :=
   match p with
   | Pderef p' _ => p' :: place_dominators p'
   | Pfield p' _ _ => place_dominators p'
-  | Pdowncast p' _ _ => p' :: place_dominators p'
+  | Pdowncast p' _ _ =>
+      let po := valid_owner p' in
+      po :: place_dominators po
   | Plocal _ _ => nil
   end.
 
