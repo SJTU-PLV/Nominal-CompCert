@@ -690,12 +690,19 @@ Lemma get_loc_footprint_map_app_inv: forall phl2 phl1 id e fpm b1 ofs1 fp1,
       /\ get_loc_footprint phl2 fp b ofs = Some (b1, ofs1, fp1).
 Admitted.
 
+Lemma get_set_footprint_map_exists: forall phl id fp fp1 fpm1 b ofs le,
+    get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp1) ->
+    exists fpm2, set_footprint_map (id, phl) fp fpm1 = Some fpm2
+            /\ get_loc_footprint_map le (id, phl) fpm2 = Some (b, ofs, fp).
+Admitted.
+
 
 Lemma get_set_footprint_map: forall phl id fp fp1 fpm1 fpm2 b ofs le,
     get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp1) ->
     set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
     get_loc_footprint_map le (id, phl) fpm2 = Some (b, ofs, fp).
 Admitted.
+
 
 (** IMPORTANT TODO: how to perform induction???  *)
 Lemma set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 le,
@@ -1649,7 +1656,7 @@ Proof.
       eapply move_place_init_is_init. eauto.
       intros (BM & FULL).
       (* We need to say that p must not be shallow children of p0!!! *)
-      (** TODO: 1. p0's type must not be struct/variant because no
+      (** TODO: 1. p0's type must not be struct/variant if so, no
         children of p0 is in the universe (to add a properties for
         universe in own_env) *)
       assert (PTY: exists ty, typeof_place p0 = Tbox ty). admit.
@@ -1768,8 +1775,10 @@ Proof.
       intros WT_LOC. 
       (* deref sem_wt location *)
       exploit deref_sem_wt_loc_sound; eauto. intros WT_VAL.
-      assert (A: exists fpm2, clear_footprint_map (path_of_place p) fpm1 = Some fpm2).
-      { admit. }
+      assert (A: exists fpm2, clear_footprint_map le (path_of_place (valid_owner p)) fpm1 = Some fpm2).
+      { unfold clear_footprint_map.
+        admit.
+      }
       destruct A as (fpm2 & CLEAR).
       exists pfp, fpm2. repeat apply conj; auto.
       eapply mmatch_move_place_sound; eauto. 
@@ -1778,6 +1787,7 @@ Proof.
       destruct (peq (local_of_place p) id).
       subst.
       (** set a wt_footprint in a wt_footprint is still wt *)
+      exploit wf_env_footprint; eauto. intros (fp1 & A & B).
       admit.
       exploit wf_env_footprint; eauto.
       intros (fp & GFPM1 & WFFP). exists fp. split; auto.
@@ -1799,7 +1809,7 @@ Proof.
       eauto. intros WTLOC1.
       rewrite <- OFSEQ in WTLOC1.
       exploit deref_sem_wt_loc_sound; eauto. intros WT_VAL.
-      assert (A: exists fpm2, clear_footprint_map (path_of_place p) fpm1 = Some fpm2).
+      assert (A: exists fpm2, clear_footprint_map le (path_of_place (valid_owner p)) fpm1 = Some fpm2).
       { admit. }
       destruct A as (fpm2 & CLEAR).
       exists fp1, fpm2. repeat apply conj; auto.
@@ -1816,10 +1826,119 @@ Proof.
     red. intros. inv H.
 Admitted.
 
+(** IMPORTANT TODO: *)
+Lemma sem_wt_loc_unchanged: forall m1 m2 fp b ofs ty
+    (WT: sem_wt_loc m1 fp b ofs ty)
+    (UNC: Mem.unchanged_on (fun b1 _ => In b1 (footprint_flat fp)) m1 m2),
+      sem_wt_loc m2 fp b ofs ty.
+Admitted.
 
-
-
-
+Lemma assign_loc_sem_wt: forall fp ce ty m1 b ofs v m2
+    (AS: assign_loc ce ty m1 b ofs v m2)
+    (WT: sem_wt_val m1 fp v ty)
+    (WTFP: wt_footprint ce ce ty fp)
+    (* the assignment does not affect the footprint *)
+    (IN: ~ In b (footprint_flat fp)),
+    sem_wt_loc m2 fp b (Ptrofs.unsigned ofs) ty.
+Proof.
+  (* no need to induciton on fp *)
+  destruct fp; intros.
+  - inv WT.
+    + inv AS. eapply sem_wt_base; eauto.
+      eapply Mem.load_store_same. eauto.
+      simpl in H. inv H.
+      simpl. econstructor.
+    + inv AS. eapply sem_wt_base; eauto.
+      eapply Mem.load_store_same. eauto.
+      simpl in H0.
+      destruct sz; destruct si; inv H0; simpl; econstructor;
+        try (simpl in H; rewrite H; auto).
+      auto. auto.
+      simpl in H. destruct (Int.eq n Int.zero).
+      subst. simpl. auto.
+      subst. simpl. auto.
+      simpl in H. destruct (Int.eq n Int.zero).
+      subst. simpl. auto.
+      subst. simpl. auto.
+    (* float *)
+    + admit.
+    (* double *)
+    + admit.
+    (* long *)
+    + admit.
+    + inv WTFP. congruence.
+    + inv WTLOC. simpl in *. congruence.
+  - inv WTFP. inv WT.
+    inv AS; simpl in *; try congruence.
+    eapply Decidable.not_or in IN. destruct IN as (IN1 & IN2).
+    assert (UNC: Mem.unchanged_on (fun b _ => b <> b0) m1 m2).
+    { eapply Mem.store_unchanged_on; eauto. }
+    econstructor. simpl; eauto.
+    eapply Mem.load_store_same. eauto.
+    exploit sem_wt_loc_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto. intros. simpl.
+    intro. apply IN2. subst. auto.
+    intros WTLOC1.
+    inv H. unfold Mptr.
+    destruct Archi.ptr64 eqn: A; simpl; try rewrite A.
+    econstructor; auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    econstructor; auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+  - inv WTFP.
+    inv AS. simpl in *. try congruence.
+    inv WT. inv WTLOC. simpl in *. try congruence.
+    eapply sem_wt_struct. intros until ffp. intros FIND.
+    exploit FWT; eauto. intros WTLOC.
+(* Mem.storebytes_split *)
+    
+(*     Lemma load_sem_wt_val_loc:  *)
+(*       Mem.loadbytes_storebytes_same *)
+Admitted.
+    
+(** Important Lemma  *)
+(* Consider assign to a variant? *)
+Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
+    (MM: mmatch fpm1 m1 e own1)
+    (TY: ty = typeof_place p)
+    (AS: assign_loc ce ty m1 b ofs v m2)
+    (WT: sem_wt_val m1 vfp v ty)
+    (* The path of this place and the path of the footprint fo p (which is not used) *)
+    (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
+    (* ownership transfer *)
+    (CKAS: own_transfer_assign own1 p = own2)
+    (WTP: wt_place (env_to_tenv e) ce p)
+    (* type of place is not enum *)
+    (NOTENUM: forall orgs id, typeof_place p <> Tvariant orgs id)
+    (NOREP: list_norepet (flat_fp_map fpm1))
+    (DIS: list_disjoint (footprint_flat vfp) (flat_fp_map fpm1)),
+  exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
+          /\ mmatch fpm2 m2 e own2
+          /\ list_norepet (flat_fp_map fpm2).
+Proof.
+  intros. destruct (path_of_place p) eqn: POP.
+  exploit get_set_footprint_map_exists; eauto.
+  instantiate (1 := vfp).
+  intros (fpm2 & A & B). exists fpm2. split. auto.
+  split.
+  (* mmatch *)
+  - red. intros until fp.
+    intros GFP INIT.
+    unfold own_transfer_assign in CKAS.
+    destruct (is_prefix p p0) eqn: PRE.
+    (* p0 is children of p1: we need to prove that the value/location of p0 is sem_wt *)
+    + exploit is_prefix_paths_app; eauto.
+      rewrite POP. simpl.
+      destruct (path_of_place p0) eqn: POP0. simpl.
+      intros (P1 & (phl & P2)). subst.
+      (* show that fp is subpath of vfp and (b0, ofs0) is sem_wt_loc
+      which requires that (b1,ofs) is sem_wt_loc. *)
+      exploit get_loc_footprint_map_app_inv; eauto.
+      intros (b1 & ofs1 & fp1 & D & E). rewrite B in D. inv D.
+      (* prove that assign_loc assigns a sem_wt_val then the location
+      is sem_wt_loc *)
 Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
 | member_footprint_struct: forall fofs fid fty
     (STRUCT: co.(co_sv) = Struct)
