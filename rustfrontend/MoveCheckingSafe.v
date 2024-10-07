@@ -578,12 +578,12 @@ Fixpoint get_footprint (phl: list path) (fp: footprint) : option footprint :=
   end.
 
 
-Definition clear_footprint (phl: list path) (fp: footprint) : option footprint :=
-  match get_footprint phl fp with
-  | Some fp1 =>
-      set_footprint phl (clear_footprint_rec fp1) fp
-  | None => None
-  end.
+(* Definition clear_footprint (phl: list path) (fp: footprint) : option footprint := *)
+(*   match get_footprint phl fp with *)
+(*   | Some fp1 => *)
+(*       set_footprint phl (clear_footprint_rec fp1) fp *)
+(*   | None => None *)
+(*   end. *)
 
 
 Definition set_footprint_map (ps: paths) (v: footprint) (fpm: fp_map) : option fp_map :=
@@ -591,19 +591,6 @@ Definition set_footprint_map (ps: paths) (v: footprint) (fpm: fp_map) : option f
   match fpm!id with
   | Some fp1 =>
       match set_footprint phl v fp1 with
-      | Some fp2 =>
-          Some (PTree.set id fp2 fpm)
-      | None =>
-          None
-      end
-  | None => None
-  end.
-
-Definition clear_footprint_map (ps: paths) (fpm: fp_map) : option fp_map :=
-  let (id, phl) := ps in
-  match fpm!id with
-  | Some fp1 =>
-      match clear_footprint phl fp1 with
       | Some fp2 =>
           Some (PTree.set id fp2 fpm)
       | None =>
@@ -629,6 +616,14 @@ Definition get_loc_footprint_map (e: env) (ps: paths) (fpm: fp_map) : option (bl
 (*       get_footprint phl fp *)
 (*   | None => None *)
 (*   end. *)
+
+Definition clear_footprint_map e (ps: paths) (fpm: fp_map) : option fp_map :=
+  match get_loc_footprint_map e ps fpm with
+  | Some (_, _, fp1) =>
+      set_footprint_map ps (clear_footprint_rec fp1) fpm
+  | None => None
+  end.
+
 
 Lemma get_loc_footprint_app: forall phl2 phl1 fp fp1 b ofs b1 ofs1 b2 ofs2 fp2,
     get_loc_footprint phl1 fp b ofs = Some (b1, ofs1, fp1) ->
@@ -682,6 +677,44 @@ Lemma get_loc_footprint_map_app_inv: forall phl2 phl1 id e fpm b1 ofs1 fp1,
 Admitted.
 
 
+Lemma get_set_footprint_map: forall phl id fp fp1 fpm1 fpm2 b ofs le,
+    get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp1) ->
+    set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
+    get_loc_footprint_map le (id, phl) fpm2 = Some (b, ofs, fp).
+Admitted.
+
+(** IMPORTANT TODO: how to perform induction???  *)
+Lemma set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 le,
+    get_loc_footprint_map le (id, phl1++phl2) fpm1 = Some (b1, ofs1, fp1) ->
+    set_footprint_map (id, phl1++phl2) fp2 fpm1 = Some fpm2 ->
+    exists b2 ofs2 fp3 fp4,
+      get_loc_footprint_map le (id, phl1) fpm1 = Some (b2, ofs2, fp3)
+      /\ get_loc_footprint_map le (id, phl1) fpm2 = Some (b2, ofs2, fp4)
+      /\ set_footprint phl2 fp2 fp3 = Some fp4.
+(* Proof. *)
+(*   induction phl1; intros. *)
+(*   - (* rewrite app_nil_r in *. exists b1, ofs1, fp1, fp2. *) *)
+(*     (* repeat apply conj; auto. *) *)
+(*   (* eapply get_set_footprint_map; eauto.  *) *)
+(*     admit. *)
+(*   - replace (a::phl1) with ((a::nil) ++ phl1) in * by auto. *)
+(*     rewrite <- app_assoc in *.             *)
+(*     exploit get_loc_footprint_map_app_inv; eauto. *)
+(*     intros (b3 & ofs3 & fp5 & D & E). *)
+(*     simpl in H0. destruct (fpm1 ! id) eqn: FP1; try congruence. *)
+(*     destruct a. *)
+(*     + destruct f; try congruence. *)
+(*       destruct (set_footprint (phl1 ++ phl2) fp2 f) eqn: SET; try congruence. *)
+(*       assert (SET1: set_footprint_map (id, phl1++phl2) (fp_box b sz f0) fpm1 = Some fpm2). *)
+(*       { unfold set_footprint_map. rewrite FP1. rewrite  *)
+      
+      
+    
+(*     exploit get_loc_footprint_map_app_inv. eapply A. *)
+(*     intros (b4 & ofs4 & fp6 & F & G). rewrite  *)
+Admitted.
+  
+    
 Section FPM.
 
 Variable fpm : fp_map.
@@ -1495,11 +1528,21 @@ Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_st
 
 (** Try to prove eval_expr_sem_wt  *)
 
+Lemma is_prefix_paths_app: forall p1 p2,
+    is_prefix p1 p2 = true ->
+    fst (path_of_place p1) = fst (path_of_place p2)
+    /\ exists phl, snd (path_of_place p2) = snd (path_of_place p1) ++ phl.
+Admitted.
+
+Lemma move_place_init_is_init: forall p p1 own,
+    is_init (move_place own p1) p = true ->
+    is_init own p = true.
+Admitted.
 
 (** IMPORTANT TODO  *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 m le own)
-    (CLR: clear_footprint_map (path_of_place p) fpm1 = Some fpm2),
+    (CLR: clear_footprint_map le (path_of_place p) fpm1 = Some fpm2),
     (* valid_owner makes this proof difficult *)
     mmatch fpm2 m le (move_place own (valid_owner p)).
 Proof.
@@ -1523,6 +1566,39 @@ Proof.
       (* p0 is prefix of p1 (valid_owner p). clear p's footprint also
       affects the footprint of p0 *)
       * assert (PRE2: is_prefix p0 p = true) by admit.
+        unfold clear_footprint_map in CLR.
+        destruct (get_loc_footprint_map le (path_of_place p) fpm1) eqn: GET1; try congruence.
+        repeat destruct p2.
+        destruct (path_of_place p) eqn: POP.
+        exploit is_prefix_paths_app. eapply PRE2. rewrite POP.
+        destruct (path_of_place p0) eqn: POP2. simpl.
+        intros (A & (phl & B)). subst.
+        (** set_footprint_map_app_inv is important TODO  *)
+        exploit set_footprint_map_app_inv. eapply GET1. eauto.
+        intros (b2 & ofs2 & fp3 & fp4 & A & B & C).
+        rewrite PFP in B. inv B.
+        (* use mmatch *)
+        exploit MM. erewrite POP2. eauto.
+        eapply move_place_init_is_init. eauto.
+        intros (BM & FULL).
+        (* We need to say that p must not be shallow children of p0!!! *)
+        (** TODO: 1. p0's type must not be struct/variant because no
+        children of p0 is in the universe (to add a properties for
+        universe in own_env) *)
+        assert (PTY: exists ty, typeof_place p0 = Tbox ty). admit.
+        destruct PTY as (ty & PTY). rewrite PTY in *.
+        inv BM. split.
+        (** TODO: po is strict prefix of p so phl is not nil  *)
+        destruct phl. admit.
+        simpl in C. destruct p2; try congruence.
+        destruct (set_footprint phl (clear_footprint_rec f) fp) eqn: SET; try congruence.
+        inv C. econstructor; eauto.
+        (** is_full is not possible because p is in the universe (add
+        a premise in this lemma) *)
+        admit.
+        simpl in TY. congruence.
+      (* p0 is not prefix of p1 *)
+      * 
         
         Lemma clear_footprint_map_inv: forall p fpm1 fpm2,
             clear_footprint_map (id, phl) fpm1 = Some fpm2 ->
