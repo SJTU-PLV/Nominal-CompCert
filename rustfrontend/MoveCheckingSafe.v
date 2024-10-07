@@ -464,6 +464,20 @@ Fixpoint path_of_place (p: place) : paths :=
       (id, phl ++ [ph_downcast (typeof_place p1) fid fty])
   end.
 
+Inductive paths_disjoint : list path -> list path -> Prop :=
+| phs_disjoint1: forall p1 p2 l1 l2,
+    (* Is it enough to use neq? *)
+    p1 <> p2 ->
+    paths_disjoint (p1::l1) (p2::l2)
+| phs_disjoint2: forall p l1 l2,
+    paths_disjoint l1 l2 ->
+    paths_disjoint (p::l1) (p::l2).
+
+Lemma local_of_paths_of_place: forall p,
+    local_of_place p = fst (path_of_place p).
+Proof.
+  induction p; simpl; auto; destruct (path_of_place p); auto.
+Qed.
 
 (** Prove some properties w.r.t list_nth_z  *)
 Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
@@ -713,7 +727,19 @@ Lemma set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 l
 (*     exploit get_loc_footprint_map_app_inv. eapply A. *)
 (*     intros (b4 & ofs4 & fp6 & F & G). rewrite  *)
 Admitted.
-  
+
+Lemma get_set_disjoint_paths : forall phl1 phl2 id e fpm1 fpm2 fp,
+    paths_disjoint phl1 phl2 ->
+    set_footprint_map (id, phl1) fp fpm1 = Some fpm2 ->
+    get_loc_footprint_map e (id, phl2) fpm1 = get_loc_footprint_map e (id, phl2) fpm2.
+Admitted.
+
+Lemma get_set_different_local : forall phl1 phl2 id1 id2 e fpm1 fpm2 fp,
+    id1 <> id2 ->
+    set_footprint_map (id1, phl1) fp fpm1 = Some fpm2 ->
+    get_loc_footprint_map e (id2, phl2) fpm1 = get_loc_footprint_map e (id2, phl2) fpm2.
+Admitted.
+
     
 Section FPM.
 
@@ -1539,80 +1565,141 @@ Lemma move_place_init_is_init: forall p p1 own,
     is_init own p = true.
 Admitted.
 
+Lemma is_not_prefix_disjoint: forall p1 p2,
+    is_prefix p1 p2 = false ->
+    is_prefix p2 p1 = false ->
+    fst (path_of_place p1) <> fst (path_of_place p2) \/
+      paths_disjoint (snd (path_of_place p1)) (snd (path_of_place p2)).
+Proof.
+  induction p1; intros; destruct (path_of_place p2) eqn: POP2; simpl in *.
+  - unfold is_prefix in *.
+    simpl in *.
+    admit.
+  - destruct (path_of_place p1) eqn: POP1.
+    unfold is_prefix in *.
+    simpl in *.
+    destruct (place_eq p1 p2) in H0; simpl in H0; try congruence. subst.
+    erewrite orb_true_r in H0. congruence.
+    destruct in_dec in H0; simpl in H0.
+    erewrite orb_true_r in H0. congruence.
+    (** p2 may be a children of p1 but p2 is not a children of p1.i  *)
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl in *.
+    (** IMPORTANT TODO: we need to say that paths of p2 is (l0 ++
+    [ph_field j] ++ ...)  where j is not equal to i *)
+    * admit.
+    * (* use I.H. *)
+      exploit IHp1. instantiate (1 := p2).
+      eapply orb_false_iff. split. destruct (place_eq p1 p2); try congruence; auto.
+      eapply not_true_iff_false. intro. eapply n1. eapply proj_sumbool_true. eauto.
+      eapply orb_false_iff. split. destruct (place_eq p1 p2); try congruence; auto.     
+      eapply not_true_iff_false. intro. eapply n2. symmetry. eapply proj_sumbool_true.
+      eauto.
+      eapply not_true_iff_false. intro. eapply n0. eapply proj_sumbool_true. eauto.  
+      intros [A|B].
+    + rewrite POP2 in A. simpl in *. auto.
+    + right. rewrite POP2 in B. simpl in *.
+      (** TODO: paths_disjoint_app *)
+      admit.
+  - admit.
+  - admit.
+Admitted.      
+      
 (** IMPORTANT TODO  *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 m le own)
-    (CLR: clear_footprint_map le (path_of_place p) fpm1 = Some fpm2),
+    (CLR: clear_footprint_map le (path_of_place (valid_owner p)) fpm1 = Some fpm2),
     (* valid_owner makes this proof difficult *)
     mmatch fpm2 m le (move_place own (valid_owner p)).
 Proof.
   intros. red. intros until fp.
   intros PFP INIT.
-  destruct (ident_eq (local_of_place p) (local_of_place p0)).
-  - set (p1:= (valid_owner p)) in *.
-    destruct (is_prefix p1 p0) eqn: PRE.
-    (* impossible *)
-    + unfold is_init, move_place, remove_place in INIT. simpl in INIT.
-      eapply Paths.mem_2 in INIT.
-      erewrite PathsMap.gsspec in INIT.
-      destruct peq.
-      * eapply Paths.filter_2 in INIT.
-        rewrite PRE in INIT. simpl in INIT. congruence.
-        red. solve_proper.
-      * unfold p1 in *.
-        rewrite valid_owner_same_local in n. congruence.
-    (* valid_owner p is not a prefix of p0 *)
-    + destruct (is_prefix p0 p1) eqn: PRE1.
-      (* p0 is prefix of p1 (valid_owner p). clear p's footprint also
+  set (p1:= (valid_owner p)) in *.
+  destruct (is_prefix p1 p0) eqn: PRE.
+  (* impossible *)
+  - unfold is_init, move_place, remove_place in INIT. simpl in INIT.
+    eapply Paths.mem_2 in INIT.
+    erewrite PathsMap.gsspec in INIT.
+    destruct peq.
+    * eapply Paths.filter_2 in INIT.
+      rewrite PRE in INIT. simpl in INIT. congruence.
+      red. solve_proper.
+    * unfold p1 in *.
+      rewrite valid_owner_same_local in n.
+      erewrite <- (is_prefix_same_local (valid_owner p) p0) in n.
+      erewrite valid_owner_same_local in n.
+      congruence.
+      auto.      
+  (* valid_owner p is not a prefix of p0 *)
+  -  destruct (is_prefix p0 p1) eqn: PRE1.
+    (* p0 is prefix of p1 (valid_owner p). clear p's footprint also
       affects the footprint of p0 *)
-      * assert (PRE2: is_prefix p0 p = true) by admit.
-        unfold clear_footprint_map in CLR.
-        destruct (get_loc_footprint_map le (path_of_place p) fpm1) eqn: GET1; try congruence.
-        repeat destruct p2.
-        destruct (path_of_place p) eqn: POP.
-        exploit is_prefix_paths_app. eapply PRE2. rewrite POP.
-        destruct (path_of_place p0) eqn: POP2. simpl.
-        intros (A & (phl & B)). subst.
-        (** set_footprint_map_app_inv is important TODO  *)
-        exploit set_footprint_map_app_inv. eapply GET1. eauto.
-        intros (b2 & ofs2 & fp3 & fp4 & A & B & C).
-        rewrite PFP in B. inv B.
-        (* use mmatch *)
-        exploit MM. erewrite POP2. eauto.
-        eapply move_place_init_is_init. eauto.
-        intros (BM & FULL).
-        (* We need to say that p must not be shallow children of p0!!! *)
-        (** TODO: 1. p0's type must not be struct/variant because no
+    * unfold clear_footprint_map in CLR.
+      destruct (get_loc_footprint_map le (path_of_place p1) fpm1) eqn: GET1; try congruence.
+      repeat destruct p2.
+      destruct (path_of_place p1) eqn: POP.
+      exploit is_prefix_paths_app. eapply PRE1. rewrite POP.
+      destruct (path_of_place p0) eqn: POP2. simpl.
+      intros (A & (phl & B)). subst.
+      (** set_footprint_map_app_inv is important TODO  *)
+      exploit set_footprint_map_app_inv. eapply GET1. eauto.
+      intros (b2 & ofs2 & fp3 & fp4 & A & B & C).
+      rewrite PFP in B. inv B.
+      (* use mmatch *)
+      exploit MM. erewrite POP2. eauto.
+      eapply move_place_init_is_init. eauto.
+      intros (BM & FULL).
+      (* We need to say that p must not be shallow children of p0!!! *)
+      (** TODO: 1. p0's type must not be struct/variant because no
         children of p0 is in the universe (to add a properties for
         universe in own_env) *)
-        assert (PTY: exists ty, typeof_place p0 = Tbox ty). admit.
-        destruct PTY as (ty & PTY). rewrite PTY in *.
-        inv BM. split.
-        (** TODO: po is strict prefix of p so phl is not nil  *)
-        destruct phl. admit.
-        simpl in C. destruct p2; try congruence.
-        destruct (set_footprint phl (clear_footprint_rec f) fp) eqn: SET; try congruence.
-        inv C. econstructor; eauto.
-        (** is_full is not possible because p is in the universe (add
+      assert (PTY: exists ty, typeof_place p0 = Tbox ty). admit.
+      destruct PTY as (ty & PTY). rewrite PTY in *.
+      inv BM. split.
+      (** TODO: po is strict prefix of p so phl is not nil  *)
+      destruct phl. admit.
+      simpl in C. destruct p2; try congruence.
+      destruct (set_footprint phl (clear_footprint_rec f) fp) eqn: SET; try congruence.
+      inv C. econstructor; eauto.
+      (** is_full is not possible because p is in the universe (add
         a premise in this lemma) *)
-        admit.
-        simpl in TY. congruence.
-      (* p0 is not prefix of p1 *)
-      * 
-        
-        Lemma clear_footprint_map_inv: forall p fpm1 fpm2,
-            clear_footprint_map (id, phl) fpm1 = Some fpm2 ->
-            place_footprint
-            exists fp1 fp2 fp3,
-              fpm1 ! id = Some fp1
-              /\ get_footprint phl fp1 = Some fp2
-              /\ set_footprint phl (clear_footprint_rec fp2) fp1 = Some fp3
-              /\ fpm2 = PTree.set id fp3 fpm1.
-        
-
-      assert (place_footprint fpm1 le p0 b ofs fp).
-      { 
-      
+      admit.
+      simpl in TY. congruence.
+    (* p0 is not prefix of p1 *)
+    * unfold clear_footprint_map in CLR.
+      destruct (get_loc_footprint_map le (path_of_place p1) fpm1) eqn: GET1; try congruence.
+      repeat destruct p2.      
+      (* no relation between p0 and (valid_owner p), so two cases *)
+      destruct (ident_eq (local_of_place p1) (local_of_place p0)).
+     + exploit is_not_prefix_disjoint. eapply PRE. eapply PRE1.
+       intros [A|B].
+       -- do 2 erewrite <- local_of_paths_of_place in A. congruence.
+       -- do 2 erewrite local_of_paths_of_place in e.
+          destruct (path_of_place p1) eqn: C. destruct (path_of_place p0) eqn: D.
+          simpl in e. subst.
+          exploit get_set_disjoint_paths. eauto.
+          eauto. instantiate (1:= le). intros E.
+          cbn [snd] in *.
+          rewrite PFP in E.
+          (* use mmatch *)
+          rewrite <- D in E.
+          exploit MM. eauto.
+          eapply move_place_init_is_init. eauto.
+          intros (BM & WTLOC). auto.                  
+     + destruct (path_of_place p1) eqn: B. destruct (path_of_place p0) eqn: C.       
+       exploit get_set_different_local; eauto.
+       replace (local_of_place p1) with i. eauto.
+       erewrite local_of_paths_of_place. rewrite B. auto.
+       replace (local_of_place p0) with i0.
+       instantiate (1 := l0). instantiate (1 := le).
+       intros D. rewrite PFP in D.
+       2: { erewrite local_of_paths_of_place. rewrite C. auto. }
+       (* use mmatch *)
+       rewrite <- C in D.
+       exploit MM. eauto.
+       eapply move_place_init_is_init. eauto.
+       intros (BM & WTLOC). auto.
+Admitted.
+       
 (* Lemma footprint_map_gss: forall p phs fpm1 fp1 fp2 ce le *)
 (*   (WT: wt_place le ce p) *)
 (*   (POP: path_of_place ce p phs) *)
