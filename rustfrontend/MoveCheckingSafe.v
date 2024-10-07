@@ -303,7 +303,9 @@ End FP_IND.
 
 (* Try to define new sem_wt *)
 
-
+Definition find_fields (fid: ident) (fpl: list (ident * type * Z * footprint)) : option (ident * type * Z * footprint) :=
+  find (fun '(fid', _, _, _) => if ident_eq fid fid' then true else false) fpl. 
+              
 (* Semantics well typed location is mutually defined with semantics
 well typed value *)
 Inductive sem_wt_loc (m: mem) : footprint -> block -> Z -> type -> Prop :=
@@ -315,7 +317,7 @@ Inductive sem_wt_loc (m: mem) : footprint -> block -> Z -> type -> Prop :=
 | sem_wt_struct: forall b ofs fpl orgs id
     (* all fields are semantically well typed *)
     (FWT: forall fid fty fofs ffp,
-        In (fid, fty, fofs, ffp) fpl ->
+        find_fields fid fpl = Some (fid, fty, fofs, ffp) ->
         sem_wt_loc m ffp b (ofs + fofs) fty),
     sem_wt_loc m (fp_struct id fpl) b ofs (Tstruct orgs id)
 | sem_wt_enum: forall fp b ofs orgs id tagz fid fty fofs
@@ -353,9 +355,6 @@ with sem_wt_val (m: mem) : footprint -> val -> type -> Prop :=
     sem_wt_val m fp (Vptr b ofs) (Tvariant orgs id)
 .
 
-Definition find_fields (fid: ident) (fpl: list (ident * type * Z * footprint)) : option (ident * type * Z * footprint) :=
-  find (fun '(fid', _, _, _) => if ident_eq fid fid' then true else false) fpl. 
-              
   
 Section COMP_ENV.
 
@@ -386,11 +385,11 @@ Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
         field_type fid co.(co_members) = OK fty ->
         field_offset ce fid co.(co_members) = OK fofs ->
         (* For simplicity, use find_field instead of In predicate *)
-        exists ffp, In (fid, fty, fofs, ffp) fpl
+        exists ffp, find_fields fid fpl = Some (fid, fty, fofs, ffp)
                (* bound condition *)
                /\ wt_footprint (PTree.remove id ce1) fty ffp)
     (WT2: forall fid fty fofs ffp,
-        In (fid, fty, fofs, ffp) fpl ->
+        find_fields fid fpl = Some (fid, fty, fofs, ffp) ->
         field_type fid co.(co_members) = OK fty
         /\ field_offset ce fid co.(co_members) = OK fofs
         /\ wt_footprint (PTree.remove id ce1) fty ffp),
@@ -417,7 +416,7 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> type -> Prop :=
 | bm_struct: forall fpl orgs id
     (* all fields are semantically well typed *)
     (FMATCH: forall fid fty fofs ffp,
-        In (fid, fty, fofs, ffp) fpl ->
+        find_fields fid fpl = Some (fid, fty, fofs, ffp) ->
         bmatch m b (ofs + fofs) ffp fty),
     bmatch m b ofs (fp_struct id fpl) (Tstruct orgs id)
 | bm_enum: forall fp orgs id tagz fid fty fofs
@@ -438,41 +437,307 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> type -> Prop :=
 
 Definition fp_map := PTree.t footprint.
 
+(* Getter and Setter of footprint map  *)
+
+(* Similar to ProjectElem in rustc *)
+Variant path : Type :=
+  | ph_deref
+  | ph_field (fid: ident)
+  (* type of the variant here is used in valid_owner proof !! *)
+  | ph_downcast (ty: type) (fid: ident) (fty: type).
+
+Definition paths : Type := (ident * list path).
+
+(* relate place and path *)
+Fixpoint path_of_place (p: place) : paths :=
+  match p with
+  | Plocal id _ =>
+      (id, nil)
+  | Pderef p1 _ =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_deref])
+  | Pfield p1 fid _ =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_field fid])
+  | Pdowncast p1 fid fty =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_downcast (typeof_place p1) fid fty])
+  end.
+
+
+(** Prove some properties w.r.t list_nth_z  *)
+Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
+  match l with
+  | nil => nil
+  | hd :: tl => if zeq n 0 then (v :: tl) else hd :: (list_set_nth_z tl (Z.pred n) v)
+  end.
+
+(* set footprint [v] in the path [ph] of footprint [fp] *)
+Fixpoint set_footprint (phl: list path) (v: footprint) (fp: footprint) : option footprint :=
+  match phl with
+  | nil => Some v
+  | ph :: l =>
+        match ph, fp with
+        | ph_deref, fp_box b sz fp1 =>
+            match set_footprint l v fp1 with
+            | Some fp2 =>
+                Some (fp_box b sz fp2)
+            | None => None
+            end
+        | ph_field fid, fp_struct id fpl =>
+            match find_fields fid fpl with
+            | Some (fid1, fty, fofs, ffp) =>                
+                match set_footprint l v ffp with
+                | Some ffp1 =>
+                    Some (fp_struct id (map (fun '(fid2, fty2, fofs2, ffp2) => if ident_eq fid fid2 then (fid2, fty2, fofs2, ffp1) else (fid2, fty2, fofs2, ffp2)) fpl)) 
+                | None => None
+                end
+            | None => None
+            end
+        | ph_downcast pty fid fty, fp_enum id tagz fid1 fty1 fofs1 fp1 =>
+            match pty with
+            | Tvariant _ id1 =>
+                if ident_eq id1 id then
+                  if ident_eq fid fid1 && type_eq fty fty1 then
+                    match set_footprint l v fp1 with
+                    | Some fp2 =>
+                        Some (fp_enum id tagz fid1 fty1 fofs1 fp2)
+                    | None => None
+                    end
+                  else None
+                else None
+            | _ => None
+            end
+        | _, _ => None
+        end
+  end.
+
+Fixpoint clear_footprint_rec (fp: footprint) : footprint :=
+  match fp with
+  | fp_box _ _ _
+  | fp_enum _ _ _ _ _ _
+  | fp_emp => fp_emp
+  | fp_struct id fpl =>
+      fp_struct id (map (fun '(fid, fty, fofs, ffp) => (fid, fty, fofs, clear_footprint_rec ffp)) fpl)
+  end.
+
+Fixpoint get_loc_footprint (phl: list path) (fp: footprint) (b: block) (ofs: Z) : option (block * Z * footprint) :=
+  match phl with
+  | nil => Some (b, ofs, fp)
+  | ph :: l =>
+      match ph, fp with
+      | ph_deref, fp_box b _ fp1 =>
+          get_loc_footprint l fp1 b 0
+      | ph_field fid, fp_struct _ fpl =>
+          match find_fields fid fpl with
+          | Some (_, _, fofs, fp1) =>
+              get_loc_footprint l fp1 b (ofs + fofs)
+          | None => None
+          end
+      | ph_downcast pty fid1 fty1, fp_enum id _ fid2 fty2 fofs fp1 =>
+          match pty with
+          | Tvariant _ id1 =>
+              if ident_eq id1 id then     
+                if ident_eq fid1 fid2 && type_eq fty1 fty2 then
+                  get_loc_footprint l fp1 b (ofs + fofs)
+                else
+                  None
+              else None
+          | _ => None
+          end
+      | _, _  => None
+      end
+  end.
+
+Fixpoint get_footprint (phl: list path) (fp: footprint) : option footprint :=
+  match phl with
+  | nil => Some fp
+  | ph :: l =>
+      match ph, fp with
+      | ph_deref, fp_box b _ fp1 =>
+          get_footprint l fp1
+      | ph_field fid, fp_struct _ fpl =>
+          match find_fields fid fpl with
+          | Some (_, _, fofs, fp1) =>
+              get_footprint l fp1
+          | None => None
+          end
+      | ph_downcast pty fid1 fty1, fp_enum id _ fid2 fty2 fofs fp1 =>
+          match pty with
+          | Tvariant _ id1 =>
+              if ident_eq id1 id then                
+                if ident_eq fid1 fid2 && type_eq fty1 fty2 then
+                  get_footprint l fp1
+                else
+                  None
+              else None
+          | _ => None
+          end
+      | _, _  => None
+      end
+  end.
+
+
+Definition clear_footprint (phl: list path) (fp: footprint) : option footprint :=
+  match get_footprint phl fp with
+  | Some fp1 =>
+      set_footprint phl (clear_footprint_rec fp1) fp
+  | None => None
+  end.
+
+
+Definition set_footprint_map (ps: paths) (v: footprint) (fpm: fp_map) : option fp_map :=
+  let (id, phl) := ps in
+  match fpm!id with
+  | Some fp1 =>
+      match set_footprint phl v fp1 with
+      | Some fp2 =>
+          Some (PTree.set id fp2 fpm)
+      | None =>
+          None
+      end
+  | None => None
+  end.
+
+Definition clear_footprint_map (ps: paths) (fpm: fp_map) : option fp_map :=
+  let (id, phl) := ps in
+  match fpm!id with
+  | Some fp1 =>
+      match clear_footprint phl fp1 with
+      | Some fp2 =>
+          Some (PTree.set id fp2 fpm)
+      | None =>
+          None
+      end
+  | None => None
+  end.
+
+
+Definition get_loc_footprint_map (e: env) (ps: paths) (fpm: fp_map) : option (block * Z * footprint) :=
+  let (id, phl) := ps in
+  match e!id, fpm!id with
+  | Some (b, ty), Some fp =>
+      get_loc_footprint phl fp b 0
+  | _, _ => None
+  end.
+
+
+(* Definition get_footprint_map (ps: paths) (fpm: fp_map) : option footprint := *)
+(*   let (id, phl) := ps in *)
+(*   match fpm!id with *)
+(*   | Some fp => *)
+(*       get_footprint phl fp *)
+(*   | None => None *)
+(*   end. *)
+
+Lemma get_loc_footprint_app: forall phl2 phl1 fp fp1 b ofs b1 ofs1 b2 ofs2 fp2,
+    get_loc_footprint phl1 fp b ofs = Some (b1, ofs1, fp1) ->
+    get_loc_footprint phl2 fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
+    get_loc_footprint (phl1 ++ phl2) fp b ofs = Some (b2, ofs2, fp2).
+Admitted.
+
+Lemma get_loc_footprint_map_app: forall phl2 phl1 id e fpm b ofs fp b1 ofs1 fp1,
+    get_loc_footprint_map e (id, phl1) fpm = Some (b, ofs, fp) ->
+    get_loc_footprint phl2 fp b ofs = Some (b1, ofs1, fp1) ->
+    get_loc_footprint_map e (id, phl1 ++ phl2) fpm = Some (b1, ofs1, fp1).
+Proof.
+  induction phl2; intros.
+  - simpl in H0. inv H0. rewrite app_nil_r. auto.
+  - unfold get_loc_footprint_map in H.
+    destruct (e ! id) eqn: ID; try congruence. destruct p.
+    destruct (fpm ! id) eqn: FPM; try congruence.     
+    replace (a :: phl2) with ((a::nil) ++ phl2) by auto.
+    rewrite app_assoc.
+    simpl in H0. destruct a.
+    + destruct fp; try congruence.          
+      eapply IHphl2. 
+      unfold get_loc_footprint_map. rewrite ID. rewrite FPM.
+      eapply get_loc_footprint_app. eauto.
+      simpl. eauto. auto.
+    + destruct fp; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      eapply IHphl2. 
+      unfold get_loc_footprint_map. rewrite ID. rewrite FPM.
+      eapply get_loc_footprint_app. eauto.
+      simpl. rewrite FIND. eauto. auto.
+    + destruct fp; try congruence.
+      destruct ty; try congruence. destruct ident_eq in H0; try congruence. subst.
+      destruct ident_eq in H0; simpl in H0; try congruence. subst.
+      destruct type_eq in H0; simpl in H0; try congruence. subst.
+      eapply IHphl2. 
+      unfold get_loc_footprint_map. rewrite ID. rewrite FPM.
+      eapply get_loc_footprint_app. eauto.
+      simpl. destruct ident_eq; simpl; try congruence.
+      destruct ident_eq; simpl; try congruence.
+      destruct type_eq; simpl; try congruence.
+      eauto. auto.
+Qed.
+
+Lemma get_loc_footprint_map_app_inv: forall phl2 phl1 id e fpm b1 ofs1 fp1,
+    get_loc_footprint_map e (id, phl1 ++ phl2) fpm = Some (b1, ofs1, fp1) ->
+    exists b ofs fp,
+      get_loc_footprint_map e (id, phl1) fpm = Some (b, ofs, fp)
+      /\ get_loc_footprint phl2 fp b ofs = Some (b1, ofs1, fp1).
+Admitted.
+
+
 Section FPM.
 
 Variable fpm : fp_map.
 
-Inductive place_footprint (e: env) : place -> block -> Z -> footprint -> Prop :=
-| place_footprint_deref: forall p fp ofs1 b1 b2 ty sz
-    (* (b1, ofs1) *-> (b2, 0) *)
-    (FP: place_footprint e p b1 ofs1 (fp_box b2 sz fp)),
-    (* For now, we do not consider reference, so the location of *p is
-    always in the start of a block b2 *)
-    place_footprint e (Pderef p ty) b2 0 fp
-| place_footprint_field: forall p fp ofs b id fid fty fofs fpl orgs
-    (FP: place_footprint e p b ofs (fp_struct id fpl))
-    (FIND: In (fid, fty, fofs, fp) fpl)
-    (PTY: typeof_place p = Tstruct orgs id),
-    place_footprint e (Pfield p fid fty) b (ofs + fofs) fp
-| place_footprint_enum: forall p fp fid fty tagz b ofs id fofs orgs
-    (FP: place_footprint e p b ofs (fp_enum id tagz fid fty fofs fp))
-    (PTY: typeof_place p = Tvariant orgs id),
-    place_footprint e (Pdowncast p fid fty) b (ofs + fofs) fp
-| place_footprint_local: forall id fp ty b
-    (FP: fpm ! id = Some fp)
-    (STK: e ! id = Some (b, ty)),
-    place_footprint e (Plocal id ty) b 0 fp
-.
+(* Inductive place_footprint (e: env) : place -> block -> Z -> footprint -> Prop := *)
+(* | place_footprint_deref: forall p fp ofs1 b1 b2 ty sz *)
+(*     (* (b1, ofs1) *-> (b2, 0) *) *)
+(*     (FP: place_footprint e p b1 ofs1 (fp_box b2 sz fp)), *)
+(*     (* For now, we do not consider reference, so the location of *p is *) *)
+(* (*     always in the start of a block b2 *) *)
+(*     place_footprint e (Pderef p ty) b2 0 fp *)
+(* | place_footprint_field: forall p fp ofs b id fid fty fofs fpl orgs *)
+(*     (FP: place_footprint e p b ofs (fp_struct id fpl)) *)
+(*     (FIND: In (fid, fty, fofs, fp) fpl) *)
+(*     (PTY: typeof_place p = Tstruct orgs id), *)
+(*     place_footprint e (Pfield p fid fty) b (ofs + fofs) fp *)
+(* | place_footprint_enum: forall p fp fid fty tagz b ofs id fofs orgs *)
+(*     (FP: place_footprint e p b ofs (fp_enum id tagz fid fty fofs fp)) *)
+(*     (PTY: typeof_place p = Tvariant orgs id), *)
+(*     place_footprint e (Pdowncast p fid fty) b (ofs + fofs) fp *)
+(* | place_footprint_local: forall id fp ty b *)
+(*     (FP: fpm ! id = Some fp) *)
+(*     (STK: e ! id = Some (b, ty)), *)
+(*     place_footprint e (Plocal id ty) b 0 fp *)
+(* . *)
 
-
+(* (* Unable to prove because place_footprint contain some type checking  *) *)
+(* Lemma get_loc_footprint_map_implies_place_footprint: forall p e ce b ofs fp, *)
+(*     wt_place (env_to_tenv e) ce p -> *)
+(*     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) -> *)
+(*     place_footprint e p b ofs fp. *)
+(* Proof. *)
+(*   induction p; simpl; intros. *)
+(*   - destruct (e!i) eqn: A; try congruence. destruct p. *)
+(*     destruct (fpm!i) eqn: B; try congruence. inv H. *)
+(*     unfold env_to_tenv in WT1. *)
+(*     erewrite PTree.gmap1 in WT1. rewrite A in WT1. inv WT1. inv H0. *)
+(*     econstructor; auto. *)
+(*   - inv H. *)
+(*     destruct (path_of_place p) eqn: POP. *)
+(*     exploit get_loc_footprint_map_app_inv; eauto. *)
+(*     intros (b1 & ofs1 & fp1 & A & B). *)
+(*     exploit IHp; eauto. intros PFP. *)
+(*     simpl in B. destruct fp1; try congruence. *)
+(*     destruct (find_fields i fpl) eqn: FIND. repeat destruct p0. *)
+(*     inv B. econstructor; eauto. *)
+(*     eapply find_some in FIND. destruct FIND.     *)
+(* Admitted. *)
+  
 Definition mmatch (m: mem) (e: env) (own: own_env): Prop :=
   forall p b ofs fp,
-    place_footprint e p b ofs fp ->
+    get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     is_init own p = true ->
     bmatch m b ofs fp (typeof_place p)
     /\ (is_full own.(own_universe) p = true ->
        sem_wt_loc m fp b ofs (typeof_place p)).
-
 
 
 Record wf_env (ce: composite_env) (e: env): Prop := {
@@ -503,9 +768,9 @@ Inductive valid_owner_offset_footprint : place -> Z -> footprint -> footprint ->
     valid_owner_offset_footprint (Pderef p ty) 0 fp fp
 | valid_owner_field: forall p fty fid fp,
     valid_owner_offset_footprint (Pfield p fid fty) 0 fp fp
-| valid_owner_downcast: forall p fid fty fp fp1 tagz fofs orgs co ofs id
+| valid_owner_downcast: forall p fid fty fp fp1 tagz fofs ofs id orgs
     (PTY: typeof_place p = Tvariant orgs id)
-    (CO: ce ! id = Some co)
+    (* (CO: ce ! id = Some co) *)
     (* (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs) *)
     (* (TAG: field_tag fid co.(co_members) = Some tagz) *)
     (VOWN: valid_owner_offset_footprint p ofs (fp_enum id tagz fid fty fofs fp) fp1),
@@ -513,10 +778,10 @@ Inductive valid_owner_offset_footprint : place -> Z -> footprint -> footprint ->
 
 (** So adhoc soluation: define a non-sense valid_owner_offset_footprint to prove the following two lemmas *)
 Lemma valid_owner_place_footprint: forall p fpm e b ofs fp
-    (PFP: place_footprint fpm e p b ofs fp)
+    (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
     (WT: wt_place e ce p),
   exists fp' ofs' fofs,
-    place_footprint fpm e (valid_owner p) b ofs' fp'
+    get_loc_footprint_map e (path_of_place (valid_owner p)) fpm = Some (b, ofs', fp')
     /\ valid_owner_offset_footprint p fofs fp fp'
     /\ ofs = ofs' + fofs.
 (* relationship between fp and fp'? *)
@@ -524,17 +789,25 @@ Lemma valid_owner_place_footprint: forall p fpm e b ofs fp
 Proof.
   induction p; intros; simpl in *.
   - exists fp, ofs, 0. repeat apply conj; auto.
-    econstructor. lia.    
-  - exists fp, ofs, 0. repeat apply conj; auto.
     econstructor. lia.
   - exists fp, ofs, 0. repeat apply conj; auto.
     econstructor. lia.
-  - inv PFP. inv WT. rewrite PTY in WT2. inv WT2.
+  - exists fp, ofs, 0. repeat apply conj; auto.
+    econstructor. lia.
+  - destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app_inv in PFP.
+    destruct PFP as (b1 & ofs1 & fp1 & GET1 & GET2).
+    inv WT.
     exploit IHp; eauto.
-    intros (fp1 & ofs1 & fofs1 & PFP1 & VOFS1 & OFSEQ).
+    intros (fp2 & ofs2 & fofs2 & PFP1 & VOFS1 & OFSEQ).
+    simpl in GET2. destruct fp1; try congruence.
+    rewrite WT2 in GET2.
+    destruct ident_eq in GET2; simpl in GET2; try congruence. subst.
+    destruct ident_eq in GET2; simpl in GET2; try congruence. subst.
+    destruct type_eq in GET2; simpl in GET2; try congruence.
+    inv GET2.
     do 3 eexists. repeat apply conj.
-    eauto. econstructor; eauto.
-    lia.
+    eauto. econstructor; eauto.    lia.
     (* ??? use the fact that variant_field_offset is constant to prove *)
 Qed.
 
@@ -549,7 +822,20 @@ Proof.
   replace ((ofs1 + (ofs + fofs))) with (ofs1 + ofs + fofs) by lia.
   auto.
 Qed.
-  
+
+Lemma valid_owner_sem_wt_loc: forall p m b ofs1 fofs1 fp1 fp,
+    sem_wt_loc m fp1 b ofs1 (typeof_place (valid_owner p)) ->
+    valid_owner_offset_footprint p fofs1 fp fp1 ->
+    sem_wt_loc m fp b (ofs1 + fofs1) (typeof_place p).
+Proof.
+  induction p; intros; simpl in *; inv H0; try rewrite Z.add_0_r; auto.
+  exploit IHp; eauto. intros.
+  rewrite PTY in H0. inv H0. simpl in *. try congruence. 
+  replace ((ofs1 + (ofs + fofs))) with (ofs1 + ofs + fofs) by lia.
+  auto.
+Qed.
+
+
 (* The footprint contained in the location of a place *)
 Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (EVAL: eval_place ce e m p b ofs)
@@ -562,7 +848,7 @@ Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (POWN: dominators_must_init init uninit universe p = true),
   (* Do we need to specify the properties of fp? Do we need to show
   the permission of the location of p? *)
-  exists fp ce' (* phl *), place_footprint fpm e p b (Ptrofs.unsigned ofs) fp
+  exists fp ce' (* phl *), get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
                       /\ wt_footprint ce ce' (typeof_place p) fp
                       /\ ce_extends ce' ce.
             (* /\ path_of_place ce p (local_of_place p, phl) *)
@@ -576,7 +862,7 @@ Proof.
   (* Plocal *)
   - rewrite Ptrofs.unsigned_zero.
     exploit wf_env_footprint; eauto. intros (fp & FP & WTFP).
-    exists fp, ce. repeat apply conj. econstructor; eauto.
+    exists fp, ce. repeat apply conj. simpl. rewrite H. rewrite FP. auto.
     simpl. auto.
     red. auto.
   (* Pfield *)
@@ -596,7 +882,10 @@ Proof.
     eapply EXT in CO. rewrite H0 in CO. inv CO.
     exploit WT0; eauto. intros (ffp & INFPL & WTFP1).
     exists ffp, (PTree.remove id0 ce'). repeat apply conj; auto.
-    econstructor; eauto.
+    (* get_loc_footprint_map *)
+    simpl. destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto.
+    simpl.  rewrite INFPL. auto.        
     (** TODO: ce_extend trans and remove *)
     admit.
     (* simpl. auto. *)
@@ -634,7 +923,10 @@ Proof.
     (** TODO: make it a lemma: prove p's dominators are init *)
     (** It is impossible to be proved  *)
     assert (PDOM: dominators_must_init init uninit universe p = true).
-    { admit. }
+    { unfold dominators_must_init in *. simpl in *.
+      eapply andb_true_iff in POWN. destruct POWN as (A & B).
+      destruct p; simpl in *; auto.
+      eapply andb_true_iff. auto. }
     (** Prove that p is_init  *)
     exploit IHEVAL. 1-5: auto.
     intros (fp & ce' & PFP & WTFP & EXT).
@@ -661,8 +953,11 @@ Proof.
     rewrite H2 in TAG. inv TAG. simpl.
     rewrite H3 in FOFS. inv FOFS.
     exists fp0, ce. repeat apply conj.
-    econstructor; eauto.
-    auto.
+    (* get_loc_footprint_map *)
+    destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto. simpl.
+    rewrite H. repeat destruct ident_eq; simpl; try congruence.
+    destruct type_eq; simpl; try congruence. auto.    
     red. auto.
     2 : { simpl in *. congruence. }
     (** *** TODO: Begin range proof *** *)
@@ -707,7 +1002,10 @@ Proof.
     inv H; simpl in *; try congruence.
     simpl in *. inv H0. rewrite LOAD in H1. inv H1.
     rewrite Ptrofs.unsigned_zero.    
-    econstructor; eauto.
+    (* get_loc_footprint_map *)
+    destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto.
+    simpl. auto.
     (* wt_footprint *)
     simpl. auto.
     (* eapply place_footprint_wt in FP. rewrite PTY in FP. inv FP.  *)
@@ -723,7 +1021,7 @@ Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit uni
     (* p owns the ownership chain *)    
     (POWN: must_movable ce1 init uninit universe p = true)
     (SOUND: sound_own own init uninit universe)
-    (PFP: place_footprint fpm e p b ofs fp)
+    (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
     (WTFP: wt_footprint ce ce1 (typeof_place p) fp)
     (EXTEND: ce_extends ce1 ce),
     sem_wt_loc m fp b ofs (typeof_place p)
@@ -756,8 +1054,9 @@ Proof.
       intros (BM & WTLOC). rewrite PTY in *. inv BM; simpl in *; try congruence.
       econstructor. simpl. eauto. eauto.
       econstructor; eauto.
-      assert (PFP1: place_footprint fpm e (Pderef p Tunit) b1 0 fp0).
-      { econstructor; eauto. }
+      assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p Tunit)) fpm = Some (b1, 0, fp0)).
+      { simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto. }
       exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). simpl in BM1. inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
@@ -773,7 +1072,9 @@ Proof.
       econstructor. simpl. eauto. eauto.
       econstructor; eauto.
       eapply IHt; eauto. simpl. auto.
-      econstructor; eauto.
+      (* get_loc_footprint_map *)
+      simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto.
     (* Tstruct *)
     + destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
       (* fp is not empty *)
@@ -786,8 +1087,9 @@ Proof.
       (** Case1 check that p is full so we can derive sem_wt_loc by mmatch *)
       destruct (is_full universe (Pderef p (Tstruct l id1))) eqn: FULL; try congruence.
       (* construct footprint of Pderef p to use mmatch *)
-      assert (PFP1: place_footprint fpm e (Pderef p (Tstruct l id1)) b1 0 fp0).
-      { econstructor; eauto. }
+      assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tstruct l id1))) fpm = Some (b1, 0, fp0)).
+      { simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto. }
       exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). simpl in *.
       (* prove sem_wt_loc: first eliminate Tbox *)
@@ -810,8 +1112,11 @@ Proof.
       { admit. }
       generalize (POWN (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) INMEM). eauto.
       auto.
-      (* place_footprint *)
-      econstructor; eauto. econstructor. eauto.
+      (* get_loc_footprint_map *)
+      simpl. destruct (path_of_place p) eqn: POP.
+      eapply get_loc_footprint_map_app; eauto.
+      eapply get_loc_footprint_map_app; eauto.
+      simpl. eauto. simpl. rewrite H. auto.
       (* wt_footprint *)
       simpl. auto.
       (* ce_extend *)
@@ -825,7 +1130,9 @@ Proof.
       econstructor. simpl. eauto.
       eauto. econstructor; eauto.
       cut (is_full own.(own_universe) (Pderef p (Tvariant l i)) = true).
-      eapply MM. econstructor. eauto.
+      eapply MM.
+      simpl. destruct (path_of_place p) eqn: POP.
+      eapply get_loc_footprint_map_app; eauto.      
       eapply must_init_sound; eauto.
       erewrite <- is_full_same; eauto.
       eapply sound_own_universe; eauto.
@@ -855,7 +1162,9 @@ Proof.
     generalize (POWN (Pfield p fid fty, fty) INMEM). eauto.
     auto.
     (* place_footprint *)
-    econstructor; eauto.    
+    simpl. destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app; eauto.
+    simpl. rewrite H. auto.
     (* wt_footprint *)
     simpl. auto.
     (* ce_extend *)
@@ -914,141 +1223,6 @@ Definition in_footprint (b: block) (fp: footprint) : Prop :=
   In b (footprint_flat fp).
   
 
-(* Similar to ProjectElem in rustc *)
-Variant path : Type :=
-  | ph_deref
-  | ph_field (fid: ident)
-  | ph_downcast (fid: ident).
-
-Definition paths : Type := (ident * list path).
-
-(* relate place and path *)
-Fixpoint path_of_place (p: place) : paths :=
-  match p with
-  | Plocal id _ =>
-      (id, nil)
-  | Pderef p1 _ =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_deref])
-  | Pfield p1 fid _ =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_field fid])
-  | Pdowncast p1 fid _ =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_downcast fid])
-  end.
-
-
-(* Inductive path_of_place: place -> paths -> Prop := *)
-(* | path_local: forall id ty, *)
-(*     path_of_place (Plocal id ty) (id, nil) *)
-(* | path_deref: forall p ty l id *)
-(*     (PH: path_of_place p (id, l)), *)
-(*     path_of_place (Pderef p ty) (id, (l ++ [ph_deref])) *)
-(* | path_field: forall p orgs id sid co idx fid fty l *)
-(*     (PH: path_of_place ce p (id, l)), *)
-(*     path_of_place ce (Pfield p fid fty) (id, (l ++ [ph_field sid idx])) *)
-(* | path_downcast: forall p orgs id sid co idx fid fty l *)
-(*     (TY: typeof_place p = Tvariant orgs sid) *)
-(*     (CO: ce ! sid = Some co) *)
-(*     (TAG: list_nth_z co.(co_members) idx = Some (Member_plain fid fty)) *)
-(*     (PH: path_of_place ce p (id, l)), *)
-(*     path_of_place ce (Pdowncast p fid fty) (id, (l ++ [ph_downcast sid idx])). *)
-
-(* Use path to set/remove a footprint *)
-
-(* Definition set_footprint_path (ph: path) (v: footprint) (fp: footprint) : option footprint := *)
-(*   match ph, fp with *)
-(*   | ph_deref, fp_box b fp' => *)
-(*       Some fp' *)
-(*   | ph_field _ idx, fp_struct fpl => *)
-(*       list_nth_z fpl idx *)
-(*   | ph_downcast _ idx1, fp_enum idx2 fp' => *)
-(*       if Z.eq_dec idx1 idx2 then *)
-(*         Some fp' *)
-(*       else *)
-(*         None *)
-(*   | _, _ => None *)
-(*   end. *)
-
-(** Prove some properties w.r.t list_nth_z  *)
-Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
-  match l with
-  | nil => nil
-  | hd :: tl => if zeq n 0 then (v :: tl) else hd :: (list_set_nth_z tl (Z.pred n) v)
-  end.
-
-(* set footprint [v] in the path [ph] of footprint [fp] *)
-Fixpoint set_footprint (phl: list path) (v: footprint) (fp: footprint) : option footprint :=
-  match phl with
-  | nil => Some v
-  | ph :: l =>
-        match ph, fp with
-        | ph_deref, fp_box b sz fp1 =>
-            match set_footprint l v fp1 with
-            | Some fp2 =>
-                Some (fp_box b sz fp2)
-            | None => None
-            end
-        | ph_field fid, fp_struct id fpl =>
-            match find_fields fid fpl with
-            | Some (fid1, fty, fofs, ffp) =>                
-                match set_footprint l v ffp with
-                | Some ffp1 =>
-                    Some (fp_struct id (map (fun '(fid2, fty2, fofs2, ffp2) => if ident_eq fid fid2 then (fid2, fty2, fofs2, ffp1) else (fid2, fty2, fofs2, ffp2)) fpl)) 
-                | None => None
-                end
-            | None => None
-            end
-        | ph_downcast fid, fp_enum id tagz fid1 fty1 fofs1 fp1 =>
-            if ident_eq fid fid1 then
-              match set_footprint l v fp1 with
-              | Some fp2 =>
-                  Some (fp_enum id tagz fid1 fty1 fofs1 fp2)
-              | None => None
-              end
-            else None
-        | _, _ => None
-        end
-  end.
-
-Fixpoint clear_footprint_rec (fp: footprint) : footprint :=
-  match fp with
-  | fp_box _ _ _
-  | fp_enum _ _ _ _ _ _
-  | fp_emp => fp_emp
-  | fp_struct id fpl =>
-      fp_struct id (map (fun '(fid, fty, fofs, ffp) => (fid, fty, fofs, clear_footprint_rec ffp)) fpl)
-  end.
-
-Fixpoint get_footprint (phl: list path) (fp: footprint) : option footprint :=
-  match phl with
-  | nil => Some fp
-  | ph :: l =>
-      match ph, fp with
-      | ph_deref, fp_box b _ fp1 =>
-          get_footprint l fp1
-      | ph_field fid, fp_struct _ fpl =>
-          match find_fields fid fpl with
-          | Some (_, _, _, fp1) =>
-              get_footprint l fp1
-          | None => None
-          end
-      | ph_downcast fid1, fp_enum _ _ fid2 _ _ fp1 =>
-          if ident_eq fid1 fid2 then
-            get_footprint l fp1
-          else
-            None
-      | _, _  => None
-      end
-  end.
-
-Definition clear_footprint (phl: list path) (fp: footprint) : option footprint :=
-  match get_footprint phl fp with
-  | Some fp1 =>
-      set_footprint phl (clear_footprint_rec fp1) fp
-  | None => None
-  end.
 
 (* Inductive footprint_path : Type := *)
 (* | fpp_leaf *)
@@ -1264,34 +1438,10 @@ Fixpoint flat_fp_frame (fpf: fp_frame) : flat_footprint :=
       footprint_flat fp ++ concat (map footprint_flat fpl) ++ flat_fp_frame fpf
   end.
 
-Definition set_footprint_map (ps: paths) (v: footprint) (fpm: fp_map) : option fp_map :=
-  let (id, phl) := ps in
-  match fpm!id with
-  | Some fp1 =>
-      match set_footprint phl v fp1 with
-      | Some fp2 =>
-          Some (PTree.set id fp2 fpm)
-      | None =>
-          None
-      end
-  | None => None
-  end.
-
-Definition clear_footprint_map (ps: paths) (fpm: fp_map) : option fp_map :=
-  set_footprint_map ps fp_emp fpm.
-
-Definition get_footprint_map (ps: paths) (fpm: fp_map) : option footprint :=
-  let (id, phl) := ps in
-  match fpm!id with
-  | Some fp =>
-      get_footprint phl fp
-  | None => None
-  end.
-
-Lemma get_footprint_map_app: forall id fp phl phl' fpm,
-    get_footprint_map (id, phl) fpm = Some fp ->
-    get_footprint_map (id, phl ++ phl') fpm = get_footprint phl' fp.
-Admitted.
+(* Lemma get_footprint_map_app: forall id fp phl phl' fpm, *)
+(*     get_footprint_map (id, phl) fpm = Some fp -> *)
+(*     get_footprint_map (id, phl ++ phl') fpm = get_footprint phl' fp. *)
+(* Admitted. *)
 
 (* Lemma footprint_map_gss: forall phl id fpm1 fpm2 fp1 fp2 ce, *)
 (*     (VPH: valid_path *)
@@ -1341,22 +1491,52 @@ Let ce := ge.(genv_cenv).
 Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
 Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) body cfg s s.
 
-Hypothesis CONSISTENT: composite_env_consistent ce.
+(* Hypothesis CONSISTENT: composite_env_consistent ce. *)
 
 (** Try to prove eval_expr_sem_wt  *)
 
 
 (** IMPORTANT TODO  *)
-Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own phs
+Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 m le own)
-    (SFM: set_footprint_map phs fp_emp fpm1 = Some fpm2)
-    (POP: path_of_place p = phs),
+    (CLR: clear_footprint_map (path_of_place p) fpm1 = Some fpm2),
     (* valid_owner makes this proof difficult *)
     mmatch fpm2 m le (move_place own (valid_owner p)).
 Proof.
-Admitted.
+  intros. red. intros until fp.
+  intros PFP INIT.
+  destruct (ident_eq (local_of_place p) (local_of_place p0)).
+  - set (p1:= (valid_owner p)) in *.
+    destruct (is_prefix p1 p0) eqn: PRE.
+    (* impossible *)
+    + unfold is_init, move_place, remove_place in INIT. simpl in INIT.
+      eapply Paths.mem_2 in INIT.
+      erewrite PathsMap.gsspec in INIT.
+      destruct peq.
+      * eapply Paths.filter_2 in INIT.
+        rewrite PRE in INIT. simpl in INIT. congruence.
+        red. solve_proper.
+      * unfold p1 in *.
+        rewrite valid_owner_same_local in n. congruence.
+    (* valid_owner p is not a prefix of p0 *)
+    + destruct (is_prefix p0 p1) eqn: PRE1.
+      (* p0 is prefix of p1 (valid_owner p). clear p's footprint also
+      affects the footprint of p0 *)
+      * assert (PRE2: is_prefix p0 p = true) by admit.
+        
+        Lemma clear_footprint_map_inv: forall p fpm1 fpm2,
+            clear_footprint_map (id, phl) fpm1 = Some fpm2 ->
+            place_footprint
+            exists fp1 fp2 fp3,
+              fpm1 ! id = Some fp1
+              /\ get_footprint phl fp1 = Some fp2
+              /\ set_footprint phl (clear_footprint_rec fp2) fp1 = Some fp3
+              /\ fpm2 = PTree.set id fp3 fpm1.
+        
 
-
+      assert (place_footprint fpm1 le p0 b ofs fp).
+      { 
+      
 (* Lemma footprint_map_gss: forall p phs fpm1 fp1 fp2 ce le *)
 (*   (WT: wt_place le ce p) *)
 (*   (POP: path_of_place ce p phs) *)
@@ -1378,8 +1558,7 @@ Proof.
   (* enum *)
   - econstructor. eapply sem_wt_enum; eauto.
 Qed.
-
-
+  
 (* The result of eval_expr is semantically well typed *)
 
 (* The footprint must be fp_emp in pexpr *)
@@ -1413,40 +1592,66 @@ Proof.
   intros. destruct e.
   (* Emoveplace *)
   - simpl in *. inv EVAL. inv WT. inv H2.
-    eapply andb_true_iff in CHECK. destruct CHECK as (DONW & MOVABLE).
-    exploit eval_place_sound; eauto.
-    intros (pfp & phl & PFP & POP & GFM).
-    (* location of p is sem_wt *)
-    exploit movable_place_sem_wt; eauto.
-    intros WT_LOC. 
-    (* deref sem_wt location *)
-    exploit deref_sem_wt_loc_sound; eauto. intros WT_VAL.
-    (* get and set of footprint_map *)
-    exploit footprint_map_gss; eauto. eapply wt_fp_emp.
-    intros (fpm2 & SFPM & GFPM).        
-    exploit mmatch_move_place_sound; eauto. intros MM1.
-    exists pfp, fpm2. repeat apply conj; auto.
-    (* wf_env *)
-    constructor. intros.
-    destruct (peq (local_of_place p) id).
-    subst.
-    (** set a wt_footprint in a wt_footprint is still wt *)
-    admit.
-    exploit wf_env_footprint; eauto.
-    intros (fp & GFPM1 & WFFP). exists fp. split; auto.
-    (** set (local_of_place p) unchanges the footprint of id *)
-    admit.
-    (** use GFP: get norepet footprint_map is disjoint  *)
-    admit.
+    destruct (place_eq p (valid_owner p)); subst.
+    (* p is not downcast *)
+    + eapply andb_true_iff in CHECK. destruct CHECK as (DONW & MOVABLE).
+      exploit eval_place_sound; eauto.
+      intros (pfp & ce' & PFP & WTFP & EXT).
+      (* location of p is sem_wt *)
+      exploit movable_place_sem_wt; eauto. instantiate (1 := ce).
+      (** TODO: wt_footprint implication *)
+      admit.
+      red. auto.
+      intros WT_LOC. 
+      (* deref sem_wt location *)
+      exploit deref_sem_wt_loc_sound; eauto. intros WT_VAL.
+      assert (A: exists fpm2, clear_footprint_map (path_of_place p) fpm1 = Some fpm2).
+      { admit. }
+      destruct A as (fpm2 & CLEAR).
+      exists pfp, fpm2. repeat apply conj; auto.
+      eapply mmatch_move_place_sound; eauto. 
+      (* wf_env *)
+      constructor. intros.
+      destruct (peq (local_of_place p) id).
+      subst.
+      (** set a wt_footprint in a wt_footprint is still wt *)
+      admit.
+      exploit wf_env_footprint; eauto.
+      intros (fp & GFPM1 & WFFP). exists fp. split; auto.
+      (** set (local_of_place p) unchanges the footprint of id *)
+      admit.
+      (** use GFP: get norepet footprint_map is disjoint  *)
+      admit.
+    (* p is downcast *)
+    + 
+      do 2 rewrite andb_true_iff in CHECK. destruct CHECK as ((DOWN & INIT) & FULL).
+      exploit eval_place_sound; eauto.
+      intros (fp1 & ce1 & PFP & WTFP).
+      exploit valid_owner_place_footprint; eauto.
+      intros (fp2 & ofs1 & fofs1 & PFP1 & VOFS & OFSEQ).
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC).      
+      exploit valid_owner_sem_wt_loc. eapply WTLOC.
+      erewrite <- is_full_same; eauto. eapply sound_own_universe; eauto.
+      eauto. intros WTLOC1.
+      rewrite <- OFSEQ in WTLOC1.
+      exploit deref_sem_wt_loc_sound; eauto. intros WT_VAL.
+      assert (A: exists fpm2, clear_footprint_map (path_of_place p) fpm1 = Some fpm2).
+      { admit. }
+      destruct A as (fpm2 & CLEAR).
+      exists fp1, fpm2. repeat apply conj; auto.
+      eapply mmatch_move_place_sound; eauto.
+      (* wf_env *)
+      admit.
+      (* disjoint *)
+      admit.
+      
   - exists fp_emp, fpm1. simpl in *. subst.
     inv EVAL.
     exploit eval_pexpr_sem_wt; eauto. intros VWT.
     repeat apply conj; auto.
     red. intros. inv H.
 Admitted.
-
-
-
 
 
 

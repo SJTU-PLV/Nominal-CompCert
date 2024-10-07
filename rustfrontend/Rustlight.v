@@ -156,6 +156,7 @@ Fixpoint valid_owner (p: place) :=
   | _ => p
   end.
 
+
 Definition moved_place (e: expr) : option place :=
   match e with
   | Emoveplace p _ => Some (valid_owner p)
@@ -371,6 +372,13 @@ Proof.
         apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.  
     + discriminate.
 Qed.
+
+Lemma valid_owner_same_local: forall p,
+    local_of_place (valid_owner p) = local_of_place p.
+Proof.
+  induction p; simpl; auto.
+Qed.
+
 
 Definition is_sibling (p1 p2: place) : bool :=
   Pos.eqb (local_of_place p1) (local_of_place p2)

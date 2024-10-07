@@ -122,7 +122,7 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
   | Ecktag p _ =>
       (* type of p must be enum *)
       match typeof_place p with
-      | Tvariant _ _ =>          
+      | Tvariant _ _ =>
           dominators_must_init init uninit universe p && must_init init uninit universe p
       | _ => false
       end
@@ -135,9 +135,14 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
 
 Definition move_check_expr (e : expr) :=
   match e with
-  | Emoveplace p _ =>
-      let p' := valid_owner p in
-      dominators_must_init init uninit universe p' && must_movable ce init uninit universe p'
+  | Emoveplace p _ =>      
+      if place_eq p (valid_owner p) then
+        (* p is not downcast ... *)                
+        dominators_must_init init uninit universe p && must_movable ce init uninit universe p
+      else
+        (* p is downcast, we just check its valid_owner is init *)
+        dominators_must_init init uninit universe p &&
+        must_init init uninit universe (valid_owner p) && is_full universe (valid_owner p)    
   | Epure pe => move_check_pexpr pe
   end.
 
