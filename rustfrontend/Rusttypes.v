@@ -521,6 +521,64 @@ Fixpoint alignof_blockcopy (env: composite_env) (t: type) : Z :=
       end
   end.
 
+Lemma alignof_blockcopy_1248:
+  forall env ty, let a := alignof_blockcopy env ty in a = 1 \/ a = 2 \/ a = 4 \/ a = 8.
+Proof.
+  assert (X: forall co, let a := Z.min 8 (co_alignof co) in
+             a = 1 \/ a = 2 \/ a = 4 \/ a = 8).
+  {
+    intros. destruct (co_alignof_two_p co) as [n EQ]. unfold a; rewrite EQ.
+    destruct n; auto.
+    destruct n; auto.
+    destruct n; auto.
+    right; right; right. apply Z.min_l.
+    rewrite two_power_nat_two_p. rewrite ! Nat2Z.inj_succ.
+    change 8 with (two_p 3). apply two_p_monotone. lia.
+  }
+  induction ty; simpl.
+  auto.
+  destruct i; auto.
+  auto.
+  destruct f; auto.
+  destruct Archi.ptr64; auto.
+  destruct Archi.ptr64; auto.
+  destruct Archi.ptr64; auto.
+  apply IHty.
+  destruct (env!i); auto.
+  destruct (env!i); auto.
+Qed.
+
+Lemma sizeof_alignof_blockcopy_compat:
+  forall env ty, (alignof_blockcopy env ty | sizeof env ty).
+Proof.
+  assert (X: forall co, (Z.min 8 (co_alignof co) | co_sizeof co)).
+  {
+    intros. apply Z.divide_trans with (co_alignof co). 2: apply co_sizeof_alignof.
+    destruct (co_alignof_two_p co) as [n EQ]. rewrite EQ.
+    destruct n. apply Z.divide_refl.
+    destruct n. apply Z.divide_refl.
+    destruct n. apply Z.divide_refl.
+    apply Z.min_case.
+    exists (two_p (Z.of_nat n)).
+    change 8 with (two_p 3).
+    rewrite <- two_p_is_exp by lia.
+    rewrite two_power_nat_two_p. rewrite !Nat2Z.inj_succ. f_equal. lia.
+    apply Z.divide_refl.
+  }
+  induction ty; simpl. unfold Z.divide. exists 4. auto.
+  apply Z.divide_refl.
+  apply Z.divide_refl.
+  apply Z.divide_refl.
+  apply Z.divide_refl.
+  apply Z.divide_refl.
+  destruct Archi.ptr64; apply Z.divide_refl.
+  apply Z.divide_mul_l. auto.
+  destruct (env!i). apply X. apply Z.divide_0_r.
+  destruct (env!i). apply X. apply Z.divide_0_r.
+Qed.
+
+
+
 
 (** ** Layout of struct fields *)
 

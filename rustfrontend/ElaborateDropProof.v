@@ -4,12 +4,13 @@ Require Import Integers.
 Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import AST Linking.
-Require Import Rusttypes.
-Require Import LanguageInterface CKLR Inject InjectFootprint.
+Require Import Ctypes Rusttypes .
+Require Import LanguageInterface CKLR Inject InjectFootprint. 
 Require Import InitDomain InitAnalysis ElaborateDrop.
 Require Import Rustlight Rustlightown RustIR RustOp.
 Require Import RustIRsem RustIRown RustIRcfg.
 Require Import Errors.
+
 
 (* ro_acc *)
 Require ValueAnalysis.
@@ -1115,28 +1116,6 @@ Proof.
   - simpl. econstructor; eauto.
 Qed.
 
-Lemma bind_parameters_injp_acc: forall params vl e te m1 m2  tvl j lo hi tlo thi tm1 Hm1
-    (STORE: bind_parameters ge e m1 params vl m2)
-    (MENV: match_envs j e m1 lo hi te tm1 tlo thi)
-    (VINJS: Val.inject_list j vl tvl),
-  exists tm2 Hm2,
-    bind_parameters tge te tm1 params tvl tm2
-    /\ injp_acc (injpw j m1 tm1 Hm1) (injpw j m2 tm2 Hm2).
-Proof. 
-    induction params, vl; intros. 
-    - admit. 
-    - inv STORE. 
-    - inv STORE. 
-    - inv STORE. 
-      inv MENV. 
-      exploit IHparams. eapply H7. 
-      econstructor. intros. eapply me_vars0. eauto. 
-      intros. eapply me_tinj0; eauto.
-      intros. eapply me_range0; eauto. 
-      intros. eapply me_trange0; eauto.
-      eauto. eauto. eauto. intros. eapply me_protect0 in H. inv H.  
-      
-    Admitted. 
 Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
 | match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret m tm bound tbound
     (MSTMT: match_stmt an flagm body cfg s ts pc next cont brk nret)
@@ -1690,24 +1669,167 @@ Proof.
   intros. inv H; red; intros; eauto with mem.
 Qed.
 
-Lemma assign_loc_injp_acc: forall f ty m loc ofs v m' tm loc' ofs' v' Hm,
-    assign_loc ge ty m loc ofs v m' ->
-    Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
-    Val.inject f v v' ->
-    exists f' tm' Hm',
-      assign_loc tge ty tm loc' ofs' v' tm'
-      /\ injp_acc (injpw f m tm Hm) (injpw f' m' tm' Hm').
+Lemma alignof_blockcopy_1248: forall ty ofs,
+  access_mode ty = By_copy
+  -> sizeof ge ty > 0 -> (alignof_blockcopy ge ty | Ptrofs.unsigned ofs)
+  -> (alignof_blockcopy tge  ty | Ptrofs.unsigned ofs). 
 Proof. 
-  intros. 
-  inv H.
-  - inv H0. exploit Mem.storev_mapped_inject; eauto.  
-    intros (tm' & A & B).  
-    exists f.  eexists. exists B. split. econstructor; eauto. 
-    econstructor; eauto. eapply Mem.ro_unchanged_store. eauto. 
-    eapply Mem.ro_unchanged_store. eauto. 
-  Admitted. 
+  intros. rewrite  comp_env_preserved. eauto. 
+Qed. 
 
-    
+
+Lemma assign_loc_unchanged_on:
+  forall ge ty m b ofs v m',
+    assign_loc ge ty m b ofs v m' ->
+    Mem.unchanged_on (fun b' ofs => b <> b') m m'.
+Proof.
+  intros. inv H.
+  - (*storev*)
+    eapply Mem.store_unchanged_on; eauto.
+  - eapply Mem.storebytes_unchanged_on; eauto.
+Qed.
+
+Lemma assign_loc_ro:
+  forall ge ty m b ofs v m',
+    assign_loc ge ty m b ofs v m' ->
+    Mem.ro_unchanged m m'.
+Proof.
+  intros. inv H.
+  - simpl in H1. eapply Mem.ro_unchanged_store; eauto.
+  - eapply Mem.ro_unchanged_storebytes; eauto.
+Qed.
+
+
+  
+Lemma assign_loc_injp_acc: forall f ty m loc ofs v m' tm loc' ofs' v' Hm,
+  assign_loc ge ty m loc ofs v m' ->
+  Val.inject f (Vptr loc ofs) (Vptr loc' ofs') ->
+  Val.inject f v v' ->
+  exists tm' Hm',
+    assign_loc tge ty tm loc' ofs' v' tm'
+    /\ injp_acc (injpw f m tm Hm) (injpw f m' tm' Hm').
+Proof. 
+  induction 1; intros.  
+  - exploit Mem.storev_mapped_inject; eauto. intros (tm' & A & B). 
+    exploit injp_acc_storev. eapply H0. exact A. exact H1. exact H2. 
+    intros. 
+    exists tm'. exists B. split. eapply assign_loc_value; eauto. 
+    eapply H3.
+  - inv H6. inv H7. 
+    rename b' into bsrc. rename ofs'0 into osrc. 
+    rename loc into bdst. rename ofs into odst.
+    rename loc' into bdst'. rename b2 into bsrc'. 
+    rewrite <- comp_env_preserved in *.
+    destruct (zeq (sizeof tge ty) 0). 
+    + assert (bytes = nil).
+    { exploit (Mem.loadbytes_empty m bsrc (Ptrofs.unsigned osrc) (sizeof tge ty)).
+      lia. congruence. }
+    subst.
+    destruct (Mem.range_perm_storebytes tm bdst' (Ptrofs.unsigned (Ptrofs.add odst (Ptrofs.repr delta))) nil)
+    as [tm' SB].
+    simpl. red; intros; extlia.
+    exploit Mem.storebytes_empty_inject; eauto. 
+    intro TMINJ. 
+    exists tm'. exists TMINJ.
+    split. eapply assign_loc_copy; eauto.
+    intros. destruct ty; simpl in *; try lia.  
+    intros; extlia.  
+    intros; extlia. 
+    (* rewrite e.  *)
+    apply Mem.loadbytes_empty. lia.
+    (* injp *)
+    econstructor. 
+    eapply Mem.ro_unchanged_storebytes; eauto.
+    eapply Mem.ro_unchanged_storebytes; eauto.
+    red. intros. eauto with mem. 
+    red. intros. eauto with mem. 
+    eapply Mem.storebytes_unchanged_on. eauto.  intros.
+    simpl in *. extlia.  
+    eapply Mem.storebytes_unchanged_on. eauto.  intros.
+    simpl in *. extlia.  
+    eauto. econstructor; rewrite H7 in H6; inv H6. 
+    (* inj_incr
+    econstructor. eauto. unfold inject_incr_disjoint. intros. 
+    rewrite H6 in H7. inv H7. 
+    exploit Mem.support_storebytes. eapply H5. congruence.
+    exploit Mem.support_storebytes. eapply SB. congruence. *)
+
+  + rewrite  comp_env_preserved in *.
+    exploit Mem.loadbytes_length. eauto. intro LEN. 
+    assert (SZPOS: sizeof ge ty > 0). 
+    {generalize (sizeof_pos ge ty). lia. }
+    assert (RPSRC: Mem.range_perm m bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sizeof ge ty) Cur Nonempty).
+      eapply Mem.range_perm_implies. eapply Mem.loadbytes_range_perm. eauto. auto with mem. 
+    assert (RPDST: Mem.range_perm m bdst (Ptrofs.unsigned odst) (Ptrofs.unsigned odst + sizeof ge ty) Cur Nonempty).
+      replace (sizeof ge ty) with (Z.of_nat (List.length bytes)).
+      eapply Mem.range_perm_implies. eapply Mem.storebytes_range_perm. eauto. eauto with mem.   
+      rewrite LEN. apply Z2Nat.id. lia.
+    assert (PSRC: Mem.perm m bsrc (Ptrofs.unsigned osrc) Cur Nonempty).
+      apply RPSRC. lia. 
+    assert (PDST: Mem.perm m bdst (Ptrofs.unsigned odst) Cur Nonempty).
+      apply RPDST. lia.
+    exploit Mem.address_inject.  eauto. eapply PSRC.  eauto. intros EQ1.
+    exploit Mem.address_inject.  eauto. eexact PDST. eauto. intros EQ2.
+    exploit Mem.loadbytes_inject; eauto. intros [bytes2 [A B]].
+    exploit Mem.storebytes_mapped_inject; eauto. intros [tm' [C D]].
+    exists tm'. exists D.
+    split. eapply assign_loc_copy; try rewrite EQ1; try rewrite EQ2; eauto. 
+    intros; eapply Mem.aligned_area_inject with (m := m); eauto.
+    apply Rusttypes.alignof_blockcopy_1248.
+    apply Rusttypes.sizeof_alignof_blockcopy_compat. 
+    (* rewrite <- comp_env_preserved.  *)
+    intros; eapply Mem.aligned_area_inject with (m := m); eauto.
+    apply Rusttypes.alignof_blockcopy_1248.
+    apply sizeof_alignof_blockcopy_compat.
+    eapply Mem.disjoint_or_equal_inject with (m := m); eauto.
+    apply Mem.range_perm_max with Cur; auto.
+    apply Mem.range_perm_max with Cur; auto.
+    (* injp *)
+    econstructor. 
+    eapply Mem.ro_unchanged_storebytes; eauto.
+    eapply Mem.ro_unchanged_storebytes; eauto.
+    red. intros. eauto with mem. 
+    red. intros. eauto with mem. 
+    eapply Mem.storebytes_unchanged_on; eauto.  intros.
+    simpl in *. unfold loc_unmapped. congruence.  
+    eapply Mem.storebytes_unchanged_on; eauto.  
+    unfold loc_out_of_reach.  
+    intros ofs Kofs K.
+    eelim K; eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply Mem.storebytes_range_perm; eauto. 
+    apply list_forall2_length in B. extlia. 
+    apply inject_incr_refl.
+    apply inject_separated_refl.
+Qed.
+
+
+Lemma bind_parameters_injp_acc: forall params vl e te m1 m2  tvl j tm1 Hm1
+    (STORE: bind_parameters ge e m1 params vl m2)
+    (me_vars0: forall (id : positive) (b : block) (ty : type), e ! id = Some (b, ty) -> exists tb : block, te ! id = Some (tb, ty) /\ j b = Some (tb, 0))
+    (VINJS: Val.inject_list j vl tvl),
+  exists tm2 Hm2,
+    bind_parameters tge te tm1 params tvl tm2
+    /\ injp_acc (injpw j m1 tm1 Hm1) (injpw j m2 tm2 Hm2).
+Proof. 
+  intros. revert me_vars0. revert VINJS. revert tvl. revert Hm1.
+  revert j tm1 te.   
+  induction STORE; intros.
+  - exists tm1. exists Hm1. inv VINJS. split. econstructor. reflexivity. 
+  - inv VINJS. 
+    eapply me_vars0 in H. destruct H as (tb & C & D). 
+    exploit assign_loc_injp_acc; eauto. 
+    instantiate (1:= Hm1).
+    intros (tm2 & Hm2 & A & B).
+    exploit IHSTORE. eauto. intros. eapply me_vars0 in H. eauto. 
+    intros (tm3 & Hm3 & E & F). 
+    eexists. eexists. split. econstructor; eauto. 
+    instantiate (1:= Hm3).
+    transitivity (injpw j m1 tm2 Hm2); eauto.
+Qed. 
+
+
 Lemma type_to_drop_member_state_eq: forall id ty,
     type_to_drop_member_state ge id ty = type_to_drop_member_state tge id ty.
 Proof.
@@ -2769,7 +2891,7 @@ Proof.
     intros (tv1 & CAST1 & VINJ2).
     exploit assign_loc_injp_acc; eauto.
     instantiate (1 := MINJ2).
-    intros (j2 & tm4 & MINJ3 & ASSIGN & INJP2).
+    intros (tm4 & MINJ3 & ASSIGN & INJP2).
     (* match_envs_flagm *)
     assert (SUP1: Mem.sup_include thi (Mem.support tm3)).
     { eapply Mem.sup_include_trans. eauto.
@@ -3044,7 +3166,7 @@ Proof.
     instantiate (1 := Hm1).
     intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & MENV2).
     (* bind_parameters in target program *)
-    exploit bind_parameters_injp_acc; eauto.
+    exploit bind_parameters_injp_acc. eauto. inv MENV2. eauto.  
     eapply val_inject_list_incr.
     inv INJP1. eauto. eauto.
     instantiate (1 := Hm2).
