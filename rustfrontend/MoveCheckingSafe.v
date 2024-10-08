@@ -271,6 +271,7 @@ algebra) *)
 Inductive footprint : Type :=
 | fp_emp                        (* empty footprint *)
 | fp_box (b: block) (sz: Z) (fp: footprint) (* A heap block storing values that occupy footprint fp *)
+(* (field ident, field type, field offset,field footprint) *)
 | fp_struct (id: ident) (fpl: list (ident * type * Z * footprint))
 | fp_enum (id: ident) (tag: Z) (fid: ident) (fty: type) (ofs: Z) (fp: footprint)
 .
@@ -305,7 +306,18 @@ End FP_IND.
 
 Definition find_fields (fid: ident) (fpl: list (ident * type * Z * footprint)) : option (ident * type * Z * footprint) :=
   find (fun '(fid', _, _, _) => if ident_eq fid fid' then true else false) fpl. 
-              
+
+Lemma find_fields_some: forall fid fid1 fpl fty fofs ffp,
+    find_fields fid fpl = Some (fid1, fty, fofs, ffp) ->
+    fid = fid1 /\ In (fid, fty, fofs, ffp) fpl.
+Proof.
+  intros. unfold find_fields in H.
+  exploit find_some; eauto. intros (A & B).
+  destruct ident_eq in B; try congruence.
+  subst. auto.
+Qed.
+
+
 (* Semantics well typed location is mutually defined with semantics
 well typed value *)
 Inductive sem_wt_loc (m: mem) : footprint -> block -> Z -> type -> Prop :=
@@ -1833,7 +1845,143 @@ Lemma sem_wt_loc_unchanged: forall m1 m2 fp b ofs ty
       sem_wt_loc m2 fp b ofs ty.
 Admitted.
 
-Lemma assign_loc_sem_wt: forall fp ce ty m1 b ofs v m2
+
+Definition list_interval {A: Type} (l: list A) (lo: Z) (sz: Z) :=
+  firstn (Z.to_nat sz) (skipn (Z.to_nat lo) l).
+
+Definition in_range (lo sz hi: Z) : Prop :=
+  0 <= lo /\ lo + sz <= hi.
+
+(** It we want to derive sem_wt_bytes from sem_wt_loc/val without the
+wt_footprint assumption, we need to add size attribute to the
+footprint. Otherwise we need to consider the well-founded induction of
+composite_env *)
+Inductive sem_wt_bytes (m: mem) : footprint -> list memval -> type -> Prop :=
+| sem_wt_bytes_base: forall chunk bytes fp ty
+    (AS: access_mode ty = Ctypes.By_value chunk)
+    (WT: sem_wt_val m fp (decode_val chunk bytes) ty),
+  sem_wt_bytes m fp bytes ty  
+(* | sem_wt_bytes_box: forall b sz ty bytes bytes1 fp *)
+(*     (DEC: decode_val Mptr bytes = Vptr b Ptrofs.zero) *)
+(*     (LOAD: Mem.loadbytes m b 0 sz = Some bytes1) *)
+(*     (WT: sem_wt_bytes m fp bytes1 ty), *)
+(*     sem_wt_bytes m (fp_box b sz fp) bytes (Tbox ty) *)
+| sem_wt_bytes_struct: forall fpl bytes orgs id
+    (WT: forall fid fty fofs ffp,
+        find_fields fid fpl = Some (fid, fty, fofs, ffp) ->          
+        sem_wt_bytes m ffp (list_interval bytes fofs (sizeof ce fty)) fty),
+    sem_wt_bytes m (fp_struct id fpl) bytes (Tstruct orgs id)
+| sem_wt_bytes_enum: forall fp orgs id tagz fid fty fofs bytes
+    (TAG: decode_val Mint32 (firstn (Z.to_nat (size_chunk Mint32)) bytes) = Vint (Int.repr tagz))
+    (WT: sem_wt_bytes m fp (skipn (Z.to_nat fofs) bytes) fty),
+    sem_wt_bytes m (fp_enum id tagz fid fty fofs fp) bytes (Tvariant orgs id)
+.
+
+
+(** May be very difficult  *)
+Lemma loadbytes_interval: forall m b ofs sz ofs1 sz1 bytes,
+    in_range ofs1 sz1 sz ->
+    Mem.loadbytes m b ofs sz = Some bytes ->
+    Mem.loadbytes m b (ofs + ofs1) sz1 = Some (list_interval bytes ofs1 sz1).
+Admitted.
+  
+Lemma sem_wt_loc_implies_wt_bytes: forall m fp b ofs bytes ty
+    (LOAD: Mem.loadbytes m b ofs (sizeof ce ty) = Some bytes)
+    (* (COMP: complete_type ce ty = true) *)
+    (WT: sem_wt_loc m fp b ofs ty),
+    sem_wt_bytes m fp bytes ty.
+Proof.
+  induction fp using strong_footprint_ind; intros.
+  - inv WT. econstructor. eauto.
+    exploit Mem.load_loadbytes; eauto.
+    intros (bytes1 & LOAD1 & EQ). 
+    assert (SZEQ: size_chunk chunk = sizeof ce ty).
+    { eapply sizeof_by_value. auto. }
+    rewrite <- SZEQ in LOAD.
+    rewrite LOAD in LOAD1. inv LOAD1.
+    auto.
+  - inv WT. econstructor. eauto.
+    exploit Mem.load_loadbytes; eauto.
+    intros (bytes1 & LOAD1 & EQ). 
+    assert (SZEQ: size_chunk chunk = sizeof ce ty).
+    { eapply sizeof_by_value. auto. }
+    rewrite <- SZEQ in LOAD.
+    rewrite LOAD in LOAD1. inv LOAD1.
+    auto.
+  - inv WT. inv WT0; simpl in *; try congruence.
+    eapply sem_wt_bytes_struct. intros until ffp.
+    intros FIND.
+    exploit FWT; eauto. intros WTLOC.
+    exploit loadbytes_interval; eauto. instantiate (1 := (sizeof ce fty)).
+    instantiate (1 := fofs).
+    (** in_range proof: we need wt_footprint but how to perform induction? !!! *)
+    admit.
+    intros LOAD1.
+    exploit find_fields_some; eauto. intros (A & B). subst.
+    (* use I.H. *)
+    exploit H; eauto. 
+  - inv WT. inv WT0; simpl in *; try congruence.
+    eapply sem_wt_bytes_enum.
+    (** TODO: wt_footprint should state that the fofs is larger than 4
+    and sizeof enum is larger than fofs *)
+    assert (LEN: exists fsz n, sizeof ce (Tvariant orgs id) = 4 + n + fsz /\ 4 + n = ofs /\ fsz >= 0 /\ n >= 0).
+    { admit. }
+    destruct LEN as (fsz & n & A & B & C & D). subst.
+    rewrite A in LOAD.    
+    exploit Mem.loadbytes_split. eauto. lia. lia.
+    intros (byte1 & byte2 & E & F & G). subst.
+    replace (Z.to_nat (size_chunk Mint32)) with 4%nat.
+    2: { simpl. auto. }
+    rewrite firstn_app.
+    replace (4 - length byte1)%nat with 0%nat.
+    2: { eapply Mem.loadbytes_length in E. rewrite E. lia. }
+    rewrite firstn_O. rewrite app_nil_r.
+    exploit Mem.loadbytes_split. eauto. lia. lia.
+    intros (byte3 & byte4 & P1 & P2 & P3). subst.
+    admit.
+Admitted.
+
+Lemma sem_wt_bytes_implies_wt_loc: forall m fp b ofs bytes ty
+    (LOAD: Mem.loadbytes m b ofs (sizeof ce ty) = Some bytes)
+    (ALIGN: (alignof ce ty | ofs))
+    (WT: sem_wt_bytes m fp bytes ty),
+    sem_wt_loc m fp b ofs ty.
+Proof.
+  induction fp using strong_footprint_ind; intros.
+  - inv WT. econstructor. eauto.
+    assert (SZEQ: size_chunk chunk = sizeof ce ty).
+    { eapply sizeof_by_value. auto. }
+    rewrite <- SZEQ in LOAD.
+    exploit Mem.loadbytes_load; eauto.
+    (* alignment *)
+    eapply Z.divide_trans.
+    eapply alignof_by_value. eauto. eauto.
+    auto.
+  - inv WT. econstructor. eauto.
+    assert (SZEQ: size_chunk chunk = sizeof ce ty).
+    { eapply sizeof_by_value. auto. }
+    rewrite <- SZEQ in LOAD.
+    exploit Mem.loadbytes_load; eauto.
+    (* alignment *)
+    eapply Z.divide_trans.
+    eapply alignof_by_value. eauto. eauto.
+    auto.
+  - inv WT. inv WT0; simpl in *; try congruence.
+    eapply sem_wt_struct. intros until ffp. intros FIND.
+    exploit WT0; eauto. intros WTBYTES.
+    exploit loadbytes_interval; eauto. instantiate (1 := (sizeof ce fty)).
+    instantiate (1 := fofs).
+    (** in_range proof: we need wt_footprint but how to perform induction? !!! *)
+    admit.
+    intros LOAD1.
+    exploit find_fields_some; eauto. intros (A & B). subst.
+    exploit H; eauto.
+    (** alignof proof *)
+    admit.
+  - admit.
+Admitted.  
+    
+Lemma assign_loc_sem_wt: forall fp ty m1 b ofs v m2
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val m1 fp v ty)
     (WTFP: wt_footprint ce ce ty fp)
@@ -1889,9 +2037,21 @@ Proof.
     eapply Mem.perm_valid_block; eauto.
   - inv WTFP.
     inv AS. simpl in *. try congruence.
-    inv WT. inv WTLOC. simpl in *. try congruence.
-    eapply sem_wt_struct. intros until ffp. intros FIND.
-    exploit FWT; eauto. intros WTLOC.
+    inv WT.
+    exploit sem_wt_loc_implies_wt_bytes; eauto. intros WTBYTES.
+    assert (WTBYTES1: sem_wt_bytes m2 (fp_struct id fpl) bytes (Tstruct orgs id)).
+    { admit. }
+    exploit Mem.loadbytes_storebytes_same; eauto.
+    intros LOAD1.
+    exploit Mem.loadbytes_length. eapply H4. intros LEN.
+    rewrite LEN in LOAD1. rewrite Z_to_nat_max in LOAD1.
+    replace (Z.max (sizeof ce (Tstruct orgs id)) 0) with (sizeof ce (Tstruct orgs id)) in LOAD1.    
+    eapply sem_wt_bytes_implies_wt_loc; eauto.
+    (** TODO: Align properties  *) admit.
+    generalize (sizeof_pos ce (Tstruct orgs id)). extlia.
+
+  - 
+    
 (* Mem.storebytes_split *)
     
 (*     Lemma load_sem_wt_val_loc:  *)
@@ -1905,6 +2065,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (TY: ty = typeof_place p)
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val m1 vfp v ty)
+    (WTFP: wt_footprint ce ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
     (* ownership transfer *)
@@ -1939,6 +2100,17 @@ Proof.
       intros (b1 & ofs1 & fp1 & D & E). rewrite B in D. inv D.
       (* prove that assign_loc assigns a sem_wt_val then the location
       is sem_wt_loc *)
+      exploit assign_loc_sem_wt; eauto. 
+      (** TODO: b1 is not in fp1  *) admit.
+      intros WTLOC.
+      Lemma get_loc_footprint_sem_wt: forall phl fp b ofs b1 ofs1 fp1,
+          get_loc_footprint phl fp b ofs = Some (b1, ofs1, fp1) ->
+          wt_footprint ce ce ty fp1 ->
+          sem_wt_loc m fp b ofs ty ->
+          (** some relation between ty an ty1 *)
+          sem_wt_loc m fp1 b1 ofs ty1 
+      
+      
 Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
 | member_footprint_struct: forall fofs fid fty
     (STRUCT: co.(co_sv) = Struct)
