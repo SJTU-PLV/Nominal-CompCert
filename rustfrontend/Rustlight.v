@@ -373,6 +373,23 @@ Proof.
     + discriminate.
 Qed.
 
+Lemma is_shallow_prefix_is_prefix: forall p1 p2,
+    is_shallow_prefix p1 p2 = true ->
+    is_prefix p1 p2 = true.
+Admitted.
+
+Lemma is_prefix_strict_trans_prefix: forall p1 p2 p3,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p2 p3 = true ->
+    is_prefix_strict p1 p3 = true.
+Admitted.
+
+
+Lemma is_shallow_prefix_refl: forall p,
+    is_shallow_prefix p p = true.
+Admitted.
+
+
 Lemma valid_owner_same_local: forall p,
     local_of_place (valid_owner p) = local_of_place p.
 Proof.

@@ -273,8 +273,8 @@ Inductive footprint : Type :=
 | fp_scalar (ty: type)        (* type must be scalar type  *)
 | fp_box (b: block) (sz: Z) (fp: footprint) (* A heap block storing values that occupy footprint fp *)
 (* (field ident, field type, field offset,field footprint) *)
-| fp_struct (id: ident) (fpl: list (ident * Z * footprint))
-| fp_enum (id: ident) (tag: Z) (fid: ident) (ofs: Z) (fp: footprint)
+| fp_struct (id: ident) (sz: Z) (fpl: list (ident * Z * footprint))
+| fp_enum (id: ident) (sz: Z) (tag: Z) (fid: ident) (ofs: Z) (fp: footprint)
 .
 (* with field_footprint : Type := *)
 (* | fp_field (fid: ident) (fty: type) (ofs: Z) (fp: footprint). *)
@@ -285,8 +285,8 @@ Variable (P: footprint -> Prop)
   (HPemp: P fp_emp)
   (HPscalar: forall ty, P (fp_scalar ty))
   (HPbox: forall (b : block) sz (fp : footprint), P fp -> P (fp_box b sz fp))
-  (HPstruct: forall id fpl, (forall fid ofs fp, In (fid, ofs, fp) fpl -> P fp) -> P (fp_struct id fpl))
-  (HPenum: forall id (tag : Z) fid ofs (fp : footprint), P fp -> P (fp_enum id tag fid ofs fp)).
+  (HPstruct: forall id sz fpl, (forall fid ofs fp, In (fid, ofs, fp) fpl -> P fp) -> P (fp_struct id sz fpl))
+  (HPenum: forall id sz (tag : Z) fid ofs (fp : footprint), P fp -> P (fp_enum id sz tag fid ofs fp)).
 
 Fixpoint strong_footprint_ind t: P t.
 Proof.
@@ -334,17 +334,17 @@ Inductive sem_wt_loc (m: mem) : footprint -> block -> Z -> Prop :=
     (LOAD: Mem.load Mptr m b ofs = Some v)
     (WT: sem_wt_val m (fp_box b1 sz1 fp) v),
     sem_wt_loc m (fp_box b1 sz1 fp) b ofs
-| sem_wt_struct: forall b ofs fpl id
+| sem_wt_struct: forall b ofs fpl id sz
     (* all fields are semantically well typed *)
     (FWT: forall fid fofs ffp,
         find_fields fid fpl = Some (fid, fofs, ffp) ->
         sem_wt_loc m ffp b (ofs + fofs)),
-    sem_wt_loc m (fp_struct id fpl) b ofs
-| sem_wt_enum: forall fp b ofs tagz fid fofs id
+    sem_wt_loc m (fp_struct id sz fpl) b ofs
+| sem_wt_enum: forall fp b ofs tagz fid fofs id sz
     (* Interpret the field by the tag and prove that it is well-typed *)
     (TAG: Mem.load Mint32 m b ofs = Some (Vint (Int.repr tagz)))
     (FWT: sem_wt_loc m fp b (ofs + fofs)),
-    sem_wt_loc m (fp_enum id tagz fid fofs fp) b ofs
+    sem_wt_loc m (fp_enum id sz tagz fid fofs fp) b ofs
 
 with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 | wt_val_unit:
@@ -365,12 +365,12 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 (* TODO *)
 (* | wt_val_ref: forall b ofs ty org mut, *)
 (*     sem_vt_val (Vptr b ofs) (Treference org mut ty) *)
-| wt_val_struct: forall b ofs fp
-    (WTLOC: sem_wt_loc m fp b (Ptrofs.unsigned ofs)),
-    sem_wt_val m fp (Vptr b ofs)
-| wt_val_enum: forall b ofs fp
-    (WTLOC: sem_wt_loc m fp b (Ptrofs.unsigned ofs)),
-    sem_wt_val m fp (Vptr b ofs)
+| wt_val_struct: forall b ofs id sz fpl
+    (WTLOC: sem_wt_loc m (fp_struct id sz fpl) b (Ptrofs.unsigned ofs)),
+    sem_wt_val m (fp_struct id sz fpl) (Vptr b ofs)
+| wt_val_enum: forall b ofs fp tagz fid fofs id sz
+    (WTLOC: sem_wt_loc m (fp_enum id sz tagz fid fofs fp) b (Ptrofs.unsigned ofs)),
+    sem_wt_val m (fp_enum id sz tagz fid fofs fp) (Vptr b ofs)
 .
 
   
@@ -415,13 +415,13 @@ Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
           field_type fid co.(co_members) = OK fty
           /\ field_offset ce fid co.(co_members) = OK fofs
           /\ wt_footprint (PTree.remove id ce1) fty ffp),
-    wt_footprint ce1 (Tstruct orgs id) (fp_struct id fpl)
+    wt_footprint ce1 (Tstruct orgs id) (fp_struct id (co_sizeof co) fpl)
 | wt_fp_enum: forall orgs id tagz fid fty fofs fp ce1 co
     (CO: ce1 ! id = Some co)
     (TAG: list_nth_z co.(co_members) tagz = Some (Member_plain fid fty))
     (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
     (WT: wt_footprint ce fty fp),
-    wt_footprint ce1 (Tvariant orgs id) (fp_enum id tagz fid fofs fp)
+    wt_footprint ce1 (Tvariant orgs id) (fp_enum id (co_sizeof co) tagz fid fofs fp)
 | wt_fp_box: forall ty b fp ce1
     (* this is ensured by bm_box *)
     (WT: wt_footprint ce1 ty fp),
@@ -435,19 +435,19 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> Prop :=
     (SIZE: Mem.load Mptr m b1 (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz)))
     (VRES: Mem.range_perm m b1 (- size_chunk Mptr) sz Cur Freeable),
     bmatch m b ofs (fp_box b1 sz fp)
-| bm_struct: forall fpl id
+| bm_struct: forall fpl id sz
     (* all fields are semantically well typed *)
     (FMATCH: forall fid fofs ffp,
         find_fields fid fpl = Some (fid, fofs, ffp) ->
         bmatch m b (ofs + fofs) ffp),
-    bmatch m b ofs (fp_struct id fpl)
-| bm_enum: forall fp id tagz fid fofs
+    bmatch m b ofs (fp_struct id sz fpl)
+| bm_enum: forall fp id tagz fid fofs sz
     (* Interpret the field by the tag and prove that it is well-typed *)
     (* [p] whose value has footprint (fp_enum tagz fp) is actually has
     tag tagz *)
     (TAG: Mem.load Mint32 m b ofs = Some (Vint (Int.repr tagz))) 
     (BM: bmatch m b (ofs + fofs) fp),
-    bmatch m b ofs (fp_enum id tagz fid fofs fp)
+    bmatch m b ofs (fp_enum id sz tagz fid fofs fp)
 | bm_scalar: forall ty chunk v
     (* (TY: scalar_type ty = true) *)
     (MODE: Rusttypes.access_mode ty = Ctypes.By_value chunk)
@@ -520,24 +520,24 @@ Fixpoint set_footprint (phl: list path) (v: footprint) (fp: footprint) : option 
                 Some (fp_box b sz fp2)
             | None => None
             end
-        | ph_field fid, fp_struct id fpl =>
+        | ph_field fid, fp_struct id sz fpl =>
             match find_fields fid fpl with
             | Some (fid1, fofs, ffp) =>                
                 match set_footprint l v ffp with
                 | Some ffp1 =>
-                    Some (fp_struct id (map (fun '(fid2,fofs2, ffp2) => if ident_eq fid fid2 then (fid2, fofs2, ffp1) else (fid2, fofs2, ffp2)) fpl)) 
+                    Some (fp_struct id sz (map (fun '(fid2,fofs2, ffp2) => if ident_eq fid fid2 then (fid2, fofs2, ffp1) else (fid2, fofs2, ffp2)) fpl)) 
                 | None => None
                 end
             | None => None
             end
-        | ph_downcast pty fid fty, fp_enum id tagz fid1 fofs1 fp1 =>
+        | ph_downcast pty fid fty, fp_enum id sz tagz fid1 fofs1 fp1 =>
             match pty with
             | Tvariant _ id1 =>
                 if ident_eq id1 id then
                   if ident_eq fid fid1 then
                     match set_footprint l v fp1 with
                     | Some fp2 =>
-                        Some (fp_enum id tagz fid1 fofs1 fp2)
+                        Some (fp_enum id sz tagz fid1 fofs1 fp2)
                     | None => None
                     end
                   else None
@@ -552,10 +552,10 @@ Fixpoint clear_footprint_rec (fp: footprint) : footprint :=
   match fp with
   | fp_scalar _
   | fp_box _ _ _
-  | fp_enum _ _ _ _ _
+  | fp_enum _ _ _ _ _ _
   | fp_emp => fp_emp
-  | fp_struct id fpl =>
-      fp_struct id (map (fun '(fid, fofs, ffp) => (fid, fofs, clear_footprint_rec ffp)) fpl)
+  | fp_struct id sz fpl =>
+      fp_struct id sz (map (fun '(fid, fofs, ffp) => (fid, fofs, clear_footprint_rec ffp)) fpl)
   end.
 
 Fixpoint get_loc_footprint (phl: list path) (fp: footprint) (b: block) (ofs: Z) : option (block * Z * footprint) :=
@@ -565,13 +565,13 @@ Fixpoint get_loc_footprint (phl: list path) (fp: footprint) (b: block) (ofs: Z) 
       match ph, fp with
       | ph_deref, fp_box b _ fp1 =>
           get_loc_footprint l fp1 b 0
-      | ph_field fid, fp_struct _ fpl =>
+      | ph_field fid, fp_struct _ _ fpl =>
           match find_fields fid fpl with
           | Some (_, fofs, fp1) =>
               get_loc_footprint l fp1 b (ofs + fofs)
           | None => None
           end
-      | ph_downcast pty fid1 fty1, fp_enum id _ fid2 fofs fp1 =>
+      | ph_downcast pty fid1 fty1, fp_enum id _ _ fid2 fofs fp1 =>
           match pty with
           | Tvariant _ id1 =>
               if ident_eq id1 id then     
@@ -593,13 +593,13 @@ Fixpoint get_footprint (phl: list path) (fp: footprint) : option footprint :=
       match ph, fp with
       | ph_deref, fp_box b _ fp1 =>
           get_footprint l fp1
-      | ph_field fid, fp_struct _ fpl =>
+      | ph_field fid, fp_struct _ _ fpl =>
           match find_fields fid fpl with
           | Some (_, fofs, fp1) =>
               get_footprint l fp1
           | None => None
           end
-      | ph_downcast pty fid1 fty1, fp_enum id _ fid2 fofs fp1 =>
+      | ph_downcast pty fid1 fty1, fp_enum id _ _ fid2 fofs fp1 =>
           match pty with
           | Tvariant _ id1 =>
               if ident_eq id1 id then                
@@ -857,12 +857,12 @@ Inductive valid_owner_offset_footprint : place -> Z -> footprint -> footprint ->
     valid_owner_offset_footprint (Pderef p ty) 0 fp fp
 | valid_owner_field: forall p fty fid fp,
     valid_owner_offset_footprint (Pfield p fid fty) 0 fp fp
-| valid_owner_downcast: forall p fid fty fp fp1 tagz fofs ofs id orgs
+| valid_owner_downcast: forall p fid fty fp fp1 tagz fofs ofs id orgs sz
     (PTY: typeof_place p = Tvariant orgs id)
     (* (CO: ce ! id = Some co) *)
     (* (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs) *)
     (* (TAG: field_tag fid co.(co_members) = Some tagz) *)
-    (VOWN: valid_owner_offset_footprint p ofs (fp_enum id tagz fid fofs fp) fp1),
+    (VOWN: valid_owner_offset_footprint p ofs (fp_enum id sz tagz fid fofs fp) fp1),
     valid_owner_offset_footprint (Pdowncast p fid fty) (ofs + fofs) fp fp1.
 
 (** So adhoc soluation: define a non-sense valid_owner_offset_footprint to prove the following two lemmas *)
@@ -1290,9 +1290,9 @@ Fixpoint footprint_flat (fp: footprint) : flat_footprint :=
   | fp_scalar _ => nil
   | fp_box b _ fp' =>
       b :: footprint_flat fp'
-  | fp_struct _ fpl =>
+  | fp_struct _ _ fpl =>
       concat (map (fun '(_, _, fp) => footprint_flat fp) fpl)
-  | fp_enum _ _ _ _ fp =>
+  | fp_enum _ _ _ _ _ fp =>
       footprint_flat fp
   end.
 
@@ -1650,16 +1650,6 @@ Lemma bmatch_set_not_shallow_paths: forall phl m b ofs fp1 fp2 vfp,
     bmatch m b ofs fp2.
 Admitted.
 
-Lemma is_shallow_prefix_is_prefix: forall p1 p2,
-    is_shallow_prefix p1 p2 = true ->
-    is_prefix p1 p2 = true.
-Admitted.
-
-Lemma is_prefix_strict_trans_prefix: forall p1 p2 p3,
-    is_prefix_strict p1 p2 = true ->
-    is_prefix p2 p3 = true ->
-    is_prefix_strict p1 p3 = true.
-Admitted.
 
 (** IMPORTANT TODO  *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
@@ -1821,10 +1811,6 @@ Lemma wt_footprint_extend_ce: forall ce1 ce2 ty fp,
     wt_footprint ce ce2 ty fp.
 Admitted.
 
-Lemma is_shallow_prefix_refl: forall p,
-    is_shallow_prefix p p = true.
-Admitted.
-
 Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (MM: mmatch fpm1 m le own1)
     (WF: list_norepet (flat_fp_map fpm1))
@@ -1938,29 +1924,52 @@ Definition list_interval {A: Type} (l: list A) (lo: Z) (sz: Z) :=
 Definition in_range (lo sz hi: Z) : Prop :=
   0 <= lo /\ lo + sz <= hi.
 
+Definition sizeof_scalar_type (ty: type) : Z :=
+  match ty with
+  | Tunit => 4
+  | Tint Ctypes.I8 _ => 1
+  | Tint Ctypes.I16 _ => 2
+  | Tint Ctypes.I32 _
+  | Tfloat Ctypes.F32 => 4
+  | Tint IBool _ => 1
+  | Tlong _
+  | Tfloat Ctypes.F64 => 8
+  | _ => 0
+  end.
+
+Definition sizeof_footprint (fp: footprint) : Z :=
+  match fp with
+  | fp_emp => 0
+  | fp_scalar ty =>
+      sizeof_scalar_type ty
+  | fp_box _ _ _ => if Archi.ptr64 then 8 else 4
+  | fp_struct _ sz _ => sz
+  | fp_enum _ sz _ _ _ _ => sz
+  end.
+
+
 (** It we want to derive sem_wt_bytes from sem_wt_loc/val without the
 wt_footprint assumption, we need to add size attribute to the
 footprint. Otherwise we need to consider the well-founded induction of
 composite_env *)
-Inductive sem_wt_bytes (m: mem) : footprint -> list memval -> type -> Prop :=
-| sem_wt_bytes_base: forall chunk bytes fp ty
+Inductive sem_wt_bytes (m: mem) : footprint -> list memval -> Prop :=
+| sem_wt_bytes_base: forall chunk bytes ty
     (AS: access_mode ty = Ctypes.By_value chunk)
-    (WT: sem_wt_val m fp (decode_val chunk bytes)),
-  sem_wt_bytes m fp bytes ty  
-(* | sem_wt_bytes_box: forall b sz ty bytes bytes1 fp *)
-(*     (DEC: decode_val Mptr bytes = Vptr b Ptrofs.zero) *)
-(*     (LOAD: Mem.loadbytes m b 0 sz = Some bytes1) *)
-(*     (WT: sem_wt_bytes m fp bytes1 ty), *)
-(*     sem_wt_bytes m (fp_box b sz fp) bytes (Tbox ty) *)
-| sem_wt_bytes_struct: forall fpl bytes orgs id
-    (WT: forall fid fty fofs ffp,
-        find_fields fid fpl = Some (fid,  fofs, ffp) ->
-        sem_wt_bytes m ffp (list_interval bytes fofs (sizeof ce fty)) fty),
-    sem_wt_bytes m (fp_struct id fpl) bytes (Tstruct orgs id)
-| sem_wt_bytes_enum: forall fp orgs id tagz fid fty fofs bytes
+    (WT: sem_wt_val m (fp_scalar ty) (decode_val chunk bytes)),
+    sem_wt_bytes m (fp_scalar ty) bytes
+| sem_wt_bytes_box: forall b sz bytes fp
+    (WT: sem_wt_val m (fp_box b sz fp) (decode_val Mptr bytes)),
+    sem_wt_bytes m (fp_box b sz fp) bytes
+| sem_wt_bytes_struct: forall fpl bytes id sz
+    (WT: forall fid fofs ffp,
+        find_fields fid fpl = Some (fid, fofs, ffp) ->
+        (* No type/size in fp_struct !!!! *)        
+        sem_wt_bytes m ffp (list_interval bytes fofs (sizeof_footprint ffp))),
+    sem_wt_bytes m (fp_struct id sz fpl) bytes
+| sem_wt_bytes_enum: forall fp id tagz fid fofs bytes sz
     (TAG: decode_val Mint32 (firstn (Z.to_nat (size_chunk Mint32)) bytes) = Vint (Int.repr tagz))
-    (WT: sem_wt_bytes m fp (skipn (Z.to_nat fofs) bytes) fty),
-    sem_wt_bytes m (fp_enum id tagz fid fofs fp) bytes (Tvariant orgs id)
+    (WT: sem_wt_bytes m fp (skipn (Z.to_nat fofs) bytes)),
+    sem_wt_bytes m (fp_enum id sz tagz fid fofs fp) bytes
 .
 
 
@@ -1970,50 +1979,71 @@ Lemma loadbytes_interval: forall m b ofs sz ofs1 sz1 bytes,
     Mem.loadbytes m b ofs sz = Some bytes ->
     Mem.loadbytes m b (ofs + ofs1) sz1 = Some (list_interval bytes ofs1 sz1).
 Admitted.
-  
-Lemma sem_wt_loc_implies_wt_bytes: forall m fp b ofs bytes ty
-    (LOAD: Mem.loadbytes m b ofs (sizeof ce ty) = Some bytes)
+
+(* Lemma sizeof_scalar_by_value:  forall (ce : composite_env) (ty : type) (chunk : memory_chunk), *)
+(*     access_mode ty = Ctypes.By_value chunk -> *)
+(*     size_chunk chunk = sizeof_scalar_type ty. *)
+(* Proof. *)
+(*   destruct ty; simpl; intros; inv H; try congruence; auto. *)
+(*   3:{  *)
+
+Lemma sem_wt_loc_implies_wt_bytes: forall m fp b ofs bytes
+    (LOAD: Mem.loadbytes m b ofs (sizeof_footprint fp) = Some bytes)
     (* (COMP: complete_type ce ty = true) *)
-    (WT: sem_wt_loc m fp b ofs ty),
-    sem_wt_bytes m fp bytes ty.
+    (WT: sem_wt_loc m fp b ofs),
+    sem_wt_bytes m fp bytes.
 Proof.
   induction fp using strong_footprint_ind; intros.
+  - inv WT. 
   - inv WT. econstructor. eauto.
     exploit Mem.load_loadbytes; eauto.
-    intros (bytes1 & LOAD1 & EQ). 
-    assert (SZEQ: size_chunk chunk = sizeof ce ty).
-    { eapply sizeof_by_value. auto. }
-    rewrite <- SZEQ in LOAD.
-    rewrite LOAD in LOAD1. inv LOAD1.
-    auto.
-  - inv WT. econstructor. eauto.
+    intros (bytes1 & LOAD1 & EQ). subst.
+    inv WT0.
+    + simpl in MODE; inv MODE. simpl in *.
+      rewrite LOAD in LOAD1. inv LOAD1.
+      rewrite <- H. econstructor.
+    + assert (SZEQ: size_chunk chunk = sizeof_footprint (fp_scalar (Tint sz si))).
+      { simpl. destruct sz; destruct si; simpl in MODE; inv MODE; simpl; auto. }
+      rewrite <- SZEQ in LOAD.
+      rewrite LOAD in LOAD1. inv LOAD1.
+      rewrite <- H0. econstructor. auto.
+    + assert (SZEQ: size_chunk chunk = sizeof_footprint (fp_scalar (Tfloat sz))).
+      { simpl. destruct sz;  simpl in MODE; inv MODE; simpl; auto. }
+      rewrite <- SZEQ in LOAD.
+      rewrite LOAD in LOAD1. inv LOAD1.
+      rewrite <- H. econstructor.
+    + assert (SZEQ: size_chunk chunk = sizeof_footprint (fp_scalar (Tlong si))).
+      { simpl. destruct si;  simpl in MODE; inv MODE; simpl; auto. }
+      rewrite <- SZEQ in LOAD.
+      rewrite LOAD in LOAD1. inv LOAD1.
+      rewrite <- H. econstructor.
+  - inv WT. inv WT0.
     exploit Mem.load_loadbytes; eauto.
-    intros (bytes1 & LOAD1 & EQ). 
-    assert (SZEQ: size_chunk chunk = sizeof ce ty).
-    { eapply sizeof_by_value. auto. }
+    intros (bytes1 & LOAD1 & EQ).
+    assert (SZEQ: size_chunk Mptr = sizeof_footprint (fp_box b sz fp)).
+    { auto. }
     rewrite <- SZEQ in LOAD.
     rewrite LOAD in LOAD1. inv LOAD1.
-    auto.
-  - inv WT. inv WT0; simpl in *; try congruence.
-    eapply sem_wt_bytes_struct. intros until ffp.
+    econstructor. 
+    rewrite <- EQ. econstructor; eauto.
+  - inv WT. econstructor. intros until ffp.
     intros FIND.
     exploit FWT; eauto. intros WTLOC.
-    exploit loadbytes_interval; eauto. instantiate (1 := (sizeof ce fty)).
-    instantiate (1 := fofs).
+    exploit loadbytes_interval; eauto.
+    instantiate (1 := sizeof_footprint ffp). instantiate (1 := fofs).
     (** in_range proof: we need wt_footprint but how to perform induction? !!! *)
     admit.
     intros LOAD1.
-    exploit find_fields_some; eauto. intros (A & B). subst.
+    exploit find_fields_some; eauto. intros (A & B).
     (* use I.H. *)
     exploit H; eauto. 
-  - inv WT. inv WT0; simpl in *; try congruence.
-    eapply sem_wt_bytes_enum.
+  - inv WT. 
+    eapply sem_wt_bytes_enum. simpl in LOAD.
     (** TODO: wt_footprint should state that the fofs is larger than 4
     and sizeof enum is larger than fofs *)
-    assert (LEN: exists fsz n, sizeof ce (Tvariant orgs id) = 4 + n + fsz /\ 4 + n = ofs /\ fsz >= 0 /\ n >= 0).
+    assert (LEN: exists fsz n, sz = 4 + n + fsz /\ 4 + n = ofs /\ fsz >= 0 /\ n >= 0).
     { admit. }
     destruct LEN as (fsz & n & A & B & C & D). subst.
-    rewrite A in LOAD.    
     exploit Mem.loadbytes_split. eauto. lia. lia.
     intros (byte1 & byte2 & E & F & G). subst.
     replace (Z.to_nat (size_chunk Mint32)) with 4%nat.
@@ -2030,7 +2060,7 @@ Admitted.
 Lemma sem_wt_bytes_implies_wt_loc: forall m fp b ofs bytes ty
     (LOAD: Mem.loadbytes m b ofs (sizeof ce ty) = Some bytes)
     (ALIGN: (alignof ce ty | ofs))
-    (WT: sem_wt_bytes m fp bytes ty),
+    (WT: sem_wt_bytes m fp bytes),
     sem_wt_loc m fp b ofs ty.
 Proof.
   induction fp using strong_footprint_ind; intros.
