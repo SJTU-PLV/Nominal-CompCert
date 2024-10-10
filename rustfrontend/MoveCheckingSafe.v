@@ -727,15 +727,24 @@ Lemma get_set_footprint_map: forall phl id fp fp1 fpm1 fpm2 b ofs le,
     get_loc_footprint_map le (id, phl) fpm2 = Some (b, ofs, fp).
 Admitted.
 
+Lemma get_set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 le,
+    get_loc_footprint_map le (id, phl1) fpm1 = Some (b1, ofs1, fp1) ->
+    set_footprint_map (id, phl1++phl2) fp2 fpm1 = Some fpm2 ->
+    exists fp3,
+      get_loc_footprint_map le (id, phl1) fpm2 = Some (b1, ofs1, fp3)
+      /\ set_footprint phl2 fp2 fp1 = Some fp3.
+Admitted.
+
+
 
 (** IMPORTANT TODO: how to perform induction???  *)
-Lemma set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 le,
-    get_loc_footprint_map le (id, phl1++phl2) fpm1 = Some (b1, ofs1, fp1) ->
-    set_footprint_map (id, phl1++phl2) fp2 fpm1 = Some fpm2 ->
-    exists b2 ofs2 fp3 fp4,
-      get_loc_footprint_map le (id, phl1) fpm1 = Some (b2, ofs2, fp3)
-      /\ get_loc_footprint_map le (id, phl1) fpm2 = Some (b2, ofs2, fp4)
-      /\ set_footprint phl2 fp2 fp3 = Some fp4.
+(* Lemma get_set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 le, *)
+(*     get_loc_footprint_map le (id, phl1++phl2) fpm1 = Some (b1, ofs1, fp1) -> *)
+(*     set_footprint_map (id, phl1++phl2) fp2 fpm1 = Some fpm2 -> *)
+(*     exists b2 ofs2 fp3 fp4, *)
+(*       get_loc_footprint_map le (id, phl1) fpm1 = Some (b2, ofs2, fp3) *)
+(*       /\ get_loc_footprint_map le (id, phl1) fpm2 = Some (b2, ofs2, fp4) *)
+(*       /\ set_footprint phl2 fp2 fp3 = Some fp4. *)
 (* Proof. *)
 (*   induction phl1; intros. *)
 (*   - (* rewrite app_nil_r in *. exists b1, ofs1, fp1, fp2. *) *)
@@ -757,7 +766,7 @@ Lemma set_footprint_map_app_inv: forall phl2 phl1 id fpm1 fpm2 fp1 fp2 b1 ofs1 l
     
 (*     exploit get_loc_footprint_map_app_inv. eapply A. *)
 (*     intros (b4 & ofs4 & fp6 & F & G). rewrite  *)
-Admitted.
+(* Admitted. *)
 
 Lemma get_set_disjoint_paths : forall phl1 phl2 id e fpm1 fpm2 fp,
     paths_disjoint phl1 phl2 ->
@@ -926,6 +935,14 @@ Proof.
   auto.
 Qed.
 
+(** IMPRTANT TODO: use this lemma to prove eval_place_sound. Think
+about the field type in wt_footprint is correct or not? *)
+Lemma get_loc_footprint_map_wt: forall p fpm e b ofs fp,
+    wf_env fpm ce e ->
+    get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
+    exists ce', wt_footprint ce ce' (typeof_place p) fp
+           /\ ce_extends ce' ce.
+Admitted.
 
 (* The footprint contained in the location of a place *)
 Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
@@ -1691,9 +1708,11 @@ Proof.
       destruct (path_of_place p0) eqn: POP2. simpl.
       intros (A & (phl & B)). subst.
       (** set_footprint_map_app_inv is important TODO  *)
-      exploit set_footprint_map_app_inv. eapply GET1. eauto.
-      intros (b2 & ofs2 & fp3 & fp4 & A & B & C).
-      rewrite PFP in B. inv B.
+      exploit get_loc_footprint_map_app_inv. eapply GET1.
+      intros (b2 & ofs2 & fp3 & A & B).
+      exploit get_set_footprint_map_app_inv. eapply A. eauto.
+      intros (fp4 & C & D).
+      rewrite PFP in C. inv C.
       (* use mmatch *)
       exploit MM. erewrite POP2. eauto.
       eapply move_place_init_is_init. eauto.
@@ -2170,6 +2189,53 @@ Proof.
   - inv H. econstructor; eauto.
 Qed.
 
+Lemma assign_loc_unchanged_on: forall ce ty m1 m2 b ofs v,
+    assign_loc ce ty m1 b ofs v m2 ->
+    Mem.unchanged_on (fun b1 ofs1 => ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)) m1 m2.
+Admitted.
+
+Lemma bmatch_unchanged_on: forall fp m1 m2 b ofs,
+    bmatch m1 b ofs fp ->
+    Mem.unchanged_on (fun b1 _ => b1 = b) m1 m2 ->
+    bmatch m2 b ofs fp.
+Admitted.
+
+
+Lemma set_wt_loc_set_subpath_wt_val: forall fp1 fp2 vfp m1 m2 b ofs b1 ofs1 ty phl pfp,
+    sem_wt_loc m1 fp1 b ofs ->
+    (* only changes the location which is updated with vfp *)
+    Mem.unchanged_on (fun b2 ofs2 => ~ (b2 = b1 /\ (ofs1 <= ofs2 < ofs1 + sizeof ce ty))) m1 m2 ->
+    sem_wt_loc m2 vfp b1 ofs1 ->
+    get_loc_footprint phl fp1 b ofs = Some (b1, ofs1, pfp) ->
+    set_footprint phl vfp fp1 = Some fp2 ->
+    sem_wt_loc m2 fp2 b ofs.
+Admitted.
+
+Lemma get_loc_footprint_map_different_local: forall id1 id2 phl1 phl2 fpm e b1 b2 ofs1 ofs2 fp1 fp2,
+    list_norepet (flat_fp_map fpm) ->
+    id1 <> id2 ->
+    get_loc_footprint_map e (id1, phl1) fpm = Some (b1, ofs1, fp1) ->
+    get_loc_footprint_map e (id2, phl2) fpm = Some (b2, ofs2, fp2) ->
+    b1 <> b2 /\ ~ In b1 (footprint_flat fp2) /\ ~ In b2 (footprint_flat fp1).
+Admitted.
+
+(** MAYBE WRONG!!! IMPORTANT TODO: some properties of wt_footprint  *)
+Lemma get_loc_footprint_map_disjoint_paths: forall id phl1 phl2 fpm e b1 b2 ofs1 ofs2 fp1 fp2 ty1 ty2,
+    list_norepet (flat_fp_map fpm) ->
+    wf_env fpm ce e ->
+    paths_disjoint phl1 phl2 ->
+    get_loc_footprint_map e (id, phl1) fpm = Some (b1, ofs1, fp1) ->
+    get_loc_footprint_map e (id, phl2) fpm = Some (b2, ofs2, fp2) ->
+    wt_footprint ce ce ty1 fp1 ->
+    wt_footprint ce ce ty2 fp2 ->
+    b1 <> b2 \/ ofs2 + sizeof ce ty2 < ofs1 \/ ofs1 + sizeof ce ty1 < ofs2.
+Admitted.
+
+
+Lemma init_place_full_unchanged: forall own p p1,
+    is_full (own_universe own) p = is_full (own_universe (init_place own p1)) p.
+Admitted.
+
 (** Important Lemma: we need to say that the footprint inside a struct
 is also disjoint !!! *)
 (* Consider assign to a variant? *)
@@ -2178,6 +2244,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (TY: ty = typeof_place p)
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val m1 vfp v)
+    (WFENV: wf_env fpm1 ce e)
     (WTFP: wt_footprint ce ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
@@ -2190,13 +2257,19 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (DIS: list_disjoint (footprint_flat vfp) (flat_fp_map fpm1)),
   exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
           /\ mmatch fpm2 m2 e own2
-          /\ list_norepet (flat_fp_map fpm2).
+          /\ list_norepet (flat_fp_map fpm2)
+          /\ wf_env fpm2 ce e.
 Proof.
   intros. destruct (path_of_place p) eqn: POP.
   exploit get_set_footprint_map_exists; eauto.
   instantiate (1 := vfp).
   intros (fpm2 & A & B). exists fpm2. split. auto.
-  split.
+  assert (NOREP2: list_norepet (flat_fp_map fpm2)).
+  { admit. }
+  (* set wt_footprint remains wf_env *)
+  assert (WFENV2: wf_env fpm2 ce e).
+  { admit. }  
+  repeat apply conj; auto.
   (* mmatch *)
   - red. intros until fp.
     intros GFP INIT.
@@ -2221,8 +2294,83 @@ Proof.
       (* sem_wt_loc implies bmatch *)
       exploit sem_wt_loc_implies_bmatch; eauto.
     (* p0 is not children of p1 *)
-    + 
-      
+    + assert (INIT1: is_init own1 p0 = true).
+      { admit. }
+      destruct (is_prefix p0 p) eqn: PRE1.
+      (* if p0 is prefix of p, so we need to prove that intializing
+      the non-shallow childre of p0 does not affect its bmatch *)
+      * exploit is_prefix_paths_app; eauto.
+        destruct (path_of_place p0) eqn: POP2.
+        rewrite POP. simpl. intros (? & (phl & P1)). subst.
+        exploit get_loc_footprint_map_app_inv. eapply PFP.
+        intros (b2 & ofs2 & fp3 & A1 & A2). 
+        exploit get_set_footprint_map_app_inv. eapply A1. eauto.
+        intros (fp4 & G1 & G2).
+        rewrite GFP in G1. inv G1.
+        exploit MM. erewrite POP2. eauto. eauto.
+        intros (BM1 & FULL1).        
+        (** TODO: properties of universe: show that phl is not shallow
+        prefix paths *)
+        assert (NOT_SHALLOW: is_shallow_prefix p0 p = false) by admit.
+        assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl) by admit.
+        exploit bmatch_set_not_shallow_paths; eauto. intros BM2. split.
+        (* use bmatch_unchanged_on but we only need to show that b is
+        not equal to b2 *)
+        (** 1. Use PFP, G1, norepet of fpm1 and phl is not shallow
+        prefix paths to prove that b is not equal to b2; *)
+        eapply bmatch_unchanged_on. eauto.
+        admit.
+        (* full -> sem_wt_loc *)
+        intros FULL2.
+        exploit assign_loc_sem_wt; eauto.
+        (* b is not in vfp *) admit.
+        intros WTLOC.
+        assert (FULL3: is_full (own_universe own1) p0 = true).
+        { erewrite init_place_full_unchanged. eauto. }
+        exploit FULL1. auto.
+        intros WTLOC1.
+        eapply set_wt_loc_set_subpath_wt_val; eauto.
+        instantiate (1 := (typeof_place p)).
+        eapply assign_loc_unchanged_on. eauto.
+      (* p0 is not a prefix of p, so p0 and p are disjoint place *)
+      * exploit is_not_prefix_disjoint; eauto.
+        destruct (path_of_place p0) eqn: POP2. rewrite POP. simpl.
+        destruct (ident_eq i0 i); subst.
+        intros [P1|P2]; try congruence.
+        (** DIFFICULT: two locals are equal but their paths are disjoint *)
+        -- exploit get_loc_footprint_map_wt. eauto. erewrite POP2. eauto.
+           intros (ce' & W1 & W2).
+           exploit wt_footprint_extend_ce; eauto. intros WT3.
+        (** MAYBE WRONG!! IMPORTANT TODO: disjoint path implies disjoint
+             location?? (not just block disjointness) *)
+           exploit get_loc_footprint_map_disjoint_paths; eauto.
+           admit.
+          
+        -- exploit get_loc_footprint_map_different_local. eauto. 
+           2: eapply B. eauto. eauto. intros (N1 & N2 & N3).
+           intros. clear H.
+           erewrite <- get_set_different_local in GFP; eauto. 
+           exploit MM. erewrite POP2. eauto. auto.           
+           intros (BM1 & FULL1).           
+           assert (UNC: Mem.unchanged_on (fun b2 _ => b2 <> b) m1 m2).
+           { eapply Mem.unchanged_on_implies. eapply assign_loc_unchanged_on; eauto.
+             intros. simpl. subst. intro. destruct H1. congruence. } 
+           split.
+           eapply bmatch_unchanged_on. eauto.
+           eapply Mem.unchanged_on_implies. eauto. simpl. intros. subst. auto.
+           intros FULL2.
+           subst.
+           erewrite <- init_place_full_unchanged in FULL2.
+           exploit FULL1; eauto. intros WTLOC2.
+           eapply sem_wt_loc_unchanged. eauto.
+           eapply Mem.unchanged_on_implies. eauto. intros. simpl.
+           destruct H; auto.
+           (* b1 is in the fp: show that b must not be in the fp *)
+           intro. subst. congruence.
+           congruence.
+Admitted.
+
+        
 Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
 | member_footprint_struct: forall fofs fid fty
     (STRUCT: co.(co_sv) = Struct)
