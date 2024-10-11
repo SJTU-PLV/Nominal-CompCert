@@ -402,7 +402,7 @@ Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
     wt_footprint ce1 ty (fp_scalar ty)
 | wt_fp_struct: forall orgs id fpl ce1 co
     (CO: ce1 ! id = Some co)
-    (** TODO: combine WT1 and WT2 elegantly  *)
+    (** TODO: combine WT1 and WT2 elegantly *)
     (WT1: forall fid fty fofs,
         field_type fid co.(co_members) = OK fty ->
         field_offset ce fid co.(co_members) = OK fofs ->
@@ -495,6 +495,12 @@ Inductive paths_disjoint : list path -> list path -> Prop :=
 | phs_disjoint2: forall p l1 l2,
     paths_disjoint l1 l2 ->
     paths_disjoint (p::l1) (p::l2).
+
+Lemma paths_disjoint_sym: forall phl1 phl2,
+    paths_disjoint phl1 phl2 ->
+    paths_disjoint phl2 phl1.
+Admitted.
+
 
 Lemma local_of_paths_of_place: forall p,
     local_of_place p = fst (path_of_place p).
@@ -937,13 +943,24 @@ Qed.
 
 (** IMPRTANT TODO: use this lemma to prove eval_place_sound. Think
 about the field type in wt_footprint is correct or not? *)
-Lemma get_loc_footprint_map_wt: forall p fpm e b ofs fp,
+Lemma get_wt_place_footprint_wt: forall p fpm e b ofs fp,
     wf_env fpm ce e ->
+    wt_place e ce p ->
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     exists ce', wt_footprint ce ce' (typeof_place p) fp
            /\ ce_extends ce' ce.
+Proof.
+  (* induction p; intros until fp; intros WF GET. *)
+  (* - simpl in GET. destruct (e!i) eqn: A; try congruence. *)
+  (*   repeat destruct p. *)
+  (*   destruct (fpm!i) eqn: B; try congruence. *)
+  (*   inv GET. exists ce. split. *)
+  (*   simpl. exploit wf_env_footprint; eauto. *)
+  (*   intros (fp1 & C & D). rewrite B in C. inv C. *)
 Admitted.
 
+    
+    
 (* The footprint contained in the location of a place *)
 Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (EVAL: eval_place ce e m p b ofs)
@@ -1931,7 +1948,7 @@ Proof.
 Admitted.
 
 (** IMPORTANT TODO: what if b is changed? *)
-Lemma sem_wt_loc_unchanged: forall fp m1 m2 b ofs
+Lemma sem_wt_loc_unchanged_blocks: forall fp m1 m2 b ofs
     (WT: sem_wt_loc m1 fp b ofs)
     (UNC: Mem.unchanged_on (fun b1 _ => In b1 (footprint_flat fp) \/ b1 = b) m1 m2),
       sem_wt_loc m2 fp b ofs.
@@ -1969,6 +1986,15 @@ Proof.
     simpl. auto.
     eapply IHfp; eauto.
 Qed.
+
+(* A more general lemma of sem_wt_loc_unchanged_blocks but it require
+wt_footprint premise: may be we can combine them into a single lemma?*)
+Lemma sem_wt_loc_unchanged_loc: forall fp m1 m2 b ofs ty
+    (WT: sem_wt_loc m1 fp b ofs)
+    (WTFP: wt_footprint ce ce ty fp)
+    (UNC: Mem.unchanged_on (fun b1 ofs1 => In b1 (footprint_flat fp) \/ (b1 = b /\ ofs <= ofs1 < ofs + sizeof ce ty)) m1 m2),
+      sem_wt_loc m2 fp b ofs.
+Admitted.
 
     
 Definition list_interval {A: Type} (l: list A) (lo: Z) (sz: Z) :=
@@ -2013,7 +2039,7 @@ Proof.
     rewrite LOAD1 in LOAD. inv LOAD.    
     econstructor; eauto.
     rewrite H0. econstructor.
-    eapply sem_wt_loc_unchanged; eauto.
+    eapply sem_wt_loc_unchanged_blocks; eauto.
     eapply Mem.unchanged_on_implies; eauto.
     intros. simpl. destruct H; auto.
     red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
@@ -2111,7 +2137,7 @@ Proof.
     inv H.
     econstructor. 
     eapply Mem.load_store_same. eauto.
-    exploit sem_wt_loc_unchanged; eauto.
+    exploit sem_wt_loc_unchanged_blocks; eauto.
     eapply Mem.unchanged_on_implies; eauto. intros. simpl.
     destruct H.
     intro. apply IN2. subst. auto.
@@ -2194,12 +2220,19 @@ Lemma assign_loc_unchanged_on: forall ce ty m1 m2 b ofs v,
     Mem.unchanged_on (fun b1 ofs1 => ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)) m1 m2.
 Admitted.
 
-Lemma bmatch_unchanged_on: forall fp m1 m2 b ofs,
+Lemma bmatch_unchanged_on_block: forall fp m1 m2 b ofs,
     bmatch m1 b ofs fp ->
     Mem.unchanged_on (fun b1 _ => b1 = b) m1 m2 ->
     bmatch m2 b ofs fp.
 Admitted.
 
+Lemma bmatch_unchanged_on_loc: forall fp m1 m2 b ofs ty,
+    bmatch m1 b ofs fp ->
+    wt_footprint ce ce ty fp ->
+    Mem.unchanged_on (fun b1 ofs1 => (b1 = b /\ (ofs <= ofs1 < ofs + sizeof ce ty))) m1 m2 ->
+    bmatch m2 b ofs fp.
+Admitted.
+ 
 
 Lemma set_wt_loc_set_subpath_wt_val: forall fp1 fp2 vfp m1 m2 b ofs b1 ofs1 ty phl pfp,
     sem_wt_loc m1 fp1 b ofs ->
@@ -2219,19 +2252,49 @@ Lemma get_loc_footprint_map_different_local: forall id1 id2 phl1 phl2 fpm e b1 b
     b1 <> b2 /\ ~ In b1 (footprint_flat fp2) /\ ~ In b2 (footprint_flat fp1).
 Admitted.
 
-(** MAYBE WRONG!!! IMPORTANT TODO: some properties of wt_footprint  *)
-Lemma get_loc_footprint_map_disjoint_paths: forall id phl1 phl2 fpm e b1 b2 ofs1 ofs2 fp1 fp2 ty1 ty2,
-    list_norepet (flat_fp_map fpm) ->
-    wf_env fpm ce e ->
-    paths_disjoint phl1 phl2 ->
-    get_loc_footprint_map e (id, phl1) fpm = Some (b1, ofs1, fp1) ->
-    get_loc_footprint_map e (id, phl2) fpm = Some (b2, ofs2, fp2) ->
-    wt_footprint ce ce ty1 fp1 ->
-    wt_footprint ce ce ty2 fp2 ->
-    b1 <> b2 \/ ofs2 + sizeof ce ty2 < ofs1 \/ ofs1 + sizeof ce ty1 < ofs2.
+(** IMPORTANT TODO  *)
+Lemma get_wt_footprint_exists_wt: forall phl fp b ofs b1 ofs1 fp1 ty,
+    wt_footprint ce ce ty fp ->
+    get_loc_footprint phl fp b ofs = Some (b1, ofs1, fp1) ->
+    exists ty1 ce', wt_footprint ce ce' ty1 fp1
+               /\ ce_extends ce' ce.
 Admitted.
 
 
+(** MAYBE WRONG!!! IMPORTANT TODO: some properties of wt_footprint  *)
+Lemma get_loc_footprint_map_disjoint_paths: forall fp b ofs phl1 phl2 b1 b2 ofs1 ofs2 fp1 fp2 ty ty1 ty2,
+    list_norepet (footprint_flat fp) ->
+    wt_footprint ce ce ty fp ->
+    wt_footprint ce ce ty1 fp1 ->
+    wt_footprint ce ce ty2 fp2 ->
+    paths_disjoint phl1 phl2 ->
+    get_loc_footprint phl1 fp b ofs = Some (b1, ofs1, fp1) ->
+    get_loc_footprint phl2 fp b ofs = Some (b2, ofs2, fp2) ->
+    (* footprint locations are disjoint *)
+    (b1 <> b2 \/ ofs2 + sizeof ce ty2 < ofs1 \/ ofs1 + sizeof ce ty1 < ofs2)
+    (* location and footprint are disjoint *)
+    /\ (~ In b1 (footprint_flat fp2))
+    /\ (~ In b2 (footprint_flat fp1))
+    /\ list_disjoint (footprint_flat fp1) (footprint_flat fp2).
+Admitted.
+
+
+Lemma norepet_flat_fp_map_element: forall fpm id fp,
+    fpm ! id = Some fp ->
+    list_norepet (flat_fp_map fpm) ->
+    list_norepet (footprint_flat fp).
+Proof.
+  intros. eapply PTree.elements_remove in H.
+  destruct H as (l1 & L2 & A & B).
+  unfold flat_fp_map in H0.
+  rewrite A in H0.
+  erewrite map_app in H0. erewrite concat_app in H0.
+  eapply list_norepet_app in H0. destruct H0 as (C & D & E).
+  simpl in D. eapply list_norepet_app in D. destruct D.
+  auto.
+Qed.
+
+  
 Lemma init_place_full_unchanged: forall own p p1,
     is_full (own_universe own) p = is_full (own_universe (init_place own p1)) p.
 Admitted.
@@ -2251,8 +2314,6 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (* ownership transfer *)
     (CKAS: own_transfer_assign own1 p = own2)
     (WTP: wt_place (env_to_tenv e) ce p)
-    (* type of place is not enum *)
-    (NOTENUM: forall orgs id, typeof_place p <> Tvariant orgs id)
     (NOREP: list_norepet (flat_fp_map fpm1))
     (DIS: list_disjoint (footprint_flat vfp) (flat_fp_map fpm1)),
   exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
@@ -2268,7 +2329,9 @@ Proof.
   { admit. }
   (* set wt_footprint remains wf_env *)
   assert (WFENV2: wf_env fpm2 ce e).
-  { admit. }  
+  {  (**  how to show that set a wt footprint remains wt: use the fact
+  that p is well-typed?? *)
+    admit. }  
   repeat apply conj; auto.
   (* mmatch *)
   - red. intros until fp.
@@ -2287,7 +2350,8 @@ Proof.
       (* prove that assign_loc assigns a sem_wt_val then the location
       is sem_wt_loc *)
       exploit assign_loc_sem_wt; eauto. 
-      (** TODO: b1 is not in fp1  *) admit.
+      (** TODO: b1 is not in fp1. Use B to show that location and its
+      footprint are disjoint *) admit.
       intros WTLOC.
       exploit sem_wt_subpath; eauto.
       intros WTLOC1.
@@ -2318,7 +2382,7 @@ Proof.
         not equal to b2 *)
         (** 1. Use PFP, G1, norepet of fpm1 and phl is not shallow
         prefix paths to prove that b is not equal to b2; *)
-        eapply bmatch_unchanged_on. eauto.
+        eapply bmatch_unchanged_on_block. eauto.
         admit.
         (* full -> sem_wt_loc *)
         intros FULL2.
@@ -2338,14 +2402,84 @@ Proof.
         destruct (ident_eq i0 i); subst.
         intros [P1|P2]; try congruence.
         (** DIFFICULT: two locals are equal but their paths are disjoint *)
-        -- exploit get_loc_footprint_map_wt. eauto. erewrite POP2. eauto.
-           intros (ce' & W1 & W2).
-           exploit wt_footprint_extend_ce; eauto. intros WT3.
-        (** MAYBE WRONG!! IMPORTANT TODO: disjoint path implies disjoint
-             location?? (not just block disjointness) *)
-           exploit get_loc_footprint_map_disjoint_paths; eauto.
-           admit.
-          
+        --   (** How to know p0 is well-typed or not? *)
+          exploit assign_loc_unchanged_on; eauto. intros UNC.
+          erewrite <- get_set_disjoint_paths in GFP; eauto.
+          (* bmatch m1 b0 ofs0 fp *)
+          exploit MM. erewrite POP2. eauto. auto.
+          intros (BM0 & FULL0).
+          (* pfp is well-typed *)
+          exploit get_wt_place_footprint_wt. eapply WFENV. eauto.
+          erewrite POP. eauto. intros (ce' & WTPFP & EXT).
+          (** prove that (b, ofs) and (b0, ofs0) are disjoint *)
+          unfold get_loc_footprint_map in PFP, GFP.
+          destruct (e!i) eqn: E1; try congruence. destruct p1.
+          destruct (fpm1 ! i) eqn: E2; try congruence.
+          (* prove fp is wt_footprint *)
+          exploit wf_env_footprint. eapply WFENV. eauto. intros (fp1 & E3 & E4).
+          rewrite E2 in E3. inv E3.          
+          exploit get_wt_footprint_exists_wt.
+          eapply wt_footprint_extend_ce; eauto. red. auto. eauto.
+          intros (ty1 & ce'' & E5 & E6).
+          exploit get_loc_footprint_map_disjoint_paths.
+          instantiate (1 := fp1). eapply norepet_flat_fp_map_element; eauto.
+          5: eapply PFP. 5: eapply GFP.
+          1-3: eapply wt_footprint_extend_ce; eauto. red. auto.
+          eapply paths_disjoint_sym; eauto.
+          2: { eapply paths_disjoint_sym. auto. }
+          (** Two cases *)
+          destruct (eq_block b b0). subst.
+          (* Case1: b = b0 *)
+          ++ intros ([C1|[C2|C3]] & I1 & I2 & I3); try congruence.
+             ** split.
+                eapply bmatch_unchanged_on_loc; eauto.
+                eapply wt_footprint_extend_ce; eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. simpl. extlia.
+                intros. exploit FULL0.
+                erewrite init_place_full_unchanged. eauto.
+                intros WTLOC.
+                eapply sem_wt_loc_unchanged_loc. eauto.
+                eapply wt_footprint_extend_ce; eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. simpl.
+                destruct H0.
+                (** prove b must be not in fp *)
+                intro. destruct H2. subst.
+                congruence.
+                lia.
+             (* The same as above *)
+             ** split.
+                eapply bmatch_unchanged_on_loc; eauto.
+                eapply wt_footprint_extend_ce; eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. simpl. extlia.
+                intros. exploit FULL0.
+                erewrite init_place_full_unchanged. eauto.
+                intros WTLOC.
+                eapply sem_wt_loc_unchanged_loc. eauto.
+                eapply wt_footprint_extend_ce; eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. simpl.
+                destruct H0.
+                (** prove b must be not in fp *)
+                intro. destruct H2. subst.
+                congruence.
+                lia.                
+          (* Case2: b <> b0 *)
+          ++ intros (N & I1 & I2 & I3). clear N. split.
+             ** eapply bmatch_unchanged_on_block. eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. subst. intro. destruct H. congruence.
+             ** intros. exploit FULL0.
+                erewrite init_place_full_unchanged. eauto.
+                intros WTLOC.
+                eapply sem_wt_loc_unchanged_blocks. eauto.
+                eapply Mem.unchanged_on_implies. eauto.
+                intros. simpl. intro. destruct H2. subst.
+                destruct H0; try congruence.
+                (** prove b must be not in fp: use the fact that
+                "disjoint locations have disjoint footprints" *)                
         -- exploit get_loc_footprint_map_different_local. eauto. 
            2: eapply B. eauto. eauto. intros (N1 & N2 & N3).
            intros. clear H.
@@ -2356,13 +2490,13 @@ Proof.
            { eapply Mem.unchanged_on_implies. eapply assign_loc_unchanged_on; eauto.
              intros. simpl. subst. intro. destruct H1. congruence. } 
            split.
-           eapply bmatch_unchanged_on. eauto.
+           eapply bmatch_unchanged_on_block. eauto.
            eapply Mem.unchanged_on_implies. eauto. simpl. intros. subst. auto.
            intros FULL2.
            subst.
            erewrite <- init_place_full_unchanged in FULL2.
            exploit FULL1; eauto. intros WTLOC2.
-           eapply sem_wt_loc_unchanged. eauto.
+           eapply sem_wt_loc_unchanged_blocks. eauto.
            eapply Mem.unchanged_on_implies. eauto. intros. simpl.
            destruct H; auto.
            (* b1 is in the fp: show that b must not be in the fp *)
