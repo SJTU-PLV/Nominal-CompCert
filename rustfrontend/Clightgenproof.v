@@ -1097,12 +1097,12 @@ Proof.
       destruct ty; simpl in *; eauto. 
       intros; eapply Mem.aligned_area_inject with (m := m); eauto. 
       apply Ctypes.alignof_blockcopy_1248. 
-      apply sizeof_alignof_blockcopy_compat.
+      apply Ctypes.sizeof_alignof_blockcopy_compat.
       rewrite EQSIZE. auto.  
       exploit alignof_blockcopy_1248. eauto. eauto. eapply H1. eauto. eauto. 
       intros; eapply Mem.aligned_area_inject with (m := m); eauto. 
       apply Ctypes.alignof_blockcopy_1248. 
-      apply sizeof_alignof_blockcopy_compat.
+      apply Ctypes.sizeof_alignof_blockcopy_compat.
       rewrite EQSIZE. auto.    
       exploit alignof_blockcopy_1248. eauto. eauto. eapply H2. eauto. eauto. 
       rewrite EQSIZE.   
