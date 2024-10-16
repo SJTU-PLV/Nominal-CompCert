@@ -1200,6 +1200,22 @@ Proof.
 + eapply IHfld; eauto.
 Qed.
 
+Lemma field_offset_no_overlap_simplified:
+  forall env id1 ofs1 ty1 id2 ofs2 ty2 fld,
+  field_offset env id1 fld = OK ofs1 -> field_type id1 fld = OK ty1 ->
+  field_offset env id2 fld = OK ofs2 -> field_type id2 fld = OK ty2 ->
+  id1 <> id2 ->
+  ofs1 + sizeof env ty1 <= ofs2
+  \/ ofs2 + sizeof env ty2 <= ofs1.
+Proof.
+  intros. exploit field_offset_no_overlap.
+  eapply H. eapply H0.
+  eapply H1. eapply H2.
+  auto. unfold layout_start. simpl.
+  rewrite ! Z.add_0_r. unfold bitsizeof.
+  lia.
+Qed.
+  
 (** Third, if a struct is a prefix of another, the offsets of common fields
     are the same. *)
 
