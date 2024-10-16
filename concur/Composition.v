@@ -290,34 +290,144 @@ Proof.
 Admitted.
 
 Require Import CallConv.
-(*
-Lemma cctrans_ext_compose : cctrans (c_ext @ c_ext) c_ext.
-Proof.
-  constructor.
-  econstructor.
-  - red. intros [mx my Hm] se1 se2 q1 q2 Hse Hq. inv Hse. inv Hq. inv H1. clear Hm1 Hm2.
-    uncklr.
-    exists (se2, (extw m1 m1 (Mem.extends_refl m1), extw m1 m2 Hm)). repeat apply conj; eauto.
-    + econstructor; eauto. constructor. constructor.
-    + exists (cq vf1 sg vargs1 m1). split. econstructor; uncklr; eauto.
-      eapply lessdef_list_refl. constructor.
-      econstructor; uncklr; eauto. constructor.
-    + simpl.
-      Inductive ext_compose_match : ext_world * ext_world -> ext_world -> Prop :=
-      |ext_compose_match_intro m1 m2 Hm11 Hm12,
-        ext_compose_match (extw m1 m2 Hm11, ext2 m1 ) ()
-                                                                            
-        ; 
-Admitted.
-*)
+Require Import InjpAccoComp.
+Inductive ro_injp_match : (unit * injp_world) * (unit * injp_world) -> (unit * injp_world) -> Prop :=
+|ro_injp_match_intro w1 w2 w3 a b c:
+  match_12_cctrans (w1, w2) w3 ->
+  ro_injp_match ((a, w1),(b,w2)) (c,w3).
+      
 Lemma cctrans_ro_injp_compose : cctrans ((ro @ c_injp) @ (ro @ c_injp)) (ro @ c_injp).
-Admitted.
+Proof.
+  constructor. econstructor. instantiate (1:= ro_injp_match).
+  - (*incoming construction*)
+    red. intros [se [[xse m] w2]]. intros. inv H. inv H0. inv H1. inv H2.
+    inv H. inv H2. inv H5. simpl in H2, H6. inv H. inv H7. clear Hm1 Hm2 Hm3.
+    inv H0. rename se into se1. rename m0 into m1. rename m3 into m2.
+    Compute  GS.ccworld ((ro @ c_injp) @ ro @ c_injp).
+    exists (se1, (se1, (row se1 m1, injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm)),(se1,(row se1 m1,injpw f m1 m2 Hm)))).
+    repeat apply conj; eauto.
+    + simpl. split. split. constructor. reflexivity. constructor; eauto. eapply match_stbls_dom; eauto.
+      split. econstructor. reflexivity. econstructor; eauto.
+    + exists (cq vf1 sg vargs1 m1). split.
+      exists (cq vf1 sg vargs1 m1). split.
+      econstructor; simpl; eauto. constructor. eauto.
+      econstructor; simpl; eauto.
+      eapply val_inject_dom; eauto.
+      eapply val_inject_list_dom; eauto.
+      exists (cq vf1 sg vargs1 m1). split.
+      econstructor; eauto. simpl. constructor. eauto.
+      econstructor; eauto. constructor.
+    + simpl. constructor. econstructor.
+      econstructor. rewrite meminj_dom_compose. reflexivity.
+      econstructor; eauto. intros. unfold meminj_dom in H0.
+      destruct (f b1) as [[? ?]|] eqn: Hf; inv H0. congruence.
+      intros. exists b2, ofs2. split. auto. unfold meminj_dom. rewrite H5.
+      replace (ofs2 - ofs2) with 0 by lia. reflexivity.
+    + intros r1 r3 wp1 wp2 wp1' Hmatch [[_ Hae1] [_ Hae2]] HACCI Hr. simpl in Hae1, Hae2.
+      destruct wp1' as [[wx11' wp11'] [wx12' wp12']]. simpl. simpl in *.
+      destruct wp1 as [[wx11 wp11] [wx12 wp12]]. simpl in *. destruct HACCI as [[_ HAci1] [_ HAci2]].
+      simpl in *. destruct wp11' as [j12 m1' m2' Hm1']. destruct wp12' as [j23 m2'_ m3' Hm2'].
+      destruct Hr as [r2 [[r1' [Hrx Hr1]] [r2' [Hry Hr2]]]].
+      inv Hrx. inv Hry. inv Hr1. inv Hr2. inv H7. inv H14. clear Hm1 Hm2 Hm3 Hm4 Hm5 Hm6.
+      rename m1'0 into m1'.
+      rename m2'0 into m2'. rename m2'1 into m3'.
+      exists (tt, injpw (compose_meminj j12 j23) m1' m3' (Mem.inject_compose _ _ _ _ _ Hm1' Hm2')).
+      repeat apply conj; eauto.
+      -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2.
+         econstructor; eauto.
+         econstructor; eauto.
+      -- inv Hmatch. inv H15. simpl. eapply injp_comp_acci; eauto. econstructor; eauto.
+      -- exists (cr vres1 m1'). split. constructor. eauto.
+        econstructor; simpl; eauto. eapply val_inject_compose; eauto.
+  - (* outgoing construction *)
+    red. intros wp1 wp2 w1 se1 se2 q1 q3 Hs Hq HACI Hmatch.
+    inv Hmatch. destruct w1 as [se [[xse [wx11 w11]] [xxse [wx12 w12]]]].
+    simpl in HACI. destruct HACI as [[_ ACI1] [_ ACI2]]. simpl in ACI1, ACI2.
+    (** Basiclly the same as old injp_comp (the hard part), plus a ACCI preservation *)
+    destruct w11 as [j12' m1' m2' Hm12'].
+    destruct w12 as [j23' m2'_ m3' Hm23'].
+    destruct Hs as [[Hsx Hs1] [Hsy Hs2]]. inv Hsx. inv Hsy. simpl in H0. destruct wx11. subst.
+    simpl in H1. destruct wx12. subst.
+    destruct Hq as [q2 [[q1' [Hqx Hq1]] [q2' [Hqy Hq2]]]]. inv Hqx. inv Hqy.
+    assert (m2'_ = m2').
+    { inv Hq1. inv Hq2. simpl in *. inv H4. inv H13.
+      reflexivity. }
+    subst m2'_.
+    exists (xse, (row xse m1', injpw (compose_meminj j12' j23')  m1' m3' (Mem.inject_compose _ _ _ _ _ Hm12' Hm23'))).
+    repeat apply conj; eauto.
+    + simpl. eauto.
+    + simpl. inv H; simpl in *.
+      eapply injp_comp_acci; eauto.
+      econstructor; eauto.
+    + econstructor; eauto. constructor. constructor.
+      inv Hs1. inv Hs2. econstructor; eauto.
+      eapply Genv.match_stbls_compose; eauto.
+    + inv Hq1. inv Hq2.
+      inv H4. inv H13. simpl in *. exists (cq vf1 sg vargs1 m1). split.
+      econstructor; eauto. constructor. inv H0. eauto.
+      econstructor; simpl; eauto. eapply val_inject_compose; eauto.
+      eapply CKLRAlgebra.val_inject_list_compose; eauto.
+    + (** The accessbility construction : use acco*)
+      intros r1 r3 [tt wp2'] [_ ACCO1] [r1' [Hr1 Hr2]]. simpl in ACCO1. inv Hr1. inv Hr2. simpl in H3,H4.
+      destruct wp2' as [j13'' m1'' m3'' Hm13'].
+      simpl in H3, H4. inv H. simpl in H6. (* inv H0. inv H1. inv Hq1. inv Hq2. *)
+      assert (Hhidden: external_mid_hidden (injpw j12' m1' m2' Hm12') (injpw j23' m2' m3' Hm23')).
+      destruct w0, w2.  inv H5.
+      exploit external_mid_hidden_acci; eauto. 
+      exploit injp_acce_outgoing_constr; eauto.
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
+      exists ((tt,injpw j12'' m1'' m2'' Hm12''),(tt,injpw j23'' m2'' m3'' Hm23'')).
+      repeat apply conj; simpl; eauto.
+      -- inv H4.
+         rename vres2 into vres3. exploit compose_meminj_midvalue; eauto.
+         intros [vres2 [RES1 RES2]]. 
+         exists (cr vres2 m2''). split.
+         exists (cr vres1 m1'0). split. econstructor; eauto. inv H2. constructor.
+         inv H0. inv Hq1. inv H12. eauto.
+         repeat econstructor; eauto.
+         exists (cr vres2 m2''). split. econstructor; eauto. constructor.
+         inv H1. inv Hq2. inv H12. inv ACCE1. econstructor; eauto.
+         destruct H19 as [_ [X _]]. auto.
+         econstructor; eauto. constructor.
+      -- simpl. econstructor. econstructor; eauto. constructor; eauto.
+Qed.
+
+
+Lemma cctrans_inv {I J: invariant li_c}: cctrans (I @ J) (J @ I).
+Proof.
+   constructor.
+  econstructor. instantiate (1:= eq).
+  - red. intros [xse [w1 w2]] se1 se q1 q2 [Hs1 Hs2] [q1' [Hq1 Hq2]].
+    inv Hs1. inv Hs2. inv Hq1. inv Hq2.
+    exists (se, (w2 , w1)). repeat apply conj; eauto.
+    + repeat constructor; eauto.
+    + repeat econstructor; eauto.
+    + intros. subst. exists (tt,tt). repeat apply conj; simpl; eauto.
+      destruct wp1' as [a b].
+      destruct H6 as [r' [Hr1 Hr2]]. inv Hr1. inv Hr2.
+      repeat econstructor; eauto.
+  - red. intros [wa wb]. intros wp2 [se [wa' wb']] se1 se2 q1 q2 [Hs1 Hs2] [q' [Hq1 Hq2]] [ACE1 ACE2] Hm.
+    subst wp2.
+    inv Hs1. inv Hs2. inv Hq1. inv Hq2.  simpl in ACE1, ACE2.
+    exists (se2, (wb', wa')). repeat apply conj; eauto.
+    + repeat constructor; eauto.
+    + repeat econstructor; eauto.
+    + intros. destruct wp2' as [wt wr]. exists (wt, wr).
+      repeat constructor; eauto.
+      destruct H4 as [r' [Hr1 Hr2]].
+      inv Hr1. inv Hr2.
+      repeat econstructor; eauto.
+Qed.
 
 Lemma cctrans_ro_wt_c : cctrans (ro @ wt_c) (wt_c @ ro).
-Admitted.
+Proof.
+  eapply cctrans_inv; eauto.
+Qed.        
 
 Lemma cctrans_wt_c_ro : cctrans (wt_c @ ro) (ro @ wt_c).
-Admitted.
+Proof.
+  eapply cctrans_inv; eauto.
+Qed.
 
 Lemma cctrans_lessdef_c_ext: cctrans c_ext (lessdef_c @ c_ext).
 Proof.
