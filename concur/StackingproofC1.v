@@ -53,7 +53,7 @@ Record cc_stacking_world_injp :=
     stk_w : injp_world;
     stk_sg : signature;
     stk_ls1 : Locmap.t;
-    stk_rs1 : regset;
+    stk_rs2 : regset;
     stk_sp2 : val;
     stk_m2 : mem;
     }.
@@ -1557,8 +1557,8 @@ Variable w : cc_stacking_world_injp.
 
 (** This is the memory assertion that captures the contents of the stack frames
   mentioned in the call stacks. *)
-Search regset.
-Definition parent_rs (s: list stackframe) : regset :=
+
+Definition parent_rs (s: list regset)  :=
   match s with
   | nil => Regmap.init Vundef
   | Stackbase sp ra :: s' => Regmap.init Vundef
