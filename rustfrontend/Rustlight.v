@@ -376,19 +376,46 @@ Qed.
 Lemma is_shallow_prefix_is_prefix: forall p1 p2,
     is_shallow_prefix p1 p2 = true ->
     is_prefix p1 p2 = true.
-Admitted.
+Proof.
+  intros. unfold is_shallow_prefix in H. unfold is_prefix.
+  unfold orb in H. destruct (place_eq p1 p2); simpl in *.
+  reflexivity.
+  induction p2; simpl in *; auto.
+  - destruct (place_eq p2 p1);simpl in *; auto.
+    destruct (in_dec place_eq p1 (shallow_parent_paths p2)).
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+  - destruct (place_eq p2 p1);simpl in *; auto.
+    destruct (in_dec place_eq p1 (shallow_parent_paths p2)).
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+  - destruct (place_eq p2 p1);simpl in *; auto.
+    destruct (in_dec place_eq p1 (shallow_parent_paths p2)).
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+    destruct (in_dec place_eq p1 (parent_paths p2)); simpl; auto.
+Qed.
 
 Lemma is_prefix_strict_trans_prefix: forall p1 p2 p3,
     is_prefix_strict p1 p2 = true ->
     is_prefix p2 p3 = true ->
     is_prefix_strict p1 p3 = true.
-Admitted.
-
+Proof.
+  intros. rewrite is_prefix_strict_iff in H. destruct H as [H1 H2].
+  destruct (place_eq p2 p3).
+  - subst. rewrite is_prefix_strict_iff. auto.
+  - assert(H3:is_prefix_strict p1 p2 = true). apply is_prefix_strict_iff.
+    auto.
+    assert(H4:is_prefix_strict p2 p3 = true). apply is_prefix_strict_iff.
+    auto.
+    apply is_prefix_strict_trans with p2. auto. auto.
+Qed.
 
 Lemma is_shallow_prefix_refl: forall p,
     is_shallow_prefix p p = true.
-Admitted.
-
+Proof.
+  intros. unfold is_shallow_prefix. unfold orb.
+  destruct (place_eq p p); simpl; auto.
+Qed.
 
 Lemma valid_owner_same_local: forall p,
     local_of_place (valid_owner p) = local_of_place p.

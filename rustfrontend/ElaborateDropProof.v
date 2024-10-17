@@ -719,8 +719,8 @@ Qed.
 Lemma dropm_preserved:
   genv_dropm tge = genv_dropm ge.
 Proof.
-  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSL as [_ EQ]. simpl in EQ.
-  unfold generate_dropm. simpl.
+  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSL as [_ EQ]. 
+  simpl in EQ. unfold generate_dropm. simpl in *. Search PTree_Properties.of_list.
 Admitted.
 
 
