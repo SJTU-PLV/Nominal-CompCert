@@ -304,7 +304,7 @@ Proof.
     red. intros [se [[xse m] w2]]. intros. inv H. inv H0. inv H1. inv H2.
     inv H. inv H2. inv H5. simpl in H2, H6. inv H. inv H7. clear Hm1 Hm2 Hm3.
     inv H0. rename se into se1. rename m0 into m1. rename m3 into m2.
-    Compute  GS.ccworld ((ro @ c_injp) @ ro @ c_injp).
+    (* Compute  GS.ccworld ((ro @ c_injp) @ ro @ c_injp). *)
     exists (se1, (se1, (row se1 m1, injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm)),(se1,(row se1 m1,injpw f m1 m2 Hm)))).
     repeat apply conj; eauto.
     + simpl. split. split. constructor. reflexivity. constructor; eauto. eapply match_stbls_dom; eauto.
@@ -520,6 +520,9 @@ Proof.
       econstructor; eauto. unfold res'. destruct vres2, (proj_sig_res sg0); auto.
 Qed.
 
+Lemma cctrans_injp_ext_ccstacking : cctrans (locset_injp @ locset_ext @ cc_stacking_injp) cc_stacking_injp.
+Admitted.
+
 Lemma cctrans_wt_loc_stacking : cctrans (wt_loc @ cc_stacking_injp) (cc_stacking_injp).
 Proof.
   constructor. econstructor. instantiate (1:= fun a b => snd a = b).
@@ -644,6 +647,24 @@ Proof.
   rewrite cc_compose_assoc_2.
   rewrite (cc_compose_assoc_1 c_ext).
   rewrite cctrans_ext_comp.
+
+  rewrite (cc_compose_assoc_1 c_ext).
+  rewrite CL_trans_ext1.
+
+  rewrite cc_compose_assoc_2.
+  rewrite (cc_compose_assoc_1 c_injp).
+  rewrite CL_trans_injp1.
+
+  rewrite cc_compose_assoc_2.
+  rewrite (cc_compose_assoc_1 locset_ext).
+  rewrite (cc_compose_assoc_1 locset_injp).
+  rewrite cctrans_injp_ext_ccstacking.
+
+  
+
+  
+
+  
 
   (*Q1: how to deal with the c_ext*)
   (*Q2: if we can prove cc_stacking_injp preserving callee_save regs, should we break it into LM? seems
