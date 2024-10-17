@@ -1119,7 +1119,7 @@ Proof.
       eapply inject_noundef_eq_trans. apply H13. rewrite H13. eauto. eauto.
       eauto. destruct H32 as [_ [? _]]. eauto. reflexivity.
 Qed.
-  
+(*  
 (** * Lemmas about LM and cc_stacking *)
 
 
@@ -1433,7 +1433,7 @@ Proof.
     assert (exists ra2', Val.inject f' ra2' ra2 /\ ra2' <> Vundef).
     admit. destruct H as [ra2' [RAinj RAdef]].
     assert (Hm23': Mem.inject f' m2' m3'). admit.
-    Compute ccworld (cc_locset_mach @ mach_injp).
+    (* Compute ccworld (cc_locset_mach @ mach_injp). *)
     set (rs2' mr := ls (R mr)).
     exists (se1, (lmw sg rs2' m2' sp2,injpw f' m2' m3' Hm23')).
     repeat apply conj; simpl; eauto.
@@ -1802,7 +1802,7 @@ Proof.
     + constructor; eauto. constructor; eauto. constructor.
     + Abort. *)
 
-
+*)
 
 (** *Compose c_injp with c_ext, to be moved to individual file later  *****)
 Require Import InjpAccoComp.

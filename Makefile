@@ -204,7 +204,7 @@ CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
        ConstpropproofC.v CSEproofC.v DeadcodeproofC.v UnusedglobproofC.v \
        SelectionproofC.v RTLgenproofC.v TailcallproofC.v \
        AllocproofC.v TunnelingproofC.v AsmgenproofC.v \
-       Composition.v
+       StackingRefine.v Composition.v
 
 
 

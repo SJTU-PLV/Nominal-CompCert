@@ -2552,8 +2552,41 @@ Qed.
         replace (ofs2 - ofs2) with 0 by lia. auto.
         replace (ofs2 - ofs2) with 0 by lia. auto.
   Qed.
-  
+
+  Lemma OUT_OF_REACH_23' : forall b3 ofs3,
+      loc_out_of_reach j2 m2 b3 ofs3 ->
+      loc_out_of_reach (compose_meminj j1' j2') m1' b3 ofs3 ->
+      loc_out_of_reach j2' m2' b3 ofs3.
+  Proof.
+    assert (DOMIN2: inject_dom_in j2 (Mem.support m2)).
+     eapply inject_implies_dom_in; eauto.
+    intros. red in H, H0. red. intros b2 d MAP2'.
+    destruct (subinj_dec _ _ _ _ _ INCR2 MAP2') as [MAP2 | NONE].
+    - destruct (Mem.loc_in_reach_find m1 j1 b2 (ofs3 -d )) as [[b1 o1]|] eqn:LOCIN.
+      + eapply Mem.loc_in_reach_find_valid in LOCIN; eauto.
+        destruct LOCIN as [MAP1 PERM1].
+        intro. eapply H0. unfold compose_meminj. apply INCR1 in MAP1. rewrite MAP1.
+        rewrite MAP2'. reflexivity. replace (ofs3 - (ofs3 - d  - o1 + d)) with o1 by lia.
+        eapply copy_perm. eauto. eauto. congruence. eauto.
+      + eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+        generalize UNCHANGE21. intro UNC2. intro. eapply H; eauto.
+        inv UNC2. apply unchanged_on_perm. eauto. eapply DOMIN2; eauto. eauto.
+    - intro. exploit ADDSAME; eauto. intros [b1 [MAP1' SAME]].
+      destruct (subinj_dec _ _ _ _ _ INCR1 MAP1') as [MAP1 | NONE1 ].
+      exfalso. exploit INCRNEW2; eauto. eapply inject_implies_image_in; eauto.
+      eapply H0; eauto. unfold compose_meminj. rewrite MAP1', MAP2'.
+      rewrite Z.add_0_l. reflexivity. eapply step2_perm2'; eauto.
+      replace (ofs3 - d - (ofs3 - d)) with 0 by lia. eauto.
+  Qed.
+
 End CONSTR_PROOF.
+
+(** This is a property for composing locset_injp with cc_stacking, showing that our composition
+    keeps the outgoing arguments in [m3'] still out_of_reach from [m2'] *)
+Definition out_of_reach_for_outgoing_arguments (j2 j2' j13': meminj) (m2 m2' m1': mem) : Prop :=
+  forall b3 ofs3,  loc_out_of_reach j2 m2 b3 ofs3 ->
+      loc_out_of_reach j13' m1' b3 ofs3 ->
+      loc_out_of_reach j2' m2' b3 ofs3.
 
 (** main content of Lemma C.16*)
 Lemma out_of_reach_trans: forall j12 j23 m1 m2 m3 m3',
@@ -2597,7 +2630,8 @@ Lemma injp_acce_outgoing_constr: forall j12 j23 m1 m2 m3 Hm13 j13' m1' m3' (Hm12
       let w1' := injpw j12' m1' m2' Hm12' in
       let w2' := injpw j23' m2' m3' Hm23' in
       j13' = compose_meminj j12' j23' /\
-      injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'.
+        injp_acce w1 w1' /\ injp_acce w2 w2' /\ external_mid_hidden w1' w2'
+      /\ out_of_reach_for_outgoing_arguments j23 j23' j13' m2 m2' m1'.
 Proof.
   intros. rename Hm12 into INJ12. rename Hm23 into INJ23. rename Hm13' into INJ13'.
   inversion H as [? ? ? ? ? ? ? ? ROUNC1 ROUNC3 MAXPERM1 MAXPERM3 [S1 UNCHANGE1] [S3 UNCHANGE3] INCR13 DISJ13 DISJ13ng]. subst.
@@ -2650,4 +2684,5 @@ Proof.
     eapply out_of_reach_trans; eauto. split; auto.
     red. intros. eapply INCRDISJ23; eauto. erewrite <- inject_tid; eauto.
   - eapply EXT_HIDDEN'; eauto.
+  - red. eapply OUT_OF_REACH_23'; eauto.
 Qed.

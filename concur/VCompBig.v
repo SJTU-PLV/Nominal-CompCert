@@ -511,7 +511,7 @@ Proof.
       destruct wp1. destruct w, w0.      inv H0.
       exploit external_mid_hidden_acci; eauto. econstructor; eauto.
       exploit injp_acce_outgoing_constr; eauto.
-      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN & _).
       exists ((injpw j12'' m1'' m2'' Hm12''),(injpw j23'' m2'' m3'' Hm23'')).
       repeat apply conj; eauto.
       -- inv H4.

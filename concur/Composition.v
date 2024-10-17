@@ -5,7 +5,8 @@ Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
-Require Import CallconvBig CallConvAlgebra VCompBig CallConvLibs.
+Require Import CallconvBig CallConvAlgebra VCompBig CallConvLibs StackingRefine.
+
 
 Unset Program Cases.
 
@@ -276,7 +277,7 @@ Definition cc_c_level : GS.callconv li_c li_c := ro @ wt_c @ c_injp.
 
 Definition cc_compcert_1 : GS.callconv li_c li_asm :=
     cc_c_level @
-    cc_c_locset @ cc_locset_mach @ cc_mach_asm.
+    cc_c_locset @ cc_stacking_injp @ cc_mach_asm.
 
 
 (** The first expand of cc_compcert for both directions *)
@@ -375,7 +376,7 @@ Proof.
       destruct w0, w2.  inv H5.
       exploit external_mid_hidden_acci; eauto. 
       exploit injp_acce_outgoing_constr; eauto.
-      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN).
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN & _).
       exists ((tt,injpw j12'' m1'' m2'' Hm12''),(tt,injpw j23'' m2'' m3'' Hm23'')).
       repeat apply conj; simpl; eauto.
       -- inv H4.
@@ -519,20 +520,19 @@ Proof.
       econstructor; eauto. unfold res'. destruct vres2, (proj_sig_res sg0); auto.
 Qed.
 
-Require Import StackingproofC.
 Lemma cctrans_wt_loc_stacking : cctrans (wt_loc @ cc_stacking_injp) (cc_stacking_injp).
 Proof.
   constructor. econstructor. instantiate (1:= fun a b => snd a = b).
-  - red. intros [[j m1 my Hm] sg ls1 sp2 m2]. intros.
+  - red. intros [[j m1 my Hm] sg ls1 rs2 sp2 m2]. intros.
     inv H. inv H0. clear Hm4 Hm5 Hm6.
-    Compute GS.ccworld (wt_loc @ cc_stacking injp).
-    exists (se1, (se1, sg, stkw injp (injpw j m1 m2 Hm) sg ls1 sp2 m2)). repeat apply conj; eauto.
+    (* Compute GS.ccworld (wt_loc @ cc_stacking injp). *)
+    exists (se1, (se1, sg, stkjw (injpw j m1 m2 Hm) sg ls1 rs2 sp2 m2)). repeat apply conj; eauto.
     + econstructor. constructor. constructor. constructor; eauto.
     + exists (lq vf1 sg ls1 m1). split. econstructor; eauto. constructor.
       intros l Hl. destruct Hl.
       * apply always_has_mreg_type.
       * cbn -[Z.add Z.mul]. rewrite <- (type_of_chunk_of_type ty) at 2.
-        inv H15. destruct H1 as [A B]. exploit B; eauto.
+        inv H16 . destruct H1 as [A B]. exploit B; eauto.
         intros [b [Hload]]. simpl in H1.
         eapply (val_has_type_inject); eauto.
         unfold load_stack in Hload. unfold Mem.loadv in Hload.
@@ -544,10 +544,10 @@ Proof.
       destruct Hr as [r' [Hr1 Hr2]]. inv Hr1. inv Hr2. simpl in H.
       exists (injpw j'' m1'' m2'' Hm''). repeat apply conj; eauto.
       econstructor; eauto.
-  - red. intros [t1 [j m1 m2 Hm]] wp2. intros [xse [[xse2 sg] [[j' m1' m2'x Hm'] sg' ls1 sp2 m2']]].
+  - red. intros [t1 [j m1 m2 Hm]] wp2. intros [xse [[xse2 sg] [[j' m1' m2'x Hm'] sg' ls1 rs2 sp2 m2']]].
     intros se1 se2 q1 q2 [Hse1 Hse2] [q' [Hq1 Hq2]] [_ ACI] Hmatch. inv Hse1. inv Hse2. inv Hq1. inv Hq2.
     simpl in ACI.
-    exists (stkw injp (injpw j' m1' m2' Hm') sg' ls1 sp2 m2'). repeat apply conj; eauto.
+    exists (stkjw (injpw j' m1' m2' Hm') sg' ls1 rs2 sp2 m2'). repeat apply conj; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
     + intros r1 r2 [j'' m1'' m2'' Hm''] ACE Hr. simpl in ACE.
