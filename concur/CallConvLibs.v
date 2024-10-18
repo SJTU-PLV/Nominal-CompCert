@@ -1290,12 +1290,192 @@ Qed.
 
 Lemma MA_trans_ext1 : cctrans (cc_mach_asm @ asm_ext) (mach_ext @ cc_mach_asm).
 Proof.
-Admitted.
+   constructor.  econstructor.  instantiate (1:= fun w1 w2 => snd w1 = fst w2).
+  - red. intros [se' [wp [rs sup]]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
+    inv Hse2. inv Hse1. inv Hq2. inv Hq1. inv H16. clear Hm1.
+    cbn in H9, H12, H14, H15.
+    rename rs1 into mrs1. rename mrs into mrs2.
+    rename m into m2. rename rs into rs3.
+     set (rs2 r :=
+           match preg_classify r with
+             | prc_pc => vf1
+             | prc_sp => sp1
+             | prc_ra => ra1  
+             | prc_preg_of m => mrs1 m
+             | prc_other => Vundef
+           end).
+    (* Compute ccworld (cc_mach_asm @ asm_injp). *)
+    exists (se2,(rs2,(Mem.support m1) , extw m1 m2 Hm0)).
+    repeat apply conj; eauto.
+    + constructor; eauto. constructor. constructor; eauto.
+    + exists (rs2, m1). split.
+      replace vf1 with rs2 # PC by reflexivity.
+      replace sp1 with rs2 # RSP by reflexivity.
+      replace ra1 with rs2 # RA by reflexivity.
+      econstructor; eauto.
+      unfold rs2. simpl. inv H0. rewrite <- H3 in H12. inv H12; try congruence.
+      unfold inject_id in H7. inv H7. constructor.
+      erewrite Mem.mext_sup; eauto.
+      intros. simpl. unfold rs2. rewrite preg_classify_preg. reflexivity.
+      econstructor; simpl; eauto.
+      intros. unfold rs2.
+      destruct (preg_classify_cases r); eauto.
+      rewrite <- H2. eauto. constructor.
+    + intros. destruct wp1 as [a wp1]. simpl in a, wp1.
+      destruct wp2 as [wp2 b]. simpl in b, wp2. simpl in H3. subst wp2.
+      destruct wp1' as [a' wp1']. simpl in H4.
+      destruct H4. simpl in H3,H4. destruct H5. simpl in H5,H7.
+      exists (wp1',tt). split. simpl. split. auto. auto. split. split; eauto.
+      destruct H6 as [r1' [Hr1 Hr2]]. inv Hr1. destruct r2. inv Hr2.
+      inv H19. simpl in H20. rename m' into m1'. rename m into m3'.
+      subst wp1'. rename r into rs3'.
+      rename rs' into rs2'.
+      exists (mr (fun r => rs3' (preg_of r)) m3'). split.
+      econstructor; simpl; eauto. intros. rewrite H17. eauto. constructor.
+      econstructor; eauto.
+      eapply inject_noundef_eq_trans. apply H6. rewrite H6.
+      unfold rs2. simpl. eauto. eauto. inv H7. eauto.
+      eapply inject_noundef_eq_trans. apply H11. rewrite H11.
+      unfold rs2. simpl. eauto. eauto. inv H7. eauto.
+      inv H4. eauto.
+  - red. intros [? ?] [? ?] [se [[rs sup] wp]]. simpl in w,w0,w1,w2.
+    intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2. inv Hse1. inv Hse2. simpl in A2.
+    inv A2. destruct A1. simpl in H, H0.
+    inv Hq1. destruct q2. inv Hq2. inv H6. simpl in H5.
+    (* Compute (ccworld (c_injp @ cc_c_locset)). *)
+    exists (se2,((extw m m0 Hm),(r, Mem.support m0))). repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor; eauto.
+    + exists (mq r#PC r#SP r#RA (fun m => r (preg_of m)) m0).
+      split. econstructor; simpl; eauto.
+      inv H2. congruence. intros. rewrite H4. eauto. constructor.
+      econstructor; eauto.
+      generalize (H5 PC). intro. inv H6; congruence.
+      generalize (H5 RSP). intro. inv H2. inv H6; try congruence. constructor.
+      rewrite <- H7 in H2. inv H2. inv H10. erewrite <- Mem.mext_sup; eauto.
+      generalize (H5 RA). intro. inv H6; congruence.
+    + intros r1 r2 [a b] AC1 Hr. simpl in AC1. destruct AC1.
+      simpl in H6, H7. clear H7.
+      destruct Hr as [r1' [Hr1 Hr2]].
+      inv Hr1. inv Hr2. simpl in H7. inv H8. simpl in H9. subst a.
+      clear Hm4 Hm3.
+      exists (tt,(extw m1 m2 Hm2)). split. split; auto. simpl.
+      inv H6. constructor; eauto.
+      split; auto. simpl.
+      set (rs1' r :=
+             match preg_classify r with
+             | prc_pc => rs RA
+             | prc_sp => rs SP
+             | prc_preg_of m => rs1 m
+             | prc_other => Vundef
+             | prc_ra => Vundef
+           end).
+      exists (rs1', m1). split.
+      econstructor. reflexivity. reflexivity. inv H6. auto.
+      intros. unfold rs1'. rewrite preg_classify_preg. reflexivity.
+      econstructor; simpl; eauto. inv H6.
+      intros. unfold rs1'.
+      destruct (preg_classify_cases r0); eauto.
+      rewrite H12. eauto.
+      rewrite H11. eauto. rewrite <- H15. eauto. constructor.
+Qed.
 
 Lemma MA_trans_ext2 : cctrans (mach_ext @ cc_mach_asm) (cc_mach_asm @ asm_ext).
 Proof.
-Admitted.
-
+    constructor.  econstructor.  instantiate (1:= fun w1 w2 => fst w1 = snd w2).
+  - red. intros [se' [[rs sup] wp]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
+    inv Hse2. inv Hse1. inv Hq1. destruct q2. inv Hq2. inv H4. clear Hm1.
+    cbn in H3.
+    rename m0 into m2. rename m into m1. rename r into rs3.
+(*     set (rs2 r :=
+           match preg_classify r with
+             | prc_pc => vf1
+             | prc_sp => sp1
+             | prc_ra => ra1  
+             | prc_preg_of m => mrs1 m
+             | prc_other => Vundef
+           end).*)
+    (* Compute ccworld (mach_injp @ cc_mach_asm). *)
+    exists (se2,(extw m1 m2 Hm0,(rs3,Mem.support m2))).
+    repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor.
+    + exists (mq rs3#PC rs3#RSP rs3#RA (fun m => rs3 (preg_of m)) m2). split.
+      econstructor; eauto. inv H0. congruence. simpl.
+      intros. rewrite H2. eauto. constructor.
+      econstructor.
+      generalize (H3 PC). intro. inv H4; congruence.
+      generalize (H3 RSP). intro. inv H0. inv H4; try congruence. constructor.
+      erewrite <- Mem.mext_sup; eauto. inv H8. congruence.
+      generalize (H3 RA). intro. inv H4; congruence. reflexivity.
+    + intros. destruct wp1 as [wp1 a]. simpl in a, wp1.
+      destruct wp2 as [b wp2]. simpl in b, wp2.
+      destruct wp1' as [wp1' a']. simpl in H4. subst wp2.
+      destruct H5. simpl in H4,H5. destruct H6. simpl in H6,H8.
+      exists (tt, wp1'). split. simpl. split. auto. auto. split. split; eauto.
+      destruct H7 as [r1' [Hr1 Hr2]]. inv Hr1. inv Hr2. inv H13. simpl in H7, H9.
+      inv H9.
+      simpl. 
+      rename m0 into m1'. rename m3 into m2'.
+      set (rs1' r :=
+             match preg_classify r with
+             | prc_pc => rs RA
+             | prc_sp => rs SP
+             | prc_preg_of m => rs1 m
+             | prc_other => Vundef
+             | prc_ra => Vundef
+             end).
+      exists (rs1', m1'). split.
+      econstructor. unfold rs1'. simpl. reflexivity.
+      reflexivity. inv H4. auto. 
+      intros. unfold rs1'. rewrite preg_classify_preg. reflexivity.
+      constructor. inv H4. intros. simpl. unfold rs1'.
+      destruct (preg_classify_cases r); eauto.
+      rewrite H11. eauto.
+      rewrite H12. eauto. rewrite <- H16. eauto.
+      constructor.
+  - red. intros [? ?] [? ?] [se [wp [rs sup]]]. simpl in w,w0,w1,w2.
+    intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2. inv Hse1. inv Hse2. simpl in A2.
+    inv A2. destruct A1. simpl in H, H0.
+    inv Hq1. destruct q2. inv Hq2. inv H8.  simpl in H2, H4,H6, H7.
+    rename rs1 into mrs1. rename rs2 into mrs2.
+    rename m into m2. rename r into rs3.
+    set (rs2 r :=
+           match preg_classify r with
+           | prc_pc => vf1
+           | prc_sp => sp1
+           | prc_ra => ra1  
+           | prc_preg_of m => mrs1 m
+           | prc_other => Vundef
+           end).
+    (* Compute (ccworld (cc_mach_asm @ asm_injp)). *)
+    exists (se2,((rs2, Mem.support m1,extw m1 m2 Hm))). repeat apply conj; eauto.
+    + constructor; eauto. constructor; eauto. constructor; eauto.
+    + exists (rs2, m1). split.
+      replace vf1 with rs2 # PC by reflexivity.
+      replace sp1 with rs2 # RSP by reflexivity.
+      replace ra1 with rs2 # RA by reflexivity.
+      econstructor; eauto. 
+      unfold rs2. simpl. inv H18. rewrite <- H8 in H4. inv H4; try congruence.
+      constructor. inv H13. erewrite Mem.mext_sup; eauto.
+      intros. simpl. unfold rs2. rewrite preg_classify_preg. reflexivity.
+      econstructor; simpl; eauto.
+      intros. unfold rs2.
+      destruct (preg_classify_cases r); eauto.
+      rewrite <- H20. eauto. constructor.
+    + intros r1 r2 [a b] AC1 Hr. simpl in AC1. destruct AC1.
+      simpl in H9. clear H8.
+      destruct Hr as [r1' [Hr1 Hr2]].
+      inv Hr1. destruct r2. inv Hr2. simpl in H13. inv H15. simpl in H16. subst b.
+      clear Hm4 Hm3.
+      exists ((extw m' m Hm2),tt). split. split; auto. simpl. inv H9. constructor; eauto.
+      split; auto. simpl.
+      exists (mr (fun m => r (preg_of m)) m).
+      split. econstructor; simpl; eauto. intros. rewrite H12. eauto. constructor.
+      econstructor.
+      eapply inject_noundef_eq_trans. apply H8. rewrite H8. eauto. eauto.
+      eauto.
+      eapply inject_noundef_eq_trans. apply H10. rewrite H10. eauto. eauto.
+      eauto. inv H9. eauto. reflexivity.
+Qed.
 (*  
 (** * Lemmas about LM and cc_stacking *)
 
@@ -2362,7 +2542,7 @@ Proof.
        eapply external_mid_hidden_ext_acci; eauto. inv ACI2. inv Hq1. inv Hq2. inv Hq3.
        inv H3. inv H12. inv H16. auto.
        exploit injp_acce_ext_outgoing_constr; eauto.
-       intros (j12'' & j34'' & m2'' & m3'' & Hm12'' & Hm34'' & COMPOSE & MEXT'' & ACCE1 & ACCE2 & HIDDEN).
+       intros (j12'' & j34'' & m2'' & m3'' & Hm12'' & Hm34'' & COMPOSE & MEXT'' & ACCE1 & ACCE2 & HIDDEN & _).
        rename m1'0 into m1''. rename m2'0 into m4''.
       exists ((injpw j12'' m1'' m2'' Hm12''),(extw m2'' m3'' MEXT'', injpw j34'' m3'' m4'' Hm34'')).
       repeat apply conj; eauto.

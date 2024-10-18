@@ -2046,8 +2046,39 @@ Section CONSTR_PROOF.
         exists b1, ofs3. split; eauto.
         replace (ofs3 - ofs3) with 0 by lia. eauto.
   Qed.
+
+  Lemma OUT_OF_REACH_34' : forall b4 ofs4,
+      loc_out_of_reach j2 m3 b4 ofs4 ->
+      loc_out_of_reach (compose_meminj j1' j2') m1' b4 ofs4 ->
+      loc_out_of_reach j2' m3' b4 ofs4.
+  Proof.
+    assert (DOMIN3: inject_dom_in j2 (Mem.support m3)).
+    eapply inject_implies_dom_in; eauto.
+    intros. red in H, H0. red. intros b3 d MAP2'.
+    destruct (subinj_dec _ _ _ _ _ INCR2 MAP2') as [MAP2 | NONE].
+    - destruct (Mem.loc_in_reach_find m1 j1 b3 (ofs4 -d )) as [[b1 o1]|] eqn:LOCIN.
+      + eapply Mem.loc_in_reach_find_valid in LOCIN; eauto.
+        destruct LOCIN as [MAP1 PERM1].
+        intro. eapply H0. unfold compose_meminj. apply INCR1 in MAP1. rewrite MAP1.
+        rewrite MAP2'. reflexivity. replace (ofs4 - (ofs4 - d  - o1 + d)) with o1 by lia.
+        eapply copy_perm_m3. eauto. eauto. congruence. eauto.
+      + eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+        generalize UNCHANGE32. intro UNC3. intro. eapply H; eauto.
+        inv UNC3. apply unchanged_on_perm. eauto. eapply DOMIN3; eauto. eauto.
+    - intro. exploit ADDSAME; eauto. intros [b1 [MAP1' SAME]].
+      destruct (subinj_dec _ _ _ _ _ INCR1 MAP1') as [MAP1 | NONE1 ].
+      exfalso. exploit INCRNEW2; eauto. eapply inject_implies_image_in; eauto.
+      eapply H0; eauto. unfold compose_meminj. rewrite MAP1', MAP2'.
+      rewrite Z.add_0_l. reflexivity. eapply step2_perm2'_m3; eauto.
+      replace (ofs4 - d - (ofs4 - d)) with 0 by lia. eauto.
+  Qed.
   
 End CONSTR_PROOF.
+
+Definition out_of_reach_for_outgoing_arguments (j2 j2' j13': meminj) (m2 m2' m1': mem) : Prop :=
+  forall b3 ofs3,  loc_out_of_reach j2 m2 b3 ofs3 ->
+      loc_out_of_reach j13' m1' b3 ofs3 ->
+      loc_out_of_reach j2' m2' b3 ofs3.
 
 (** main content of Lemma C.16*)
 Lemma out_of_reach_trans: forall j12 j23 m1 m2 m3 m3',
@@ -2090,14 +2121,15 @@ Lemma injp_acce_ext_outgoing_constr: forall j12 j34 m1 m2 m3 m4 Hm14 j14' m1' m4
     injp_acce (injpw (compose_meminj j12 j34) m1 m4 Hm14) (injpw j14' m1' m4' Hm14') ->
     external_mid_hidden_ext w1 w2 ->
     Mem.extends m2 m3 ->
-    exists j12' j23' m2' m3' Hm12' Hm34',
+    exists j12' j34' m2' m3' Hm12' Hm34',
       let w1' := injpw j12' m1' m2' Hm12' in
-      let w2' := injpw j23' m3' m4' Hm34' in
-      j14' = compose_meminj j12' j23' /\
+      let w2' := injpw j34' m3' m4' Hm34' in
+      j14' = compose_meminj j12' j34' /\
         Mem.extends m2' m3' /\
         injp_acce w1 w1' /\
         injp_acce w2 w2' /\
-        external_mid_hidden_ext w1' w2'.
+        external_mid_hidden_ext w1' w2' /\
+        out_of_reach_for_outgoing_arguments j34 j34' j14' m3 m3' m1'.
 Proof.
   intros. rename Hm12 into INJ12. rename Hm34 into INJ34. rename Hm14' into INJ14'. rename H1 into EXT23.
   inversion H as [? ? ? ? ? ? ? ? ROUNC1 ROUNC4 MAXPERM1 MAXPERM4 [S1 UNCHANGE1] [S4 UNCHANGE4] INCR14 DISJ14 DISJ14ng]. subst.
@@ -2158,5 +2190,6 @@ Proof.
     red. intros. erewrite Mem.mext_sup in INCRDISJ34; eauto.
     eapply INCRDISJ34; eauto. erewrite <- inject_tid; eauto.
   - eapply EXT_HIDDEN'; eauto.
+  - red. eapply OUT_OF_REACH_34'; eauto.
 Qed.
 

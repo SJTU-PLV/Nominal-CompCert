@@ -520,9 +520,6 @@ Proof.
       econstructor; eauto. unfold res'. destruct vres2, (proj_sig_res sg0); auto.
 Qed.
 
-Lemma cctrans_injp_ext_ccstacking : cctrans (locset_injp @ locset_ext @ cc_stacking_injp) cc_stacking_injp.
-Admitted.
-
 Lemma cctrans_wt_loc_stacking : cctrans (wt_loc @ cc_stacking_injp) (cc_stacking_injp).
 Proof.
   constructor. econstructor. instantiate (1:= fun a b => snd a = b).
@@ -660,7 +657,7 @@ Proof.
   rewrite (cc_compose_assoc_1 locset_injp).
   rewrite cctrans_injp_ext_ccstacking.
 
-  
+  rewrite MA_trans_ext2.
 
   
 
