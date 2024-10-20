@@ -154,6 +154,462 @@ Definition dominators_must_init (initmap uninitmap universe: PathsMap.t) (p: pla
   forallb (must_init initmap uninitmap universe) (place_dominators p).
 
 
+(** **  Properties used in ElaborateDropProof and MoveCheckingSafe  *)
+
+
+(* auxilary functions for own_env *)
+Fixpoint collect_children_in (s: PathsMap.t) (l: list place) : Paths.t :=
+  match l with
+  | nil => Paths.empty
+  | p :: l' =>            
+      let id := local_of_place p in
+      let ps := PathsMap.get id s in
+      Paths.union (Paths.filter (fun elt => is_prefix p elt) ps) (collect_children_in s l')
+  end.
+
+Lemma collect_children_in_exists: forall l own p,
+    Paths.In p (collect_children_in own l) ->
+    exists p', In p' l /\ is_prefix p' p = true.
+Proof.
+  induction l; intros own p IN; simpl in *.
+  exfalso. eapply Paths.empty_1. eauto.
+  eapply Paths.union_1 in IN. destruct IN as [IN1|IN2].
+  - eapply Paths.filter_2 in IN1. exists a. auto.
+    red. solve_proper.
+  - eapply IHl in IN2.
+    destruct IN2 as (p' & IN1 & PRE).
+    eauto.
+Qed.
+
+Lemma collect_children_in_implies: forall l p1 p2 own,
+    In p1 l ->
+    is_prefix p1 p2 = true ->
+    Paths.In p2 (PathsMap.get (local_of_place p2) own) ->
+    Paths.In p2 (collect_children_in own l).
+Proof.
+  induction l; intros p1 p2 own IN1 PRE IN2; simpl in *.
+  contradiction.
+  destruct IN1; subst.
+  - eapply Paths.union_2.
+    eapply Paths.filter_3. red. solve_proper.
+    erewrite is_prefix_same_local; eauto.
+    auto.
+  - eapply Paths.union_3.
+    eapply IHl; eauto.
+Qed.
+
+Definition remove_paths_in (s: PathsMap.t) (id: ident) (ps: Paths.t) :=
+  let l := PathsMap.get id s in
+  PathsMap.set id (Paths.diff l ps) s.
+
+(* just update PathsMap *)
+Fixpoint move_split_places_uncheck (own: PathsMap.t) (l: list (place * bool)) : PathsMap.t :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      move_split_places_uncheck (remove_place p own) l'
+  end.
+
+Fixpoint add_split_places_uncheck (universe: PathsMap.t) (uninit: PathsMap.t) (l: list (place * bool)) : PathsMap.t :=
+  match l with
+  | nil => uninit
+  | (p,_) :: l' =>
+      add_split_places_uncheck universe (add_place universe p uninit) l'
+  end.
+
+(* update Paths.t *)
+Fixpoint filter_split_places_uncheck (own: Paths.t) (l: list (place * bool)) : Paths.t :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      filter_split_places_uncheck (Paths.filter (fun elt => negb (is_prefix p elt)) own) l'
+  end.
+
+Lemma filter_split_places_uncheck_more: forall l u1 u2,
+    LPaths.ge u1 u2 ->
+    LPaths.ge (filter_split_places_uncheck u1 l) (filter_split_places_uncheck u2 l).
+Proof.
+  induction l; simpl; auto.
+  intros u1 u2 GE. destruct a.
+  eapply IHl.
+  red. red. intros a IN.
+  eapply Paths.filter_3.
+  red. solve_proper.
+  eapply GE. eapply Paths.filter_1; eauto.
+  red. solve_proper.
+  eapply Paths.filter_2 in IN.
+  auto.
+  red. solve_proper.
+Qed.
+
+Lemma filter_split_places_uncheck_unchange: forall l p own,
+    Paths.In p (filter_split_places_uncheck own l) ->
+    Paths.In p own.
+Proof.
+  induction l; simpl; auto.
+  intros p own IN. destruct a.
+  eapply IHl. 
+  eapply filter_split_places_uncheck_more; eauto.
+  red. red.
+  intros a IN1.
+  eapply Paths.filter_1; eauto.
+  red. solve_proper.
+Qed.
+
+  
+Lemma move_split_places_uncheck_more: forall l u1 u2,
+    PathsMap.ge u1 u2 ->
+    PathsMap.ge (move_split_places_uncheck u1 l) (move_split_places_uncheck u2 l).
+Proof.
+  induction l; intros; simpl; auto.
+  destruct a. eapply IHl.
+  red. intros id.
+  unfold remove_place.
+  red. do 2 rewrite PathsMap.gsspec.
+  destruct (peq id (local_of_place p)); subst.
+  - red. intros a A.
+    eapply Paths.filter_3. red. solve_proper.
+    apply H.
+    eapply Paths.filter_1; eauto. red. solve_proper.
+    eapply Paths.filter_2 in A. auto.
+    red. solve_proper.
+  - eapply H.
+Qed.
+  
+Lemma add_split_places_uncheck_more: forall l w u1 u2,
+    PathsMap.ge u1 u2 ->
+    PathsMap.ge (add_split_places_uncheck w u1 l) (add_split_places_uncheck w u2 l).
+Proof.
+  induction l; intros; simpl; auto.
+  destruct a. eapply IHl.
+  red. intros id.
+  unfold add_place.
+  red. do 2 rewrite PathsMap.gsspec.
+  destruct (peq id (local_of_place p)); subst.
+  - red. intros a A.
+    eapply Paths.union_1 in A.
+    destruct A.
+    eapply Paths.union_2. eapply H. auto.
+    eapply Paths.union_3. auto.
+  - eapply H.
+Qed.
+
+    
+(* equivalent (just ge for now because it is enough) between
+get-filter-set and get-set-get-set ... -get-set mode *)
+Lemma filter_move_split_places_ge: forall l id init
+    (NAME: forall p b, In (p, b) l -> local_of_place p = id),
+    PathsMap.ge (PathsMap.set id (filter_split_places_uncheck (PathsMap.get id init) l) init) (move_split_places_uncheck init l).
+Proof.
+  induction l; simpl; intros.
+  red. intros p. red. rewrite PathsMap.gsspec.
+  destruct (peq p id); subst. apply LPaths.ge_refl.
+  apply LPaths.eq_refl.
+  apply LPaths.ge_refl. apply LPaths.eq_refl.
+  destruct a.
+  generalize (IHl id (remove_place p init)).
+  intros GE.
+  eapply PathsMap.ge_trans.
+  2: eauto.
+  red. intros p1. red.
+  do 2 rewrite PathsMap.gsspec.
+  destruct (peq p1 id); subst.
+  - eapply filter_split_places_uncheck_more.
+    (* core of proof *)
+    red. red. erewrite <- NAME; eauto.
+    unfold remove_place.
+    intros a IN. rewrite PathsMap.gsspec in IN.
+    destruct (peq (local_of_place p) (local_of_place p)); try congruence.
+  - red. unfold remove_place.
+    intros a IN. rewrite PathsMap.gsspec in IN.
+    destruct (peq p1 (local_of_place p)); subst.
+    eapply Paths.filter_1; eauto. red. solve_proper.
+    auto.
+Qed.
+
+Lemma filter_split_places_subset_collect_children: forall l p1 p2 own,
+    Paths.In p1 (filter_split_places_uncheck own l) ->
+    In p2 (map fst l) ->
+    is_prefix p2 p1 = false.
+Proof.
+  induction l; simpl; intros p1 p2 own IN1 IN2.
+  contradiction.
+  destruct a. 
+  destruct (split l) eqn: SPLIT. simpl in *.
+  destruct IN2; subst.
+  - eapply filter_split_places_uncheck_unchange in IN1.
+    eapply Paths.filter_2 in IN1.
+    eapply negb_true_iff; auto.
+    red. solve_proper.
+  - eapply IHl; eauto.
+Qed.
+
+
+(** Properties of is_init and must_init *)
+
+Lemma move_place_not_init: forall p own,
+    is_init (move_place own p) p = false.
+Proof.
+  intros. unfold move_place, is_init.
+  simpl. unfold remove_place.
+  erewrite PathsMap.gsspec.
+  destruct peq; try congruence.
+  eapply not_true_is_false.
+  intro. eapply Paths.mem_2 in H.
+  eapply Paths.filter_2 in H.
+  erewrite is_prefix_refl in H. simpl in H.
+  congruence.
+  red. solve_proper.
+Qed.
+
+Lemma move_place_still_not_owned: forall p1 p2 own,
+    is_init own p1 = false ->
+    is_init (move_place own p2) p1 = false.
+Proof.
+  intros. unfold is_init, move_place in *.
+  simpl. unfold remove_place.
+  eapply not_true_iff_false. eapply not_true_iff_false in H. 
+  intro. apply H. clear H.
+  eapply Paths.mem_1.
+  eapply Paths.mem_2 in H0.
+  erewrite PathsMap.gsspec in H0.
+  destruct peq.
+  - rewrite e.
+    eapply Paths.filter_1; eauto.
+    red. solve_proper.
+  - auto.
+Qed.    
+
+Lemma move_irrelavent_place_still_owned: forall p1 p2 own,
+    is_init own p1 = true ->
+    is_prefix p2 p1 = false ->
+    is_init (move_place own p2) p1 = true.
+Proof.
+  intros p1 p2 own INIT PRE.
+  unfold is_init in *.
+  eapply Paths.mem_1.
+  eapply Paths.mem_2 in INIT.
+  unfold move_place, remove_place. simpl.
+  erewrite PathsMap.gsspec.
+  destruct peq.
+  - rewrite <- e.
+    eapply Paths.filter_3.
+    red. solve_proper.
+    auto. eapply negb_true_iff. auto.
+  - auto.
+Qed.
+
+Lemma init_irrelavent_place_still_not_owned: forall p1 p2 own,
+    is_init own p1 = false ->
+    is_prefix p2 p1 = false ->
+    is_init (init_place own p2) p1 = false.
+Proof.
+  intros p1 p2 own INIT PRE.
+  eapply not_true_iff_false.  eapply not_true_iff_false in INIT.
+  intro INIT1. apply INIT. clear INIT.
+  unfold is_init in *.
+  eapply Paths.mem_1.
+  eapply Paths.mem_2 in INIT1.
+  unfold init_place, add_place in *. simpl in *.
+  erewrite PathsMap.gsspec in INIT1.
+  destruct peq.
+  - rewrite e.
+    eapply Paths.union_1 in INIT1.
+    destruct INIT1 as [A|B].
+    auto.
+    eapply Paths.filter_2 in B; eauto. congruence.
+    red. solve_proper.
+  - auto.
+Qed.
+
+
+Lemma move_prefix_not_init: forall p1 p2 own,
+    (* this premise is important to prevent that p1 and p2 *)
+(*        does not exists in universe so that move p1 has no *)
+(*        effect *)
+    (* Paths.In p2 (PathsMap.get (local_of_place p1) own.(own_universe)) -> *)
+    is_prefix p1 p2 = true ->
+    is_init (move_place own p1) p2 = false.
+Proof.
+  intros p1 p2 own PRE.
+  unfold is_init, move_place, remove_place.
+  simpl. erewrite <- is_prefix_same_local.
+  2: eauto.
+  rewrite PathsMap.gsspec.
+  destruct peq; try congruence.
+  eapply not_true_iff_false. intro.
+  eapply not_false_iff_true in PRE.
+  eapply Paths.mem_2 in H.
+  apply PRE.
+  eapply Paths.filter_2 in H. eapply negb_true_iff.
+  auto.
+  red. solve_proper.
+Qed.
+  
+Lemma init_prefix_init: forall p1 p2 own,
+    Paths.In p2 (PathsMap.get (local_of_place p1) own.(own_universe)) ->
+    is_prefix p1 p2 = true ->
+    is_init (init_place own p1) p2 = true.
+Proof.
+  intros p1 p2 own IN PRE.
+  unfold is_init, init_place, add_place.
+  simpl. erewrite <- is_prefix_same_local.
+  2: eauto.
+  rewrite PathsMap.gsspec.
+  destruct peq; try congruence.
+  eapply Paths.mem_1.
+  eapply Paths.union_3.
+  eapply Paths.filter_3; eauto.
+  red. solve_proper.
+Qed.
+  
+Lemma init_owned_place_still_owned: forall p1 p2 own,
+    is_init own p1 = true ->
+    is_init (init_place own p2) p1 = true.
+Proof.
+  intros p1 p2 own INIT.
+  unfold is_init, init_place, add_place in *.
+  eapply Paths.mem_1.
+  eapply Paths.mem_2 in INIT.
+  simpl.
+  rewrite PathsMap.gsspec.
+  destruct peq.
+  - rewrite <- e.
+    eapply Paths.union_2. auto.
+  - auto.
+Qed.
+
+(* all the children has been moved out. It is used to prove move_split_places_uncheck_sound *)
+Inductive move_ordered_split_places_spec : own_env -> list place -> Prop :=
+| ordered_in_own_nil: forall own,
+    move_ordered_split_places_spec own nil
+| ordered_in_own_cons: forall p l own
+    (PRES: forall p', is_prefix_strict p p' = true -> is_init own p' = false)
+    (MORD: move_ordered_split_places_spec (if is_init own p then move_place own p else own) l),
+    move_ordered_split_places_spec own (p :: l).
+
+
+Lemma ordered_and_complete_split_places_meet_spec: forall drops own
+    (COMPLETE: forall p a, In p drops -> is_prefix p a = true -> Paths.In a (PathsMap.get (local_of_place a) own.(own_universe)) -> In a drops \/ is_init own a = false)
+    (ORDER: split_places_ordered drops),   
+    move_ordered_split_places_spec own drops.
+Proof.
+  induction drops; simpl; intros.
+  constructor.
+  econstructor.
+  - intros.
+    destruct (Paths.mem p' (PathsMap.get (local_of_place a) (own_universe own))) eqn: UNI.
+    + eapply Paths.mem_2 in UNI.      
+      (* p' must be equal to a? *)
+      exploit COMPLETE. left. eauto.
+      instantiate (1 := p'). eapply is_prefix_strict_implies; auto.
+      eauto. erewrite <- is_prefix_same_local. eauto.
+      eapply is_prefix_strict_implies; auto.
+      auto. intros [[A|B]|C].
+      * subst. erewrite is_prefix_strict_not_refl in H.
+        congruence.
+      * inv ORDER. eapply Forall_forall with (x:=p') in H2.
+        eapply is_prefix_strict_iff in H. destruct H.
+        congruence.
+        auto.
+      * auto. (* destruct (is_init own a); auto. *)
+        (* eapply move_place_still_not_owned. auto. *)
+    (* easy because p' is not in universe *)
+    + eapply not_true_iff_false.
+      intro. eapply not_true_iff_false in UNI.
+      apply UNI.
+      erewrite is_prefix_same_local.
+      eapply is_init_in_universe. auto.
+      eapply is_prefix_strict_implies. auto.
+  - inv ORDER. eapply IHdrops; eauto.
+    assert (UNIEQ: PathsMap.eq (own_universe (if is_init own a then move_place own a else own)) (own_universe own)).
+    { destruct is_init.
+      unfold move_place. simpl. apply PathsMap.eq_refl.
+      apply PathsMap.eq_refl. }
+    intros. exploit COMPLETE.
+    right. eauto.
+    eauto.
+    eapply UNIEQ. eauto.
+    intros [[A | B]| C].
+    + subst. right.
+      destruct (is_init own a0) eqn: INIT.
+      eapply move_place_not_init.
+      auto.
+    + auto.
+    + right.
+      destruct (is_init own a) eqn: INIT.
+      eapply move_place_still_not_owned. auto.
+      auto.
+Qed.
+
+(* relation of moveing split places *)
+Fixpoint move_split_places (own :own_env) (l: list (place * bool)) : own_env :=
+  match l with
+  | nil => own
+  | (p,_) :: l' =>
+      move_split_places (if is_init own p then move_place own p else own) l'
+  end.
+
+
+Lemma move_split_places_uncheck_sound: forall drops own own'
+    (SPEC: move_ordered_split_places_spec own (map fst drops)),
+    move_split_places own drops = own' ->
+    PathsMap.ge (move_split_places_uncheck (own_init own) drops) (own_init own')
+    /\ PathsMap.ge (add_split_places_uncheck (own_universe own) (own_uninit own) drops) (own_uninit own')
+    /\ PathsMap.eq (own_universe own) (own_universe own').
+Proof.
+  induction drops; intros; subst; simpl.
+  - split. apply PathsMap.ge_refl. eapply PathsMap.eq_refl.
+    split. apply PathsMap.ge_refl. eapply PathsMap.eq_refl.
+    apply PathsMap.eq_refl.
+  - destruct a.
+    simpl in SPEC. inv SPEC.
+    destruct (is_init own p) eqn: OWN.
+    + exploit (IHdrops (move_place own p)); eauto.
+    (* p is not owned, so remove it has no effect *)
+    + exploit (IHdrops own); eauto.
+      intros (A & B & C).
+      split; try split. 3: auto.
+      2: { eapply PathsMap.ge_trans; eauto.
+           eapply add_split_places_uncheck_more.
+           red. intros id. unfold add_place.
+           red. rewrite PathsMap.gsspec.
+           destruct (peq id (local_of_place p)); subst.
+           + red. intros a D. eapply Paths.union_2. auto.
+           + eapply LPaths.ge_refl. apply LPaths.eq_refl. }
+      (* core proof *)
+      eapply PathsMap.ge_trans; eauto.
+      assert (CORE: PathsMap.ge (remove_place p (own_init own)) (own_init own)).
+      { red. intros id. unfold remove_place. red.
+        rewrite PathsMap.gsspec.
+        destruct (peq id (local_of_place p)); subst.
+        + red. intros a IN.
+          eapply Paths.filter_3. red. solve_proper.
+          auto.
+          (* key to prove: a is not a child of p. From opposite side, *)
+          (* if a is a strict children of p or p is equal to a, then
+          is_init own a = false which is a contradiction of IN or
+          OWN *)
+          destruct (place_eq p a). subst.
+          * rewrite is_prefix_refl. simpl.
+            erewrite <- OWN.            
+            unfold is_init. 
+            eapply Paths.mem_1 in IN. auto.
+          * apply Is_true_eq_true.
+            apply negb_prop_intro.
+            intro PRE. apply Is_true_eq_true in PRE.
+            assert (PRES1: is_prefix_strict p a = true).
+            { eapply is_prefix_strict_iff. auto. }
+            exploit PRES; eauto.
+            unfold is_init. intros INIT.
+            eapply Paths.mem_1 in IN.
+            erewrite is_prefix_same_local in IN; eauto.
+            congruence.
+        + eapply LPaths.ge_refl. apply LPaths.eq_refl. }
+      eapply move_split_places_uncheck_more; eauto.
+Qed.
+
+
 (* move it to a new file *)
 
 (** * Soundness of Initial Analysis *)
@@ -379,13 +835,6 @@ Qed.
       
 (** ** Semantic invariant *)
 
-(* relation of moveing split places *)
-Fixpoint move_split_places (own :own_env) (l: list (place * bool)) : own_env :=
-  match l with
-  | nil => own
-  | (p,_) :: l' =>
-      move_split_places (if is_init own p then move_place own p else own) l'
-  end.
 
 Inductive get_IM_state : IM.t -> IM.t -> option (PathsMap.t * PathsMap.t) -> Prop :=
 | get_IM_bot1: forall s,
