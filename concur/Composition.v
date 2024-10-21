@@ -558,6 +558,17 @@ Proof.
       econstructor; eauto.
 Qed.
 
+Lemma inject_list_in {A B: Type}:
+  forall (l : list A)
+    (map1 map2: A -> val) j, (forall a, In a l -> Val.inject j (map1 a) (map2 a)) ->
+                                    Val.inject_list j map1##l  map2##l.
+Proof.
+  induction l; intros.
+  - constructor.
+  - simpl. constructor. eapply H. left. auto.
+    eapply IHl. intros. apply H. right. auto.
+Qed.
+          
 Lemma cctrans_CAinjp: cctrans (cc_c_locset @ cc_stacking_injp @ cc_mach_asm) cc_c_asm_injp_new.
 Proof.
   constructor.
@@ -644,17 +655,13 @@ Proof.
           generalize (size_arguments_above sg). intro. lia.
       } destruct H as [m4'_ REMOVE].
       simpl. econstructor; eauto.
-      {
-        induction (loc_arguments sg).
-        - constructor.
-        - constructor. 2: eauto.
-          assert (He: In a (loc_arguments sg)). admit. (*ofc*)
-          apply loc_arguments_always_one in He as Ho. destruct Ho as [l0 Ho]. subst a.
-          simpl.
-          apply loc_arguments_external in He. inv He.
-          simpl. rewrite <- H12. eauto.
-          simpl. destruct H18 as [A [B C]]. exploit C; eauto. intros  [v [Hl Hinj]].
-          setoid_rewrite Hl. eauto.
+      { eapply inject_list_in.
+        intros. apply loc_arguments_always_one in H as Ho. destruct Ho as [l0 Ho]. subst a.
+        simpl.
+        apply loc_arguments_external in H. inv H.
+        simpl. rewrite <- H12. eauto.
+        simpl. destruct H18 as [A [B C]]. exploit C; eauto. intros [v [Hl Hinj]].
+        setoid_rewrite Hl. eauto.
       }
     + intros r1 r2 [j'' m1'' m4'' Hm''] ACE Hr. simpl in ACE, Hr.
       inv Hr. 
