@@ -660,6 +660,17 @@ Local Opaque sepconj.
 - apply frame_set_reg; auto.
 Qed.
 
+Corollary frame_callee_save_eq:
+  forall j sp ls ls0 rs0 rs0' parent retaddr m P,
+    m |= frame_contents j sp ls ls0 rs0 parent retaddr ** P ->
+    (forall r, is_callee_save r = true -> rs0 r = rs0' r) ->
+    m |= frame_contents j sp ls ls0 rs0' parent retaddr ** P.
+Proof.
+  intros. eapply frame_contents_exten. eauto. eauto. 3: eauto.
+  eauto. intros. rewrite <- H0; eauto.
+  eapply used_callee_save_prop; eauto.
+Qed.
+
 Corollary frame_set_regpair:
   forall j sp ls0 rs0 parent retaddr m P p v ls,
   m |= frame_contents j sp ls ls0 rs0 parent retaddr ** P ->
@@ -863,6 +874,15 @@ Lemma caller_save_reg_within_bounds:
 Proof.
   intros; red; intros. congruence.
 Qed.
+
+Lemma reg_within_bounds_caller_save:
+  forall r,
+  ~ mreg_within_bounds b r -> is_callee_save r = true.
+Proof.
+  intros. destruct (is_callee_save r) eqn:?; eauto.
+  elim H. red. intros. congruence.
+Qed.
+
 
 Lemma agree_locs_set_pair:
   forall ls0 p v ls,
@@ -2371,7 +2391,7 @@ Inductive match_states: injp_world -> Linear.state -> Mach.state -> Prop :=
         (FIND: Genv.find_funct ge vf = Some f)
         (FINJ: Val.inject j vf vf')
         (AGREGS: agree_regs j ls rs)
-        (TRS: rs = parent_rs lrs)
+        (TRS: forall r, is_callee_save r = true -> rs r = parent_rs lrs r) (*This could be rs = parent_rs lrs if we do not consider tailcall*)
         (SEP: m' |= stack_contents j cs cs' lrs
                  ** minjection j m
                  ** globalenv_inject se tse j m)
@@ -2628,7 +2648,7 @@ Proof.
   apply match_stacks_change_sig with (Linear.fn_sig f); eauto.
   apply zero_size_arguments_tailcall_possible. eapply wt_state_tailcall; eauto.
   destruct ros; simpl in *; eauto. eapply symbol_address_inject; eauto. apply SEP.
-  admit.
+  intros. rewrite <- V; eauto.
   rewrite globalenv_support in SEP; eauto. 
   apply Mem.support_free in H2. rewrite H2. eauto.
   eapply injp_acce_small; eauto.
@@ -2795,6 +2815,8 @@ Proof.
   unfold local_t, init_m1. simpl.
   inv ACCE. destruct H8 as [[_ X] _].  congruence.
   eapply stack_contents_support; eauto. apply SEP'.
+  red. intros. rewrite F; eauto. apply TRS.
+  eapply reg_within_bounds_caller_save; eauto.
   apply Mem.alloc_result in A. rewrite A. simpl.
   unfold local_t, init_m1. inv ACCE.
   destruct H9 as [[_ X] _]. inversion Hm0. inv mi_thread.
@@ -2804,7 +2826,8 @@ Proof.
   eapply Mem.valid_block_unchanged_on; eauto.
   intro. eapply Mem.fresh_block_alloc; eauto.
   eapply Mem.valid_block_unchanged_on; eauto.
-  rewrite sep_swap in SEP. 
+  rewrite sep_swap in SEP.
+  eapply frame_callee_save_eq; eauto.
   rewrite sep_swap. eapply stack_contents_change_meminj; eauto.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
   etransitivity. eauto. eapply injp_acc_tl_i; eauto.
@@ -2837,13 +2860,14 @@ Proof.
   eapply stack_contents_support; eauto. apply SEP'.
   apply agree_regs_set_pair. apply agree_regs_undef_caller_save_regs.
   apply agree_regs_inject_incr with j; auto.
-  auto. intros. 
-  transitivity ((undef_caller_save_regs (parent_rs lrs)) r).
+  auto.
+  intros. 
+  transitivity ((undef_caller_save_regs rs) r).
   generalize (CallConv.loc_result_always_one (ef_sig ef)).
   intros [r0 Hr]. rewrite Hr. simpl. rewrite Regmap.gso. reflexivity.
   generalize (loc_result_caller_save (ef_sig ef)).
   intro Hcs. rewrite Hr in Hcs. simpl in Hcs. congruence.
-  unfold undef_caller_save_regs. rewrite H. reflexivity.
+  unfold undef_caller_save_regs. rewrite H. eauto.
   apply stack_contents_change_meminj with j; auto.
   rewrite sep_comm, sep_assoc; auto.
   etransitivity. eauto. eapply injp_acc_tl_e; eauto.
@@ -2862,7 +2886,7 @@ Proof.
   eapply frame_contents_exten with rs0 (parent_locset s) (parent_rs lrs'); auto.
   intros; apply Val.lessdef_same; apply AGCS; red; congruence.
   intros; rewrite (OUTU ty ofs); auto.
-Admitted.
+Qed.
 
 End STEP_CORRECT.
 
@@ -2954,7 +2978,7 @@ Proof.
   inv WTS. rewrite FIND in H4; inv H4. fold ge in FIND0. rewrite FIND in FIND0; inv FIND0.
   edestruct functions_translated as (tf & TFIND & TRANSL); eauto. apply SEP.
   simpl in TRANSL. inv TRANSL.
-  eexists (stkjw (injpw _ _ _ Hm) _ ls (parent_rs w lrs) (parent_sp cs') m'), _. repeat apply conj.
+  eexists (stkjw (injpw _ _ _ Hm) _ ls rs (parent_sp cs') m'), _. repeat apply conj.
   - econstructor; eauto.
   - eauto.
   - eapply match_stacks_init_args in SEP; eauto.
