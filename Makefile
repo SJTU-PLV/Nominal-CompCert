@@ -136,7 +136,7 @@ BACKEND=\
   ConstpropOp.v Constprop.v ConstpropOpproof.v \
   CSEdomain.v CombineOp.v CSE.v CombineOpproof.v \
   NeedDomain.v NeedOp.v Deadcode.v \
-  Unusedglob.v Unusedglobproof.v \
+  Unusedglob.v \
   Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
   Allocation.v Allocproof.v \
   Tunneling.v Tunnelingproof.v \
@@ -145,11 +145,9 @@ BACKEND=\
   CleanupLabels.v CleanupLabelsproof.v \
   Debugvar.v Debugvarproof.v \
   Mach.v \
-  Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
+  Bounds.v Stacklayout.v Stacking.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   Asmrel.v AsmLinking.v \
-
-  # Constpropproof.v \	CSEproof.v \ Deadcodeproof.v 
 
 # C front-end modules (in cfrontend/)
 

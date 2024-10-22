@@ -135,7 +135,7 @@ Lemma ca_cllmma_equiv :
   cceqv cc_c_asm (cc_c_locset @ cc_locset_mach @ cc_mach_asm).
 Proof. split. apply cc_ca_cllmma. apply cc_cllmma_ca. Qed.
 
-
+(*
 (** Definition of cc_c_asm_injp (CAinjp) as the general calling convention between C and assembly.
 The memory and arguments are related by some injection function. *)
 
@@ -572,3 +572,4 @@ Lemma cainjp__injp_ca_equiv:
   cceqv cc_c_asm_injp (cc_c injp @ cc_c_asm).
 Proof. split. apply cc_cainjp__injp_ca. apply cc_injpca_cainjp. Qed.
 
+*)

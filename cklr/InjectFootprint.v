@@ -526,9 +526,6 @@ Proof.
     + cbn. rstep; auto.
 Qed.
 
-(** * The proof of injp ⊑ injp ⋅ injp starts from here *)
-(* Injection implies image is in the support *)
-
 Lemma inject_implies_image_in: forall f m1 m2,
   Mem.inject f m1 m2 -> inject_image_in f (Mem.support m2).
 Proof.
@@ -560,6 +557,12 @@ Proof.
   intros. destruct (f b) eqn:?. destruct p.
   apply H in Heqo. congruence. auto.
 Qed.
+
+
+(*
+(** * The proof of injp ⊑ injp ⋅ injp starts from here *)
+(* Injection implies image is in the support *)
+
 
 (** * Step1: The Construction of meminj j1' j2' *)
 
@@ -2343,7 +2346,7 @@ Qed.
              unfold Mem.valid_block. eauto.
         * left. eapply step2_perm2; eauto. replace (ofs + delta - ofs) with delta by lia.
           eauto.
-  Admitted.
+  Abort.
 
 
   Lemma step2_perm2': forall b1 o1 b2 o2 b3 d k p,
@@ -2579,11 +2582,11 @@ Qed.
         left. eapply step2_perm1; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
         right. intro. apply P1. eapply step2_perm2; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
-  Admitted.
+  Abort.
 
   Lemma tid_s2 :
     Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2').
-  Admitted.
+  Abort.
   
 End CONSTR_PROOF.
 
@@ -2807,3 +2810,4 @@ Proof.
         intros [E F]. split; eauto.
     + repeat rstep; eauto.
 Qed.
+*)

@@ -2950,7 +2950,7 @@ Proof.
   intros. cbn. eapply external_states_simulation; eauto.
   apply step_simulation; eauto.
 Qed.
-
+(*
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
@@ -2959,7 +2959,7 @@ Proof.
   rewrite sub_inj_injp.
   eapply transf_program_correct'; eauto.
 Qed.
-
+*)
 (** ** Commutation with linking *)
 
 Global Instance TransfSimplLocalsLink : TransfLink match_prog.

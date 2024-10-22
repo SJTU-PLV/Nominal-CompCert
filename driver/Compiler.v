@@ -32,7 +32,7 @@ Require Import Asmrel.
 Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
-Require Import CA.
+(* Require Import CA. *)
 Require Import CallconvBig VCompBig CallConvAlgebra CallConvLibs Composition.
 
 (** Languages (syntax and semantics). *)

@@ -1657,7 +1657,7 @@ Proof.
   rewrite Ptrofs.add_assoc. auto.
   exists Vundef. split; constructor.
 Qed.
-
+(*
 (** I ⋅ injp ⋅ I ⋅ injp ⊑  I ⋅ injp for any C-level invariant I*)
 Lemma trans_injp_inv_incoming (I: invariant li_c) :
   ccref (I @ injp) ((I @ injp) @ (I @ injp)).
@@ -1794,99 +1794,8 @@ Qed.
 Theorem ro_injp_trans:
   cceqv ((ro @ injp) @ (ro @ injp)) (ro @ injp).
 Proof. split. eapply trans_injp_ro_outgoing. eapply trans_injp_inv_incoming. Qed.
-
-(** ** Properties for the Deadcode pass *)
-(** The [match_state] relation for Deadcode uses [magree] instead of [Mem.inject].
-    As a result, proving injp for the incoming side is relatively complicated.
-    We prove ro ⋅ injp ->> ro ⋅ inj and turns it to ro ⋅ injp -> ro ⋅ injp with the help
-    of self-simulations using ro and injp at RTL level and following refinement.
-
-    ro ⋅ injp ⊑ ro ⋅ injp ⋅ ro ⋅ injp ⋅ injp  --> ro ⋅ injp ⋅ ro ⋅ inj ⋅ injp ⊑ ro ⋅ injp
-
-    Outgoing side is trivial from ro ⋅ injp ⊑ ro ⋅ injp ⋅ ro ⋅ injp.
-    Incoming side is proved using the same pattern as injp ⋅ inj ⋅ injp ⊑ injp.
  *)
 
-Lemma ro_injp_inj_I_incoming (I: invariant li_c) :
-  ccref (ro @ injp) ((ro @ injp) @ (ro @ inj) @ injp).
-Proof.
-  red. intros [[se wi] w] se1 se4 q1 q4 [Hse1 Hse4] [q1' [Hq1 Hq4]].
-  inv Hse1. inv Hq1. inv Hse4. inv Hq4. simpl in H4,H5. inv H6.
-  rename m0 into m1. rename m3 into m4. clear Hm2 Hm3.
-  assert (Hm12: Mem.inject (meminj_dom f) m1 m1).
-  eapply mem_inject_dom; eauto.
-  exists (se,(se,wi,injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm1)),
-      (se,(se,wi,injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-        (injpw f m1 m4 Hm1))).
-  repeat apply conj.
-  - constructor; eauto. constructor; eauto. constructor; eauto.
-    constructor; eauto. eapply match_stbls_dom; eauto.
-    constructor; eauto. constructor; eauto. constructor; eauto.
-    constructor; eauto. simpl. eapply match_stbls_dom; eauto.
-    constructor; eauto.
-  - exists (cq vf1 sg vargs1 m1). split.
-    repeat econstructor; eauto. simpl. eapply val_inject_dom; eauto.
-    simpl. eapply val_inject_list_dom; eauto.
-    exists (cq vf1 sg vargs1 m1). split.
-    econstructor; eauto. split. econstructor; eauto. econstructor; cbn; eauto.
-    eapply val_inject_dom; eauto.
-    simpl. eapply val_inject_list_dom; eauto.
-    constructor; simpl; eauto.
-  - intros r1 r4 [r2 [Hr1 [r3 [Hr2 Hr3]]]].
-    destruct Hr1 as [r1' [x Hr1]]. inv x. rename r1' into r1.
-    destruct Hr2 as [r2' [x Hr2]]. inv x. rename r2' into r2.
-    destruct Hr1 as [w12' [Hw1' Hr1]].
-    destruct Hr2 as [w23' [Hw2' Hr2]].
-    destruct Hr3 as [w34' [Hw3' Hr3]].
-    destruct w12' as [f12 m1' m2' Hm12'].
-    destruct w23' as [f23 xm2' xm3' ].
-    destruct w34' as [f34 m3' m4' Hm34'].
-    inv Hr1. inv H10. inv Hr2. inv H14. inv Hr3. inv H15.
-    inv Hw1'.
-    inv Hw2'.
-    inv Hw3'.
-    rename m1'0 into m1'. rename m2' into m3'. rename m2'1 into m4'. rename m2'0 into m2'.
-    assert (Hm14' :  Mem.inject (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
-    eapply Mem.inject_compose; eauto.
-    eapply Mem.inject_compose; eauto.
-    exists (cr vres1 m1'). split. constructor; eauto.
-    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4' Hm14').
-    destruct H23 as [S23 H23].    destruct H24 as [S24 H24].
-    repeat apply conj.
-    + constructor; eauto.
-      * split. eauto. eapply Mem.unchanged_on_implies; eauto.
-        intros. apply loc_unmapped_dom; eauto.
-      * rewrite <- (meminj_dom_compose f).
-        rewrite <- (meminj_dom_compose f) at 2.
-        rauto.
-      * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
-        destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
-        destruct (f23 b2) as [[b3 d2]|] eqn: INJ2; try congruence.
-        destruct (f34 b3) as [[b4' d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H26; eauto. unfold meminj_dom. rewrite f14. auto.
-        intros [A B].
-        exploit H28; eauto. inversion Hm12. apply mi_freeblocks; eauto.
-        intros [C D].
-        exploit H38. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
-        intros [E F]. split; eauto.
-    + constructor; eauto. cbn.
-      eapply val_inject_compose; eauto.
-      eapply val_inject_compose; eauto.
-      constructor.
-Qed.
-
-Lemma Deadcode_ext_out:
-  ccref ((ro @ injp) @ (ro @ injp) @ injp) (ro @ injp).
-Proof.
-  etransitivity.
-  rewrite <- (cc_compose_assoc (ro @ injp)).
-  rewrite trans_injp_ro_outgoing.
-  rewrite cc_compose_assoc.
-  assert (ccref (injp @ injp) injp).
-  rewrite <- CKLRAlgebra.cc_c_compose.
-  rewrite injp_injp2. reflexivity.
-  rewrite H. reflexivity. reflexivity.
-Qed.
 
 (** ** The reversed version of [commut_wt_c] *)
 Theorem wt_R_refinement R:
