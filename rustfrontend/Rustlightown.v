@@ -386,6 +386,9 @@ Fixpoint place_dominators (p: place) : list place :=
   | Plocal _ _ => nil
   end.
 
+Definition dominators_is_init (own: own_env) (p: place) : bool :=
+  forallb (is_init own) (place_dominators p).
+
 (* A place's dominator is owned means that this place is the owner of
 the location it resides in *)
 (* Definition place_dominator_own (own: own_env) (p: place) : bool := *)
