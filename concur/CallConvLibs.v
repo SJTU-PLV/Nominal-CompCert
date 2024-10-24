@@ -1349,7 +1349,6 @@ Lemma args_removed_acci: forall f m1 m2 m3 f' m1' m3' sg sp Hm13 Hm13' Hm12,
     exists m2' Hm12',
       args_removed sg sp m3' m2' /\
         injp_acci (injpw f m1 m2 Hm12) (injpw f' m1' m2' Hm12').
-Admitted.
 
 Compute gworld (cc_locset_mach @ mach_injp).
 Lemma args_removed_extends : forall sg sp m1 m2,
@@ -1805,7 +1804,6 @@ Proof.
       -- econstructor; eauto.
          admit.
          (** another problem : shall we unify the 2unchanged_on with args_removed? Maybe the "unchanged_on + noperm relation" is enough?*)
-Admitted.
 (** Seems can be proved? *)
 
 

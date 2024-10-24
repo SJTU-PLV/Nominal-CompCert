@@ -32,6 +32,7 @@ Inductive cc_c_asm_injp_mq : cc_cainjp_world -> c_query -> query li_asm -> Prop:
     Val.has_type tsp Tptr ->
     Val.has_type tra Tptr ->
     valid_blockv (Mem.support tm) tsp ->
+    pointer_tid (Mem.tid (Mem.support tm)) tsp ->
     args_removed sg tsp tm tm0 -> (* The Outgoing arguments are readable and freeable in tm *)
     vf <> Vundef -> tra <> Vundef ->
     cc_c_asm_injp_mq

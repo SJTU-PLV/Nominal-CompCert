@@ -463,6 +463,7 @@ Section ConcurSim.
             econstructor. eauto. congruence.
           - (** why we need this valid_blockv? for what in which step for DR*)
             admit.
+          - admit.
           - econstructor. simpl. red.
             unfold Conventions.size_arguments. rewrite NONEARG.
             reflexivity.
@@ -632,11 +633,11 @@ Qed.
       intros until wA. intros H H0 MSE.
       inv H. inv H0.
       subst tvf targs. rewrite pthread_create_locs in H4. simpl in H4.
-      inv H4. inv H9. inv H11. inv H5.
+      inv H4. inv H10. inv H12. inv H9.
       set (rs' := rs # PC <- (rs RSI) # RDI <- (rs RDX)).
       assert (INJPTC: j b_ptc = Some (b_ptc, 0)).
       {
-        inv MSE. inv H11.
+        inv MSE. inv H12.
         exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDPTC.
         intros (b3 & INJ).
         exploit mge_symb; eauto.
@@ -645,10 +646,10 @@ Qed.
         inv FINDPTC'. eauto.
       }
       assert (PCVAL: rs PC = Vptr b_ptc Ptrofs.zero).
-      inv H1. rewrite H9 in INJPTC. inv INJPTC. reflexivity.
+      inv H5. rewrite H12 in INJPTC. inv INJPTC. reflexivity.
       assert (INJSTR: j b_start = Some (b_start, 0)).
       {
-        inv MSE. inv H11.
+        inv MSE. inv H12.
         exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDSTR. eauto.
         intros (b3 & INJ).
         exploit mge_symb; eauto.
@@ -657,13 +658,13 @@ Qed.
         inv FINDSTR'. eauto.
       }
       assert (RSIVAL: rs RSI = Vptr b_start Ptrofs.zero).
-      inv H3. rewrite H11 in INJSTR. inv INJSTR. reflexivity.
+      inv H3. rewrite H12 in INJSTR. inv INJSTR. reflexivity.
       case (Mem.thread_create tm) as [tm' id] eqn:MEM_CREATE'.
       exploit thread_create_inject; eauto. intros [Hm1 eqid]. subst id.
       assert (exists b_t' ofs_t', rs RDI = Vptr b_t' ofs_t').
-      inv H2. eauto. destruct H as [b_t' [ofs_t' RDIVAL]].
+      inv H2. eauto. destruct H1 as [b_t' [ofs_t' RDIVAL]].
       assert (exists b_arg' ofs_arg', rs RDX = Vptr b_arg' ofs_arg').
-      inv H4. eauto. destruct H as [b_arg' [ofs_arg' RDXVAL]].
+      inv H4. eauto. destruct H1 as [b_arg' [ofs_arg' RDXVAL]].
       exists (cajw (injpw j m' tm' Hm1) start_routine_sig rs').
       eexists. repeat apply conj.
       - fold se in FINDPTC. rewrite SE_eq in FINDPTC.
@@ -677,12 +678,14 @@ Qed.
         econstructor; eauto. rewrite start_routine_loc. simpl.
         constructor. unfold rs'. rewrite Pregmap.gss. eauto.
         constructor. unfold Conventions.size_arguments.
-        rewrite start_routine_loc. simpl. intros. inv H. extlia.
+        rewrite start_routine_loc. simpl. intros. inv H1. extlia.
         unfold rs'. repeat rewrite Pregmap.gso.
-        subst tsp. inv H10. constructor. simpl.
+        subst tsp. rewrite <- H. constructor. simpl.
         inv MEM_CREATE'. simpl.
-        rewrite <- Mem.sup_create_in. auto.
-        congruence. congruence.
+        rewrite <- Mem.sup_create_in. auto. congruence. congruence.
+        unfold rs'. repeat rewrite Pregmap.gso.
+        subst tsp. inv H11. constructor.
+        inv MEM_CREATE'. simpl. eauto. congruence. congruence.
         econstructor. unfold Conventions.tailcall_possible, Conventions.size_arguments.
         rewrite start_routine_loc. simpl. reflexivity. congruence.
       - econstructor; eauto.
@@ -1128,10 +1131,10 @@ Qed.
          { inv Q_YIE. red in MS. inv MS.
            econstructor. fold tse. rewrite <- SE_eq. eauto.
            subst tvf. inv H3.
-           rewrite <- SE_eq in H10.
-           exploit match_senv_id. eauto. apply H13. eauto. intros [X Y].
+           rewrite <- SE_eq in H11.
+           exploit match_senv_id. eauto. apply H14. eauto. intros [X Y].
            subst b delta. reflexivity.
-           simpl. simpl in H15. inv Hm0. inv mi_thread. inv Hms. unfold Mem.next_tid. auto.
+           simpl. simpl in H16. inv Hm0. inv mi_thread. inv Hms. unfold Mem.next_tid. auto.
          }
          reflexivity.
          reflexivity.
@@ -1145,9 +1148,9 @@ Qed.
          -- destruct CUR_INJP_TID. split. simpl in TID. congruence. simpl in NTID. congruence.
          -- destruct CUR_INJP_TID.  simpl in *.
             intros. destruct (Nat.eq_dec n cur). subst.
-            rewrite NatMap.gss in H9. inv H9.
+            rewrite NatMap.gss in H10. inv H10.
             split. eauto. lia. 
-            rewrite NatMap.gso in H9.
+            rewrite NatMap.gso in H10.
             exploit FIND_TID; eauto. eauto.
          -- intros.
             instantiate (1:= NatMap.set cur (Some wA) worldsA).
@@ -1189,7 +1192,7 @@ Qed.
        inv Q_JOIN. inv MQ. red in MS. inv MS.
        subst targs tvf.
        setoid_rewrite pthread_join_locs in H6. simpl in H6.
-       inv H6. inv H17. inv H18.
+       inv H6. inv H18. inv H19.
        assert (HPC: rs_q PC = Vptr b_ptj Ptrofs.zero).
        inv H7. rewrite <- SE_eq in H3. exploit match_senv_id; eauto. intros [X Y].
        subst b2 delta. reflexivity.
@@ -1698,8 +1701,9 @@ Qed.
            intros. rewrite SG_STR in H. unfold Conventions.size_arguments in H.
            setoid_rewrite start_routine_loc in H. simpl in H. inv H. extlia.
            inv ACCG1. inv H11.
-           econstructor. simpl. inv H19. inv unchanged_on_e'.
+           econstructor. simpl. inv H20. inv unchanged_on_e'.
            eauto.
+           inv ACCG1. inv H12. econstructor. destruct H20 as [[_ B] _]. congruence.
            econstructor. rewrite SG_STR. red. unfold Conventions.size_arguments.
            rewrite start_routine_loc. simpl. auto.
          }
@@ -1993,6 +1997,7 @@ Qed.
                fold tsp1. unfold ntm.
                eapply Mach.valid_blockv_support. eauto.
                red. intros. simpl. erewrite <- Mem.sup_yield_in. auto.
+               simpl. fold tsp1. admit.
                econstructor. unfold Conventions.tailcall_possible.
                unfold Conventions.size_arguments. rewrite start_routine_loc.
                simpl. lia.
@@ -2035,7 +2040,7 @@ Qed.
           exploit substep_switch_in; eauto.
           intros (s2'' & i' & X & Y).
           exists i', s2''. split. left. eapply plus_one. eapply step_switch; eauto. eauto.
-Qed.
+Admitted.
 
   End FSIM.
 

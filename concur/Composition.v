@@ -556,7 +556,7 @@ Proof.
       econstructor; eauto.
 Qed.
 
-Lemma inject_list_in {A B: Type}:
+Lemma inject_list_in {A: Type}:
   forall (l : list A)
     (map1 map2: A -> val) j, (forall a, In a l -> Val.inject j (map1 a) (map2 a)) ->
                                     Val.inject_list j map1##l  map2##l.
@@ -608,18 +608,18 @@ Proof.
     + econstructor; eauto. constructor. split. econstructor; eauto. constructor.
     + exists (lq vf sg ls2 m1). split. econstructor; eauto.
       exists (mq tvf sp4 tra mrs3 m4). split. econstructor; eauto.
-      admit. (** to be added in CAinjp*)
+      inv H15. econstructor; eauto. erewrite inject_tid; eauto.
       intros. specialize (Hargsinj (R r)). exploit Hargsinj. constructor. eauto.
       split. eauto with mem. split. intros.
       {
-        intros. inv H15. rewrite H0 in H. extlia.
+        intros. inv H16. rewrite H0 in H. extlia.
         do 2 eexists. split.  reflexivity. 
         split; eauto.
         eapply Mem.free_range_perm; eauto.
       }
       {
-        intros. inv H15. apply tailcall_possible_reg in H. inv H. eauto.
-        exploit H12; eauto. intros [v4 Hl]. exists v4. split. eauto.
+        intros. inv H16. apply tailcall_possible_reg in H. inv H. eauto.
+        exploit H13; eauto. intros [v4 Hl]. exists v4. split. eauto.
         specialize (Hargsinj (S Outgoing ofs ty)). exploit Hargsinj; eauto. constructor. eauto.
         unfold ls3. simpl. rewrite <- H0. setoid_rewrite Hl. eauto.
       }
@@ -630,9 +630,9 @@ Proof.
       inv Hr1. inv Hr2. simpl in Hr3. inv Hr3. rename m' into m1''.
       exists (injpw j'' m1'' m4'' Hm''). repeat apply conj; eauto.
       econstructor; simpl; eauto.
-      destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr. simpl. rewrite <- H13. eapply H22.
+      destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr. simpl. rewrite <- H14. eapply H23.
       rewrite Hr. constructor. reflexivity.
-      intros. rewrite <- H13. rewrite <- H23; eauto.
+      intros. rewrite <- H14. rewrite <- H24; eauto.
   - red. intros [t1 [[j m1 m4 Hm] t2]] wp2 [xse [sg [xse2 [[[j' m1' m4' Hm'] xsg ls2 mrs3 sp4 xm4] [rs4 xsup]]]]].
     intros se1 se4 q1 q4 [Hse1 [Hse2 Hse3]] [q2 [Hq1 [q3 [Hq2 Hq3]]]] [_ [ACI _]] Hmat. simpl in ACI.
     inv Hse1. inv Hse2. inv Hse3. inv Hq1. inv Hq2. inv Hq3. rename xm4 into m4'. rename m into m1'.
@@ -649,7 +649,7 @@ Proof.
           eapply args_removed_free; eauto.
           intros. exploit C; eauto. intros [v [D E]].
           exists v. rewrite <- Hsp4. auto.
-        + exists m4'. constructor. red. Search size_arguments.
+        + exists m4'. constructor. red. 
           generalize (size_arguments_above sg). intro. lia.
       } destruct H as [m4'_ REMOVE].
       simpl. econstructor; eauto.
@@ -661,6 +661,7 @@ Proof.
         simpl. destruct H18 as [A [B C]]. exploit C; eauto. intros [v [Hl Hinj]].
         setoid_rewrite Hl. eauto.
       }
+      inv SPL. econstructor; eauto. erewrite <- inject_tid; eauto.
     + intros r1 r2 [j'' m1'' m4'' Hm''] ACE Hr. simpl in ACE, Hr.
       inv Hr. 
       exists (tt, (injpw j'' m1'' m4'' Hm'', tt)). repeat apply conj; simpl; eauto.
@@ -690,7 +691,7 @@ Proof.
         intros [A B]. apply B. eauto.
       }
       econstructor; eauto. inv ACE. destruct H28 as [_ [SUP _]]. auto.
-Admitted. (*to do : add a reflexivity between m_pred and args_removed *)
+Qed.
 
 
 Definition cc_compcert : GS.callconv li_c li_asm :=
