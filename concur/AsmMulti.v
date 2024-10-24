@@ -108,17 +108,18 @@ Section MultiThread.
 
   (** maybe we should change Vnullptr*)
   Definition main_id := prog_main (skel OpenS).
-  Definition initial_regset (pc : val) :=
+  Definition initial_regset (pc : val) (sp: val):=
     (Pregmap.init Vundef) # PC <- pc
                           # RA <- Vnullptr
-                          # RSP <- Vnullptr.
+                          # RSP <- sp.
                                             
   Inductive initial_state : state -> Prop :=
-  |initial_state_intro : forall ls main_b m0 rs0,
+  |initial_state_intro : forall ls main_b m0 rs0 m0' sb,
       Genv.find_symbol initial_se main_id = Some main_b ->
       Genv.init_mem (skel OpenS) = Some m0 ->
-      rs0 = initial_regset (Vptr main_b Ptrofs.zero) ->
-      (Smallstep.initial_state OpenLTS) (rs0,m0) ls ->
+      Mem.alloc m0 0 0 = (m0', sb) ->
+      rs0 = initial_regset (Vptr main_b Ptrofs.zero) (Vptr sb Ptrofs.zero)->
+      (Smallstep.initial_state OpenLTS) (rs0,m0') ls ->
       initial_state (initial_gstate ls).
 
   (** Final state of Concurrent semantics *)
@@ -155,20 +156,25 @@ Section MultiThread.
       Mem.next_tid (Mem.support m) = next ->
       query_is_yield_asm (rs, m) next.
 
-  Inductive query_is_pthread_create_asm : query li_asm -> query li_asm -> Prop :=
+  Inductive query_is_pthread_create_asm : query li_asm -> reply li_asm -> query li_asm -> Prop :=
   |pthread_create_intro :
-    forall m b_ptc b_the ofs_the b_start b_arg ofs_arg m' rs rs' start_id new_tid
+    forall m b_ptc b_the ofs_the b_start b_arg ofs_arg m1 rs rs_r rs_q start_id new_tid P1 m2 m3 sp P2 m4
       (FINDPTC: Genv.find_symbol initial_se pthread_create_id = Some b_ptc)
       (FINDSTR: Genv.find_symbol initial_se start_id = Some b_start)
       (RS_PC: rs # PC = Vptr b_ptc Ptrofs.zero)
       (RS_RDI : rs # RDI = Vptr b_the ofs_the)
       (RS_RSI : rs # RSI = Vptr b_start Ptrofs.zero)
       (RS_RDX : rs # RDX = Vptr b_arg ofs_arg)
-      (RS'_PC : rs' # PC = Vptr b_start Ptrofs.zero)
-      (rs'_RDI : rs' # RDI = Vptr b_arg ofs_arg)
+      (RSR: rs_r = (rs # PC <- (rs RA) # RAX <- (Vint (Int.one))))
+      (RSQ_PC : rs_q # PC = Vptr b_start Ptrofs.zero)
+      (RSQ_RDI : rs_q # RDI = Vptr b_arg ofs_arg)
+      (RSQ_RSP: rs_q # RSP = Vptr sp Ptrofs.zero)
       (** We may need more requirements of rs' here *)
-      (MEM_CREATE: Mem.thread_create m = (m', new_tid)),
-      query_is_pthread_create_asm (rs,m) (rs', m').
+      (MEM_CREATE: Mem.thread_create m = (m1, new_tid))
+      (MEM_YIELD: Mem.yield m1 new_tid P1 = m2)
+      (MEM_ALLOCSP: Mem.alloc m2 0 0 = (m3, sp))
+      (MEM_YB: Mem.yield m3 (Mem.tid (Mem.support m)) P2 = m4),
+      query_is_pthread_create_asm (rs,m) (rs_r,m4) (rs_q, m3).
   
   Inductive query_is_pthread_join_asm: query li_asm -> nat -> val -> Prop :=
   |pthread_join_intro_asm: forall rs m b_ptj i v_vptr ofs_vptr
@@ -243,13 +249,13 @@ Section MultiThread.
       Smallstep.step OpenLTS ge ls1 t ls2 ->
       update_thread s (cur_tid s) (Local ls2) = s' ->
       step ge s t s'
-  |step_thread_create : forall ge s s' q_ptc rs_str rs gm0 gmem ls ls',
+  |step_thread_create : forall ge s s' q_ptc r_ptc q_str rs gm0 ls ls',
       get_cur_thread s = Some (Local ls) -> (* get the current local state *)
       Smallstep.at_external OpenLTS ls (rs, gm0) -> (* get the query to pthread_create *)
-      query_is_pthread_create_asm q_ptc (rs_str, gmem) -> (* get the query to start_routine *)
-      Smallstep.after_external OpenLTS ls ((rs # PC <- (rs RA) # RAX <- (Vint (Int.one))), gmem) ls' ->
+      query_is_pthread_create_asm q_ptc r_ptc q_str -> (* get the reply to [pthread_create] and query to start_routine *)
+      Smallstep.after_external OpenLTS ls r_ptc ls' ->
       (* the current thread completes the primitive, regsets are unchanged *)
-      pthread_create_state s rs_str (Local ls') = s' ->
+      pthread_create_state s (fst q_str) (Local ls') = s' ->
       step ge s E0 s'
   |step_switch : forall ge s s' s'' target gmem',
       switch_out s s' target gmem' ->

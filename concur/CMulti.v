@@ -141,19 +141,30 @@ Section MultiThread.
     update_thread s' target ls_new.
 
 
+  Lemma thread_create_yield : forall m m' tid,
+      Mem.thread_create m = (m', tid) ->
+      Mem.range_prop tid (Mem.support m').
+  Proof.
+    intros.
+    generalize (Mem.tid_valid (Mem.support m)). intro Hv.
+    intros. inv H. constructor. simpl. unfold Mem.next_tid. lia.
+    simpl. unfold Mem.next_tid. simpl. rewrite app_length. simpl. lia.
+  Qed.
    
-  Inductive query_is_pthread_create : query li_c -> query li_c -> Prop :=
+  Inductive query_is_pthread_create : query li_c -> reply li_c -> query li_c -> Prop :=
   |pthread_create_intro :
-    forall m arglist b_ptc b_start b_arg ofs_arg b_t ofs_t m' start_id tid m''
+    forall m arglist b_ptc b_start b_arg ofs_arg b_t ofs_t m1 start_id tid m2 P1
       (FINDPTC: Genv.find_symbol initial_se pthread_create_id = Some b_ptc)
       (FINDSTR: Genv.find_symbol initial_se start_id = Some b_start)
       (ARGLIST: arglist = (Vptr b_t ofs_t) :: (Vptr b_start Ptrofs.zero) :: (Vptr b_arg ofs_arg) :: nil)
-      (MEM_CREATE: Mem.thread_create m = (m', tid))
-      (NMAX: (tid < 1000)%nat)
-      (THREAD_V: Mem.storev Mint64 m' (Vptr b_t ofs_t) (Vint (nat_to_int tid NMAX)) = Some m''),
+      (MEM_CREATE: Mem.thread_create m = (m1, tid)) (** allocate a new thread id*)
+      (MEM_YIELD: Mem.yield m1 tid P1 = m2) (** The initial query for new thread has new tid *)
+      (NMAX: (tid < 1000)%nat),
+      (* (THREAD_V: Mem.storev Mint64 m' (Vptr b_t ofs_t) (Vint (nat_to_int tid NMAX)) = Some m''), *)
       query_is_pthread_create
-        (cq (Vptr b_ptc Ptrofs.zero) pthread_create_sig arglist m)
-        (cq (Vptr b_start Ptrofs.zero) start_routine_sig ((Vptr b_arg ofs_arg)::nil) m').
+      (cq (Vptr b_ptc Ptrofs.zero) pthread_create_sig arglist m)
+      (cr (Vint (Int.one)) m1)
+      (cq (Vptr b_start Ptrofs.zero) start_routine_sig ((Vptr b_arg ofs_arg)::nil) m2).
 
   (* We add a new thread with its initial query without memory,
      we also update the running memory by adding a new list of positives *)
@@ -163,7 +174,6 @@ Section MultiThread.
     let s'' := update_thread s' ntid (Initial cqv) in
     update_thread s'' ctid ls'.
     
-
   Inductive query_is_pthread_join : query li_c -> nat -> val -> Prop :=
   |pthread_join_intro :
     forall m arglist b_ptj target_id b_vptr ofs_vptr i
@@ -248,14 +258,13 @@ Section MultiThread.
       Smallstep.step OpenLTS ge ls1 t ls2 ->
       update_thread s (cur_tid s) (Local ls2) = s' ->
       step ge s t s'
-  |step_thread_create : forall ge s s' q_ptc q_str gmem ls ls' cqv,
+  |step_thread_create : forall ge s s' q_ptc r_ptc q_str ls ls' cqv,
       get_cur_thread s = Some (Local ls) -> (* get the current local state *)
       Smallstep.at_external OpenLTS ls q_ptc -> (* get the query to pthread_create *)
-      query_is_pthread_create q_ptc q_str -> (* get the query to start_routine *)
+      query_is_pthread_create q_ptc r_ptc q_str -> (* get the query to start_routine *)
       (* The global memory is already updated from q_ptc to q_str *)
-      cq_mem q_str = gmem -> (* the updated memory, difference is the #threads and the thread variable *)
       get_cqv q_str = cqv -> (*the initial query without memory, is stored as initial state in new thread *)
-      Smallstep.after_external OpenLTS ls (cr (Vint Int.one) gmem) ls' -> (* the current thread completes the primitive*)
+      Smallstep.after_external OpenLTS ls r_ptc ls' -> (* the current thread completes the primitive*)
       pthread_create_state s cqv (Local ls') = s' ->
       step ge s E0 s'
   |step_switch : forall ge s s' s'' target gmem',

@@ -210,7 +210,7 @@ Proof.
   specialize (ROM p ltac:(apply Linking.linkorder_refl)). *)
   admit.
   erewrite Genv.init_mem_genv_sup; eauto.
-Admitted. (*should be correct, just need to be proved*)
+Abort. (*should be correct, just need to be proved*)
 
 Lemma main_block_genv: Genv.find_symbol se (prog_main tp) = Some main_block_c.
 Proof.
@@ -267,7 +267,7 @@ Proof.
   rewrite Pregmap.gss.
   unfold ge_asm. simpl. unfold Genv.symbol_address. rewrite main_block_genv. discriminate.
   rewrite <- m0_same at 2. constructor.
-Admitted. (*ok, just nullptr issue*)
+Abort.
 
 
 Lemma Hmatch_reply1 : forall r r1 r2,
@@ -408,5 +408,5 @@ Proof.
   exact Hvalid. eapply Hmatch_query; eauto. exact Hmatch_senv.
   intros. eapply Hmatch_reply1; eauto.
   admit.
-Admitted. (*only valid for Clight -> Asm *)
+Abort.
 End CLOSE_COMPCERT.
