@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Builtins Events Memory Globalenvs Smallstep Invariant.
-Require Import CallconvBig VCompBig.
+Require Import CallconvBig Injp.
 Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.

@@ -19,7 +19,7 @@ Require Import Op Locations Mach Conventions Asm.
 Require Import Asmgen Asmgenproof0 Asmgenproof1.
 Require Import LanguageInterface CKLR Extends.
 
-Require Import CallconvBig CallConvLibs.
+Require Import CallconvBig Ext.
 Definition match_prog (p: Mach.program) (tp: Asm.program) :=
   match_program (fun _ f tf => Asmgen.transf_fundef f = OK tf) eq p tp.
 
@@ -1101,6 +1101,7 @@ Qed.
 
 End WITH_WORLD.
 
+Infix "@" := GS.cc_compose (at level 30, right associativity).
 Let cc : GS.callconv li_mach li_asm := mach_ext @ cc_mach_asm.
 
 Lemma transf_initial_states:
@@ -1191,6 +1192,7 @@ Qed.
 
 End PRESERVATION.
 
+Infix "@" := GS.cc_compose (at level 30, right associativity).
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   GS.forward_simulation (mach_ext @ cc_mach_asm)

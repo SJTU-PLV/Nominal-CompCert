@@ -4,7 +4,7 @@ Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import Extends Inject InjectFootprint.
 
-Require Import CallconvBig.
+Require Import CallconvBig Injp Ext.
 Require Import InjpAccoComp.
 
 Lemma loc_out_of_reach_trans:

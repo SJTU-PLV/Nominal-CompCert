@@ -20,7 +20,7 @@ Require Import Op Locations Conventions LTL.
 Require Import Tunneling.
 Require Import LanguageInterface cklr.Extends.
 
-Require Import CallconvBig CallConvLibs.
+Require Import CallconvBig Ext.
 
 Definition match_prog (p tp: program) :=
   match_program (fun ctx f tf => tf = tunnel_fundef f) eq p tp.

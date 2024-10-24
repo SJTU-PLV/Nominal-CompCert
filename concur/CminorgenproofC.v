@@ -19,7 +19,7 @@ Require Intv.
 Require Import AST Linking.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import CallconvBig.
-Require Import VCompBig.
+Require Import Injp.
 
 Require Import Csharpminor Switch Cminor Cminorgen.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.

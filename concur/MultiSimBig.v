@@ -4,7 +4,7 @@ Require Import Smallstep SmallstepClosed.
 Require Import ValueAnalysis.
 Require Import MultiLibs CMulti AsmMulti.
 Require Import InjectFootprint CA.
-Require Import CallconvBig.
+Require Import CallconvBig Injp CAnew.
 
 (** * TODOs after completing this : Generalization *)
 
@@ -57,7 +57,7 @@ Section ConcurSim.
     Variable fsim_match_states : Genv.symtbl -> Genv.symtbl -> cc_cainjp_world -> injp_world -> fsim_index ->
                                  Smallstep.state OpenC -> Smallstep.state OpenA -> Prop.
     Hypothesis fsim_skel : skel OpenC = skel OpenA.
-    Hypothesis fsim_lts : forall (se1 se2 : Genv.symtbl) (wB : ccworld cc_c_asm_injp),
+    Hypothesis fsim_lts : forall (se1 se2 : Genv.symtbl) (wB : GS.ccworld cc_c_asm_injp_new),
         GS.match_senv cc_c_asm_injp_new wB se1 se2 ->
         Genv.valid_for (skel OpenC) se1 ->
         GS.fsim_properties cc_c_asm_injp_new se1 se2 wB (OpenC se1) 
@@ -296,7 +296,7 @@ Section ConcurSim.
         (M_STATES: match_local_states wB wp i sc sa),
         match_thread_states wB None wp i (CMulti.Local OpenC sc) (Local OpenA sa)
     |match_initial : forall wB i cqv rs m tm
-        (M_QUERIES: match_query cc_c_asm_injp wB (get_query cqv m) (rs,tm))
+        (M_QUERIES: GS.match_query cc_c_asm_injp_new wB (get_query cqv m) (rs,tm))
         (SG_STR: cqv_sg cqv = start_routine_sig),
         match_thread_states wB None (get wB) i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
     |match_returny : forall wB wA i sc sa wp wp'
@@ -443,7 +443,7 @@ Section ConcurSim.
         set (rs0 := initial_regset (Vptr main_b Ptrofs.zero)).
         set (q2 := (rs0,m0)).
         set (q1 := {| cq_vf := Vptr main_b Ptrofs.zero; cq_sg := main_sig; cq_args := nil; cq_mem := m0 |}).
-        assert (MQ: match_query cc_c_asm_injp w0 q1 q2).
+        assert (MQ: GS.match_query cc_c_asm_injp_new w0 q1 q2).
         { (* match initial query *)
           assert (NONEARG: Conventions1.loc_arguments main_sig = nil).
           unfold main_sig. unfold Conventions1.loc_arguments. destruct Archi.ptr64; simpl; eauto.
@@ -623,10 +623,10 @@ Qed.
         
     Lemma trans_pthread_create__start_routine: forall q_ptc q_str qa_ptc wA,
         query_is_pthread_create OpenC q_ptc q_str ->
-        match_query cc_c_asm_injp wA q_ptc qa_ptc ->
+        GS.match_query cc_c_asm_injp_new wA q_ptc qa_ptc ->
         injp_match_stbls (cajw_injp wA) se tse ->
         exists wA' qa_str, query_is_pthread_create_asm OpenA qa_ptc qa_str /\
-                        match_query cc_c_asm_injp wA' q_str qa_str /\
+                        GS.match_query cc_c_asm_injp_new wA' q_str qa_str /\
                         worlds_ptc_str wA wA'.
     Proof.
       intros until wA. intros H H0 MSE.

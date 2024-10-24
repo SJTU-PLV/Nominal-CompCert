@@ -4,7 +4,7 @@ Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import Inject InjectFootprint.
 
-Require Import CallconvBig.
+Require Import CallconvBig Injp.
 
 (** * The proof of injp ⊑ injp ⋅ injp starts from here *)
 

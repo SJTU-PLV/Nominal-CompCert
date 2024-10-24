@@ -19,7 +19,7 @@ Require Import Values Memory Globalenvs Events Smallstep.
 Require Import Ctypes Cop Clight SimplLocals.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 
-Require Import CallconvBig.
+Require Import CallconvBig Injp.
 
 Module VSF := FSetFacts.Facts(VSet).
 Module VSP := FSetProperties.Properties(VSet).

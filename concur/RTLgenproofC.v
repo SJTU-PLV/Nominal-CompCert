@@ -17,7 +17,7 @@ Require Import Integers Values Memory Events Smallstep Globalenvs.
 Require Import Switch Registers Cminor Op CminorSel RTL.
 Require Import RTLgen RTLgenspec.
 Require Import LanguageInterface cklr.CKLR cklr.Extends.
-Require Import CallconvBig CallConvLibs.
+Require Import CallconvBig Ext.
 
 (** * Correspondence between Cminor environments and RTL register sets *)
 

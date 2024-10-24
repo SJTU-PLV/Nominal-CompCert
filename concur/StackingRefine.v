@@ -6,11 +6,12 @@ Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
 Require Import CallconvBig CallConvAlgebra InjpAccoComp InjpExtAccoComp VCompBig.
+Require Import Injp Ext CAnew.
 Require Import Separation StackingproofC CallConv CallConvLibs.
 Import GS.
 
 Local Open Scope sep_scope.
-
+(*
 Record cc_stacking_world_injp :=
   stkjw {
     stk_w : injp_world;
@@ -98,7 +99,7 @@ Next Obligation.
   eapply Genv.valid_for_match in H2.
   apply H2. eauto.
 Qed.
-
+*)
 Lemma cctrans_locset_injp_stacking : cctrans (locset_injp @ cc_stacking_injp) cc_stacking_injp.
 Proof.
   constructor.

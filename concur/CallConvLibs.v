@@ -6,6 +6,7 @@ Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
 Require Import CallconvBig CallConvAlgebra VCompBig.
+Require Import Injp Ext.
 Require Import StackingproofC CallConv.
 Import GS.
 
@@ -37,17 +38,7 @@ Section TRANS.
 End TRANS.
 
 
-(*    
-Program Definition cc_id {li : language_interface} : callconv li li :=
-  {|
-    ccworld := unit;
-    ccworld_world := world_unit;
-    match_senv w := eq;
-    match_query w := eq;
-    match_reply w := eq;
-  |}.
- *)
-
+(** Compose identity pass *)
 Lemma cctrans_id_1 {li1 li2 : language_interface} : forall (cc: callconv li1 li2),
     cctrans (cc_compose cc_id cc) cc.
 Proof.
@@ -103,15 +94,6 @@ Proof.
 Qed.
 
 
-(** Q : Can we (Should we) define the new [injp] as [cklr] instead of several different
-        callconvs for different interfaces ?
-      
-    1. Compare the [c_injp] defined above v.s. [cc_c injp]. 
-       Can we define another version of cc_c based on another [cklr] equipped with acci and acce?
-    2. Try []
-
-  *)
-
 Lemma compose_id_new_injp_1 {li1 li2: language_interface} : forall (cc: callconv li1 li2) L1 L2 L3,
     Smallstep.forward_simulation 1 1 L1 L2 ->
     forward_simulation cc L2 L3 ->
@@ -132,275 +114,6 @@ Proof.
 Qed.
 
 
-
-(*
-Lemma oldfsim_newfsim_ext_c : forall  (L1 L2: semantics li_c li_c),
-    Smallstep.forward_simulation (cc_c ext) (cc_c ext) L1 L2 ->
-    forward_simulation c_ext L1 L2.
-Proof.
-  intros. red in H. inv H. constructor.
-  inv X. econstructor; eauto.
-  intros. exploit fsim_lts0; eauto.
-  intros FPros.
-  instantiate (1:= fun se1 se2 wB gw idx s1 s2 =>  fsim_match_states0 se1 se2 wB idx s1 s2).
-  simpl.
-  inv FPros. econstructor; eauto.
-  - intros. exploit fsim_match_final_states0; eauto.
-    intros [r2 [A B]]. exists r2. exists tt. intuition auto. reflexivity. reflexivity.
-  - intros. exploit fsim_match_external0; eauto.
-    intros (w0 & q2 & A & B & C).
-    exists w0, q2. intuition auto. reflexivity.
-    eapply H4; eauto.
-Qed.
-*)
-
-(** * Definition of new extend, including some internal (and? external) accessibilities for composing with injp *)
-Require Import Extends.
-(*
-Definition free_preserved_ext (m1 m1' m2': mem) : Prop :=
-  forall b ofs, fst b <> Mem.tid (Mem.support m1) ->
-           Mem.perm m1 b ofs Max Nonempty ->
-           ~ Mem.perm m1' b ofs Max Nonempty ->
-           ~ Mem.perm m2' b ofs Max Nonempty.
-*)
-Inductive ext_acci : relation ext_world :=
-    ext_acci_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
-                     (m1' m2' : mem) (Hm' : Mem.extends m1' m2')
-                     (TID1: Mem.tid (Mem.support m1) = Mem.tid (Mem.support m1'))
-                     (TID2: Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2'))
-                     (SUP1: Mem.sup_include (Mem.support m1) (Mem.support m1'))
-                     (SUP2: Mem.sup_include (Mem.support m2) (Mem.support m2'))
-                     (MPD1: Mem.max_perm_decrease m1 m1')
-                     (MPD2: Mem.max_perm_decrease m2 m2')
-                     (FREEP: free_preserved_ext m1 m1' m2'),
-                     ext_acci (extw m1 m2 Hm) (extw m1' m2' Hm').
-
-Instance ext_acci_preo : PreOrder ext_acci.
-Proof.
-  split.
-  - intros [m1 m2 Hm]. constructor; eauto; try red; intros; auto.
-  - intros [m1 m2 Hm] [m1' m2' Hm'] [m1'' m2'' Hm''] HA HB.
-    inv HA. inv HB. constructor; eauto; try congruence.
-    + red. intros. apply MPD1. auto. apply MPD0. apply SUP1. auto. auto.
-    + red. intros. apply MPD2. auto. apply MPD3. apply SUP2. auto. auto.
-    + red in FREEP, FREEP0.
-      red. intros.
-      destruct (Mem.perm_dec m1' b ofs Max Nonempty).
-      * eapply FREEP0; eauto. congruence.
-      * intro. eapply FREEP; eauto. apply MPD3; auto.
-        apply SUP2. inv Hm. rewrite <- mext_sup.
-        eapply Mem.perm_valid_block; eauto.
-Qed.
-
-Lemma ext_acci_free : forall m m' tm tm' Hm b lo hi Hm',
-    Mem.free m b lo hi = Some m' ->
-    Mem.free tm b lo hi = Some tm' ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_free; eauto;
-    try red; intros; eauto with mem.
-  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
-  destruct H2. subst.
-  eapply Mem.perm_free_2; eauto.
-Qed.
-
-Lemma ext_acci_store : forall m m' tm tm' Hm chunk b ofs v1 v2 Hm',
-    Mem.store chunk m b ofs v1 = Some m' ->
-    Mem.store chunk tm b ofs v2 = Some tm' ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_store; eauto;
-    try red; intros; eauto with mem.
-Qed.
-
-Lemma ext_acci_storev : forall m m' tm tm' Hm chunk a1 a2 v1 v2 Hm',
-    Mem.storev chunk m a1 v1 = Some m' ->
-    Mem.storev chunk tm a2 v2 = Some tm' ->
-    Val.lessdef a1 a2 ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. inv H1; try inv H.
-  destruct a2; inv H0. inv H2. eapply ext_acci_store; eauto.
-Qed.
-(*
-Lemma ext_acci_storebytes : forall m m' tm tm' Hm b ofs vs1 vs2 Hm',
-    Mem.storebytes m b ofs vs1 = Some m' ->
-    Mem.storebytes tm b ofs vs2 = Some tm' ->
-    Val.lessdef_list vs1 vs2 ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. constructor; eauto;
-    try erewrite <- Mem.support_free; eauto;
-    try red; intros; eauto with mem.
-  eapply Mem.perm_free_inv in H2; eauto. destruct H2; auto.
-  destruct H2. subst.
-  eapply Mem.perm_free_2; eauto.
-Qed.
-*)
-Lemma ext_acci_alloc : forall m m' tm tm' Hm b1 b2 lo1 hi1 lo2 hi2 Hm',
-    Mem.alloc m lo1 hi1 = (m', b1) ->
-    Mem.alloc tm lo2 hi2 = (tm', b2) ->
-    ext_acci (extw m tm Hm) (extw m' tm' Hm').
-Proof.
-  intros. apply Mem.support_alloc in H as S1. apply Mem.support_alloc in H0 as S2.
-  constructor; eauto. rewrite S1. eauto. rewrite S2. reflexivity.
-  rewrite S1. eauto with mem. rewrite S2. eauto with mem.
-  red. intros. eauto with mem.
-  red. intros. eauto with mem.
-  red. intros. eauto with mem.
-Qed.
-
-Inductive ext_acce : relation ext_world :=
-    ext_acce_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
-                     (m1' m2' : mem) (Hm' : Mem.extends m1' m2')
-                     (TID1: Mem.tid (Mem.support m1) = Mem.tid (Mem.support m1'))
-                     (TID2: Mem.tid (Mem.support m2) = Mem.tid (Mem.support m2'))
-                     (SUP1: Mem.sup_include (Mem.support m1) (Mem.support m1'))
-                     (SUP2: Mem.sup_include (Mem.support m2) (Mem.support m2'))
-                     (MPD1: Mem.max_perm_decrease m1 m1')
-                     (MPD2: Mem.max_perm_decrease m2 m2'),
-                     ext_acce (extw m1 m2 Hm) (extw m1' m2' Hm').
-
-Instance ext_acce_preo : PreOrder ext_acce.
-Proof.
-  split.
-  - intros [m1 m2 Hm]. constructor; eauto; try red; intros; auto.
-  - intros [m1 m2 Hm] [m1' m2' Hm'] [m1'' m2'' Hm''] HA HB.
-    inv HA. inv HB. constructor; eauto; try congruence.
-    + red. intros. apply MPD1. auto. apply MPD0. apply SUP1. auto. auto.
-    + red. intros. apply MPD2. auto. apply MPD3. apply SUP2. auto. auto.
-Qed.
-
-Lemma ext_acci_acce : forall w1 w2, ext_acci w1 w2 -> ext_acce w1 w2.
-Proof. intros. inv H. constructor; eauto. Qed.
-
-Hint Resolve ext_acci_acce : core.
-
-Program Instance ext_world_id : World ext_world :=
-    {
-      w_state := ext_world;
-      w_lens := lens_id;
-      w_acci := ext_acci;
-      w_acce := ext_acce;
-      w_acci_trans := ext_acci_preo;
-    }.
-
-Program Definition c_ext : callconv li_c li_c :=
-  {|
-    ccworld := ext_world;
-    ccworld_world := ext_world_id;
-    match_senv w := eq;
-    match_query := cc_c_query ext;
-    match_reply := cc_c_reply ext;    
-  |}.
-
-
-Program Instance lens_ext_locset : Lens (signature * ext_world) ext_world :=
-  {
-    get := snd;
-    set := fun w wp => (fst w, wp);
-  }.
-
-Program Instance ext_world_id_l : World (signature * ext_world) :=
-    {
-      w_state := ext_world;
-      w_lens := lens_ext_locset;
-      w_acci := ext_acci;
-      w_acce := ext_acce;
-      w_acci_trans := ext_acci_preo;
-    }.
-
-Program Definition locset_ext : callconv li_locset li_locset :=
-  {|
-    ccworld := signature * ext_world;
-    ccworld_world := ext_world_id_l;
-    match_senv w := eq;
-    match_query w := cc_locset_query ext (fst w) (snd w);
-    match_reply w := cc_locset_reply ext (fst w) (snd w);    
-  |}.
-
-
-Program Definition mach_ext : callconv li_mach li_mach :=
-   {|
-    ccworld := ext_world;
-    ccworld_world := ext_world_id;
-    match_senv w := eq;
-    match_query := cc_mach_mq ext;
-    match_reply := cc_mach_mr ext;    
-  |}.
-
-Program Definition asm_ext : callconv li_asm li_asm :=
-   {|
-    ccworld := ext_world;
-    ccworld_world := ext_world_id;
-    match_senv w := eq;
-    match_query := cc_asm_match ext;
-    match_reply := cc_asm_match ext;    
-  |}.
-
-(** Big Problem : bring lower cklrs to C level *)
-
-Program Instance lens_injp_locset : Lens (signature * injp_world) injp_world :=
-  {
-    get := snd;
-    set := fun w wp => (fst w, wp);
-  }.
-
-Program Instance injp_world_id_l : World (signature * injp_world) :=
-    {
-      w_state := injp_world;
-      w_lens := lens_injp_locset;
-      w_acci := injp_acci;
-      w_acce := injp_acce;
-      w_acci_trans := injp_acci_preo;
-    }.
-(* cc_locset *)
-Program Definition locset_injp : callconv li_locset li_locset :=
-  {|
-    ccworld := signature * injp_world;
-    ccworld_world := injp_world_id_l;
-    match_senv w := CKLR.match_stbls injp (snd w);
-    match_query w := cc_locset_query injp (fst w) (snd w);
-    match_reply w := cc_locset_reply injp (fst w) (snd w);    
-  |}.
-Next Obligation.
-  inv H. inv H0. auto.
-Qed.
-Next Obligation.
-  intros. inv H. erewrite <- Genv.valid_for_match; eauto.
-Qed.
-
-Program Definition mach_injp : callconv li_mach li_mach :=
-  {|
-    ccworld := injp_world;
-    ccworld_world := injp_world_id;
-    match_senv w := CKLR.match_stbls injp w;
-    match_query := cc_mach_mq injp;
-    match_reply := cc_mach_mr injp;    
-  |}.
-Next Obligation.
-  inv H. inv H0. auto.
-Qed.
-Next Obligation.
-  intros. inv H. erewrite <- Genv.valid_for_match; eauto.
-Qed.
-
-Program Definition asm_injp : callconv li_asm li_asm :=
-  {|
-    ccworld := injp_world;
-    ccworld_world := injp_world_id;
-    match_senv w := CKLR.match_stbls injp w;
-    match_query := cc_asm_match' injp;
-    match_reply := cc_asm_match injp;    
-  |}.
-Next Obligation.
-  inv H. inv H0. auto.
-Qed.
-Next Obligation.
-  intros. inv H. erewrite <- Genv.valid_for_match; eauto.
-Qed.
 
 Infix "@" := GS.cc_compose (at level 30, right associativity).
 
@@ -1023,8 +736,7 @@ Proof.
       apply H8. auto.
 Qed.
 
-(** TODO: wt_loc through CL *)
-
+(** Lemmas about MA cc_mach_asm *)
 
 Inductive preg_class :=
   | prc_pc
@@ -2161,10 +1873,374 @@ Proof.
 
 *)
 
-(** *Compose c_injp with c_ext, to be moved to individual file later  *****)
+(** *Compose c_injp @ c_injp into c_injp  *****)
 Require Import InjpAccoComp.
 
-(** Definition of new c_ext, including wp *)
+Inductive match_injp_comp_world : (injp_world * injp_world) -> injp_world -> Prop :=
+|world_comp_intro:
+  forall m1 m2 m3 j12 j23 j13 Hm12 Hm23 Hm13,
+    j13 = compose_meminj j12 j23 ->
+    match_injp_comp_world (injpw j12 m1 m2 Hm12, injpw j23 m2 m3 Hm23) (injpw j13 m1 m3 Hm13).
+
+Inductive injp_trivial_comp_world : (injp_world * injp_world) -> injp_world -> Prop :=
+|trivial_comp_intro : forall j m1 m3 Hm12 Hm23 Hm13,
+    injp_trivial_comp_world (injpw (meminj_dom j) m1 m1 Hm12, injpw j m1 m3 Hm23)
+      (injpw j m1 m3 Hm13).
+
+
+          
+Lemma injp_comp_acce : forall w11 w12 w11' w12' w1 w2,
+    injp_trivial_comp_world (w11, w12)  w1 ->
+    match_injp_comp_world (w11', w12')  w2 ->
+    injp_acce w11 w11' -> injp_acce w12 w12' ->
+    injp_acce w1 w2.
+Proof.
+  intros. inv H. inv H0.
+  inv H1. inv H2. rename m0 into m1'. rename m2 into m2'. rename m4 into m3'.
+  econstructor; eauto.
+  - destruct H11. split. auto. eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H. split; auto. red. unfold meminj_dom.
+    rewrite H. reflexivity.
+  - assert (j = compose_meminj (meminj_dom j) j).
+    rewrite meminj_dom_compose. reflexivity.
+    rewrite H. rauto.
+  - red.
+    intros b1 b2 delta Hb Hb' Ht. unfold compose_meminj in Hb'.
+    destruct (j12 b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
+    destruct (j23 bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
+    inv Hb'.
+    exploit H14; eauto. unfold meminj_dom. rewrite Hb. reflexivity.
+    intros [X Y].
+    destruct (j bi) as [[? ?] | ] eqn:Hfbi.
+    {
+      eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+    }
+    edestruct H22; eauto. erewrite <- inject_tid; eauto.
+    inv Hm0. inv mi_thread. erewrite <- Hjs; eauto.
+  - red. intros. unfold compose_meminj in H0.
+    destruct (j12 b1) as [[bi d]|] eqn: Hj1; inv H0.
+    destruct (j23 bi) as [[b2' d']|] eqn: Hj2; inv H2.
+    exploit H15; eauto. unfold meminj_dom. rewrite H. reflexivity.
+    intros [A B]. split; auto.
+    intro. apply B. red. erewrite inject_block_tid; eauto.
+Qed.
+
+
+Lemma inject_preserve_tid : forall j m1 m2 b1 b2 d,
+    j b1 = Some (b2, d) ->
+    Mem.inject j m1 m2 ->
+    fst b1 = fst b2 /\ Mem.tid (Mem.support m1) = Mem.tid (Mem.support m2).
+Proof.
+  intros. inv H0. inv mi_thread. inv Hms. split; eauto.
+Qed.
+
+Lemma inject_other_thread : forall j m1 m2 b1 b2 d,
+    j b1 = Some (b2, d) ->
+    Mem.inject j m1 m2 ->
+    fst b1 <> Mem.tid (Mem.support m1) <->
+    fst b2 <> Mem.tid (Mem.support m2).
+Proof.
+  intros. edestruct inject_preserve_tid; eauto.
+  split;
+  congruence.
+Qed.
+(*
+Inductive external_mid_hidden: injp_world -> injp_world -> Prop :=
+|external_mid_hidden_intro :
+  forall j12 j23 m1 m2 m3 Hm12 Hm23
+    (** This case says that for any related external blocks [j13 b1 = Some b3],
+        we have constructed b2 in m2 s.t. j12 b1 = Some b2.*)
+    (Hconstr1: forall b1 b2 d, fst b2 <> Mem.tid (Mem.support m2) ->
+                 j12 b1 = Some (b2, d) -> j23 b2 <> None)
+    (** This cases says that for any external stack block [with permission] in m2
+        and *mapped to m3* in m2, it comes from a corresponding position im m1*)
+    (Hconstr2: forall b2 ofs2 b3 d2, fst b2 <> Mem.tid (Mem.support m2) ->
+                Mem.perm m2 b2 ofs2 Max Nonempty -> j23 b2 = Some (b3, d2) ->
+                exists b1 ofs1, Mem.perm m1 b1 ofs1 Max Nonempty /\ j12 b1 = Some (b2, ofs2 - ofs1)),
+    external_mid_hidden (injpw j12 m1 m2 Hm12) (injpw j23 m2 m3 Hm23).
+ *)
+
+(** From the incoming world [w1], where the internal memory is hidden, we will construct a 
+    mid-level memory [m2] to get [w11] and [w12]. This construction is either [I: Initial state]
+    or [Y: After external].   
+
+    For I, [m2] is exactlt [m1]. For Y, [m2] is constructed by the "injp construction" algorithm.
+    These constructions are defined by us, therefore we can ensure that for any "thread-external block"
+    (i.e. allocated by other threads) [b2] in [m2], it must be *public* in both [w11] and [w12].
+    Otherwise it should not be created. 
+    
+    Therefore, we can prove the following lemma, which states that the internal accessbility of
+    [w11, w12] to [w11',w12'] can indicate the same accessbility of [w2] which hides the mid-level
+    memory
+ *)
+
+Lemma inject_val_tid : forall j m1 m2 b1 b2 d,
+    Mem.inject j m1 m2 ->
+    j b1 = Some (b2, d) ->
+    fst b1 = fst b2.
+Proof.
+  intros. inv H. inv mi_thread. erewrite Hjs; eauto.
+Qed.
+
+Lemma injp_comp_acci : forall w11 w12 w11' w12' w1 w2,
+    match_injp_comp_world (w11, w12)  w1 ->
+    external_mid_hidden w11 w12 ->
+    match_injp_comp_world (w11', w12')  w2 ->
+    injp_acci w11 w11' -> injp_acci w12 w12' ->
+    injp_acci w1 w2.
+Proof.
+  intros. inv H. inv H1. inv H0.
+  rename j0 into j12'. rename j1 into j23'. rename m0 into m1'. rename m4 into m2'.
+  rename m5 into m3'.
+  inv H2. inv H3.
+  constructor; eauto.
+  - destruct H11 as [S11 H11]. split. auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H as [X Y]. split; auto.
+    red. red in X. unfold compose_meminj in X.
+    destruct (j12 b) as [[b2 d]|] eqn: Hj12; try congruence.
+    destruct (j23 b2) as [[b3 d2]|] eqn:Hj23; try congruence.
+    eapply Hconstr1 in Hj12; eauto. congruence.
+    erewrite <- inject_other_thread; eauto.
+  - destruct H21 as [S21 H21]. split. auto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H as [X Y]. split; auto.
+    red. intros. red in X. intro.
+    exploit Hconstr2; eauto. erewrite inject_other_thread; eauto.
+    intros (b1 & ofs1 & Hp1 & Hj12).
+    exploit X. unfold compose_meminj. rewrite Hj12, H. reflexivity.
+    replace (ofs - (ofs - delta - ofs1 + delta)) with ofs1 by lia. auto.
+    auto.
+  - rauto.
+  - red.
+    intros b1 b2 delta Hb Hb' Ht. unfold compose_meminj in Hb'.
+        destruct (j12' b1) as [[bi delta12] | ] eqn:Hb1'; try discriminate.
+        destruct (j23' bi) as [[xb2 delta23] | ] eqn:Hb2'; try discriminate.
+        inv Hb'.
+        destruct (j12 b1) as [[? ?] | ] eqn:Hb1.
+        + apply H13 in Hb1 as Heq. rewrite Hb1' in Heq. inv Heq.
+          destruct (j23 b) as [[? ?] |] eqn: Hb2.
+          unfold compose_meminj in Hb. rewrite Hb1, Hb2 in Hb. congruence.
+          exfalso. exploit H23; eauto.
+          erewrite <- inject_tid; eauto.
+          erewrite <- inject_val_tid. 3: eauto. auto. eauto.
+          intros [X Y].
+          eapply Mem.valid_block_inject_2 in Hb1; eauto.
+        + exploit H14; eauto. intros [X Y].
+          destruct (j23 bi) as [[? ?] |] eqn: Hb2.
+          exfalso. eapply Mem.valid_block_inject_1 in Hb2; eauto.
+          exploit H23; eauto.
+  - red. intros. unfold compose_meminj in H, H0.
+    destruct (j12 b1) as [[bi d]|] eqn: Hj1; inv H.
+    + 
+      destruct (j23 bi) as [[b2' d']|] eqn: Hj2; inv H2.
+      apply H13 in Hj1 as Hj1'. rewrite Hj1' in H0.
+      destruct (j23' bi) as [[b2'' d'']|] eqn: Hj2'; inv H0.
+      exploit H24; eauto. intros A. erewrite inject_tid; eauto.
+      erewrite inject_block_tid. 3: eauto. eauto. eauto.
+    + destruct (j12' b1) as [[bi d]|] eqn: Hj1'; inv H0.
+      destruct (j23' bi) as [[b2' d'']|] eqn: Hj2'; inv H1.
+      exploit H15; eauto. 
+  - red. intros. unfold compose_meminj in H. rename b2 into b3.
+    destruct (j12 b1) as [[b2 d]|] eqn: Hj12; try congruence.
+    destruct (j23 b2) as [[b3' d2]|] eqn:Hj23; try congruence. inv H.
+    red in H16. specialize (H16 _ _ _ _ Hj12 H0 H1 H2) as Hp2'.
+    eapply Mem.perm_inject in H1 as Hp2. 3: eauto. 2: eauto.
+    red in H25. inv Hm12. inv mi_thread. inv Hms. rewrite H3 in H0.
+    red in Hjs. erewrite Hjs in H0; eauto.
+    specialize (H25 _ _ _ _ Hj23 H0 Hp2 Hp2') as Hp3.
+    rewrite Z.add_assoc. auto.
+Qed.
+
+Definition match_12_cctrans : injp_world * injp_world -> injp_world -> Prop :=
+  fun w2 w =>
+    match_injp_comp_world w2 w /\ external_mid_hidden (fst w2) (snd w2).
+
+(** Problem : Although the "thread-external" blocks in [m2] is perfectly public from construction.
+    It may be changed during the internal execution.
+
+    [b1]                                         [xx] <- freed
+     w1                                           w1'
+    [b2] -----------------ACCI--------------->   [b2]
+     w2                                           w2'
+    [b3]                                         [b3]
+   
+    After internal execution, the [Hconstr2] may be destoryed. Why?
+    
+    When the block [b] is deliverd to external, and back to internal again.
+    It is possible for the internal executions to change the values of [b3] because 
+    it is now public in second [w2'] but private in the composed world. 
+
+    Which breaks the ACCI: 
+    For values, there is a case such that the value in [b2] is Vundef but [b3] = Vint 1.
+    Then L2 does sth like [b++;], therefore Vundef -> Vundef. Vint 1 -> Vint 2. 
+    It is possbie according to the definition of ACCI.
+    
+    But the point here is: "How can L2 opearates on [b2]?" It is a private external block.
+    Since L2 cannot even see [b2], the values of its corresponding block in [b3] should
+    not change either. 
+    In other words, The simulation L1 <= L2 indicates that [b2] is not changed via ACCI.
+    But such unchanged property cannot be transfer to [b3] vid L2 <= L3.
+
+    Now the solution is we add [free_preserved] in ACCI, which requires that [b2] is freed
+    if its inverse image [b1] is freed. 
+    Therefore we can ensure that an [out_of_reach] position in m2 is not only "unchanged",
+    but also *inaccessible*. 
+    Therefore we do not have to worry the change of values in [b3] because it is also 
+    [out_of_reach] now in [w2'].
+
+    *)
+Lemma external_mid_hidden_acci: forall j12 j23 m1 m2 m3 Hm12 Hm23 j12' j23' m1' m2' m3' Hm12' Hm23',
+    let w1 := injpw j12 m1 m2 Hm12 in
+    let w2 := injpw j23 m2 m3 Hm23 in
+    let w1' := injpw j12' m1' m2' Hm12' in
+    let w2' := injpw j23' m2' m3' Hm23' in
+    external_mid_hidden w1 w2 ->
+    injp_acci w1 w1' -> injp_acci w2 w2' ->
+    external_mid_hidden w1' w2'.
+Proof.
+  intros. inv H. inv H0. inv H1.
+  econstructor; eauto.
+  - intros. red in Hnb0. destruct (j12 b1) as [[b2' d']|] eqn:Hj12.
+    + apply H13 in Hj12 as Heq. rewrite H0 in Heq. inv Heq.
+      destruct (j23 b2') as [[b3 d'']|] eqn:Hj23.
+      * apply H22 in Hj23. congruence.
+      * exploit Hconstr1; eauto. inv H12. destruct unchanged_on_thread_i. congruence.
+    + exploit H14; eauto. erewrite inject_val_tid. 3: eauto. 2: eauto.
+      erewrite inject_tid. 2: eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+      intros [A B].
+      exfalso. exploit Hnb0; eauto. eapply Mem.valid_block_inject_2; eauto.
+      intro. apply H. destruct H20 as [[_ Z] _]. congruence.
+  - intros. red in Hnb3. destruct (j23 b2) as [[b3' d']|] eqn:Hj23.
+    + apply H22 in Hj23 as Heq. rewrite H1 in Heq. inv Heq.
+      destruct (Mem.loc_in_reach_find m1 j12 b2 ofs2) as [[b1 ofs1]|] eqn:FIND12.
+      * eapply Mem.loc_in_reach_find_valid in FIND12; eauto. destruct FIND12 as [Hj12 Hpm1].
+        exists b1, ofs1. split. edestruct Mem.perm_dec; eauto. exfalso.
+        eapply H16; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_]. congruence.
+        replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia.
+        auto. auto.
+      * eapply Mem.loc_in_reach_find_none in FIND12; eauto. destruct H12 as [[X Y]Z].
+        exploit Hconstr2; eauto. congruence. inv Z.
+        eapply unchanged_on_perm; eauto. red. split; auto. congruence. eapply Mem.valid_block_inject_1; eauto.
+        intros (b1 & ofs1 & Hpm1 & Hj12). exists b1, ofs1. split.
+        edestruct Mem.perm_dec; eauto. exfalso.
+        eapply H16; eauto.
+        erewrite inject_other_thread. 2: eauto. 2: eauto. destruct H20 as [[_ TID]_]. congruence.
+        replace (ofs1 + (ofs2 - ofs1)) with ofs2 by lia. auto. auto.
+    + exploit H23; eauto. inversion H12. inv unchanged_on_thread_i. congruence.
+      intros [A B].
+      exfalso. exploit Hnb3; eauto. eapply Mem.valid_block_inject_2; eauto.
+      erewrite inject_other_thread in H. 3: eauto. 2: eauto. intro.
+      apply H.
+      destruct H21 as [[_ Z]_]. congruence.
+Qed.
+
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite Valuesrel.add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
+Lemma cctrans_injp_comp : cctrans (cc_compose c_injp c_injp) (c_injp).
+Proof.
+  constructor. econstructor. instantiate (1:= match_12_cctrans).
+  - (*incoming construction*)
+    red. intros. inv H0. inv H3. simpl in H2, H1.
+    inv H.
+    exists (se1, (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm),
+              injpw f m1 m2 Hm)).
+    repeat apply conj; eauto.
+    + simpl. split. constructor; eauto. eapply match_stbls_dom; eauto. constructor; simpl; eauto.
+    + exists (cq vf1 sg vargs1 m1). split.
+      econstructor; simpl; eauto. eapply val_inject_dom; eauto.
+      eapply val_inject_list_dom; eauto.
+      econstructor; eauto. simpl. econstructor; eauto.
+    + econstructor. rewrite meminj_dom_compose. reflexivity.
+    + econstructor; eauto. intros. unfold meminj_dom in H0.
+      destruct (f b1) as [[? ?]|] eqn: Hf; inv H0. congruence.
+      intros. exists b2, ofs2. split. auto. unfold meminj_dom. rewrite H3.
+      replace (ofs2 - ofs2) with 0 by lia. reflexivity.
+    + intros r1 r3 wp1 wp2 wp1' Hmatch [Hae1 Hae2] HACCI Hr. simpl in Hae1, Hae2.
+      destruct wp1' as [wp11' wp12']. simpl. simpl in *.
+      destruct wp1 as [wp11 wp12]. simpl in *. destruct HACCI as [HAci1 HAci2].
+      simpl in *. destruct wp11' as [j12 m1' m2' Hm1']. destruct wp12' as [j23 m2'_ m3' Hm2'].
+      destruct Hr as [r2 [Hr1 Hr2]].
+      inv Hr1. inv Hr2. simpl in *. inv H0. inv H11. rename m1'0 into m1'.
+      rename m2'0 into m2'. rename m2'1 into m3'.
+      exists (injpw (compose_meminj j12 j23) m1' m3' (Mem.inject_compose _ _ _ _ _ Hm1' Hm2')).
+      repeat apply conj; eauto.
+      -- eapply injp_comp_acce. 3: apply Hae1. 3:apply Hae2.
+         econstructor; eauto.
+         econstructor; eauto.
+      -- inv Hmatch. eapply injp_comp_acci; eauto. econstructor; eauto.
+      -- econstructor; simpl; eauto. eapply val_inject_compose; eauto.
+  - (* outgoing construction *)
+    red. intros wp1 wp2 w1 se1 se2 q1 q3 Hs Hq HACI Hmatch.
+    inv Hmatch. destruct w1 as [x [w11 w12]].
+    inv HACI. simpl in H1,H2. 
+    (** Basiclly the same as old injp_comp (the hard part), plus a ACCI preservation *)
+    destruct w11 as [j12' m1' m2' Hm12'].
+    destruct w12 as [j23' m2'_ m3' Hm23'].
+    assert (m2'_ = m2').
+    { destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2. simpl in *. inv H5. inv H14.
+      reflexivity. }
+    subst m2'_.
+    exists (injpw (compose_meminj j12' j23')  m1' m3' (Mem.inject_compose _ _ _ _ _ Hm12' Hm23') ).
+    repeat apply conj; eauto.
+    + simpl. inv H; simpl in *.
+      eapply injp_comp_acci; eauto.
+      econstructor; eauto.
+      econstructor; eauto.
+    + inv Hs. inv H3. inv H4. econstructor; eauto.
+      eapply Genv.match_stbls_compose; eauto.
+    + destruct Hq as [q2 [Hq1 Hq2]]. inv Hq1. inv Hq2.
+      inv H5. inv H14. simpl in *.
+      econstructor; simpl; eauto. eapply val_inject_compose; eauto.
+      eapply CKLRAlgebra.val_inject_list_compose; eauto.
+    + (** The accessbility construction : use acco*)
+      intros r1 r3 wp2' ACCO1 MR. simpl in ACCO1. inv MR. simpl in H3,H4.
+      destruct wp2' as [j13'' m1'' m3'' Hm13'].
+      simpl in H3, H4.
+      assert (Hhidden: external_mid_hidden (injpw j12' m1' m2' Hm12') (injpw j23' m2' m3' Hm23')).
+      destruct wp1. destruct w, w0.      inv H0.
+      exploit external_mid_hidden_acci; eauto. econstructor; eauto.
+      exploit injp_acce_outgoing_constr; eauto.
+      intros (j12'' & j23'' & m2'' & Hm12'' & Hm23'' & COMPOSE & ACCE1 & ACCE2 & HIDDEN & _).
+      exists ((injpw j12'' m1'' m2'' Hm12''),(injpw j23'' m2'' m3'' Hm23'')).
+      repeat apply conj; eauto.
+      -- inv H4.
+         rename vres2 into vres3. exploit compose_meminj_midvalue; eauto.
+         intros [vres2 [RES1 RES2]]. 
+         exists (cr vres2 m2''). repeat econstructor; eauto.
+      -- econstructor; eauto.
+Qed.
+                                                                                                               
+Theorem injp_pass_compose: forall (L1 L2 L3: semantics li_c li_c),
+    forward_simulation c_injp L1 L2 ->
+    forward_simulation c_injp L2 L3 ->
+    forward_simulation c_injp L1 L3.
+Proof.
+  intros.
+  assert (forward_simulation (cc_compose c_injp c_injp) L1 L3).
+  eapply st_fsim_vcomp; eauto.
+  eapply open_fsim_cctrans; eauto.
+  apply cctrans_injp_comp.
+Qed.
+
+(** * Compose  c_ext @ c_ext into c_ext *)
 
 Inductive ext_comp_match : (ext_world * ext_world) -> ext_world -> Prop :=
 |ext_comp_match_intro m1 m2 m3 Hm12 Hm23 Hm13:
@@ -2247,10 +2323,12 @@ Qed.
     match_reply w := cc_c_reply ext w;
   |}.
  *)
+
+(** * Compose c_injp @ c_ext @ c_injp into c_injp *)
 Require Import InjpExtAccoComp.
 
 Inductive match_injp_ext_comp_world : injp_world -> ext_world -> injp_world -> injp_world -> Prop :=
-|world_comp_intro:
+|world_ext_comp_intro:
   forall m1 m2 m3 m4 j12 j34 j14 Hm12 Hm23 Hm34 Hm14,
     j14 = compose_meminj j12 j34 ->
     match_injp_ext_comp_world (injpw j12 m1 m2 Hm12) (extw m2 m3 Hm23) (injpw j34 m3 m4 Hm34) (injpw j14 m1 m4 Hm14).
@@ -2261,7 +2339,7 @@ Definition injp_ext_cctrans : injp_world * (ext_world * injp_world) -> injp_worl
     match_injp_ext_comp_world w1 w2 w3 w /\ external_mid_hidden_ext w1 w3.
 
 Inductive injp_trivial_comp_world_ext : injp_world -> ext_world -> injp_world -> injp_world -> Prop :=
-  trivial_comp_intro :
+  trivial_comp_ext_intro :
     forall (j : meminj) (m1 m3 : mem) (Hm12 : Mem.inject (meminj_dom j) m1 m1)
       (Hm34 Hm14 : Mem.inject j m1 m3) Hm23,
       injp_trivial_comp_world_ext (injpw (meminj_dom j) m1 m1 Hm12) (extw m1 m1 Hm23) (injpw j m1 m3 Hm34)

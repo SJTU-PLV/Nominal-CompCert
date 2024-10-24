@@ -23,7 +23,7 @@ Require Archi.
 Require Import Op Registers RTL Locations Conventions RTLtyping LTL.
 Require Import Allocation.
 
-Require Import CallconvBig CallConvLibs.
+Require Import CallconvBig Ext.
 
 Definition match_prog (p: RTL.program) (tp: LTL.program) :=
   match_program (fun _ f tf => transf_fundef f = OK tf) eq p tp.
@@ -2492,6 +2492,8 @@ Proof.
   econstructor; eauto.
   apply wt_regset_assign; auto. rewrite WTRES0; auto.
 Qed.
+
+Infix "@" := GS.cc_compose (at level 30, right associativity).
 
 Lemma initial_states_simulation:
   forall q1 q2 st1,

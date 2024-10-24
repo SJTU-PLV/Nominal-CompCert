@@ -193,15 +193,16 @@ CLOSE=SmallstepClosed.v
 
 # Concurrent semantics
 
-CONCUR=MultiLibs.v CMulti.v AsmMulti.v \
-       CallconvBig.v MultiSimBig.v \
-       HCompBig.v CallConvAlgebra.v \
-       InjpAccoComp.v VCompBig.v InjpExtAccoComp.v CallConvLibs.v \
+CONCUR=CallconvBig.v \
+       HCompBig.v CallConvAlgebra.v VCompBig.v \
+       Injp.v Ext.v \
        SimplLocalsproofC.v CminorgenproofC.v InliningproofC.v \
        InvariantC.v StackingproofC.v \
        ConstpropproofC.v CSEproofC.v DeadcodeproofC.v UnusedglobproofC.v \
        SelectionproofC.v RTLgenproofC.v TailcallproofC.v \
        AllocproofC.v TunnelingproofC.v AsmgenproofC.v \
+       InjpAccoComp.v InjpExtAccoComp.v CallConvLibs.v \
+       CAnew.v MultiLibs.v CMulti.v AsmMulti.v MultiSimBig.v \
        StackingRefine.v Composition.v
 
 

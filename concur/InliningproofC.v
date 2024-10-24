@@ -15,7 +15,7 @@
 Require Import Coqlib Wfsimpl Maps Errors Integers.
 Require Import AST Linking Values Memory Globalenvs Events Smallstep.
 Require Import CallconvBig.
-Require Import VCompBig.
+Require Import Injp.
 
 Require Import Op Registers RTL.
 Require Import Inlining Inliningspec.

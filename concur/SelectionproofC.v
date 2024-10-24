@@ -16,7 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps.
 Require Import AST Linking Errors Integers.
 Require Import Values Memory Builtins Events Globalenvs Smallstep.
-Require Import CallconvBig VCompBig CallConvLibs.
+Require Import CallconvBig Ext.
 Require Import LanguageInterface Invariant cklr.Extends.
 Require Import Switch Cminor Op CminorSel Cminortyping.
 Require Import SelectOp SelectDiv SplitLong SelectLong Selection.

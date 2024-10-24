@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Integers AST Linking.
 Require Import Values Memory Events Globalenvs LanguageInterface Smallstep.
 Require Import Op Registers RTL Conventions Tailcall.
-Require Import cklr.Extends CallconvBig CallConvLibs.
+Require Import cklr.Extends CallconvBig Ext.
 
 (** * Syntactic properties of the code transformation *)
 

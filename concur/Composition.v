@@ -5,8 +5,8 @@ Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
 Require Import Maps Stacklayout.
 
-Require Import CallconvBig CallConvAlgebra VCompBig CallConvLibs StackingRefine.
-
+Require Import CallconvBig CallConvAlgebra CallConvLibs.
+Require Import Injp Ext CAnew StackingproofC StackingRefine.
 
 Unset Program Cases.
 
@@ -268,10 +268,8 @@ Qed.
 
 (** Unification of the outgoing side *)
 
-Definition cc_compcert : GS.callconv li_c li_asm :=
-       ro @ wt_c @
-       cc_c_asm_injp_new.
 
+(*
 (** The C-level simulation convention *)
 Definition cc_c_level : GS.callconv li_c li_c := ro @ wt_c @ c_injp.
 
@@ -288,7 +286,7 @@ Theorem cc_compcert_merge:
 Proof.
   intros.
   unfold cc_compcert, cc_compcert_1 in *.
-Admitted.
+*)
 
 Require Import CallConv.
 Require Import InjpAccoComp.
@@ -575,7 +573,7 @@ Proof.
   econstructor. instantiate (1:= fun a b => fst (snd a) = b).
   - red. intros [[f m1 m4 Hm] sg rs4] se1 se2 q1 q2 Hse Hq.
     inv Hse. clear Hm1 Hm2 Hm3. inv Hq.
-    Compute GS.ccworld (cc_c_locset @ cc_stacking_injp @ cc_mach_asm).
+    (* Compute GS.ccworld (cc_c_locset @ cc_stacking_injp @ cc_mach_asm). *)
     set (mrs3 mr := rs4 (preg_of mr)). rename tsp0 into sp4.
     set (ls2i := Locmap.init Vundef).
     set (ls3 := make_locset mrs3 m4 sp4).
@@ -638,7 +636,7 @@ Proof.
   - red. intros [t1 [[j m1 m4 Hm] t2]] wp2 [xse [sg [xse2 [[[j' m1' m4' Hm'] xsg ls2 mrs3 sp4 xm4] [rs4 xsup]]]]].
     intros se1 se4 q1 q4 [Hse1 [Hse2 Hse3]] [q2 [Hq1 [q3 [Hq2 Hq3]]]] [_ [ACI _]] Hmat. simpl in ACI.
     inv Hse1. inv Hse2. inv Hse3. inv Hq1. inv Hq2. inv Hq3. rename xm4 into m4'. rename m into m1'.
-    exists (CA.cajw (injpw j' m1' m4' Hm') sg rs4).
+    exists (CAnew.cajw (injpw j' m1' m4' Hm') sg rs4).
     repeat apply conj; eauto.
     + simpl. constructor; eauto.
     + assert (exists m4'_, args_removed sg (rs4 RSP) m4' m4'_).
@@ -693,7 +691,12 @@ Proof.
       }
       econstructor; eauto. inv ACE. destruct H28 as [_ [SUP _]]. auto.
 Admitted. (*to do : add a reflexivity between m_pred and args_removed *)
-    
+
+
+Definition cc_compcert : GS.callconv li_c li_asm :=
+       ro @ wt_c @
+       cc_c_asm_injp_new @ asm_ext.
+
 Lemma cc_collapse :
   cctrans
     ( ro @ c_injp @ 
@@ -708,9 +711,9 @@ Lemma cc_collapse :
       (wt_loc @ cc_stacking_injp) @ (* Stacking *)
       (mach_ext @ cc_mach_asm)
     )
-    cc_compcert_1.
+    cc_compcert.
 Proof.
-  unfold cc_compcert_1. unfold cc_c_level.
+  unfold cc_compcert.
   etransitivity.
   
   rewrite !cc_compose_assoc_2.
@@ -797,17 +800,5 @@ Proof.
   rewrite (cc_compose_assoc_1 cc_stacking_injp).
   rewrite (cc_compose_assoc_1 cc_c_locset).
   rewrite cctrans_CAinjp.
-
-  
-
-  
-
-  
-
-  (*Q1: how to deal with the c_ext*)
-  (*Q2: if we can prove cc_stacking_injp preserving callee_save regs, should we break it into LM? seems
-       we can reuse more results? Or the LM trans lemmas cannot be uses because of the one-wayness?*)
-
-  (** If we can prove Tunneling using injp instead of ext, than we can keep cc_stacking injp as it is*)
-
-Abort.
+  reflexivity. reflexivity.
+Qed.

@@ -15,7 +15,7 @@
 Require Import FSets Coqlib Maps Ordered Iteration Errors.
 Require Import AST Linking.
 Require Import Integers Values Memory Globalenvs Events Smallstep.
-Require Import CallconvBig VCompBig.
+Require Import CallconvBig Injp.
 Require Import Op Registers RTL.
 Require Import Unusedglob.
 
