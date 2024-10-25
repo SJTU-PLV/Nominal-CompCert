@@ -397,7 +397,7 @@ Qed.
 
 Require Import Conventions Asm Mach Lineartyping.
 Require Import Injp Ext CAnew.
-Require Import InvariantC.
+Require Import InvariantC RTLselfsim.
 
 Infix "@" := GS.cc_compose (at level 30, right associativity).
 
@@ -435,57 +435,6 @@ Proof.
   destruct (flag tt); subst; eauto.
 Qed.
 
-(** TODO3: self_simulations , high possibility to be true *)
-Lemma va_interface_selfsim: forall (prog: RTL.program),
-  GS.forward_simulation (ro @ c_injp) (RTL.semantics prog) (RTL.semantics prog).
-Proof.
-Admitted.
-
-Lemma RTL_injp_selfsim : forall (prog: RTL.program),
-    GS.forward_simulation c_injp (RTL.semantics prog) (RTL.semantics prog).
-Admitted.
-
-Lemma RTL_ext_selfsim : forall (prog: RTL.program),
-    GS.forward_simulation c_ext (RTL.semantics prog) (RTL.semantics prog).
-Admitted.
-
-
-(*
-Lemma callconv_compose_para : forall {li1 li2 li3}
-                                (cc1: callconv li1 li2) (cc2: callconv li2 li3),
-    cctrans 
-     (cc_compose cc1 cc2)
-      (GS.cc_compose cc1 cc2).
-Proof.
-  intros. constructor.
-  econstructor. instantiate (1:= fun _ _ => True).
-  - red. intros. destruct w2 as [se [w1 w2]].
-    inv H. destruct H0 as [q1' [Hq1 Hq2]].
-    (* Compute ( GS.ccworld (cc1 @ cc2)%cc). *)
-    exists (se, w1, w2). repeat apply conj; eauto.
-    + constructor; eauto.
-    + econstructor; eauto.
-    + intros. simpl in H0, wp1, wp1'.
-      exists (tt, tt). split. reflexivity.
-      split. destruct wp2. split; reflexivity.
-      destruct H4 as [r1' [A B]].
-      econstructor; eauto.
-  - red. intros. destruct w1 as [[se w1] w2].
-    exists (se, (w1, w2)). repeat apply conj; eauto.
-    + intros. simpl in H0, wp1, wp2'. destruct wp2'.
-      exists (tt). split. reflexivity.
-      destruct H4 as [r1' [A B]]. split.
-      econstructor; eauto. auto.
-Qed.
-
-Lemma callconv_compose_para3: forall {A B C D} (cc1 : callconv A B) cc2 (cc3 : callconv C D),
-    cctrans (cc_compose cc1 (cc_compose cc2 cc3))
-      (GS.cc_compose cc1 (GS.cc_compose cc2 cc3)).
-Proof.
-  intros. rewrite callconv_compose_para.
-  rewrite callconv_compose_para. reflexivity.
-Qed.
-*)
 (** ** Composition of passes *)
 
 Theorem clight_semantic_preservation:
