@@ -516,19 +516,156 @@ Qed.
 
 (* establish match_envs after the allocation of the drop flags in the
 target programs *)
-Lemma alloc_drop_flags_match: forall j1 m1 tm1 e1 lo hi te1 tlo thi (flags: list (place * ident)) Hm1
+Lemma alloc_drop_flags_match: forall (flags: list (place * ident)) j1 m1 tm1 e1 lo hi te1 tlo thi Hm1
     (MENV: match_envs j1 e1 m1 lo hi te1 tm1 tlo thi)
     (SINCR: Mem.sup_include thi (Mem.support tm1))
-    (DISJOINT: forall p id, In (p, id) flags -> e1 ! id = None),
+    (DISJOINT: forall id, In id (map snd flags) -> e1 ! id = None)
+    (NOREPEAT:list_norepet (map snd flags)),
   exists te2 tm2 Hm2,
     alloc_variables tge te1 tm1 (combine (map snd flags) (repeat type_bool (length flags))) te2 tm2
     /\ injp_acc (injpw j1 m1 tm1 Hm1) (injpw j1 m1 tm2 Hm2)
     (* wf_dropm *)
-    /\ (forall p id, In (p, id) flags ->
+    /\ (forall id, (In id (map snd flags)) ->
                exists b, te2 ! id = Some (b, type_bool)
                     /\ e1 ! id = None)
+    /\ (forall id, ~ In id (map snd flags)  -> te1 ! id = te2 ! id)
     /\ match_envs j1 e1 m1 lo hi te2 tm2 tlo (Mem.support tm2).
-Admitted.
+Proof. 
+  induction flags; intros. 
+  - exists te1, tm1, Hm1. 
+    split. econstructor. split; auto.
+    reflexivity.
+    split. intros. contradiction. 
+    inv MENV. split. auto. 
+    econstructor; eauto. intros. eapply me_trange0 in H. inv H. eauto.   
+  - destruct a as [p id]. simpl in DISJOINT. 
+    destruct (Mem.alloc tm1 0 1) as (tm1', b) eqn:ALLOC.
+    exploit Mem.alloc_right_inject. eauto. eauto. intros A.
+    
+    exploit IHflags. 
+    (* instantiate (1:= Mem.support tm2).  *)
+    instantiate (7:= m1).
+    instantiate (3:= tm1').
+    instantiate (3:= (PTree.set id (b, type_bool) te1)).
+    instantiate (5:= e1).
+    instantiate (5:= j1).
+    instantiate (1:= Mem.support tm1').
+    instantiate (1:= tlo).
+    instantiate (1:= hi).
+    instantiate (1:= lo). 
+    inv MENV.
+    econstructor.   
+    intros. rewrite PTree.gsspec.
+    destruct (peq id0 id).
+    (* id0 is in flags *)
+    inv e. 
+    exploit DISJOINT. left. eauto. 
+    intro B. intuition. 
+    (* id0 not in flags *)
+    eapply me_vars0 in H. destruct H as (tb & C & D). 
+    exists tb. split; auto.
+    (* me_tinj0 *)
+    intros. rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
+    destruct (peq id2 id); destruct (peq id1 id). 
+    congruence. 
+    inv e. inv H0. eapply me_trange0 in H. 
+    destruct H. unfold Mem.sup_include in SINCR. apply SINCR in H0.
+    eapply Mem.valid_not_valid_diff in H0. eauto. eapply Mem.fresh_block_alloc. eauto.
+    inv e. inv H. eapply me_trange0 in H0. destruct H0. eapply SINCR in H0.
+    eapply Mem.valid_not_valid_diff in H0. eauto. eapply Mem.fresh_block_alloc. eauto.
+    eauto.
+    (* range0 *)
+    eauto.
+    (* trange0 *)
+    intros. rewrite PTree.gsspec in H. destruct (peq id0 id) eqn:?.    
+    (* eq *)
+    inv H.
+    split. 
+    eapply Mem.fresh_block_alloc in ALLOC.
+    unfold Mem.valid_block in ALLOC.
+    eapply Mem.sup_include_trans in SINCR. instantiate (1:= tlo) in SINCR.
+    unfold not. intros.
+    unfold not in ALLOC.
+    unfold Mem.sup_include in SINCR. eapply SINCR in H.
+    eapply ALLOC in H. auto. auto.
+    exploit Mem.support_alloc; eauto. intros.
+    eapply Mem.alloc_result in ALLOC. inv ALLOC. rewrite H.
+    unfold Mem.nextblock. simpl. left. auto. 
+    (*not equal*)
+    eapply me_trange0 in H. inv H.
+    split. auto. 
+    unfold Mem.sup_include in SINCR. apply SINCR in H1.
+    exploit Mem.support_alloc; eauto. intros. rewrite H. unfold sup_incr. simpl.
+    right. auto.
+    (* me_tinitial0 *)
+    auto.
+    (*me_incr0*)
+    auto.
+    (*me_tincr0*)
+    eapply Mem.support_alloc in ALLOC. rewrite ALLOC.
+    eapply Mem.sup_include_trans. eauto.
+    unfold Mem.sup_include. intros. apply SINCR in H. unfold sup_incr.
+    simpl. auto. 
+    (* me_protect0 *)
+    intros. rewrite PTree.gsspec in H0. destruct (peq id0 id). 
+    inv H0. simpl. split. unfold Mem.range_perm. intros.
+    eapply Mem.perm_alloc_2; eauto.
+    (* loc_out_of_reach *)
+    unfold loc_out_of_reach.
+    intros.
+    eapply Mem.fresh_block_alloc in ALLOC. 
+    eapply Mem.valid_block_inject_2 in H0; eauto. 
+    (* not equal*)
+    split. simpl.
+    eapply me_protect0 in H; eauto. destruct H as (C & D). 
+      simpl in C. simpl.
+      unfold Mem.range_perm.
+      intros. eapply C in H.
+      eapply Mem.perm_alloc_1; eauto.
+     (*loc_out_of_reach*)
+      eapply me_protect0 in H. inv H. eauto. eauto.
+    apply Mem.sup_include_refl.
+    eauto.
+    (* no repeat *)
+    inv NOREPEAT. auto. 
+    (*finish IHflags*)
+    (* instantiate (1:= Hm1).  *)
+    intros (te2 & tm2 & Hm2 & ALLOC' & INJP & WF & NOTIN & MENV2 ). 
+    exists te2. exists tm2. exists Hm2. 
+    split. simpl.  econstructor. eauto.  eauto.   
+    split. instantiate (1:= A) in INJP. 
+    transitivity (injpw j1 m1 tm1' A); eauto.
+    inv INJP. 
+    econstructor; eauto. 
+    eapply Mem.ro_unchanged_alloc in ALLOC. auto.  
+    red. intros.  
+    eapply Mem.perm_alloc_4; eauto. 
+    eapply Mem.fresh_block_alloc in ALLOC. 
+    eapply Mem.valid_not_valid_diff; eauto.
+    eapply Mem.alloc_unchanged_on. eauto.
+    eapply inject_separated_refl. 
+    split.
+    (* wf_dropm *)
+    simpl. intros.
+    inv NOREPEAT.
+    (* eq *)
+    pose proof H. inv H. 
+    apply DISJOINT in H0.     
+    exists b. 
+    split; eauto.
+    eapply NOTIN in H2. rewrite PTree.gss in H2. auto.  
+    (* not eq *)
+    generalize (WF id0). intros.
+    eapply H in H1. eapply H1.
+    split.
+    (* NOTIN *)
+    simpl. intros. inv NOREPEAT.
+    exploit (NOTIN id0). tauto. intros.
+    rewrite PTree.gso in H0. 
+    auto. apply Decidable.not_or in H. destruct H. auto. 
+    (* match_cases *)
+    exact MENV2.
+Qed. 
 
 Lemma alloc_variables_support:
   forall ge e m vars e' m',
@@ -541,7 +678,6 @@ Proof.
   apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ.
   apply Mem.sup_include_refl. apply IHalloc_variables.
 Qed.
-
 
 Lemma alloc_variables_range:
   forall ge id b ty e m vars e' m',
@@ -559,7 +695,6 @@ Proof.
   destruct A.
   split. intro. apply H2. apply Mem.sup_incr_in2.  auto. auto.
 Qed.
-
 
 Lemma alloc_variables_injective:
   forall ge id1 b1 ty1 id2 b2 ty2 e m vars e' m',
@@ -2066,6 +2201,17 @@ Proof.
 Qed.
 
 
+Lemma pair_snd_in: forall (A B: Type) (a: A) (b: B) (l: list (A * B)),
+    In (a, b) l -> In b (map snd l).
+Proof.
+  induction l; simpl; intros.
+  - inv H.
+  - destruct a0. simpl in H. destruct H.
+    + inv H. simpl. auto.
+    + simpl. right. eapply IHl. eauto.
+Qed.
+
+
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
 Lemma step_dropplace_simulation:
@@ -2756,7 +2902,7 @@ Proof.
     inv ENTRY.
     
     (* alloc the same variables and parameters in source and target *)
-    exploit alloc_variables_match; eauto.
+    exploit alloc_variables_match; eauto. 
     eapply match_empty_envs.
     eapply Mem.sup_include_refl.
     eapply Mem.sup_include_refl. 
@@ -2770,9 +2916,10 @@ Proof.
     instantiate (1 := drop_flags).
     (* easy: added a norepet check in target program to ensure that
     source env does not contains identities of drop flags *)
+    admit. 
     admit.
     instantiate (1 := Hm1).
-    intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & MENV2).
+    intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & NOTIN & MENV2 ).
     (* bind_parameters in target program *)
     exploit bind_parameters_injp_acc. eauto. inv MENV2. eauto.  
     eapply val_inject_list_incr.
@@ -2788,6 +2935,7 @@ Proof.
     unfold init_drop_flags_bot in *. generalize GIM as GIM1. intros. inv GIM.
     rewrite <- H3 in EQ3. rewrite <- H4 in EQ3. clear H3 H4.
     exploit eval_init_drop_flags_wf; eauto.
+    intros. exploit WFFLAG. instantiate (1:= id). eapply pair_snd_in. eauto. eauto.  
     eapply me_tinj; eauto.
     (* norepet of drop_flags *)
     admit.
