@@ -310,6 +310,12 @@ Proof.
       * apply (is_prefix_strict_trans p1 p2 p3 H H0).
 Qed.
 
+Lemma is_prefix_antisym: forall p1 p2,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p2 p1 = false.
+Admitted.
+
+
 Lemma is_prefix_strict_implies: forall p1 p2,
     is_prefix_strict p1 p2 = true ->
     is_prefix p1 p2 = true.

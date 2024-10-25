@@ -70,6 +70,7 @@ Definition generate_place_map {A} (l: list (place * A)) : PTree.t (list (place *
 
 Section INIT_UNINIT.
 
+
 Variable (maybeInit maybeUninit: PMap.t IM.t).
 Variable universe : PathsMap.t.
 

@@ -22,29 +22,6 @@ Import ListNotations.
 (** ** Ownership based operational semantics for RustIR (the semantics before drop elaboration equipped with an ownership local environment) *)
 
 Section SEMANTICS.
-
-(* Drop place state *)
-
-Inductive drop_place_state : Type :=
-| drop_fully_owned_comp
-    (* drop the composite and then drop the box *)
-    (p: place) (l: list place) : drop_place_state
-| drop_fully_owned_box
-    (l: list place) : drop_place_state
-.
-
-Definition gen_drop_place_state (p: place) : drop_place_state :=
-  match split_fully_own_place p (typeof_place p) with
-  | nil => drop_fully_owned_box nil
-  | p' :: l =>
-      match typeof_place p' with
-      | Tstruct _ _
-      | Tvariant _ _ =>
-          drop_fully_owned_comp p' l
-      | _ =>
-          drop_fully_owned_box (p' :: l)
-      end
-  end.
           
 (** Continuation *)
   
@@ -397,7 +374,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_init own p = true)
-    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
+    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box (split_partial_own_place p))),
     (* move p to match drop p *)
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)

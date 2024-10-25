@@ -459,10 +459,10 @@ Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place 
     split_norepet: list_norepet (map fst drops);
     split_ordered: split_places_ordered  (map fst drops);
     (** TODO: current implementation does not guarantee this property.*)
-    split_correct_full: forall p,
-      In (p,true) drops ->
+    split_correct_full: forall p full,
+      In (p,full) drops ->
       (* no p's children in universe if p is full *)
-      is_full_internal universe p = true
+      is_full_internal universe p = full
   }.
 
 Lemma split_drop_place_meet_spec: forall ce universe p drops,

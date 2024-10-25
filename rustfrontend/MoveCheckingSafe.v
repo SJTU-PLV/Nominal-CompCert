@@ -98,6 +98,9 @@ Inductive wt_state (ce: composite_env) : state -> Prop :=
     (WT1: wt_stmt e ce s)                  
     (WT2: wt_cont e ce k),
     wt_state ce (State f s k e own m)
+| wt_dropplace_state: forall f st drops k own m (e: env)
+    (WT1: Forall (fun p => wt_place e ce p) (map fst drops)),
+    wt_state ce (Dropplace f st drops k e own m)
 .
 
 
@@ -1139,7 +1142,8 @@ Admitted.
 if a place p is init, then all its dominators is init. Those
 properties are only guaranteed by the move checking, so we cannot
 prove it in the semantics. One problem is how to establish and
-preserve this invariant in the function entry and every step *)
+preserve this invariant in the function entry and every step. May be
+we should do some checking for each function *)
 
 Record wf_own_env (own: own_env) : Prop := {
     wf_own_dominators: forall p,
@@ -1155,6 +1159,13 @@ Record wf_own_env (own: own_env) : Prop := {
     wf_own_no_downcast: forall p fid ty,
       in_universe own p = true ->
       ~ In (ph_downcast ty fid) (snd (path_of_place p));
+
+    (* all place in the universe is not scalar type and if it is not
+    full, it must be box type *)
+    wf_own_type: forall p,
+      in_universe own p = true ->
+      scalar_type (typeof_place p) = false
+      /\ (is_full (own_universe own) p = false -> exists ty, typeof_place p = Tbox ty)
   }.
 
 
@@ -1880,6 +1891,52 @@ Lemma move_place_init_is_init: forall p p1 own,
     is_init own p = true.
 Admitted.
 
+Lemma move_children_still_init: forall own p1 p2 p3,
+    is_init (move_place own p1) p3 = true ->
+    is_prefix p1 p2 = true ->
+    is_init (move_place own p2) p3 = true.
+Admitted.
+      
+(* what if move out a downcast? *)
+Lemma move_place_dominator_still_init: forall p own
+    (NOTDOWN: forall ty fid, ~ In (ph_downcast ty fid) (snd (path_of_place p))),
+    dominators_is_init own p = true ->
+    dominators_is_init (move_place own p) p = true.
+Proof.
+  induction p; intros; unfold dominators_is_init in *; auto.
+  - simpl in H. 
+    exploit IHp.
+    intros. intro. eapply NOTDOWN. simpl.
+    destruct (path_of_place p) eqn: POP. simpl. eapply in_app. eauto.    
+    eauto. intros.
+    eapply forallb_forall. intros.
+    eapply forallb_forall in H0. 2: eauto.
+    eapply move_children_still_init. eauto.
+    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
+    eapply orb_true_r.
+  - simpl in H.
+    eapply andb_true_iff in H. destruct H.
+    exploit IHp.
+    intros. intro. eapply NOTDOWN. simpl.
+    destruct (path_of_place p) eqn: POP. simpl. eapply in_app. eauto.    
+    eauto. intros.
+    eapply forallb_forall. intros.
+    simpl in H2. destruct H2; subst.
+    (* case1 *)
+    eapply move_irrelavent_place_still_owned. auto.
+    eapply is_prefix_antisym. unfold is_prefix_strict. simpl.
+    destruct place_eq. auto. congruence.
+    (* case2 *)
+    eapply forallb_forall in H1. 2: eauto.
+    eapply move_children_still_init. eauto.
+    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
+    eapply orb_true_r.
+  - simpl in NOTDOWN. exfalso.
+    eapply NOTDOWN.
+    destruct (path_of_place p) eqn: POP. simpl. eapply in_app_iff.
+    right. econstructor. eauto.
+Qed.
+
 Lemma is_not_prefix_disjoint: forall p1 p2,
     is_prefix p1 p2 = false ->
     is_prefix p2 p1 = false ->
@@ -2511,6 +2568,14 @@ Lemma get_loc_footprint_norepet: forall phl fp b ofs b1 ofs1 fp1,
     /\ ~ In b1 (footprint_flat fp1).
 Admitted.
 
+Lemma get_loc_footprint_map_norepet: forall phl id fpm b1 ofs1 fp1 e,
+    list_norepet (flat_fp_map fpm) ->
+    get_loc_footprint_map e (id, phl) fpm = Some (b1, ofs1, fp1) ->
+    list_norepet (footprint_flat fp1)
+    /\ ~ In b1 (footprint_flat fp1).
+Admitted.
+
+
 (* Two memory location (b1, ofs1) and (b2, ofs2) which have type ty1
 and ty2 are non-overlap *)
 Definition loc_disjoint (b1 b2: block) (ty1 ty2: type) (ofs1 ofs2: Z) : Prop :=
@@ -2564,6 +2629,19 @@ Proof.
   eapply get_loc_footprint_eq. eauto.
 Qed.  
 
+Lemma get_loc_footprint_map_incl: forall phl fpm b1 ofs1 fp1 le id,
+    get_loc_footprint_map le (id, phl) fpm = Some (b1, ofs1, fp1) ->
+    incl (footprint_flat fp1) (flat_fp_map fpm).
+Proof.
+  intros. simpl in H. destruct (le!id) in H; try congruence.
+  destruct p. destruct (fpm!id) eqn: FPM; try congruence.
+  red. intros. eapply get_loc_footprint_incl in H0; eauto.
+  unfold flat_fp_map. eapply in_concat.
+  exists (footprint_flat f). split; auto.
+  eapply in_map_iff. exists (id, f). simpl. split; auto.
+  eapply PTree.elements_correct. auto.
+Qed.
+   
 Lemma wt_footprint_same_size: forall fp ty1 ty2,
     wt_footprint ce ce ty1 fp ->
     wt_footprint ce ce ty2 fp ->
@@ -3129,11 +3207,10 @@ semantically well-typed. The root place (and its location and its
 footprint because we need to maintain some separation property of its
 footprint and the other) is internal in this invariant because we do
 not want to expose them in sound_cont (i.e., internal in
-sound_cont). *)
-Inductive sound_drop_place_state (e: env) (m: mem) (fpm: fp_map) (rfp: footprint) (own: own_env) : option drop_place_state -> Prop :=
-| sound_drop_place_state_none: sound_drop_place_state e m fpm rfp own None
-| sound_drop_place_state_comp: forall r b ofs p l b1 ofs1 fp1 empfp
-    (* Note that the footprint of r has been moved out (but we cannot
+sound_cont). rfp is the footprint of this state *)
+Inductive sound_drop_place_state (e: env) (m: mem) (fpm: fp_map) (own: own_env) : footprint -> option drop_place_state -> Prop :=
+| sound_drop_place_state_none: sound_drop_place_state e m fpm own fp_emp None
+| sound_drop_place_state_comp: forall r b ofs p l b1 ofs1 fp1 empfp rfp    (* Note that the footprint of r has been moved out (but we cannot
     ensure that its footprint is fp_emp because it may be a struct! *)
     (PFP: get_loc_footprint_map e (path_of_place r) fpm = Some (b, ofs, empfp))
     (NOREP: list_norepet (footprint_flat rfp))
@@ -3143,15 +3220,18 @@ Inductive sound_drop_place_state (e: env) (m: mem) (fpm: fp_map) (rfp: footprint
     (WTLOC: sem_wt_loc m fp1 b1 ofs1)
     (WTP: wt_place e ce r)
     (WTFP: wt_footprint ce ce (typeof_place p) fp1),
-    sound_drop_place_state e m fpm rfp own (Some (drop_fully_owned_comp p l))
-| sound_drop_place_state_box: forall r b ofs l b1 ofs1 ty1 empfp p
+    sound_drop_place_state e m fpm own rfp (Some (drop_fully_owned_comp p l))
+| sound_drop_place_state_box: forall r b ofs l b1 ofs1 ty1 empfp p rfp fp
     (PFP: get_loc_footprint_map e (path_of_place r) fpm = Some (b, ofs, empfp))
     (NOREP: list_norepet (footprint_flat rfp))
     (DOM: dominators_is_init own r = true)
-    (* The footprint of p must be empty to make rfp minimum *)
-    (SPLIT: sound_split_fully_own_place m r b ofs rfp l p b1 ofs1 ty1 fp_emp)
+    (* The footprint of p must be empty to make rfp minimum so that we
+    can prove no memory leak. But it make the sound_dropplace proof
+    very difficult as we need to track the status of the footprint in
+    the sound_dropplace *)
+    (SPLIT: sound_split_fully_own_place m r b ofs rfp l p b1 ofs1 ty1 fp)
     (WTP: wt_place e ce r),
-    sound_drop_place_state e m fpm rfp own (Some (drop_fully_owned_box l)).
+    sound_drop_place_state e m fpm own rfp (Some (drop_fully_owned_box l)).
 
 
 Lemma sound_split_fully_own_place_type_inv: forall m r b ofs rfp l p b1 ofs1 ty1 fp1,
@@ -3283,7 +3363,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (MM: mmatch fpm m e own1)
     (WFNEV: wf_env fpm ce e)
     (** VERY DIFFICULT: Invariant of drop_place_state *)
-    (SDP: sound_drop_place_state e m fpm rfp own1 st)
+    (SDP: sound_drop_place_state e m fpm own1 rfp st)
     (SEP: list_norepet (flat_fp_frame (fpf_dropplace e fpm rfp fpf)))
     (MOVESPLIT: move_split_places own1 ps = own2)
     (* ordered property of the split places used to prove sound_state after the dropplace *)
@@ -3344,11 +3424,13 @@ Inductive sound_state: state -> Prop :=
     (ACC: rsw_acc w (rsw sg flat_fp m Hm))
     (* every place in the drop_fully_owned state is owned: this may be
     wrong because it does not consider own is changing *)
-    (SDP: sound_drop_place_state e m fpm rfp own1 st)
+    (SDP: sound_drop_place_state e m fpm own1 rfp st)
     (* big step update of the own_env *)
     (MOVESPLIT: move_split_places own1 drops = own2)
     (* ordered property of the split places used to prove sound_state after the dropplace *)
     (ORDERED: move_ordered_split_places_spec own1 (map fst drops))
+    (* fullspec is used to maintain the invariant between is_full and the full flags *)
+    (FULLSPEC: forall p full,  In (p, full) drops -> is_full (own_universe own1) p = full)
     (WF: wf_env fpm ce e)
     (IM: get_IM_state maybeInit!!next maybeUninit!!next (Some (mayinit, mayuninit)))
     (* Why sound_own own2 here not own1? because the analysis result is about the next node *)
@@ -3730,11 +3812,11 @@ Admitted.
 
 (* norepet (l ++ fpm) where l is a general list which can
     represent other elements in the frame *)
-Lemma set_disjoint_footprint_norepet: forall fp fpm1 fpm2 vfp id phl,
-    list_norepet (fp ++ (flat_fp_map fpm1)) ->
+Lemma set_disjoint_footprint_norepet: forall fpm1 fpm2 vfp id phl,
+    list_norepet (flat_fp_map fpm1) ->
     set_footprint_map (id, phl) vfp fpm1 = Some fpm2 ->
-    list_disjoint (fp ++ (flat_fp_map fpm1)) (footprint_flat vfp) ->
-    list_norepet (fp ++ (flat_fp_map fpm2)).
+    list_disjoint (flat_fp_map fpm1) (footprint_flat vfp) ->
+    list_norepet (flat_fp_map fpm2).
 Admitted.
 
 Lemma empty_footprint_flat: forall fp,
@@ -3768,26 +3850,40 @@ Lemma set_footprint_norepet: forall phl fp1 fp2 vfp,
     list_norepet (footprint_flat fp2).
 Admitted.
 
+(* Set a footprint also remove the original one out. This removed
+   footprint is disjoint with the updated footprint map *)
+Lemma get_set_disjoint_footprint_map: forall l i fpm1 fpm2 b ofs fp1 fp2 le,
+    get_loc_footprint_map le (i, l) fpm1 = Some (b, ofs, fp1) ->
+    set_footprint_map (i, l) fp2 fpm1 = Some fpm2 ->
+    list_disjoint (footprint_flat fp1) (footprint_flat fp2) ->
+    list_norepet (flat_fp_map fpm1) ->
+    list_disjoint (flat_fp_map fpm2) (footprint_flat fp1).
+Admitted.
 
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
+    wt_state ce s1 ->
     step_dropplace ge s1 t s2 ->
-    sound_state s2.
+    sound_state s2 /\ wt_state ce s2.
 Proof.
-  intros s1 t s2 SOUND STEP.
+  intros s1 t s2 SOUND WTST STEP.
   inv STEP.
   (* step_dropplace_init1 *)
   - inv SOUND. inv ORDERED.
-    simpl in *. rewrite NOTOWN in *. 
+    simpl in *. rewrite NOTOWN in *.
+    split.
     econstructor; eauto.
+    (* wt_state: may be lift to a lemma *)
+    inv WTST.
+    econstructor. inv WT1. auto.     
   (* step_dropplace_init2 *)
   - inv SOUND. inv ORDERED.
     simpl in *. rewrite OWN in *.
     (* compute the new footprint map: it require some well-formed
     properties of own_env *)
-    exploit get_loc_footprint_map_progress. eauto. eauto. 
-    2: eauto. instantiate (1 := p).
-    (* wt_place *) admit.
+    exploit get_loc_footprint_map_progress. eauto. eauto.
+    (* wt_place *)
+    instantiate (1 := p). inv WTST. inv WT1. auto.
     (* dominators_is_init *)
     eapply wf_own_dominators; eauto.
     (*place p does not contain downcast *)
@@ -3801,8 +3897,8 @@ Proof.
     (* p has no downcast *)
     assert (forall ty fid, ~ In (ph_downcast ty fid) (snd (path_of_place p))).
     { intros. eapply wf_own_no_downcast. eauto. eapply is_init_in_universe. auto. }
-    
-    eapply sound_dropplace with (fpm:=fpm1); eauto.
+    split. inv SDP.
+    eapply sound_dropplace with (fpm:=fpm1) (rfp:=fp); eauto.
     (* mmatch: use mmatch_move_place_sound *)
     erewrite <- (valid_owner_same p).
     eapply mmatch_move_place_sound. eauto.
@@ -3812,29 +3908,77 @@ Proof.
     apply is_shallow_prefix_refl.
     unfold clear_footprint_map. rewrite POP. rewrite GFP. auto.
     (* norepet of the footprint frame *)
-    simpl. eapply list_norepet_append_commut2.
+    simpl.
+    erewrite (app_assoc (flat_fp_map fpm1)).
+    eapply list_norepet_append_commut2.
+    simpl in NOREP.
     eapply list_norepet_append_commut2 in NOREP.
     rewrite app_assoc in *.
-    eapply set_disjoint_footprint_norepet; eauto.
-    eapply empty_footprint_disjoint.
+    eapply list_norepet_app in NOREP. destruct NOREP as (A1 & A2 & A3).
+    eapply list_norepet_app. repeat apply conj; auto.
+    eapply list_norepet_app. repeat apply conj.
+    eapply set_disjoint_footprint_norepet. eauto. eauto.
+    erewrite empty_footprint_flat. red. intros. inv H1.
+    eapply get_loc_footprint_map_norepet; eauto.
+    eapply get_set_disjoint_footprint_map; eauto.
+    erewrite empty_footprint_flat. red. intros. inv H1.
+    red. intros. eapply A3; auto.
+    eapply in_app in H1. destruct H1.
+    exploit set_footprint_map_incl; eauto. intros [A|B]; auto.
+    erewrite empty_footprint_flat in B. inv B.
+    eapply get_loc_footprint_map_incl; eauto.        
     (* rsw_acc *)
     eapply rsw_acc_trans. eauto.
     econstructor. eapply Mem.unchanged_on_refl.
     simpl. red. intros. intro. eapply H0.
-    eapply in_app_iff in H1. destruct H1.
-    eapply in_app_iff. auto.
-    eapply in_app_iff in H1. destruct H1.
-    eapply in_app_iff. right. eapply in_app_iff. left.
+    rewrite !in_app_iff.
+    rewrite !in_app_iff in H1. repeat destruct H1; auto.
+    right. left.
     exploit set_footprint_map_incl; eauto. intros [A|B]; auto.
     rewrite empty_footprint_flat in B. inv B.
-    eapply in_app_iff. right. eapply in_app_iff. auto.
+    right. left.
+    eapply get_loc_footprint_map_incl; eauto.
     (** IMPORTATN TODO: prove sound_drop_place_state, but first we
     test if sound_drop_place_state is enough or not *)
+    exploit MM. erewrite POP. eauto. auto.
+    intros (BM & FULL).
+    (* prove that full is true then p is_full *)
+    destruct full.
+    exploit FULL. eapply FULLSPEC. auto. intros WTLOC.
+    2: { exploit FULLSPEC. left. eauto.
+         intros F.
+         (* p's type must be Box type *)
+         exploit wf_own_type. eauto.
+         eapply is_init_in_universe. eauto.
+         intros (A1 & A2). exploit A2. eauto. intros (ty & A3).
+         (* how do we know the type of p? How can we ensure that the *)
+    (*         footprint of p is fp_emp? *)
+         erewrite A3 in *.  inv WTFP;  try congruence.
+         inv BM. inv BM.
+         eapply sound_drop_place_state_box with (r:=p). erewrite POP.
+         eauto.
+         (* norepet *)
+         rewrite !list_norepet_app in NOREP.
+         eapply get_loc_footprint_map_norepet; eauto. eapply NOREP.
+         (* dominator is init *)
+         eapply move_place_dominator_still_init.
+         intros.
+         eapply wf_own_no_downcast. eauto. eapply is_init_in_universe; eauto.
+         eapply wf_own_dominators; eauto.
+         (* sound_split_fully_own_place *)
+         unfold split_partial_own_place.
+         rewrite A3.
+         econstructor. erewrite <- A3. eapply sound_split_nil; eauto.
+         all: eauto. inv WTST. inv WT1. auto. }
+         admit.
+    admit.
     admit.
     (* wf_env *)
     admit.
     (* wf_own_env *)
-    admit.    
+    admit.
+    (* wt_state *)
+    admit.
   (* step_dropplace_box *)
   - inv SOUND. inv SDP. inv SPLIT.
     (* To prove the (b,ofs) is equal to (b2,ofs2) so that (b', ofs')
@@ -3876,7 +4020,9 @@ Proof.
     (* norepet of rfp1 *)
     assert (NOREP2: list_norepet (footprint_flat rfp1)).
     { eapply set_footprint_norepet; eauto.
-      simpl. econstructor. simpl. red. auto. }    
+      simpl. econstructor.
+      simpl. red. intros. inv H0. }
+    split.
     (* prove sound_dropplace *)
     eapply sound_dropplace with (rfp := rfp1); eauto.
     (* sound_cont *)
@@ -3911,7 +4057,8 @@ Proof.
     simpl in H0. contradiction.
     (* sound_drop_place_state *)
     econstructor; eauto.
-        
+    (* wt_state *)
+    admit.
   (* step_dropplace_struct *)
   - inv SOUND.
     inv DP.
