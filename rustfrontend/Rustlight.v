@@ -316,6 +316,18 @@ Lemma is_prefix_antisym: forall p1 p2,
 Admitted.
 
 
+Lemma is_prefix_valid_owner: forall p,
+    is_prefix (valid_owner p) p = true.
+Admitted.
+
+(* similar to is_prefix_strict_trans_prefix *)
+Lemma is_prefix_strict_trans_prefix2: forall p1 p2 p3,
+    is_prefix p1 p2 = true ->
+    is_prefix_strict p2 p3 = true ->
+    is_prefix_strict p1 p3 = true.
+Admitted.
+
+
 Lemma is_prefix_strict_implies: forall p1 p2,
     is_prefix_strict p1 p2 = true ->
     is_prefix p1 p2 = true.

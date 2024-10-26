@@ -1896,18 +1896,32 @@ Lemma move_children_still_init: forall own p1 p2 p3,
     is_prefix p1 p2 = true ->
     is_init (move_place own p2) p3 = true.
 Admitted.
-      
-(* what if move out a downcast? *)
-Lemma move_place_dominator_still_init: forall p own
-    (NOTDOWN: forall ty fid, ~ In (ph_downcast ty fid) (snd (path_of_place p))),
+
+Lemma place_dominators_valid_owner_incl: forall p,
+    incl (place_dominators (valid_owner p)) (place_dominators p).
+Proof.
+  induction p; simpl; auto; try apply incl_refl.
+  - red. intros. simpl. right. auto.
+Qed.
+
+Lemma place_dominators_downcast_incl: forall p fid fty,
+    incl (place_dominators p) (place_dominators (Pdowncast p fid fty)).
+Proof.
+  induction p; simpl; auto; intros; try apply incl_nil_l.
+  - red. intros. simpl. right; auto.
+  - red. intros. simpl. right; auto.
+  - apply incl_refl.
+Qed.
+  
+(* what if move out a downcast? Use place_dominators_valid_owner_incl
+and place_dominators_downcast_incl ! *)
+Lemma move_place_dominator_still_init: forall p own,    
     dominators_is_init own p = true ->
     dominators_is_init (move_place own p) p = true.
 Proof.
   induction p; intros; unfold dominators_is_init in *; auto.
   - simpl in H. 
     exploit IHp.
-    intros. intro. eapply NOTDOWN. simpl.
-    destruct (path_of_place p) eqn: POP. simpl. eapply in_app. eauto.    
     eauto. intros.
     eapply forallb_forall. intros.
     eapply forallb_forall in H0. 2: eauto.
@@ -1917,8 +1931,6 @@ Proof.
   - simpl in H.
     eapply andb_true_iff in H. destruct H.
     exploit IHp.
-    intros. intro. eapply NOTDOWN. simpl.
-    destruct (path_of_place p) eqn: POP. simpl. eapply in_app. eauto.    
     eauto. intros.
     eapply forallb_forall. intros.
     simpl in H2. destruct H2; subst.
@@ -1931,11 +1943,27 @@ Proof.
     eapply move_children_still_init. eauto.
     unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
     eapply orb_true_r.
-  - simpl in NOTDOWN. exfalso.
-    eapply NOTDOWN.
-    destruct (path_of_place p) eqn: POP. simpl. eapply in_app_iff.
-    right. econstructor. eauto.
+  - exploit IHp. 
+    (* H can imply the premise of IHp *)
+    eapply forallb_forall. intros.
+    eapply forallb_forall in H. eauto. eapply place_dominators_downcast_incl. auto.
+    intros A.
+    (* valid_owner p is init *)
+    simpl in H.  eapply andb_true_iff in H. destruct H.
+    simpl. eapply andb_true_iff. split.
+    eapply move_irrelavent_place_still_owned. eauto.
+    eapply is_prefix_antisym.
+    eapply is_prefix_strict_trans_prefix2. eapply is_prefix_valid_owner.
+    unfold is_prefix_strict. simpl.
+    destruct (place_eq p p); try congruence. auto.    
+    (* p's dominators are init so the dominators of (valid_owner p) are init *)
+    eapply forallb_forall. intros.
+    eapply forallb_forall in A. eapply move_children_still_init. eauto.
+    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
+    simpl. eapply orb_true_r.
+    eapply place_dominators_valid_owner_incl. auto.
 Qed.
+
 
 Lemma is_not_prefix_disjoint: forall p1 p2,
     is_prefix p1 p2 = false ->
@@ -3860,6 +3888,112 @@ Lemma get_set_disjoint_footprint_map: forall l i fpm1 fpm2 b ofs fp1 fp2 le,
     list_disjoint (flat_fp_map fpm2) (footprint_flat fp1).
 Admitted.
 
+Lemma sound_split_fully_own_place_app: forall l1 l2 m p1 p2 p3 b1 b2 b3 ofs1 ofs2 ofs3 fp1 fp2 fp3 ty2 ty3,
+    sound_split_fully_own_place m p1 b1 ofs1 fp1 l1 p2 b2 ofs2 ty2 fp2 ->
+    sound_split_fully_own_place m p2 b2 ofs2 fp2 l2 p3 b3 ofs3 ty3 fp3 ->
+    sound_split_fully_own_place m p1 b1 ofs1 fp1 (l2++l1) p3 b3 ofs3 ty3 fp3.
+Proof.
+  induction l2; intros.
+  - exploit sound_split_fully_own_place_type_inv. eapply H. intros. subst.
+    inv H0. simpl.   auto.
+  - inv H0. exploit sound_split_fully_own_place_type_inv. eapply H. intros. subst.
+    simpl. econstructor.
+    eapply IHl2; eauto. all: eauto.
+Qed.
+
+(* Used to prove gen_drop_place_state_sound. We only consider non-empty list. *)
+Lemma split_fully_own_place_sound: forall ty p m b ofs fp p0 l
+    (PTY: typeof_place p = ty)
+    (SPLIT: split_fully_own_place p ty = p0 :: l)
+    (WTLOC: sem_wt_loc m fp b ofs)
+    (WTFP: wt_footprint ce ce (typeof_place p) fp),
+    exists b1 ofs1 fp1,
+      sound_split_fully_own_place m p b ofs fp l p0 b1 ofs1 (typeof_place p0) fp1
+      /\ sem_wt_loc m fp1 b1 ofs1
+      /\ wt_footprint ce ce (typeof_place p0) fp1.
+Proof.
+  induction ty; intros; simpl in *; try congruence.
+  - destruct l.
+    + eapply app_eq_unit in SPLIT. destruct SPLIT as [[A1 A2]|[B1 B2]]; try congruence.
+      inv A2.
+      exists b, ofs, fp. repeat apply conj; auto.
+      econstructor.
+    + destruct (split_fully_own_place (Pderef p ty) ty) eqn: SPLIT1; simpl in SPLIT; try congruence.
+      inv SPLIT.
+      (* get fp *)
+      rewrite PTY in WTFP. inv WTFP. inv WTLOC. simpl in WF. congruence.
+      inv WTLOC. inv WT0.
+      exploit IHty. 2: eauto. simpl. auto.
+      eapply WTLOC. simpl. auto.
+      intros (b1 & ofs1 & fp1 & A1 & A2 & A3).
+      exists b1, ofs1, fp1. repeat apply conj; auto.
+      eapply sound_split_fully_own_place_app.
+      econstructor. erewrite <- PTY. econstructor.
+      all: auto.   
+  - destruct l0; try congruence. inv SPLIT.
+    exists b, ofs, fp. repeat apply conj; auto.
+      econstructor.
+  - destruct l0; try congruence. inv SPLIT.
+    exists b, ofs, fp. repeat apply conj; auto.
+    econstructor.
+Qed.
+
+  
+Lemma split_fully_own_place_cons_type: forall ty p p1 l,
+    typeof_place p = ty ->
+    split_fully_own_place p ty = p1 :: l ->
+    (exists orgs id, typeof_place p1 = Tstruct orgs id)
+    \/ (exists orgs id, typeof_place p1 = Tvariant orgs id)
+    \/ (exists ty, typeof_place p1 = Tbox ty).
+Proof.
+  induction ty; intros; simpl in *; try congruence.
+  - destruct l.
+    + eapply app_eq_unit in H0. destruct H0 as [[A1 A2]|[B1 B2]]; try congruence.
+      inv A2. eauto.
+    + destruct (split_fully_own_place (Pderef p ty) ty) eqn: SPLIT1; simpl in H0; try congruence.
+      inv H0.
+      eapply IHty. instantiate (1 := Pderef p ty). auto. eauto.
+  - inv H0. eauto.
+  - inv H0. eauto.
+Qed.
+    
+Lemma gen_drop_place_state_sound: forall p own fp b ofs m empfp fpm (le: env),
+    wt_place le ce p ->
+    dominators_is_init own p = true ->
+    sem_wt_loc m fp b ofs ->
+    wt_footprint ce ce (typeof_place p) fp ->
+    get_loc_footprint_map le (path_of_place p) fpm = Some (b, ofs, empfp) ->
+    list_norepet (footprint_flat fp) ->
+    sound_drop_place_state le m fpm own fp (Some (gen_drop_place_state p)).
+Proof.
+  intros until le; intros WTP DOM WTLOC WTFP GFP NOREP; unfold gen_drop_place_state.
+  destruct (split_fully_own_place p (typeof_place p)) eqn: SPLIT.
+  - econstructor; eauto.
+    econstructor.
+  - exploit split_fully_own_place_cons_type; eauto.
+    intros. destruct H as [A|B]. 2: destruct B.
+    + destruct A as (orgs & id & TYP1).
+      rewrite TYP1.
+      exploit split_fully_own_place_sound. 2: eauto. 1-3: eauto.
+      intros (b1 & ofs1 & fp1 & A1 & A2 & A3).
+      econstructor; eauto.
+    + destruct H as (orgs & id & TYP1).
+      rewrite TYP1.
+      exploit split_fully_own_place_sound. 2: eauto. 1-3: eauto.
+      intros (b1 & ofs1 & fp1 & A1 & A2 & A3).
+      econstructor; eauto.
+    + destruct H as (ty & TYP1).
+      rewrite TYP1.
+      exploit split_fully_own_place_sound. 2: eauto. 1-3: eauto.
+      intros (b1 & ofs1 & fp1 & A1 & A2 & A3).
+      rewrite TYP1 in *.
+      inv A3. inv A2. simpl in WF. congruence.
+      inv A2. inv WT0.
+      econstructor; eauto.
+      econstructor; eauto.
+Qed.
+
+
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
     wt_state ce s1 ->
@@ -3945,34 +4079,38 @@ Proof.
     (* prove that full is true then p is_full *)
     destruct full.
     exploit FULL. eapply FULLSPEC. auto. intros WTLOC.
-    2: { exploit FULLSPEC. left. eauto.
-         intros F.
-         (* p's type must be Box type *)
-         exploit wf_own_type. eauto.
-         eapply is_init_in_universe. eauto.
-         intros (A1 & A2). exploit A2. eauto. intros (ty & A3).
-         (* how do we know the type of p? How can we ensure that the *)
-    (*         footprint of p is fp_emp? *)
-         erewrite A3 in *.  inv WTFP;  try congruence.
-         inv BM. inv BM.
-         eapply sound_drop_place_state_box with (r:=p). erewrite POP.
-         eauto.
-         (* norepet *)
-         rewrite !list_norepet_app in NOREP.
-         eapply get_loc_footprint_map_norepet; eauto. eapply NOREP.
-         (* dominator is init *)
-         eapply move_place_dominator_still_init.
-         intros.
-         eapply wf_own_no_downcast. eauto. eapply is_init_in_universe; eauto.
-         eapply wf_own_dominators; eauto.
-         (* sound_split_fully_own_place *)
-         unfold split_partial_own_place.
-         rewrite A3.
-         econstructor. erewrite <- A3. eapply sound_split_nil; eauto.
-         all: eauto. inv WTST. inv WT1. auto. }
-         admit.
-    admit.
-    admit.
+    (* soundness of gen_drop_place_state *)
+    exploit move_place_dominator_still_init. eapply wf_own_dominators; eauto.
+    intros DOM1. inv WTST. inv WT1.
+    eapply gen_drop_place_state_sound; eauto.
+    eapply wt_footprint_extend_ce; eauto.
+    rewrite POP. eauto.
+    eapply get_loc_footprint_map_norepet; eauto.
+    rewrite !list_norepet_app in NOREP. intuition.    
+    (* case2 *)
+    { exploit FULLSPEC. left. eauto.
+      intros F.
+      (* p's type must be Box type *)
+      exploit wf_own_type. eauto.
+      eapply is_init_in_universe. eauto.
+      intros (A1 & A2). exploit A2. eauto. intros (ty & A3).
+      (* how do we know the type of p? How can we ensure that the *)
+      (*         footprint of p is fp_emp? *)
+      erewrite A3 in *.  inv WTFP;  try congruence.
+      inv BM. inv BM.
+      eapply sound_drop_place_state_box with (r:=p). erewrite POP.
+      eauto.
+      (* norepet *)
+      rewrite !list_norepet_app in NOREP.
+      eapply get_loc_footprint_map_norepet; eauto. eapply NOREP.
+      (* dominator is init *)
+      eapply move_place_dominator_still_init.
+      eapply wf_own_dominators; eauto.
+      (* sound_split_fully_own_place *)
+      unfold split_partial_own_place.
+      rewrite A3.
+      econstructor. erewrite <- A3. eapply sound_split_nil; eauto.
+      all: eauto. inv WTST. inv WT1. auto. }
     (* wf_env *)
     admit.
     (* wf_own_env *)

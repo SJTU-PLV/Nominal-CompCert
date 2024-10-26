@@ -2916,8 +2916,11 @@ Proof.
     instantiate (1 := drop_flags).
     (* easy: added a norepet check in target program to ensure that
     source env does not contains identities of drop flags *)
-    admit. 
     admit.
+    (* norepet of drop_flags, using the norepet checking in generate_drop_flags *)
+    unfold generate_drop_flags in EQ1.
+    destruct list_norepet_dec in EQ1; try congruence.
+    destruct list_norepet_dec in EQ1; try congruence. inv EQ1. auto.
     instantiate (1 := Hm1).
     intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & NOTIN & MENV2 ).
     (* bind_parameters in target program *)
