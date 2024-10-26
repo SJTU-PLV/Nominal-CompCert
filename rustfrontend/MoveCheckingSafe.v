@@ -3993,6 +3993,24 @@ Proof.
       econstructor; eauto.
 Qed.
 
+(* Set a wt footprint in the footprint map remains wf_env *)
+Lemma set_footprint_map_wf_env: forall phl id fpm1 fpm2 ce le fp ty,
+    wt_footprint ce ce ty fp ->
+    set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
+    wf_env fpm1 ce le ->
+    wf_env fpm2 ce le.
+Admitted.
+
+(* The empty footprint is well-typed *)
+Lemma clear_wt_footprint_wt: forall fp ty,
+    wt_footprint ce ce ty fp ->
+    wt_footprint ce ce ty (clear_footprint_rec fp).
+Admitted.
+
+Lemma wf_own_env_move_place: forall p own,
+    wf_own_env own ->
+    wf_own_env (move_place own p).
+Admitted.
 
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
@@ -4112,9 +4130,11 @@ Proof.
       econstructor. erewrite <- A3. eapply sound_split_nil; eauto.
       all: eauto. inv WTST. inv WT1. auto. }
     (* wf_env *)
-    admit.
+    eapply set_footprint_map_wf_env. 
+    eapply clear_wt_footprint_wt. eapply wt_footprint_extend_ce; eauto.
+    eauto. auto.    
     (* wf_own_env *)
-    admit.
+    eapply wf_own_env_move_place. auto.
     (* wt_state *)
     admit.
   (* step_dropplace_box *)

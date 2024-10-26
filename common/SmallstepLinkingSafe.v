@@ -116,6 +116,7 @@ Record lts_safe {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invar
       reply_inv IB wI r;    
   }.
 
+
 (** lts_safe_triple is hoare-triple representation of lts_safe, but it
 is unused for now *)
 
@@ -541,7 +542,66 @@ Proof.
   2: { eapply star_reachable; eauto. }
   eauto.
 Qed.
-   
+
+(** An alternative safety definition *)
+
+Section SAFEK.
+
+(* lts_safek is an alternative definition of safety based on "safe in
+k steps". Note that when k is zero, we require the state satisfies SI
+(e.g., not_stuck or partial_safe) so that any reachable state
+satisfies SI. One opportunity of this definition is to utilize bound
+model checking. *)
+
+Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop :=
+| safek_O: forall s
+    (SINV: SI L s),
+    safek se L IA IB SI wI O s
+| safek_step: forall s1 s2 k t
+    (STEP: Step L s1 t s2)
+    (SAFEK: safek se L IA IB SI wI k s2),
+    safek se L IA IB SI wI (S k) s1
+| safek_final: forall s r k
+    (FINAL: final_state L s r)
+    (* The reply satisfies the post-condition *)
+    (RINV: reply_inv IB wI r),
+    safek se L IA IB SI wI k s
+| safek_external: forall s1 k w q r
+    (ATEXT: at_external L s1 q)
+    (QINV: query_inv IA w q)
+    (* We require that the incoming reply satisfies its condition *)
+    (AFEXT: reply_inv IA w r ->
+            exists s2, after_external L s1 r s2
+                  /\ safek se L IA IB SI wI k s2),
+    safek se L IA IB SI wI (S k) s1
+.
+     
+
+Definition lts_safek {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB S -> S -> Prop) (wI: inv_world IB) :=  
+  forall q,
+    (* when the query is valid and satisfis the pre-condition *)
+    valid_query L q = true ->
+    query_inv IB wI q ->
+    exists s, initial_state L q s
+         (* This lts does not get stuck in any k steps *)
+         /\ (forall k, safek se L IA IB SI wI k s).
+
+Definition module_safek_se {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI se :=
+  forall w,
+    symtbl_inv IB w se ->
+    lts_safek se (L se) IA IB SI w.
+
+Definition module_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI :=
+  forall se,
+    Genv.valid_for (skel L) se ->
+    module_safek_se L IA IB SI se.
+
+(* Compositionality *)
+
+End SAFEK.
+
+
+
 (** Unfinished: The following code is a more general module_safety
 property which supports different invariant in incoming side and
 outgoing side *)
