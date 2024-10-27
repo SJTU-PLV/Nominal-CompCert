@@ -546,21 +546,24 @@ Qed.
 (** An alternative safety definition *)
 
 Section SAFEK.
-
+  
 (* lts_safek is an alternative definition of safety based on "safe in
 k steps". Note that when k is zero, we require the state satisfies SI
 (e.g., not_stuck or partial_safe) so that any reachable state
 satisfies SI. One opportunity of this definition is to utilize bound
 model checking. *)
-
+  
 Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop :=
-| safek_O: forall s
-    (SINV: SI L s),
+| safek_O: forall s,
     safek se L IA IB SI wI O s
-| safek_step: forall s1 s2 k t
-    (STEP: Step L s1 t s2)
-    (SAFEK: safek se L IA IB SI wI k s2),
-    safek se L IA IB SI wI (S k) s1
+| safek_internal_reach: forall s1 k
+    (* Ensure that this internal state satisfies SI (i.e., not stuck
+    or partial safe) *)
+    (SINV: SI L s1)
+    (* Every internal reachable states of s1 is safek *)
+    (SAFEK: forall t s2, Star L s1 t s2 ->
+                    safek se L IA IB SI wI k s2),
+    safek se L IA IB SI wI k s1
 | safek_final: forall s r k
     (FINAL: final_state L s r)
     (* The reply satisfies the post-condition *)
@@ -575,6 +578,32 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
                   /\ safek se L IA IB SI wI k s2),
     safek se L IA IB SI wI (S k) s1
 .
+  
+(* Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop := *)
+(* | safek_O: forall s, *)
+(*     safek se L IA IB SI wI O s *)
+(* | safek_step: forall s1 s2 k t *)
+(*     (STEP: Step L s1 t s2) *)
+(*     (SAFEK: safek se L IA IB SI wI k s2), *)
+(*     safek se L IA IB SI wI (S k) s1 *)
+(* | safek_SI: forall s k *)
+(*     (* SI as a special final state *) *)
+(*     (SINV: SI L s), *)
+(*     safek se L IA IB SI wI k s *)
+(* | safek_final: forall s r k *)
+(*     (FINAL: final_state L s r) *)
+(*     (* The reply satisfies the post-condition *) *)
+(*     (RINV: reply_inv IB wI r), *)
+(*     safek se L IA IB SI wI k s *)
+(* | safek_external: forall s1 k w q r *)
+(*     (ATEXT: at_external L s1 q) *)
+(*     (QINV: query_inv IA w q) *)
+(*     (* We require that the incoming reply satisfies its condition *) *)
+(*     (AFEXT: reply_inv IA w r -> *)
+(*             exists s2, after_external L s1 r s2 *)
+(*                   /\ safek se L IA IB SI wI k s2), *)
+(*     safek se L IA IB SI wI (S k) s1 *)
+(* . *)
      
 
 Definition lts_safek {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB S -> S -> Prop) (wI: inv_world IB) :=  
@@ -596,7 +625,73 @@ Definition module_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI
     Genv.valid_for (skel L) se ->
     module_safek_se L IA IB SI se.
 
-(* Compositionality *)
+(** Compositionality *)
+
+(* To prove safety under composition, we need some deterministic
+properties in initial, external and final states *)
+
+Record lts_open_determinate {liA liB st} (L: lts liA liB st) : Prop :=
+  Interface_determ {
+    od_initial_determ: forall q s1 s2,
+      initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
+    od_at_external_determ: forall s q1 q2,
+      at_external L s q1 -> at_external L s q2 -> q1 = q2;
+    od_after_external_determ: forall s r s1 s2,
+      after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
+    od_final_determ: forall s r1 r2,
+      final_state L s r1 -> final_state L s r2 -> r1 = r2
+  }.
+
+Definition open_determinate {liA liB} (L: semantics liA liB) :=
+  forall se, lts_open_determinate (L se).
+
+(** Cannot defined: Composition of safety_invariant (e.g., not_stuck
+or partial_safe). Maybe we cannot define a general composed SI because
+SI depends on the specific definition of the lts. For example,
+at_external in one lts is an internal step in the composed lts *)
+
+(* Let SI1 := SI (state L1). *)
+(* Let SI2 := SI (state L2). *)
+(* Let SI3 := SI (state L). *)
+
+(* We need to prove SI3 implies SI1 or SI2 if L = L1 ⊕ L2 *)
+
+(* How to use parametricity (or something else?) to prove this?? *)
+(* Lemma parametricity_SI: forall se s3, *)
+(*     compose L1 L2 = Some L -> *)
+(*     SI3 (L se) s3 -> *)
+(* how to construct s1 and s2 ????? *)
+       (* SI1 (L1 se) s1 \/ SI2 (L2 se) s2 *)
+
+Section COMPOSE_SAFETY.
+
+Context {li} (I: invariant li) (L1 L2 L: semantics li li) (SI: forall st, lts li li st -> st -> Prop).
+    
+Hypothesis L1_determ: open_determinate L1.
+Hypothesis L2_determ: open_determinate L2.
+
+Lemma compose_safek:
+  module_safek L1 I I not_stuck ->
+  module_safek L2 I I not_stuck ->
+  compose L1 L2 = Some L ->
+  module_safek L I I not_stuck.
+(* Proof. *)
+(*   intros SAFE1 SAFE2 COMP. unfold compose in *. unfold option_map in *. *)
+(*   destruct (link (skel L1) (skel L2)) as [sk|] eqn:Hsk; try discriminate. inv COMP. *)
+(*   set (L := fun i:bool => if i then L1 else L2). *)
+(*   red. intros se w VALID INV. *)
+(*   assert (VALIDSE: forall i, Genv.valid_for (skel (L i)) se). *)
+(*   destruct i. *)
+(*   eapply Genv.valid_for_linkorder. *)
+(*   eapply (link_linkorder _ _ _ Hsk). eauto. *)
+(*   eapply Genv.valid_for_linkorder. *)
+(*   eapply (link_linkorder _ _ _ Hsk). eauto. *)
+(*   assert (SAFE: forall i, module_safe_se (L i) I I not_stuck se). *)
+(*   { intros i. generalize (VALIDSE i). intros VSE. *)
+(*     destruct i; simpl; auto. } *)
+(*   constructor. *)
+
+Admitted.
 
 End SAFEK.
 
