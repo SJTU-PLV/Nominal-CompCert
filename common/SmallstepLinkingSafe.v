@@ -632,15 +632,15 @@ properties in initial, external and final states *)
 
 Record lts_open_determinate {liA liB st} (L: lts liA liB st) : Prop :=
   Interface_determ {
-    od_initial_determ: forall q s1 s2,
-      initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
-    od_at_external_determ: forall s q1 q2,
-      at_external L s q1 -> at_external L s q2 -> q1 = q2;
-    od_after_external_determ: forall s r s1 s2,
-      after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
-    od_final_determ: forall s r1 r2,
-      final_state L s r1 -> final_state L s r2 -> r1 = r2
-  }.
+      od_initial_determ: forall q s1 s2,
+        initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
+      od_at_external_determ: forall s q1 q2,
+        at_external L s q1 -> at_external L s q2 -> q1 = q2;      
+      od_after_external_determ: forall s r s1 s2,
+        after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
+      od_final_determ: forall s r1 r2,
+        final_state L s r1 -> final_state L s r2 -> r1 = r2
+    }.
 
 Definition open_determinate {liA liB} (L: semantics liA liB) :=
   forall se, lts_open_determinate (L se).
@@ -665,7 +665,7 @@ at_external in one lts is an internal step in the composed lts *)
 
 Section COMPOSE_SAFETY.
 
-Context {li} (I: invariant li) (L1 L2 L: semantics li li) (SI: forall st, lts li li st -> st -> Prop).
+Context {li} (I: invariant li) (L1 L2 L: semantics li li).
     
 Hypothesis L1_determ: open_determinate L1.
 Hypothesis L2_determ: open_determinate L2.
@@ -675,24 +675,72 @@ Lemma compose_safek:
   module_safek L2 I I not_stuck ->
   compose L1 L2 = Some L ->
   module_safek L I I not_stuck.
-(* Proof. *)
-(*   intros SAFE1 SAFE2 COMP. unfold compose in *. unfold option_map in *. *)
-(*   destruct (link (skel L1) (skel L2)) as [sk|] eqn:Hsk; try discriminate. inv COMP. *)
-(*   set (L := fun i:bool => if i then L1 else L2). *)
-(*   red. intros se w VALID INV. *)
-(*   assert (VALIDSE: forall i, Genv.valid_for (skel (L i)) se). *)
-(*   destruct i. *)
-(*   eapply Genv.valid_for_linkorder. *)
-(*   eapply (link_linkorder _ _ _ Hsk). eauto. *)
-(*   eapply Genv.valid_for_linkorder. *)
-(*   eapply (link_linkorder _ _ _ Hsk). eauto. *)
-(*   assert (SAFE: forall i, module_safe_se (L i) I I not_stuck se). *)
-(*   { intros i. generalize (VALIDSE i). intros VSE. *)
-(*     destruct i; simpl; auto. } *)
-(*   constructor. *)
+Proof.
+  intros SAFE1 SAFE2 COMP. unfold compose in *. unfold option_map in *.
+  destruct (link (skel L1) (skel L2)) as [sk|] eqn:Hsk; try discriminate. inv COMP.
+  set (L := fun i:bool => if i then L1 else L2).
+  red. intros se VALID w INV.
+  assert (VALIDSE: forall i, Genv.valid_for (skel (L i)) se).
+  { destruct i.
+    eapply Genv.valid_for_linkorder.
+    eapply (link_linkorder _ _ _ Hsk). eauto.
+    eapply Genv.valid_for_linkorder.
+    eapply (link_linkorder _ _ _ Hsk). eauto. }
+  assert (SAFE: forall i, lts_safek se (L i se) I I not_stuck w).
+  { intros i. generalize (VALIDSE i). intros VSE.
+    destruct i.
+    eapply SAFE1; eauto.
+    eapply SAFE2; eauto. }
+  (* prove lts_safek *)
+  red. intros q VQ QINV.
+  assert (VQi: exists i, valid_query (L i se) q = true).
+  { simpl in VQ. unfold SmallstepLinking.valid_query in VQ.
+    apply orb_true_iff in VQ. destruct VQ; eauto. }
+  destruct VQi as (iq & VQi).
+  (* construct initial state *)
+  exploit SAFE; eauto. intros (inits & INIT & SAFEK).
+  exists (st L iq inits :: nil). split.
+  econstructor; eauto.
+  (* prove safek *)
+  intros k.
+  assert (NOTSTUCK: not_stuck (SmallstepLinking.semantics L sk se) (st L iq inits :: nil)). admit.
+  eapply safek_internal_reach.
+  admit.
+  intros. induction H.
+  destruct NOTSTUCK as [A|[B|C]].
+  admit.  admit. destruct C as (t & s' & STEP).
+  
+  eapply safek_internal_reach.
+  red. right. right. eauto. intros.
+  
+  eapply IHstar. admit.
+  
+  
+  induction k.
+  admit.
+  inv IHk. admit.
 
-Admitted.
+  eapply safek_internal_reach. auto.
+  intros. admit.
 
+  eapply safek_final; eauto.
+
+  eapply safek_external; eauto. intros.
+  exploit AFEXT; eauto. intros (s2 & AFST & SAFEKAF).
+  exists s2. split; auto.
+  
+  
+  (* How to know inits can run to an external state? *)
+  eapply safek_internal_reach.
+  (* How to know inits is not stuck??? *)
+  Nat.strong_left_induction
+  eapply Nat.strong_right_induction.
+  
+  induction k. admit.
+  inv IHk.
+  
+
+  
 End SAFEK.
 
 
