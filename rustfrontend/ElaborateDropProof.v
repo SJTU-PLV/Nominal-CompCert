@@ -505,15 +505,6 @@ Proof.
   intros (A & B). split; auto.
 Qed.  
   
-(* unused *)
-(* Lemma match_envs_flagm_bound_unchanged: forall j own le m1 m2 lo hi tle flagm tm1 tm2 tlo thi , *)
-(*     match_envs_flagm j own le m1 lo hi tle flagm tm1 tlo thi -> *)
-(*     Mem.unchanged_on (fun b _ => ~ Mem.sup_In b hi) m1 m2 -> *)
-(*     Mem.unchanged_on (fun b _ => ~ Mem.sup_In b thi) tm1 tm2 -> *)
-(*     match_envs_flagm j own le m2 lo hi tle flagm tm2 tlo thi. *)
-(* Proof. *)
-(* Admitted.  *)
-
 (* establish match_envs after the allocation of the drop flags in the
 target programs *)
 Lemma alloc_drop_flags_match: forall (flags: list (place * ident)) j1 m1 tm1 e1 lo hi te1 tlo thi Hm1
@@ -768,7 +759,6 @@ Proof.
     exists b1'. split. auto.  auto. 
     apply MENV in H0. destruct H0. destruct H0. 
     exists x. split.  auto.  auto.
-    (* admit.  *)
     (* protect  *)
     instantiate (1 := B) in H. 
     instantiate (1 := INJ) in H. 
@@ -2211,6 +2201,16 @@ Proof.
     + simpl. right. eapply IHl. eauto.
 Qed.
 
+(* gen_drop_place_state in simulation and drop_fully_own in compilation match *)
+Lemma gen_drop_place_state_match: forall p,
+    match_drop_place_state (Some (gen_drop_place_state p)) (drop_fully_own p).
+Proof.
+  intros.
+  unfold gen_drop_place_state, drop_fully_own.
+  destruct (split_fully_own_place p (typeof_place p)) eqn: SPLIT.
+  econstructor.
+  destruct (typeof_place p0) eqn: TYP; try econstructor.
+Qed.                                                                
 
 (* difficult part is establish simulation (match_split_drop_places)
 when entering dropplace state *)
@@ -2311,7 +2311,10 @@ Proof.
       intros. simpl. intro. subst.
       eapply me_trange. eapply me_envs; eauto. eauto. auto.
       (** TODO: match_drop_place_state and gen_drop_place_state *)
-      admit.
+      destruct full.
+      eapply gen_drop_place_state_match.
+      econstructor.
+      (* match_split_drop_places *)
       auto. eauto. eauto.
       (* match_envs_flagm *)
       eapply match_envs_flagm_sync_step; eauto.
@@ -2331,7 +2334,9 @@ Proof.
       (* match_states *)
       econstructor; eauto.
       (** TODO: match_drop_place_state and gen_drop_place_state *)
-      admit.
+      simpl. destruct full.
+      eapply gen_drop_place_state_match.
+      econstructor.
       (** move out a place which does not have drop flag has no
       effect on match_envs_flagm *)
       eapply match_envs_flagm_move_no_flag_place; eauto.
@@ -2444,7 +2449,7 @@ Proof.
     auto.
     econstructor; eauto.
     econstructor.
-Admitted.
+Qed.
 
 
 Lemma step_dropstate_simulation:

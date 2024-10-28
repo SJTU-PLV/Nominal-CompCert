@@ -4125,8 +4125,6 @@ Proof.
       eapply move_place_dominator_still_init.
       eapply wf_own_dominators; eauto.
       (* sound_split_fully_own_place *)
-      unfold split_partial_own_place.
-      rewrite A3.
       econstructor. erewrite <- A3. eapply sound_split_nil; eauto.
       all: eauto. inv WTST. inv WT1. auto. }
     (* wf_env *)

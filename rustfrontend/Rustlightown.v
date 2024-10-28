@@ -749,14 +749,6 @@ Definition gen_drop_place_state (p: place) : drop_place_state :=
       end
   end.
 
-Definition split_partial_own_place (p: place) :=
-  match typeof_place p with
-  | Tbox _ =>
-      [p]
-  | _ =>
-      []
-  end.
-
 
 (** Continuation *)
 
@@ -1386,7 +1378,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_init own p = true)
-    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box (split_partial_own_place p))),
+    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)
 | step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l

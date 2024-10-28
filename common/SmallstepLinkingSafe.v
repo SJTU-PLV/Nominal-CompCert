@@ -704,43 +704,44 @@ Proof.
   (* prove safek *)
   intros k.
   assert (NOTSTUCK: not_stuck (SmallstepLinking.semantics L sk se) (st L iq inits :: nil)). admit.
-  eapply safek_internal_reach.
-  admit.
-  intros. induction H.
-  destruct NOTSTUCK as [A|[B|C]].
-  admit.  admit. destruct C as (t & s' & STEP).
+  (* eapply safek_internal_reach. *)
+  (* admit. *)
+  (* intros. induction H. *)
+  (* destruct NOTSTUCK as [A|[B|C]]. *)
+  (* admit.  admit. destruct C as (t & s' & STEP). *)
   
-  eapply safek_internal_reach.
-  red. right. right. eauto. intros.
+  (* eapply safek_internal_reach. *)
+  (* red. right. right. eauto. intros. *)
   
-  eapply IHstar. admit.
+  (* eapply IHstar. admit. *)
   
   
-  induction k.
-  admit.
-  inv IHk. admit.
+  (* induction k. *)
+  (* admit. *)
+  (* inv IHk. admit. *)
 
-  eapply safek_internal_reach. auto.
-  intros. admit.
+  (* eapply safek_internal_reach. auto. *)
+  (* intros. admit. *)
 
-  eapply safek_final; eauto.
+  (* eapply safek_final; eauto. *)
 
-  eapply safek_external; eauto. intros.
-  exploit AFEXT; eauto. intros (s2 & AFST & SAFEKAF).
-  exists s2. split; auto.
+  (* eapply safek_external; eauto. intros. *)
+  (* exploit AFEXT; eauto. intros (s2 & AFST & SAFEKAF). *)
+  (* exists s2. split; auto. *)
   
   
-  (* How to know inits can run to an external state? *)
-  eapply safek_internal_reach.
-  (* How to know inits is not stuck??? *)
-  Nat.strong_left_induction
-  eapply Nat.strong_right_induction.
+  (* (* How to know inits can run to an external state? *) *)
+  (* eapply safek_internal_reach. *)
+  (* (* How to know inits is not stuck??? *) *)
+  (* Nat.strong_left_induction *)
+  (* eapply Nat.strong_right_induction. *)
   
-  induction k. admit.
-  inv IHk.
-  
+  (* induction k. admit. *)
+  (* inv IHk. *)
+Admitted.  
 
-  
+End COMPOSE_SAFETY.
+
 End SAFEK.
 
 

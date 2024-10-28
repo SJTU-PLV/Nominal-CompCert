@@ -374,7 +374,7 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_init own p = true)
-    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box (split_partial_own_place p))),
+    (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     (* move p to match drop p *)
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)

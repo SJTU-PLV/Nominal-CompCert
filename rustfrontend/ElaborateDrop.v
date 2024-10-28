@@ -141,7 +141,8 @@ Definition drop_fully_own (p: place) :=
 Definition generate_drop (p: place) (full: bool) (flag: option ident) : statement :=
   let drop := if full then
                 drop_fully_own p
-              else Sdrop p in
+                (* To simulate makeseq *)
+              else Ssequence (Sdrop p) (Ssequence Sskip Sskip) in
   match flag with
   | Some id =>
       let set_flag := set_dropflag id false in
