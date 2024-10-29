@@ -548,34 +548,39 @@ Qed.
 Section SAFEK.
   
 (* lts_safek is an alternative definition of safety based on "safe in
-k steps". Note that when k is zero, we require the state satisfies SI
-(e.g., not_stuck or partial_safe) so that any reachable state
-satisfies SI. One opportunity of this definition is to utilize bound
-model checking. *)
-  
+k steps". One opportunity of this definition is to utilize bound model
+checking. We treat SI as a special final state (but how to express its
+disjointness?) *)
+
 Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop :=
 | safek_O: forall s,
     safek se L IA IB SI wI O s
-| safek_internal_reach: forall s1 k
-    (* Ensure that this internal state satisfies SI (i.e., not stuck
-    or partial safe) *)
-    (SINV: SI L s1)
-    (* Every internal reachable states of s1 is safek *)
-    (SAFEK: forall t s2, Star L s1 t s2 ->
-                    safek se L IA IB SI wI k s2),
-    safek se L IA IB SI wI k s1
+| safek_step: forall s1 t s2 k
+    (* Ensure that this internal state can make a step *)
+    (STEP: Step L s1 t s2)
+    (* We allow internal nondeterminism so every states in the next
+    step must be safek. *)
+    (SAFEK: forall t' s2', Step L s1 t' s2' ->
+                      safek se L IA IB SI wI k s2'),
+    safek se L IA IB SI wI (S k) s1
+| safek_SI: forall s k
+    (* SI as a special final state. It can be False to define total
+    safe or memory_error to define partial safe *)
+    (SINV: SI L s),
+    safek se L IA IB SI wI k s              
 | safek_final: forall s r k
     (FINAL: final_state L s r)
     (* The reply satisfies the post-condition *)
     (RINV: reply_inv IB wI r),
     safek se L IA IB SI wI k s
-| safek_external: forall s1 k w q r
+| safek_external: forall s1 k w q
     (ATEXT: at_external L s1 q)
+    (SYMBINV: symtbl_inv IA w se)
     (QINV: query_inv IA w q)
     (* We require that the incoming reply satisfies its condition *)
-    (AFEXT: reply_inv IA w r ->
-            exists s2, after_external L s1 r s2
-                  /\ safek se L IA IB SI wI k s2),
+    (AFEXT: forall r, reply_inv IA w r ->
+                 exists s2, after_external L s1 r s2
+                       /\ safek se L IA IB SI wI k s2),
     safek se L IA IB SI wI (S k) s1
 .
   
@@ -625,19 +630,31 @@ Definition module_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI
     Genv.valid_for (skel L) se ->
     module_safek_se L IA IB SI se.
 
+(* Module total safety (SI is False) *)
+Definition SIF {liA liB S} : lts liA liB S -> S -> Prop := (fun _ _ => False).
+
+Definition module_total_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) := module_safek L IA IB SIF.
+
 (** Compositionality *)
 
 (* To prove safety under composition, we need some deterministic
-properties in initial, external and final states *)
+properties in initial, external and final states. Nostep and noext are
+used to ensure that each case of safek is disjoint *)
 
 Record lts_open_determinate {liA liB st} (L: lts liA liB st) : Prop :=
   Interface_determ {
       od_initial_determ: forall q s1 s2,
         initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
+      od_at_external_nostep: forall s q,
+        at_external L s q -> Nostep L s;
       od_at_external_determ: forall s q1 q2,
         at_external L s q1 -> at_external L s q2 -> q1 = q2;      
       od_after_external_determ: forall s r s1 s2,
         after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
+      od_final_nostep: forall s r,
+        final_state L s r -> Nostep L s;
+      od_final_noext: forall s r q,
+        final_state L s r -> at_external L s q -> False;
       od_final_determ: forall s r1 r2,
         final_state L s r1 -> final_state L s r2 -> r1 = r2
     }.
@@ -663,6 +680,221 @@ at_external in one lts is an internal step in the composed lts *)
 (* how to construct s1 and s2 ????? *)
        (* SI1 (L1 se) s1 \/ SI2 (L2 se) s2 *)
 
+(* Lemma lts_safek_le {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB S -> S -> Prop) (wI: inv_world IB): forall k1 k2 s, *)
+(*     (k1 <= k2)%nat -> *)
+(*     safek se L IA IB SI wI k2 s -> *)
+(*     safek se L IA IB SI wI k1 s. *)
+(* Admitted. *)
+  
+Section SAFEK_INTERNAL.
+
+Context {li} (I: invariant li) (L: bool -> semantics li li).
+Context (sk: AST.program unit unit) (se: Genv.symtbl).
+
+
+(** Proof strategy of the compositionality of safek:
+
+1. Definition of wfk_state. We define a general predicate (called
+wfk_state) on the state of the composed semantics (i.e., list of
+frame) to act as the safek in the composed semantics. It takes an
+initial world of the composed semantics, the list of frame and a list
+of natural number represting "k step safe" at each frame. The key
+component of wfk_state is wfk_frames which takes similar arguments but
+returns the emitted world from the top of the frames.
+
+2. Lemma wf_state_safek. This lemma is the key of the composition
+proof. It says that if the frames are well-formed (i.e., each frame is
+safe in k steps) and the k step safety of the composed semantics is
+larger than any k' step in the frames, then the state of the composed
+semantics is safe in k step.
+
+2.1. To prove this lemma, we extract the top frame and use safety in
+each module to perform case analysis of this frame. This frame can
+take an internal step, at_external and final. At each case, we
+construct the step of the composed semantics. For example, an internal
+step in the top frame can be an internal step (step_internal) in the
+composed semantics, but not a step_push/pop. But this properties
+require that the module semantics are open_determinate.
+
+3. Compositionality Lemma, just construct initial_state and apply
+wf_state_safek.
+
+ *)
+
+(* For now, just use SIF as the SI. w is the initial world. The return
+world is the world omitted by the at_external state in the top of the
+frame *)
+Inductive wfk_frames w : list (frame L) -> list nat -> inv_world I -> Prop :=
+| wfk_frames_nil: wfk_frames w nil nil w
+| wfk_frames_cons: forall i s q w1 w2 fms k kl
+    (WF: wfk_frames w fms kl w1)
+    (VSE1: symtbl_inv I w1 se)
+    (EXT: at_external (L i se) s q)
+    (WTQ: query_inv I w2 q)
+    (* desrible progress property here *)
+    (PGS: forall r, reply_inv I w2 r ->
+                 exists s', after_external (L i se) s r s'
+                       (* Is (forall k) too strong? The choice of k depends on w2... *)
+                     /\ safek se (L i se) I I SIF w1 k s'),
+    wfk_frames w ((st L i s) :: fms) (k :: kl) w2.
+
+Inductive wfk_state w: list (frame L) -> list nat -> Prop :=
+| wfk_state_cons: forall i s frs w1 k kl
+    (WFS: wfk_frames w frs kl w1)
+    (VSE: symtbl_inv I w1 se)
+    (SAFEK: safek se (L i se) I I SIF w1 k s),
+    wfk_state w (st L i s :: frs) (k :: kl).
+
+Hypothesis L_determ: forall i, open_determinate (L i).
+Hypothesis (SAFE: forall i, module_safek_se (L i) I I SIF se).
+
+Lemma wf_state_safek: forall k kl s w
+    (WF: wfk_state w s kl)
+    (GT: forall n, In n kl -> (k <= n)%nat),
+    safek se (SmallstepLinking.semantics L sk se) I I SIF w k s.
+Proof.
+  induction k; intros.
+  econstructor.
+  inv WF.
+  (* s0 can make one step *)
+  exploit GT. econstructor. eauto. intros LE.
+  destruct k0. lia.
+  inv SAFEK.
+  (* s0 takes one module local internal step *)
+  - eapply safek_step.
+    eapply step_internal; eauto.
+    intros t1 s1 STEP1.
+    (* case analysis of STEP1 *)
+    inv STEP1; subst_dep.
+    (* internal step of (L i) *)
+    * eapply IHk.
+      instantiate (1 := k0 :: kl0).      
+      econstructor; eauto.
+      intros. inv H. lia. exploit GT. eapply in_cons. eauto. lia.
+    (* contradition: s0 cannot take internal step and external step meanwhile *)
+    * exfalso.
+      eapply od_at_external_nostep; eauto.
+      eapply L_determ; eauto.
+    (* contradition: final and one step cannot appear meanwhile *)
+    * exfalso.
+      eapply od_final_nostep; eauto.
+      eapply L_determ; eauto.
+  (* SIF is False *)
+  - red in SINV. contradiction.
+  (* s0 is final state *)
+  - destruct frs. 
+    (* case 1: final state in the composed semantics *)
+    + eapply safek_final. econstructor; eauto.
+      inv WFS. auto.
+    (* case 2: step_pop *)
+    + destruct f. inv WFS. subst_dep.
+      exploit PGS; eauto. intros (s' & AFEXT & SAFEEXT).      
+      eapply safek_step.
+      (* can take a step *)
+      eapply step_pop; eauto.
+      (* all next steps are safek *)
+      intros.
+      (* use determinism to show that s2' can be only the after_external state *)
+      inv H; subst_dep.
+      * exfalso.
+        eapply od_final_nostep; eauto.
+        eapply L_determ; eauto.
+      (* s0 cannot be final and at_external states *)
+      * exfalso.
+        eapply od_final_noext; eauto.
+        eapply L_determ; eauto.
+      * (* use open_determinate to show the reply and after_external state are equal *)
+        eapply od_final_determ in FINAL; eauto. subst.
+        eapply od_after_external_determ in AFEXT; eauto. subst.
+        (* use IHk *)
+        eapply IHk. instantiate (1 := k1 :: kl).
+        econstructor; eauto.
+        exploit GT. instantiate (1 := k1). intuition. intros.
+        intros. inv H0. lia.
+        exploit GT. eapply in_cons. eapply in_cons; eauto.
+        lia.
+        1-2: eapply L_determ; eauto.
+  (* s0 is at_external state *)
+  - destruct (orb (valid_query (L true se) q) (valid_query (L false se) q)) eqn: VQ.
+    (* case1: step_push *)
+    + eapply orb_true_iff in VQ.      
+      destruct VQ as [VQ1|VQ2].
+      * (* construct initial state *)
+        generalize (SAFE true w0 SYMBINV q VQ1 QINV).
+        intros (inits & INIT & SAFEK).
+        eapply safek_step. eapply step_push; eauto.
+        intros.
+        (* internal step of the composed semantics must be step_push (by determinism) *)
+        inv H; subst_dep.
+        -- exfalso.
+           eapply od_at_external_nostep; eauto.
+           eapply L_determ; eauto.
+        -- eapply od_at_external_determ in ATEXT; eauto. subst.
+           (* what if q is valid in two modules??? *)
+           generalize (SAFE j w0 SYMBINV q H6 QINV).
+           intros (initj & INITj & SAFEKj).
+           eapply od_initial_determ in H7; eauto. subst.
+           eapply IHk. instantiate (1 := k :: k0 :: kl0).
+           econstructor. econstructor; eauto. auto.
+           eauto.
+           (* Gt properties *)
+           intros. inv H. lia.
+           inv H0. exploit GT. instantiate (1 := S n). econstructor. auto.
+           lia.
+           exploit GT. eapply in_cons. eauto. lia.
+           1-2: eapply L_determ; eauto.
+        -- exfalso.
+           eapply od_final_noext; eauto.
+           eapply L_determ; eauto.
+      (* The same as the above case *)
+      * (* construct initial state *)
+        generalize (SAFE false w0 SYMBINV q VQ2 QINV).
+        intros (inits & INIT & SAFEK).
+        eapply safek_step. eapply step_push; eauto.
+        intros.
+        (* internal step of the composed semantics must be step_push (by determinism) *)
+        inv H; subst_dep.
+        -- exfalso.
+           eapply od_at_external_nostep; eauto.
+           eapply L_determ; eauto.
+        -- eapply od_at_external_determ in ATEXT; eauto. subst.
+           (* what if q is valid in two modules??? *)
+           generalize (SAFE j w0 SYMBINV q H6 QINV).
+           intros (initj & INITj & SAFEKj).
+           eapply od_initial_determ in H7; eauto. subst.
+           eapply IHk. instantiate (1 := k :: k0 :: kl0).
+           econstructor. econstructor; eauto. auto.
+           eauto.
+           (* Gt properties *)
+           intros. inv H. lia.
+           inv H0. exploit GT. instantiate (1 := S n). econstructor. auto.
+           lia.
+           exploit GT. eapply in_cons. eauto. lia.
+           1-2: eapply L_determ; eauto.
+        -- exfalso.
+           eapply od_final_noext; eauto.
+           eapply L_determ; eauto.
+    (* case 2: composed semantics is at_external *)
+    + eapply safek_external.
+      econstructor. eauto.
+      eapply orb_false_iff in VQ. destruct VQ.
+      destruct j; auto.
+      eauto. eauto.
+      intros.
+      exploit AFEXT; eauto.
+      intros (s1 & AFEXT1 & SAFEK1).
+      exists (st L i s1 :: frs). split.
+      econstructor; eauto.
+      (* safek *)
+      eapply IHk. instantiate (1 := k0 :: kl0).
+      econstructor; eauto.
+      intros. inv H0.
+      exploit GT. econstructor. eauto. lia.
+      exploit GT. eapply in_cons. eauto. lia.
+Qed.
+  
+End SAFEK_INTERNAL.
+  
 Section COMPOSE_SAFETY.
 
 Context {li} (I: invariant li) (L1 L2 L: semantics li li).
@@ -670,11 +902,11 @@ Context {li} (I: invariant li) (L1 L2 L: semantics li li).
 Hypothesis L1_determ: open_determinate L1.
 Hypothesis L2_determ: open_determinate L2.
 
-Lemma compose_safek:
-  module_safek L1 I I not_stuck ->
-  module_safek L2 I I not_stuck ->
+Lemma compose_total_safek:
+  module_total_safek L1 I I ->
+  module_total_safek L2 I I ->
   compose L1 L2 = Some L ->
-  module_safek L I I not_stuck.
+  module_total_safek L I I.
 Proof.
   intros SAFE1 SAFE2 COMP. unfold compose in *. unfold option_map in *.
   destruct (link (skel L1) (skel L2)) as [sk|] eqn:Hsk; try discriminate. inv COMP.
@@ -686,7 +918,7 @@ Proof.
     eapply (link_linkorder _ _ _ Hsk). eauto.
     eapply Genv.valid_for_linkorder.
     eapply (link_linkorder _ _ _ Hsk). eauto. }
-  assert (SAFE: forall i, lts_safek se (L i se) I I not_stuck w).
+  assert (SAFE: forall i, module_safek_se (L i) I I SIF se).
   { intros i. generalize (VALIDSE i). intros VSE.
     destruct i.
     eapply SAFE1; eauto.
@@ -702,43 +934,14 @@ Proof.
   exists (st L iq inits :: nil). split.
   econstructor; eauto.
   (* prove safek *)
-  intros k.
-  assert (NOTSTUCK: not_stuck (SmallstepLinking.semantics L sk se) (st L iq inits :: nil)). admit.
-  (* eapply safek_internal_reach. *)
-  (* admit. *)
-  (* intros. induction H. *)
-  (* destruct NOTSTUCK as [A|[B|C]]. *)
-  (* admit.  admit. destruct C as (t & s' & STEP). *)
-  
-  (* eapply safek_internal_reach. *)
-  (* red. right. right. eauto. intros. *)
-  
-  (* eapply IHstar. admit. *)
-  
-  
-  (* induction k. *)
-  (* admit. *)
-  (* inv IHk. admit. *)
+  intros. eapply wf_state_safek; eauto.
+  (* open_determinate *)
+  destruct i; auto.
+  (* wfk_state *)
+  instantiate (1 := k :: nil). econstructor; eauto. econstructor.
+  intros. inv H. lia. inv H0.
+Qed.
 
-  (* eapply safek_internal_reach. auto. *)
-  (* intros. admit. *)
-
-  (* eapply safek_final; eauto. *)
-
-  (* eapply safek_external; eauto. intros. *)
-  (* exploit AFEXT; eauto. intros (s2 & AFST & SAFEKAF). *)
-  (* exists s2. split; auto. *)
-  
-  
-  (* (* How to know inits can run to an external state? *) *)
-  (* eapply safek_internal_reach. *)
-  (* (* How to know inits is not stuck??? *) *)
-  (* Nat.strong_left_induction *)
-  (* eapply Nat.strong_right_induction. *)
-  
-  (* induction k. admit. *)
-  (* inv IHk. *)
-Admitted.  
 
 End COMPOSE_SAFETY.
 
