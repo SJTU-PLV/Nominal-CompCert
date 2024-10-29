@@ -1545,3 +1545,192 @@ Proof.
 Qed.    
     
 End SAFETY_PRESERVATION.
+
+(* The preservation of safety in k step *)
+
+Section SAFETYK_PRESERVATION.
+
+Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2).
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
+Context (IA1 : invariant liA1) (IB1: invariant liB1).
+
+Hypothesis L1_determ: open_determinate L1.
+Hypothesis L2_determ: open_determinate L2.
+
+Section BSIM.
+  
+Context se1 se2 ccwB (wB1: inv_world IB1) bsim_index bsim_order bsim_match_states            
+  (BSIMP: bsim_properties ccA ccB se1 se2 ccwB (L1 se1) (L2 se2) bsim_index bsim_order (bsim_match_states se1 se2 ccwB)).
+
+Context (MENV: match_senv ccB ccwB se1 se2).
+
+Lemma step_safek: forall s1 s2 t
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1)
+    (STEP: Step (L1 se1) s1 t s2),
+    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+Proof.
+  intros.
+  generalize (SAFEK (S k)). intros SAFE1.
+  inv SAFE1; eauto.
+  + red in SINV. contradiction.
+  + exfalso.
+    eapply od_final_nostep; eauto.
+  + exfalso.
+    eapply od_at_external_nostep; eauto.
+Qed.
+
+Lemma star_safek: forall s1 s2 t
+    (STAR: Star (L1 se1) s1 t s2)
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
+    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+Proof.
+  induction 1; intros; eauto.
+  eapply IHSTAR. eapply step_safek; eauto.
+Qed.
+
+Lemma plus_safek: forall s1 s2 t
+    (PLUS: Plus (L1 se1) s1 t s2)
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
+    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+Proof.
+  intros. inv PLUS.
+  eapply star_safek; eauto. intros.
+  eapply step_safek; eauto. 
+Qed.
+
+
+(* Lemma external_safek: forall s1 s2 t *)
+(*     (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1) *)
+(*     (STEP: Step (L1 se1) s1 t s2), *)
+(*     forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.     *)
+(* Proof. *)
+
+Lemma safek_internal_safe : forall s1
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
+    safe (L1 se1) s1.
+Proof.
+  unfold safe. induction 2.
+  - generalize (SAFEK 1%nat). intros SAFE1.
+    inv SAFE1; eauto.
+    red in SINV. contradiction.
+  - eapply IHstar.
+    intros.
+    eapply step_safek; eauto.
+Qed.
+      
+(* Key proof of module_total_safek_preservation *)
+Lemma bsim_safek_preservation: forall k s1 s2 i
+    (SAFEK: forall n, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1)
+    (MATCH: bsim_match_states se1 se2 ccwB i s1 s2),
+    safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) SIF (wB1, ccwB) k s2.
+Proof.
+  induction k; intros.
+  econstructor.
+  (* prove s1 is internal safe (to get Smallstep.safe) and then use
+  bsim_progress *)
+  generalize (safek_internal_safe s1 SAFEK). intros ISAFE1.
+  eapply safe_implies in ISAFE1.
+  generalize (bsim_progress BSIMP i _ MATCH ISAFE1).
+  (* 3 cases of s2 *)
+  intros [(r2 & FINAL2)|[(q2 & ATEXT2)|(t2 & s2' & STEP2)]].
+  (* s1' is final state *)
+  - exploit (@bsim_match_final_states liA1); eauto.
+    intros (s1' & r1 & STAT1 & FINAL1 & MR).
+    (* prove s1' is safek *)
+    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1').
+    { eapply star_safek; eauto. }
+    generalize (SAFEK1' 1%nat). intros SAFE1.
+    (* s1' have three cases, by determinism, it must be in final state *)
+    inv SAFE1.
+    + exfalso.
+      eapply od_final_nostep; eauto.
+    + red in SINV. contradiction.
+    (* final state *)
+    + eapply od_final_determ in FINAL1; eauto. subst.
+      eapply safek_final. eauto.
+      econstructor. split; eauto.
+    + exfalso.
+      eapply od_final_noext; eauto.
+  (* s1' is at_external state *)
+  - exploit (@bsim_match_external liA1); eauto.
+    intros (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MENV1 & AFEXT1).
+    (* prove s1' is safek *)
+    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1').
+    { eapply star_safek; eauto. }
+    generalize (SAFEK1' (S k)%nat). intros SAFE1.
+    inv SAFE1.
+    + exfalso.
+      eapply od_at_external_nostep; eauto.
+    + red in SINV. contradiction.
+    + exfalso.
+      eapply od_final_noext; eauto.
+    (* at_external *)
+    + eapply od_at_external_determ in ATEXT1; eauto. subst.      
+      eapply safek_external. eauto.
+      instantiate (1 := (w, ccwA)).
+      (* symtbl_inv *)
+      econstructor. split; eauto.
+      (* query_inv *)
+      econstructor. split; eauto.
+      (* reply *)
+      intros r2 (r1 & RINV1 & MR).
+      exploit AFEXT; eauto.
+      intros (s1'' & AFEXT'' & SAFEK'').
+      (* use AFEXT1 *)
+      exploit AFEXT1. eauto.
+      intros [EXIST MATCHEXT].
+      exploit EXIST; eauto. intros (s2' & AFEXT2').
+      exploit MATCHEXT; eauto.
+      intros (s1''' & AFEXT''' & (i' & MATCH')).
+      (* use L1 after_external determinate to show s1'' = s1''' *)
+      eapply od_after_external_determ in AFEXT''; eauto. subst.      
+      exists s2'. split; auto.
+      eapply IHk. 2: eapply MATCH'.
+      (** Difficult *)
+      admit.
+  - eapply safek_step; eauto.
+    intros t' s2'' STEP.
+    exploit (@bsim_simulation liA1); eauto.
+    intros (i' & s1' & OR & MATCH').
+    destruct OR as [PLUS| (STAR & ORD)].
+    + eapply IHk. 2: eapply MATCH'.
+      eapply plus_safek; eauto.
+    + eapply IHk. 2: eapply MATCH'.
+      eapply star_safek; eauto.
+Admitted.
+      
+End BSIM.
+
+
+
+Lemma module_total_safek_preservation:
+  module_total_safek L1 IA1 IB1 ->
+  backward_simulation ccA ccB L1 L2 ->
+  module_total_safek L2 (invcc IA1 ccA) (invcc IB1 ccB).
+Proof.
+  intros SAFE [BSIM].
+  red. intros se2 VSE2.
+  red. intros (wB1 & ccwB) (se1 & SYM1 & MENV).
+  intros q2 VQ2 (q1 & QINV2 & MQ).
+  assert (VSE1: Genv.valid_for (skel L1) se1).
+  { eapply match_senv_valid_for; eauto.
+    erewrite bsim_skel; eauto. }
+  inv BSIM.
+  generalize (bsim_lts se1 se2 ccwB MENV VSE1). intros BSIMP.
+  assert (VQ1: valid_query (L1 se1) q1 = true).
+  { erewrite <- bsim_match_valid_query; eauto. }  
+  (* initial_match *)
+  exploit SAFE; eauto.
+  intros (s1 & INIT1 & SAFE1).
+  edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+  exploit EXIST; eauto.
+  intros (s2 & INIT2).
+  exploit MATCH; eauto.
+  intros (s1' & INIT1' & (i & MST)).
+  (* use initial_determ *)
+  eapply od_initial_determ in INIT1; eauto. subst.
+  (* use s2 as the initial state of L2 *)
+  exists s2. split. auto.
+  (** Key part: prove safek by generalization of s2 *)
+  intros. eapply bsim_safek_preservation; eauto.
+Qed.
