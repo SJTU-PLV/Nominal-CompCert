@@ -1564,6 +1564,48 @@ Context se1 se2 ccwB (wB1: inv_world IB1) bsim_index bsim_order bsim_match_state
 
 Context (MENV: match_senv ccB ccwB se1 se2).
 
+Let mst i s1 s2 := bsim_match_states se1 se2 ccwB i s1 s2.
+
+
+(* (n,k)-simulation-diagram. To prove this, we need s1 is safe
+(internally). But how can we prove internal safe in after
+external??. What about treating the nk_sim_diagram as the composition
+of safek in the source and the simulation? *)
+(* Inductive nk_sim_diagram : state L1 -> state L2 -> nat -> nat -> Prop := *)
+(* | nk_sim_O: forall s1 s2 n, *)
+(*     (* The target cannot take a step *) *)
+(*     nk_sim_diagram s1 s2 n O *)
+(* | nk_sim_step: forall s1 s2 n k *)
+(*     (STEP: forall s2' tr, Step (L2 se2) s2 tr s2' -> *)
+(*                     exists i s1' n1, *)
+(*                       starN (step (L1 se1)) (globalenv (L1 se1)) n1 s1 tr s1' *)
+(*                       /\ mst i s1' s2' *)
+(*                       (* we should ensure n is enough *) *)
+(*                       /\ (n1 <= n)%nat *)
+(*                       /\ nk_sim_diagram s1' s2' (n-n1)%nat k), *)
+(*     nk_sim_diagram s1 s2 n (S k) *)
+(* | nk_sim_external: forall s1 s2 n k *)
+(*     (ATEXT: forall q2, *)
+(*         at_external (L2 se2) s2 q2 -> *)
+(*         exists ccwA s1' q1 n1, *)
+(*           starN (step (L1 se1)) (globalenv (L1 se1)) n1 s1 E0 s1' *)
+(*           /\ (n1 <= n)%nat *)
+(*           /\ at_external (L1 se1) s1' q1 *)
+(*           /\ match_query ccA ccwA q1 q2 *)
+(*           /\ match_senv ccA ccwA se1 se2 *)
+(*           /\ (forall r1 r2, *)
+(*                 match_reply ccA ccwA r1 r2 -> *)
+(*                 (* we do not need bsim_match_cont_exist but *) *)
+(*                 after_external (L2 se2) s2 r2 s2' -> *)
+(*                 exists i s1'', *)
+(*                   after_external (L1 se1) s1' r1 s1'' *)
+(*                   /\ mst i s1'' s2' *)
+(*                   /\ nk_sim_diagram s1'' s2' (n-n1) k)), *)
+(*     nk_sim_diagram s1 s2 (S n) (S k) *)
+(* . *)
+
+  
+
 Lemma step_safek: forall s1 s2 t
     (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1)
     (STEP: Step (L1 se1) s1 t s2),
@@ -1687,6 +1729,7 @@ Proof.
       exists s2'. split; auto.
       eapply IHk. 2: eapply MATCH'.
       (** Difficult *)
+      starN
       admit.
   - eapply safek_step; eauto.
     intros t' s2'' STEP.

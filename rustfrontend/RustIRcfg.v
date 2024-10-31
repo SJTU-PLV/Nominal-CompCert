@@ -30,70 +30,106 @@ Inductive select_kind : Type :=
 Definition selector := list select_kind.
 
 
-Definition select_stmt_aux (sel: select_kind) (stmt: option statement) 
-: option statement :=
+(* Definition select_stmt_aux (sel: select_kind) (stmt: option statement)  *)
+(* : option statement := *)
+(*   match sel, stmt with *)
+(*   | Selseqleft, Some (Ssequence s1 s2) => Some s1 *)
+(*   | Selseqright, Some (Ssequence s1 s2) => Some s2 *)
+(*   | Selifthen, Some (Sifthenelse _ s1 s2) => Some s1 *)
+(*   | Selifelse, Some (Sifthenelse _ s1 s2) => Some s2 *)
+(*   | Selloop, Some (Sloop s) => Some s *)
+(*   | _, _ => None *)
+(*   end. *)
+
+(* Definition select_stmt (stmt: statement) (sel: selector) : option statement := *)
+(*   fold_right select_stmt_aux (Some stmt) sel. *)
+
+(** Maybe we can use fold_right to implement select_stmt and reverse *)
+(* the selectors to simplify the proof *)
+Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement :=
   match sel, stmt with
-  | Selseqleft, Some (Ssequence s1 s2) => Some s1
-  | Selseqright, Some (Ssequence s1 s2) => Some s2
-  | Selifthen, Some (Sifthenelse _ s1 s2) => Some s1
-  | Selifelse, Some (Sifthenelse _ s1 s2) => Some s2
-  | Selloop, Some (Sloop s) => Some s
+  | nil, _ => Some stmt
+  | Selseqleft :: sel', Ssequence s1 s2 => select_stmt s1 sel'
+  | Selseqright :: sel', Ssequence s1 s2 => select_stmt s2 sel'
+  | Selifthen :: sel', Sifthenelse _ s1 s2 => select_stmt s1 sel'
+  | Selifelse :: sel', Sifthenelse _ s1 s2 => select_stmt s2 sel'
+  | Selloop :: sel', Sloop s => select_stmt s sel'
   | _, _ => None
   end.
 
-Definition select_stmt (stmt: statement) (sel: selector) : option statement :=
-  fold_right select_stmt_aux (Some stmt) sel.
+(* Change in place the statement resided in this selector to an another
+statement. And return the modified statement *)
+(** TODO: we do not want to use [rev] *)
 
-(* (** Maybe we can use fold_right to implement select_stmt and reverse *)
-(* the selectors to simplify the proof *) *)
-(* Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement := *)
-(*   match sel, stmt with *)
+(* Fixpoint update_stmt_aux (root: statement) (sel: selector) (stmt: statement): option statement := *)
+(*   match sel, root with *)
 (*   | nil, _ => Some stmt *)
 (*   | Selseqleft :: sel', Ssequence s1 s2 => select_stmt s1 sel' *)
 (*   | Selseqright :: sel', Ssequence s1 s2 => select_stmt s2 sel' *)
 (*   | Selifthen :: sel', Sifthenelse _ s1 s2 => select_stmt s1 sel' *)
 (*   | Selifelse :: sel', Sifthenelse _ s1 s2 => select_stmt s2 sel' *)
 (*   | Selloop :: sel', Sloop s => select_stmt s sel' *)
-(*   | _, _ => None *)
-(*   end. *)
+(*   end.   *)
+  (* match sel, root with *)
+  (* | nil, _ => Some stmt *)
+  (* | Selseqleft :: sel', Ssequence s1 s2 => *)
+  (*     match (update_stmt_aux s1 sel' stmt) with *)
+  (*     | Some s1' => Some (Ssequence s1' s2) *)
+  (*     | None => None *)
+  (*     end *)
+  (* | Selseqright :: sel', Ssequence s1 s2 =>       *)
+  (*     match (update_stmt_aux s2 sel' stmt) with *)
+  (*     | Some s2' => Some (Ssequence s1 s2') *)
+  (*     | None => None *)
+  (*     end *)
+  (* | Selifthen :: sel', Sifthenelse e s1 s2 => *)
+  (*     match (update_stmt_aux s1 sel' stmt) with *)
+  (*     | Some s1' => Some (Sifthenelse e s1' s2) *)
+  (*     | None => None *)
+  (*     end *)
+  (* | Selifelse :: sel', Sifthenelse e s1 s2 => *)
+  (*     match (update_stmt_aux s2 sel' stmt) with *)
+  (*     | Some s2' => Some (Sifthenelse e s1 s2') *)
+  (*     | None => None *)
+  (*     end *)
+  (* | Selloop :: sel', Sloop s => *)
+  (*     match (update_stmt_aux s sel' stmt) with *)
+  (*     | Some s' => Some (Sloop s') *)
+  (*     | None => None *)
+  (*     end *)
+  (* | _, _ => None *)
+  (* end. *)
 
-(* Change in place the statement resided in this selector to an another
-statement. And return the modified statement *)
-(** TODO: we do not want to use [rev] *)
-Fixpoint update_stmt_aux (root: statement) (sel: selector) (stmt: statement): option statement :=
+Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): option statement :=
   match sel, root with
   | nil, _ => Some stmt
   | Selseqleft :: sel', Ssequence s1 s2 =>
-      match (update_stmt_aux s1 sel' stmt) with
+      match (update_stmt s1 sel' stmt) with
       | Some s1' => Some (Ssequence s1' s2)
       | None => None
       end
   | Selseqright :: sel', Ssequence s1 s2 =>      
-      match (update_stmt_aux s2 sel' stmt) with
+      match (update_stmt s2 sel' stmt) with
       | Some s2' => Some (Ssequence s1 s2')
       | None => None
       end
   | Selifthen :: sel', Sifthenelse e s1 s2 =>
-      match (update_stmt_aux s1 sel' stmt) with
+      match (update_stmt s1 sel' stmt) with
       | Some s1' => Some (Sifthenelse e s1' s2)
       | None => None
       end
   | Selifelse :: sel', Sifthenelse e s1 s2 =>
-      match (update_stmt_aux s2 sel' stmt) with
+      match (update_stmt s2 sel' stmt) with
       | Some s2' => Some (Sifthenelse e s1 s2')
       | None => None
       end
   | Selloop :: sel', Sloop s =>
-      match (update_stmt_aux s sel' stmt) with
+      match (update_stmt s sel' stmt) with
       | Some s' => Some (Sloop s')
       | None => None
       end
   | _, _ => None
   end.
-
-Definition update_stmt (root: statement) (sel: selector) (stmt: statement): option statement :=
-  update_stmt_aux root (rev sel) stmt.
-
 
 (** ** Control flow graph based on selector *)
 
@@ -443,18 +479,18 @@ Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector)
   | Sbox p e =>
       add_instr (Isel sel succ)
   | Ssequence stmt1 stmt2 =>
-      do succ2 <- transl_stmt stmt2 (Selseqright :: sel) succ cont brk;
-      do succ1 <- transl_stmt stmt1 (Selseqleft :: sel) succ2 cont brk;
+      do succ2 <- transl_stmt stmt2 (sel ++ [Selseqright]) succ cont brk;
+      do succ1 <- transl_stmt stmt1 (sel ++ [Selseqleft]) succ2 cont brk;
       ret succ1
   | Sifthenelse e stmt1 stmt2 =>
-      do n1 <- transl_stmt stmt1 (Selifthen :: sel) succ cont brk;
-      do n2 <- transl_stmt stmt2 (Selifelse :: sel) succ cont brk;
+      do n1 <- transl_stmt stmt1 (sel ++ [Selifthen]) succ cont brk;
+      do n2 <- transl_stmt stmt2 (sel ++ [Selifthen]) succ cont brk;
       do n3 <- add_instr (Icond e n1 n2);
       ret n3
   | Sloop stmt =>
       do loop_jump_node <- reserve_instr;
       (* The succ in function body is loop_start *)
-      do body_start <- transl_stmt stmt (Selloop :: sel) loop_jump_node (Some loop_jump_node) (Some succ);
+      do body_start <- transl_stmt stmt (sel ++ [Selloop]) loop_jump_node (Some loop_jump_node) (Some succ);
       do _ <- update_instr loop_jump_node (Inop body_start);
       (* return loop_jump_node and return body_start are equivalent *)
       ret loop_jump_node
@@ -499,18 +535,6 @@ Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=
   
 
 End COMPOSITE_ENV.
-
-(* compute the next selector in the execution (i.e., the starting
-selector of the continuation) *)
-Fixpoint next_sel (sel: selector) : selector :=
-  match sel with
-  | [] => []
-  | Selseqleft :: sel1 => Selseqright :: sel1
-  | Selseqright :: sel1 => next_sel sel1
-  | Selifthen :: sel1 => next_sel sel1
-  | Selifelse :: sel1 => next_sel sel1
-  | Selloop :: sel1 => sel
-  end.
 
 
 (** * Relations between the generated CFG and the source statement *)
@@ -587,65 +611,68 @@ Inductive tr_fun (f: function) (nret: node) : node -> rustcfg -> Prop :=
     (RET: cfg ! nret = Some Iend),
     tr_fun f nret entry cfg.
 
+
+(** Comment it because we changed the definition of select_stmt and
+update_stmt, and tr_fun is unused in the proof of the compilation *)
 Lemma add_instr_at:
     forall i n s s' R, add_instr i s = Res n s' R ->
     (st_code s') ! n = Some i.
-Proof. 
+Proof.
   intros. monadInv H. simpl. rewrite PTree.gss. auto.
-Qed.     
-
-Lemma add_instr_next:
-    forall n0 s n s' R,
-    add_instr (Inop n0) s = Res n s' R ->
-    n0 = n.
-Proof.
-  intros. monadInv H. inversion R. subst.
-  Admitted.
-
-Lemma update_instr_at:
-    forall i n x s s' R, update_instr n i s = Res x s' R ->
-    (st_code s') ! n = Some i.
-Proof. 
-  intros. unfold update_instr in H. 
-  destruct (plt n (st_nextnode s)) eqn:E;
-  destruct (check_empty_node s n) eqn:E2; inversion H.
-  eapply PTree.gss.
-Qed. 
-
-Lemma ret_instr_at:
-  forall (succ:positive) n s s' R, ret succ s = Res n s' R ->
-  n = succ.
-Proof.
-  intros. inversion H. auto.
 Qed.
 
-Lemma select_stmt_sequence_first :
-  forall body sel stmt1 stmt2,
-    select_stmt body sel = Some (Ssequence stmt1 stmt2) ->
-    select_stmt body (Selseqleft :: sel) = Some stmt1
-with select_stmt_sequence_second :
-  forall body sel stmt1 stmt2,
-    select_stmt body sel = Some (Ssequence stmt1 stmt2) ->
-    select_stmt body (Selseqright :: sel) = Some stmt2
-with select_stmt_ifelse_if :
-  forall body sel e stmt1 stmt2,
-  select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) ->
-  select_stmt body (Selifthen :: sel) = Some stmt1
-with select_stmt_ifelse_else :
-  forall body sel e stmt1 stmt2,
-  select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) ->
-  select_stmt body (Selifelse :: sel) = Some stmt2
-with select_stmt_loop :
-  forall body sel stmt,
-  select_stmt body sel = Some (Sloop stmt) ->
-  select_stmt body (Selloop :: sel) = Some stmt.
-Proof.
-  intros. simpl. rewrite H. reflexivity.
-  intros. simpl. rewrite H. reflexivity.
-  intros. simpl. rewrite H. reflexivity.
-  intros. simpl. rewrite H. reflexivity.
-  intros. simpl. rewrite H. reflexivity.
-Qed.
+(* Lemma add_instr_next: *)
+(*     forall n0 s n s' R, *)
+(*     add_instr (Inop n0) s = Res n s' R -> *)
+(*     n0 = n. *)
+(* Proof. *)
+(*   intros. monadInv H. inversion R. subst. *)
+(*   Admitted. *)
+
+(* Lemma update_instr_at: *)
+(*     forall i n x s s' R, update_instr n i s = Res x s' R -> *)
+(*     (st_code s') ! n = Some i. *)
+(* Proof.  *)
+(*   intros. unfold update_instr in H.  *)
+(*   destruct (plt n (st_nextnode s)) eqn:E; *)
+(*   destruct (check_empty_node s n) eqn:E2; inversion H. *)
+(*   eapply PTree.gss. *)
+(* Qed.  *)
+
+(* Lemma ret_instr_at: *)
+(*   forall (succ:positive) n s s' R, ret succ s = Res n s' R -> *)
+(*   n = succ. *)
+(* Proof. *)
+(*   intros. inversion H. auto. *)
+(* Qed. *)
+
+(* Lemma select_stmt_sequence_first : *)
+(*   forall body sel stmt1 stmt2, *)
+(*     select_stmt body sel = Some (Ssequence stmt1 stmt2) -> *)
+(*     select_stmt body (Selseqleft :: sel) = Some stmt1 *)
+(* with select_stmt_sequence_second : *)
+(*   forall body sel stmt1 stmt2, *)
+(*     select_stmt body sel = Some (Ssequence stmt1 stmt2) -> *)
+(*     select_stmt body (Selseqright :: sel) = Some stmt2 *)
+(* with select_stmt_ifelse_if : *)
+(*   forall body sel e stmt1 stmt2, *)
+(*   select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) -> *)
+(*   select_stmt body (Selifthen :: sel) = Some stmt1 *)
+(* with select_stmt_ifelse_else : *)
+(*   forall body sel e stmt1 stmt2, *)
+(*   select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) -> *)
+(*   select_stmt body (Selifelse :: sel) = Some stmt2 *)
+(* with select_stmt_loop : *)
+(*   forall body sel stmt, *)
+(*   select_stmt body sel = Some (Sloop stmt) -> *)
+(*   select_stmt body (Selloop :: sel) = Some stmt. *)
+(* Proof. *)
+(*   intros. simpl. rewrite H. reflexivity. *)
+(*   intros. simpl. rewrite H. reflexivity. *)
+(*   intros. simpl. rewrite H. reflexivity. *)
+(*   intros. simpl. rewrite H. reflexivity. *)
+(*   intros. simpl. rewrite H. reflexivity. *)
+(* Qed. *)
 
 Lemma instr_at_incr:
   forall s1 s2 n i,
@@ -655,93 +682,96 @@ Proof.
   destruct (H2 n); congruence.
 Qed.
 
-Lemma tr_stmt_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall body stmt n succ cont brk nret,
-  tr_stmt body (st_code s1) stmt n succ cont brk nret ->
-  tr_stmt body (st_code s2) stmt n succ cont brk nret.
-Proof.
-  intros s1 s2 EXT.
-  pose (AT:= fun pc i => instr_at_incr s1 s2 pc i EXT).
-  induction 1; econstructor; eauto.
-Qed.
+(* Lemma tr_stmt_incr: *)
+(*   forall s1 s2, state_incr s1 s2 -> *)
+(*   forall body stmt n succ cont brk nret, *)
+(*   tr_stmt body (st_code s1) stmt n succ cont brk nret -> *)
+(*   tr_stmt body (st_code s2) stmt n succ cont brk nret. *)
+(* Proof. *)
+(*   intros s1 s2 EXT. *)
+(*   pose (AT:= fun pc i => instr_at_incr s1 s2 pc i EXT). *)
+(*   induction 1; econstructor; eauto. *)
+(* Qed. *)
 
-Lemma add_instr_res_incr:
-  forall s1 s2 s3 i n R1 R2, state_incr s1 s2 ->
-  state_incr s2 s3 -> add_instr i s1 = Res n s2 R1 ->
-  add_instr i s1 = Res n s3 R2.
-Proof.
-  intros. inversion H1. Admitted.
 
-(* tr_stmt matches transl_stmt *)
-Lemma transl_stmt_charact: forall body sel stmt nret succ cont brk s s' n R,
-    select_stmt body sel = Some stmt ->
-    transl_stmt nret stmt sel succ cont brk s = Res n s' R ->
-    tr_stmt body s'.(st_code) stmt n succ cont brk nret.
-Proof.
-intros until stmt. generalize dependent sel.
-induction stmt; intros; simpl in H0.
-(* Sskip *)
-apply ret_instr_at in H0. subst. constructor.
-(* Sassign *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Sassign_variant *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Sbox *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Sstoragelive *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Sstoragedead *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Sdrop *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Scall *)
-econstructor. eapply add_instr_at. eauto. eauto.
-(* Ssequence *)
-monadInv H0. econstructor. 
-eapply IHstmt1. eapply select_stmt_sequence_first. eauto. eauto.
-eapply (tr_stmt_incr s0 s'). congruence.
-eapply IHstmt2. eapply select_stmt_sequence_second. eauto. eauto.
-(* Sifthenelse *)
-monadInv H0. econstructor. eapply (tr_stmt_incr s0 s').
-eapply state_incr_trans; eauto.
-eapply IHstmt1. eapply select_stmt_ifelse_if. eauto. eauto.
-eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto.
-eapply IHstmt2. eapply select_stmt_ifelse_else. eauto. eauto.
-eapply add_instr_at. eauto.
-(* Sloop *)
-monadInv H0. econstructor. 
-eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto.
-eapply IHstmt. eapply select_stmt_loop. eauto. eauto.
-eapply update_instr_at. eauto.
-(* Sbreak *)
-destruct brk.
-  apply add_instr_next in H0. subst n0. apply tr_Sbreak.
-  inversion H0.
-(* Scontinue *)
-destruct cont.
-  apply add_instr_next in H0. subst n0. apply tr_Scontinue.
-  inversion H0.
-(* Sreturn *)
-econstructor. eapply add_instr_at. eauto. eauto.
-Qed.
+(* (* tr_stmt matches transl_stmt *) *)
+(* Lemma transl_stmt_charact: forall body sel stmt nret succ cont brk s s' n R, *)
+(*     select_stmt body sel = Some stmt -> *)
+(*     transl_stmt nret stmt sel succ cont brk s = Res n s' R -> *)
+(*     tr_stmt body s'.(st_code) stmt n succ cont brk nret. *)
+(* Proof. *)
+(* intros until stmt. generalize dependent sel. *)
+(* induction stmt; intros; simpl in H0. *)
+(* (* Sskip *) *)
+(* apply ret_instr_at in H0. subst. constructor. *)
+(* (* Sassign *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Sassign_variant *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Sbox *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Sstoragelive *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Sstoragedead *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Sdrop *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Scall *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* (* Ssequence *) *)
+(* monadInv H0. econstructor.  *)
+(* eapply IHstmt1. eapply select_stmt_sequence_first. eauto. eauto. *)
+(* eapply (tr_stmt_incr s0 s'). congruence. *)
+(* eapply IHstmt2. eapply select_stmt_sequence_second. eauto. eauto. *)
+(* (* Sifthenelse *) *)
+(* monadInv H0. econstructor. eapply (tr_stmt_incr s0 s'). *)
+(* eapply state_incr_trans; eauto. *)
+(* eapply IHstmt1. eapply select_stmt_ifelse_if. eauto. eauto. *)
+(* eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto. *)
+(* eapply IHstmt2. eapply select_stmt_ifelse_else. eauto. eauto. *)
+(* eapply add_instr_at. eauto. *)
+(* (* Sloop *) *)
+(* monadInv H0. econstructor.  *)
+(* eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto. *)
+(* eapply IHstmt. eapply select_stmt_loop. eauto. eauto. *)
+(* eapply update_instr_at. eauto. *)
+(* (* Sbreak *) *)
+(* destruct brk. *)
+(*   apply add_instr_next in H0. subst n0. apply tr_Sbreak. *)
+(*   inversion H0. *)
+(* (* Scontinue *) *)
+(* destruct cont. *)
+(*   apply add_instr_next in H0. subst n0. apply tr_Scontinue. *)
+(*   inversion H0. *)
+(* (* Sreturn *) *)
+(* econstructor. eapply add_instr_at. eauto. eauto. *)
+(* Qed. *)
 
-Lemma generate_cfg_charact: forall f entry cfg,
-    generate_cfg f.(fn_body) = OK (entry, cfg) ->
-    exists nret, tr_fun f nret entry cfg.
-Proof.
-  intros f entry cfg GEN.
-  generalize GEN. intros GEN'.
-  unfold generate_cfg in GEN.
-  destruct (generate_cfg' (fn_body f) init_state) eqn: GCFG; try congruence.
-  inv GEN. unfold generate_cfg' in GCFG.
-  monadInv GCFG. exists x. econstructor. eapply GEN'.
-  eapply transl_stmt_charact with (sel:=nil). eauto.
-  eauto. eapply add_instr_res_incr in EQ.
-  eapply add_instr_at in EQ. eapply EQ. 
-  eauto. eauto. Unshelve. eauto.
-  (** Unshelve? *)
-Qed.
+(* Lemma generate_cfg_charact: forall f entry cfg, *)
+(*     generate_cfg f.(fn_body) = OK (entry, cfg) -> *)
+(*     exists nret, tr_fun f nret entry cfg. *)
+(* Proof. *)
+(*   intros f entry cfg GEN. *)
+(*   generalize GEN. intros GEN'. *)
+(*   unfold generate_cfg in GEN. *)
+(*   destruct (generate_cfg' (fn_body f) init_state) eqn: GCFG; try congruence. *)
+(*   inv GEN. unfold generate_cfg' in GCFG. *)
+(*   monadInv GCFG. exists x. econstructor. eapply GEN'. *)
+(*   eapply transl_stmt_charact with (sel:=nil). eauto. *)
+(*   eauto. eapply add_instr_res_incr in EQ. *)
+(*   eapply add_instr_at in EQ. eapply EQ.  *)
+(*   eauto. eauto. Unshelve. eauto. *)
+(*   (** Unshelve? *) *)
+(* Qed. *)
+
+(* Lemma generate_cfg_exists_nret: forall f entry cfg, *)
+(*     generate_cfg f.(fn_body) = OK (entry, cfg) -> *)
+(*     exists nret, cfg ! nret = Some Iend. *)
+(* Proof. *)
+(*   intros. exploit generate_cfg_charact; eauto. *)
+(*   intros (nret & TRFUN). inv TRFUN. *)
+(*   eauto. *)
+(* Qed. *)
 
 
 (** * A general framework for CFG compilation based on selectors *)
@@ -778,11 +808,13 @@ Definition transl_on_instr (src: statement) (pc: node) (instr: instruction)
   | _ => OK src
   end.
 
+Definition transl_on :=
+  fun body pc instr => 
+    do body' <- body; transl_on_instr body' pc instr.
+
 Definition transl_on_cfg (src: statement) (cfg: rustcfg) 
 : Errors.res statement :=
-  PTree.fold 
-  (fun body pc instr => 
-  do body' <- body; transl_on_instr body' pc instr) cfg (OK src).
+  PTree.fold transl_on cfg (OK src).
 
 (* Translation relation between source statment and target statement *)
 
@@ -852,36 +884,328 @@ statement -> node -> node -> option node -> option node -> node -> Prop :=
     match_stmt body cfg (Sreturn e) ts pc next cont brk endn
 .
 
-Lemma transl_Sskip :
-  forall entry cfg ts, generate_cfg Sskip = OK (entry, cfg) ->
-  transl_on_cfg Sskip cfg = OK ts -> ts = Sskip.
+
+Inductive selector_disjoint : selector -> selector -> Prop :=
+| sel_disjoint_neq: forall s1 s2 l1 l2,
+    s1 <> s2 ->
+    selector_disjoint (s1::l1) (s2::l2)
+| sel_disjoint_cons: forall s l1 l2,
+    selector_disjoint l1 l2 ->
+    selector_disjoint (s::l1) (s::l2).
+
+
+
+Lemma select_stmt_nil: forall s,
+    select_stmt s [] = Some s.
+  induction s; auto.
+Qed.
+
+Lemma select_stmt_app: forall sel1 sel2 s1 s2 s3,
+    select_stmt s1 sel1 = Some s2 ->
+    select_stmt s2 sel2 = Some s3 ->
+    select_stmt s1 (sel1 ++ sel2) = Some s3.
 Proof.
-  intros. unfold generate_cfg in H. 
-  destruct (generate_cfg' Sskip init_state) eqn:E.
-  - discriminate H.
-  - inversion H. subst. monadInv E.
-    unfold transl_on_cfg in H0. simpl in H0. 
+  induction sel1; intros.
+  - simpl. erewrite select_stmt_nil in H. inv H. auto.
+  - destruct a; destruct s1; simpl in *; try congruence; eauto.
+Qed.
+
+Lemma update_stmt_nil: forall s body,
+    update_stmt body [] s = Some s.
+  induction body; auto.
+Qed.
+
+
+Lemma update_stmt_select: forall sel body1 body2 s,
+    update_stmt body1 sel s = Some body2 ->
+    select_stmt body2 sel = Some s.
+Proof.
+  induction sel; intros; simpl in *.
+  - erewrite update_stmt_nil in H. inv H.
+    eapply select_stmt_nil.
+  - destruct a; destruct body1; simpl in *; try congruence; eauto.
+    + destruct (update_stmt body1_1 sel s) eqn: A; try congruence.
+      inv H. eapply IHsel; eauto.
+    + destruct (update_stmt body1_2 sel s) eqn: A; try congruence.
+      inv H. eapply IHsel; eauto.
+    + destruct (update_stmt body1_1 sel s) eqn: A; try congruence.
+      inv H. eapply IHsel; eauto.
+    + destruct (update_stmt body1_2 sel s) eqn: A; try congruence.
+      inv H. eapply IHsel; eauto.
+    + destruct (update_stmt body1 sel s) eqn: A; try congruence.
+      inv H. eapply IHsel; eauto.
+Qed.
+
+Lemma set_stmt_select: forall sel body1 body2 s pc,
+    set_stmt pc body1 sel s = OK body2 ->
+    select_stmt body2 sel = Some s.
+Proof.
+  intros. unfold set_stmt in H.
+  destruct (update_stmt body1 sel s) eqn: A; try congruence.
+  inv H.
+  eapply update_stmt_select; eauto.
+Qed.  
+
+Lemma transl_on_instrs_error: forall l msg,
+    fold_left (fun (a : Errors.res statement) (p : positive * instruction) =>
+                 transl_on a (fst p) (snd p)) l (Error msg) = Error msg.
+Proof.
+  induction l; simpl; auto.
+Qed.
+
+Lemma update_stmt_disjoint_select: forall sel1 sel2 body1 body2 s1 s2,
+    select_stmt body1 sel1 = Some s1 ->
+    update_stmt body1 sel2 s2 = Some body2 ->
+    selector_disjoint sel1 sel2 ->
+    select_stmt body2 sel1 = Some s1.
+Proof.
+  induction sel1; intros.
+  - inv H1.
+  - inv H1.
+    + destruct body1; destruct a; destruct s3; simpl in *; try congruence.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+    + destruct body1; destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+      * destruct (update_stmt body1 l2 s2) eqn: A; try congruence. inv H0.
+        simpl. eauto.
+Qed.
+
+                
+Lemma set_stmt_disjoint_select: forall sel1 sel2 body1 body2 s1 s2 pc,
+    select_stmt body1 sel1 = Some s1 ->
+    set_stmt pc body1 sel2 s2 = OK body2 ->
+    selector_disjoint sel1 sel2 ->
+    select_stmt body2 sel1 = Some s1.
+Proof.
+  intros. unfold set_stmt in H0.
+  destruct (update_stmt body1 sel2 s2) eqn: A in H0; try congruence.
+  inv H0.
+  eapply update_stmt_disjoint_select; eauto.
+Qed.
+
+
+Lemma transl_on_instrs_unchanged: forall l sel body1 body2 s
+    (SEL: select_stmt body1 sel = Some s)
+    (TRANSL: fold_left (fun (a : Errors.res statement) (p : positive * instruction) =>
+                          transl_on a (fst p) (snd p)) l (OK body1) = OK body2)
+    (DISJOINT: forall pc sel1 n, In (pc, (Isel sel1 n)) l ->
+                                selector_disjoint sel sel1),
+    select_stmt body2 sel = Some s.
+Proof.
+  induction l; intros; simpl in *.
+  - inv TRANSL. auto.
+  - destruct (transl_on_instr body1 (fst a) (snd a)) eqn: A.
+    2: { erewrite transl_on_instrs_error in TRANSL. congruence. }
+    destruct a. simpl in *.
+    unfold transl_on_instr in A.
+    destruct i.
+    + inv A. eapply IHl; eauto.
+    + destruct (select_stmt body1 s1) eqn: SEL1; try congruence.
+      Errors.monadInv A.
+      exploit set_stmt_select; eauto.
+      intros SEL2.
+      exploit DISJOINT. left. eauto. intros DIS.
+      (* so select_stmt so sel = Some s *)      
+      exploit set_stmt_disjoint_select. eapply SEL. eauto. auto.
+      intros SEL3.
+      eapply IHl; eauto.
+    + inv A. eapply IHl; eauto.
+    + inv A. eapply IHl; eauto.
+Qed.
+    
+    
+Lemma transl_on_cfg_unchanged: forall sel s body1 body2 cfg,
+    select_stmt body1 sel = Some s ->
+    transl_on_cfg body1 cfg = OK body2 ->
+    (forall pc sel1 n, cfg ! pc = Some (Isel sel1 n) ->
+                  selector_disjoint sel sel1) ->
+    select_stmt body2 sel = Some s.
+Proof.
+  intros. unfold transl_on_cfg in H0.
+  erewrite PTree.fold_spec in H0.
+  eapply transl_on_instrs_unchanged; eauto.
+  intros. eapply H1.
+  eapply PTree.elements_complete. eauto.
+Qed.
+ 
+Definition is_atomic_stmt (s: statement) : Prop :=
+  match s with
+  | Sassign _ _
+  | Sassign_variant _ _ _ _
+  | Sbox _ _
+  | Sstoragelive _
+  | Sstoragedead _
+  | Sdrop _
+  | Scall _ _ _ => True
+  | _ => False
+  end.
+                     
+(* Cases of atomic statement in transl_on_cfg_charact *)
+Lemma add_instr_charact: forall sel  g n g' R body1 body2 stmt succ cont brk nret
+    (TRSTMT: add_instr (Isel sel succ) g = Res n g' R)
+    (SEL: select_stmt body1 sel = Some stmt)
+    (TRANSL: transl_on_cfg body1 (st_code g') = OK body2)
+    (DISJOINT: forall (pc : positive) (sel1 : selector) (n : node),
+        (st_code g) ! pc = Some (Isel sel1 n) -> selector_disjoint sel sel1)
+    (ATOMIC: is_atomic_stmt stmt),
+    exists ts,
+      select_stmt body2 sel = Some ts /\
+        match_stmt body1 (st_code g') stmt ts n succ cont brk nret.
+Proof.
+  intros.      
+  unfold add_instr in TRSTMT. inv TRSTMT. simpl in *.
+  set (pc:=st_nextnode g) in *.
+  unfold transl_on_cfg in TRANSL.
+  rewrite PTree.fold_spec in TRANSL.
+  assert (A: (PTree.set pc (Isel sel succ) (st_code g)) ! pc = Some (Isel sel succ)).
+  eapply PTree.gss.        
+  exploit PTree.elements_remove; eauto.
+  intros (l1 & l2 & B1 & B2).
+  rewrite B1 in TRANSL.
+  (* show disjointness of l1++l2 *)
+  assert (E: forall i, (PTree.remove pc (PTree.set pc (Isel sel succ) (st_code g))) ! i = (st_code g) ! i).
+  { intros.
+    erewrite PTree.grspec.
+    destruct PTree.elt_eq. subst.
+    (* st_code must not contain pc by st_wf *)
+    symmetry.
+    destruct (st_wf g pc). unfold pc in *. extlia. auto.
+    erewrite PTree.gso; auto. }
+  erewrite PTree.elements_extensional in B2; eauto.
+  (* simplify TRANSL *)
+  rewrite fold_left_app in TRANSL.
+  set (transl:= (fun (a : Errors.res statement) (p : positive * instruction) =>
+                   transl_on a (fst p) (snd p))) in *.
+  set (body1' := (fold_left transl l1 (OK body1))) in *.
+  simpl in TRANSL.
+
+  unfold node in *.
+  destruct ((transl body1' (pc, Isel sel succ))) eqn: C1 in TRANSL.
+  2: { erewrite transl_on_instrs_error in TRANSL. congruence. }      
+  (* monadInv C1 *)
+  unfold transl, transl_on_instr in C1.
+  simpl in C1.
+  Errors.monadInv C1.
+  unfold transl_on_instr in EQ0.
+  destruct (select_stmt x sel) eqn: SEL1; try congruence.
+  unfold body1' in EQ. Errors.monadInv EQ0.
+  (* transl on disjoint selector select_stmt is unchanged *)
+  exploit transl_on_instrs_unchanged. eapply SEL. eauto.
+  (* prove disjointness *)   
+  intros. eapply DISJOINT. eapply PTree.elements_complete.
+  erewrite B2. eapply in_app. eauto. intros SEL2.
+  rewrite SEL1 in SEL2. inv SEL2.    
+  exists x0.    
+  split.
+  (* set_stmt and then select it *)
+  unfold set_stmt in EQ2.
+  destruct (update_stmt x sel x0) eqn: UPDATE; try congruence.
+  inv EQ2.
+  exploit update_stmt_select; eauto. 
+  intros SEL2.
+  eapply transl_on_instrs_unchanged; eauto.
+  (* prove disjointness *)   
+  intros. eapply DISJOINT. eapply PTree.elements_complete.
+  erewrite B2. eapply in_app. eauto.
+  (* prove match_stmt *)
+  destruct stmt; simpl in ATOMIC; try contradiction.
+  all: econstructor; try eapply PTree.gss; auto. 
+Qed.
+
+
+(** Key proof of transl_on_cfg_meet_spec  *)
+Lemma transl_on_cfg_charact: forall s body1 body2 n succ cont brk nret sel g g' R
+  (* similar to transl_stmt_charact *)
+  (TRSTMT: RustIRcfg.transl_stmt nret s sel succ cont brk g = Res n g' R)
+  (SEL: select_stmt body1 sel = Some s)
+  (* transl_on the updated cfg (st_code g') *)
+  (TRANSL: transl_on_cfg body1 (st_code g') = OK body2)
+  (DISJOINT: forall pc sel1 n, (st_code g) ! pc = Some (Isel sel1 n) ->
+                          selector_disjoint sel sel1),
+  exists ts,
+    select_stmt body2 sel = Some ts
+    /\ match_stmt body1 (st_code g') s ts n succ cont brk nret.
+Proof.
+  induction s; intros; simpl in TRSTMT.
+  - inv TRSTMT.        
+    exists Sskip. split.
+    eapply transl_on_cfg_unchanged; eauto.
+    econstructor.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  - eapply add_instr_charact; eauto.
+    red. auto.
+  (* Ssequence *)
+  - monadInv TRSTMT.    
+    exploit IHs1; eauto. eapply select_stmt_app. eauto. simpl. 
+    eapply select_stmt_nil.
+    (* prove disjointness *)
+    admit.
+    intros (ts1 & SEL1 & MSTMT1).
+    
+    
+    exploit IHs2. eauto. eapply select_stmt_app. eauto. simpl. 
+    eapply select_stmt_nil.
+    (* prove transl_on_cfg = Some body1': use transl_on_cfg_state_incr. How to prove select (sel++[Selseqright] in this body1' is the same as the result of body2?) *)
+    
+    (* prove disjointness *)
+    intros.
+    (* 2 cases, pc is in g or pc not in g and all selector in s is disjoint with  *)
+    
+  (* - rewrite  *)
 Admitted.
 
-(** How to prove? added a visited list (list of pc) in match_stmt *)
-Lemma transl_on_cfg_meet_spec: forall s ts cfg entry
-    (CFG: generate_cfg s = OK (entry, cfg))
-    (TRANSL: transl_on_cfg s cfg = OK ts),
-  exists nret, match_stmt s cfg s ts entry nret None None nret
+Lemma transl_on_cfg_meet_spec: forall f ts cfg entry
+    (CFG: generate_cfg (fn_body f) = OK (entry, cfg))
+    (TRANSL: transl_on_cfg (fn_body f) cfg = OK ts),
+  exists nret, match_stmt (fn_body f) cfg (fn_body f) ts entry nret None None nret
           /\ cfg ! nret = Some Iend.
-Proof.
-  induction s; intros. 
-  (* Sskip    *)
-  exists entry.
-  assert(HT: ts = Sskip). apply (transl_Sskip entry cfg ts CFG TRANSL).
-  rewrite HT. econstructor.
-  (* Sassign *)
-  (* exists entry. *)
-  (* apply match_Sassign with nil.   *)
-  (* unfold generate_cfg in CFG.  *)
-  (* destruct (generate_cfg' (Sassign p e) init_state ). *)
-  (* discriminate. inversion CFG; subst; clear CFG.  *)
-Admitted.  
+Proof.  
+  intros. unfold generate_cfg in CFG.
+  destruct (generate_cfg' (fn_body f) init_state) eqn: GENCFG; try congruence.
+  unfold generate_cfg' in GENCFG.
+  monadInv GENCFG. inv CFG.
+  exploit transl_on_cfg_charact; eauto.
+  eapply select_stmt_nil.
+  (* disjointness *)
+  intros.
+  unfold add_instr in EQ. inv EQ. simpl in *.
+  (* if pc = x  *)
+  erewrite PTree.gsspec in H. destruct peq in H; try congruence.
+  erewrite PTree.gempty  in H. inv H.  
+  intros (ts1 & SEL & MSTMT). simpl in SEL. inv SEL.
+  exists x.
+  erewrite select_stmt_nil in H0. inv H0.
+  split; auto.
+  (* prove cfg!nret = Some Iend *)
+  clear EQ0.
+  eapply instr_at_incr. eauto.
+  eapply add_instr_at. eauto.
+Qed.
 
 End SPEC.
 
