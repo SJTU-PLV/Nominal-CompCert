@@ -14,6 +14,8 @@ Require Import Cop RustOp.
 Require Import LanguageInterface.
 Require Import Clight Rustlight Rustlightown.
 Require Import InitDomain RustIR.
+Require Import Sorting.Permutation.
+
 
 Import ListNotations.
 
@@ -177,10 +179,13 @@ Record generator: Type := mkstate {
 
 Inductive state_incr: generator -> generator -> Prop :=
   state_incr_intro:
-    forall (s1 s2: generator),
-    Ple s1.(st_nextnode) s2.(st_nextnode) ->
-    (forall pc,
-        s1.(st_code)!pc = None \/ s2.(st_code)!pc = s1.(st_code)!pc) ->
+    forall (s1 s2: generator)
+    (PLE: Ple s1.(st_nextnode) s2.(st_nextnode))
+    (INCL: forall pc, s1.(st_code)!pc = None
+                 \/ s2.(st_code)!pc = s1.(st_code)!pc)
+    (* there is an append strategy of the elements of s1 and s2 under
+    the permutation *)
+    (PERMU: exists l, Permutation (PTree.elements (st_code s2)) (PTree.elements (st_code s1) ++ l)),
     state_incr s1 s2.
 
 Lemma state_incr_refl:
@@ -189,6 +194,9 @@ Proof.
   intros. apply state_incr_intro.
   apply Ple_refl.
   intros. auto.
+  (* permutation *)
+  exists nil. erewrite app_nil_r.
+  reflexivity.
 Qed.
 
 Lemma state_incr_trans:
@@ -196,8 +204,14 @@ Lemma state_incr_trans:
 Proof.
   intros. inv H; inv H0. apply state_incr_intro.
   apply Ple_trans with (st_nextnode s2); assumption.
-  intros. generalize (H2 pc) (H3 pc). intuition congruence.
+  intros. generalize (INCL pc) (INCL0 pc). intuition congruence.
+  destruct PERMU0. destruct PERMU.
+  exists (x0++x). etransitivity. eauto.
+  erewrite app_assoc.
+  eapply Permutation_app. auto.
+  reflexivity.
 Qed.
+
 
 (** ** The generator and error monad *)
 
@@ -369,6 +383,25 @@ intros.
   constructor; simpl.
   apply Ple_succ.
   intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto.
+  (* permutation *)
+  exists [(n,i)].  
+  exploit (@PTree.elements_remove instruction n i (PTree.set n i (st_code s))).
+  eapply PTree.gss.
+  intros (l1 & l2 & A1 & A2).
+  rewrite A1.
+  assert (A3: PTree.elements (st_code s) = l1 ++ l2).
+  { erewrite <- A2.
+    eapply PTree.elements_extensional.
+    intros. rewrite PTree.grspec.
+    destruct s. simpl in *.
+    destruct (st_wf0 i0).
+    - destruct PTree.elt_eq. subst. extlia.
+      erewrite PTree.gso; auto.
+    - destruct PTree.elt_eq. subst. auto.
+      erewrite PTree.gso; auto. }
+  rewrite A3.
+  rewrite <- app_assoc. eapply Permutation_app.
+  reflexivity. eapply Permutation_cons_app. rewrite app_nil_r. reflexivity.  
 Qed.
 
 Definition add_instr (i: instruction) : mon node :=
@@ -402,6 +435,8 @@ Proof.
   intros; constructor; simpl.
   apply Ple_succ.
   auto.
+  (* permutation *)
+  exists nil. rewrite app_nil_r. reflexivity.
 Qed.
 
 Definition reserve_instr: mon node :=
@@ -434,6 +469,22 @@ Proof.
   constructor; simpl; intros.
   apply Ple_refl.
   rewrite PTree.gsspec. destruct (peq pc n). left; congruence. right; auto.
+  (* permutation *)
+  (* permutation *)
+  exists [(n,i)].
+  exploit (@PTree.elements_remove instruction n i (PTree.set n i (st_code s))).
+  eapply PTree.gss.
+  intros (l1 & l2 & A1 & A2).
+  rewrite A1.
+  assert (A3: PTree.elements (st_code s) = l1 ++ l2).
+  { erewrite <- A2.
+    eapply PTree.elements_extensional.
+    intros. rewrite PTree.grspec.
+    destruct PTree.elt_eq. subst. auto.
+      erewrite PTree.gso; auto. }
+  rewrite A3.
+  rewrite <- app_assoc. eapply Permutation_app.
+  reflexivity. eapply Permutation_cons_app. rewrite app_nil_r. reflexivity.  
 Qed.
 
 Definition check_empty_node:
@@ -1263,8 +1314,12 @@ Proof.
       destruct H1. inv H1. congruence.
     + destruct (select_stmt body s1) eqn: SEL1; try congruence.
       Errors.monadInv A.
+      in_split
 
-      
+        PTree.fold_spec
+        PTree.fold1_spec
+
+        
     + inv A. eapply IHl1; eauto.
       eapply incl_cons_inv. eauto. 
       intros. eapply DISJOINT; eauto. intro.
@@ -1290,7 +1345,7 @@ Proof.
   rewrite PTree.fold_spec in *.
   set (transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
                     transl_on a (fst p) (snd p))) in *.
-  
+  incl
 
   
   induction body; intros.
