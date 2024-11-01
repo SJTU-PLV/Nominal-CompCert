@@ -910,6 +910,17 @@ Proof.
   - destruct a; destruct s1; simpl in *; try congruence; eauto.
 Qed.
 
+Lemma select_stmt_app_inv: forall l1 l2 body s,
+    select_stmt body (l1 ++ l2) = Some s ->
+    exists body1, select_stmt body l1 = Some body1
+             /\ select_stmt body1 l2 = Some s.
+Proof.
+  induction l1; intros; simpl in *.
+  - exists body. split. eapply select_stmt_nil.
+    auto.
+  - destruct a; destruct body; simpl in *; try congruence; eauto.
+Qed.
+
 Lemma update_stmt_nil: forall s body,
     update_stmt body [] s = Some s.
   induction body; auto.
@@ -1127,6 +1138,175 @@ Proof.
 Qed.
 
 
+(* The new instructions in the translated cfg can only contain
+   some selectors whose prefix is sel *)
+Lemma transl_stmt_selectors_prefix: forall s nret sel1 sel2 n1 n2 n3 cont brk g1 g2 R pc,
+    RustIRcfg.transl_stmt nret s sel1 n1 cont brk g1 = Res n2 g2 R ->
+    (st_code g1) ! pc = None ->
+    (st_code g2) ! pc = Some (Isel sel2 n3) ->
+    exists l, sel1 ++ l = sel2.
+Proof.
+  Ltac solve_atomic TRANSL G2 :=
+    inv TRANSL; simpl in *;
+    erewrite PTree.gsspec in G2;
+    destruct peq in G2; try congruence; inv G2;
+    exists nil; eapply app_nil_r.
+    
+  induction s; intros until pc; intros TRANSL G1 G2; simpl in TRANSL; try solve_atomic TRANSL G2.  
+  - inv TRANSL. congruence.
+  - monadInv TRANSL.
+    (* case analysis of pc in s *)
+    inv INCR0. generalize (H0 pc). intros [A1|A2].
+    + exploit IHs1; eauto. intros (l & A3). subst.
+      erewrite <- app_assoc. eauto.
+    + erewrite A2 in G2.
+      exploit IHs2; eauto. intros (l & A3). subst.
+      erewrite <- app_assoc. eauto.
+  - monadInv TRANSL.
+    assert (G3: (st_code s0) ! pc = Some (Isel sel2 n3)).
+    { unfold add_instr in EQ0. inv EQ0. simpl in *.
+      erewrite PTree.gsspec in G2.
+      destruct peq in G2; try congruence. }
+    (* case analysis of pc in s *)
+    generalize INCR1. intros.
+    inv INCR5. generalize (H0 pc). intros [A1|A2].
+    + exploit IHs2; eauto. intros (l & A3). subst.
+      erewrite <- app_assoc. eauto.
+    + erewrite A2 in G3.
+      exploit IHs1; eauto. intros (l & A3). subst.
+      erewrite <- app_assoc. eauto.
+  - monadInv TRANSL.
+    assert (G3: (st_code s1) ! pc = Some (Isel sel2 n3)).
+    {  unfold update_instr in EQ0. destruct plt in EQ0; try congruence.
+       destruct (check_empty_node s1 n2); try congruence.
+       inv EQ0. simpl in *.
+       erewrite PTree.gsspec in G2.
+       destruct peq in G2; try congruence. }
+    assert (G4: (st_code s0) ! pc = None).
+    { unfold reserve_instr in EQ. inv EQ.
+      simpl in *. auto. }    
+    exploit IHs; eauto.
+    intros (l & A3). subst.
+    erewrite <- app_assoc. eauto.
+  - destruct brk; try congruence.
+    unfold add_instr in TRANSL. inv TRANSL. simpl in *.
+    erewrite PTree.gsspec in G2.
+    destruct peq in G2; try congruence.
+    monadInv TRANSL.
+  - destruct cont; try congruence.
+    unfold add_instr in TRANSL. inv TRANSL. simpl in *.
+    erewrite PTree.gsspec in G2.
+    destruct peq in G2; try congruence.
+    monadInv TRANSL.
+Qed.
+
+
+Lemma selector_disjoint_sym: forall s1 s2,
+    selector_disjoint s1 s2 ->
+    selector_disjoint s2 s1.
+Proof.
+  induction s1; intros; inv H.
+  - econstructor. auto.
+  - eapply sel_disjoint_cons. eauto.
+Qed.
+
+Lemma selector_disjoint_app1: forall s1 s2 l,
+    selector_disjoint s1 s2 ->
+    selector_disjoint s1 (s2 ++ l).
+Proof.
+  induction s1; intros; inv H.
+  - simpl. econstructor. auto.
+  - simpl. eapply sel_disjoint_cons. eauto.
+Qed.
+
+Lemma selector_disjoint_app2: forall l s1 s2,
+    selector_disjoint s1 s2 ->
+    selector_disjoint (l ++ s1) (l ++ s2).
+Proof.
+  induction l; intros.
+  - simpl. auto.
+  - simpl. eapply sel_disjoint_cons. eauto.
+Qed.
+
+Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
+    transl_on_cfg body1 (st_code g2) = OK body2 ->
+    state_incr g1 g2 ->
+    exists body3, transl_on_cfg body1 (st_code g1) = OK body3.
+Admitted.
+
+Let transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
+                 transl_on a (fst p) (snd p)).
+
+(* auxilary lemma for transl_on_cfg_state_incr_unchanged *)
+Lemma transl_on_instrs_incr_unchanged: forall l1 l2 body body1 body2 sel1 s
+    (TR1: fold_left transl l1 (OK body) = OK body1)
+    (TR2: fold_left transl l2 (OK body) = OK body2)
+    (INCL: incl l1 l2)
+    (DISJOINT: forall pc sel2 n, ~ In (pc, (Isel sel2 n)) l1 ->          
+                            In (pc, (Isel sel2 n)) l2 ->
+                            selector_disjoint sel1 sel2)
+    (SEL: select_stmt body1 sel1 = Some s),
+    select_stmt body2 sel1 = Some s.
+Proof.
+  induction l1; intros; simpl in *.
+  - inv TR1. eapply transl_on_instrs_unchanged. eauto.
+    eauto.
+    (* disjointness *)
+    intros. eapply DISJOINT. congruence. eauto.
+  - destruct a. simpl in *.
+    destruct (transl_on_instr body p i) eqn: A.
+    2: { erewrite transl_on_instrs_error in TR1. congruence. }
+    unfold transl_on_instr in A. destruct i.
+    + inv A. eapply IHl1; eauto.
+      eapply incl_cons_inv. eauto. 
+      intros. eapply DISJOINT; eauto. intro.
+      destruct H1. inv H1. congruence.
+    + destruct (select_stmt body s1) eqn: SEL1; try congruence.
+      Errors.monadInv A.
+
+      
+    + inv A. eapply IHl1; eauto.
+      eapply incl_cons_inv. eauto. 
+      intros. eapply DISJOINT; eauto. intro.
+      destruct H1. inv H1. congruence.
+    + inv A. eapply IHl1; eauto.
+      eapply incl_cons_inv. eauto. 
+      intros. eapply DISJOINT; eauto. intro.
+      destruct H1. inv H1. congruence.
+
+
+Lemma transl_on_cfg_state_incr_unchanged: forall body body1 body2 g1 g2 sel1 s
+    (TR1: transl_on_cfg body (st_code g1) = OK body1)
+    (TR2: transl_on_cfg body (st_code g2) = OK body2)
+    (INCR: state_incr g1 g2)
+    (SEL: select_stmt body1 sel1 = Some s)
+    (DISJOINT: forall pc sel2 n, (st_code g1) ! pc = None ->
+                            (st_code g2) ! pc = Some (Isel sel2 n) ->
+                            selector_disjoint sel1 sel2),
+    select_stmt body2 sel1 = Some s.
+Proof.
+  intros.
+  unfold transl_on_cfg in *.
+  rewrite PTree.fold_spec in *.
+  set (transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
+                    transl_on a (fst p) (snd p))) in *.
+  
+
+  
+  induction body; intros.
+  - 
+  
+
+Lemma match_stmt_state_incr: forall s ts body g1 g2 pc succ cont brk nret,
+    match_stmt body (st_code g1) s ts pc succ cont brk nret ->
+    state_incr g1 g2 ->
+    match_stmt body (st_code g2) s ts pc succ cont brk nret.
+Proof.
+  induction s; intros until nret; intros MSTMT INCR; inv MSTMT; try econstructor; eauto.
+  all : inv INCR; destruct (H0 pc); try congruence;
+    erewrite H1; auto.
+Qed.
+
 (** Key proof of transl_on_cfg_meet_spec  *)
 Lemma transl_on_cfg_charact: forall s body1 body2 n succ cont brk nret sel g g' R
   (* similar to transl_stmt_charact *)
@@ -1163,17 +1343,49 @@ Proof.
   - monadInv TRSTMT.    
     exploit IHs1; eauto. eapply select_stmt_app. eauto. simpl. 
     eapply select_stmt_nil.
-    (* prove disjointness *)
-    admit.
+    (* prove disjointness: the new selectors in s not in g must be (sel++[Selseqleft]++l)) *)
+    intros. generalize INCR as A. intros. inv A.
+    generalize (H1 pc). intros [B1|B2].
+    exploit transl_stmt_selectors_prefix. eapply EQ. eauto. eauto.
+    intros (l & B3). subst.
+    eapply selector_disjoint_app1.
+    eapply selector_disjoint_app2. econstructor. congruence.
+    eapply selector_disjoint_sym.
+    eapply selector_disjoint_app1. eapply selector_disjoint_sym.
+    eapply DISJOINT; eauto. erewrite <- B2. eauto.
     intros (ts1 & SEL1 & MSTMT1).
-    
-    
+    (* use IHs2 *)
+    (* first prove that transl_on_cfg s also success *)
+    exploit transl_on_cfg_state_incr. eapply TRANSL. eapply INCR1. 
+    intros (body3 & T1).    
     exploit IHs2. eauto. eapply select_stmt_app. eauto. simpl. 
     eapply select_stmt_nil.
-    (* prove transl_on_cfg = Some body1': use transl_on_cfg_state_incr. How to prove select (sel++[Selseqright] in this body1' is the same as the result of body2?) *)
-    
+    eauto.    
     (* prove disjointness *)
     intros.
+    eapply selector_disjoint_sym.
+    eapply selector_disjoint_app1. eapply selector_disjoint_sym.
+    eapply DISJOINT; eauto.    
+    intros (ts2 & SEL2 & MSTMT2).
+    (* use SEL2 prove that the selection in body2 return the same result *)
+    assert (SEL3: select_stmt body2 (sel++[Selseqright]) = Some ts2).
+    { eapply transl_on_cfg_state_incr_unchanged.
+      eapply T1. eauto. eauto. eauto.
+      (* prove disjointness *)
+      intros.
+      exploit transl_stmt_selectors_prefix. eapply EQ1. eauto. eauto.
+      intros (l & A). subst.
+      rewrite <- app_assoc. eapply selector_disjoint_app2. econstructor.
+      congruence. }
+    exploit select_stmt_app_inv. eapply SEL1. intros (b1 & S1 & S2).
+    exploit select_stmt_app_inv. eapply SEL3. intros (b2 & S3 & S4).
+    rewrite S1 in S3. inv S3. destruct b2; simpl in *; try congruence.
+    erewrite select_stmt_nil in *. inv S2. inv S4.
+    exists (Ssequence ts1 ts2). split; auto.
+    econstructor; eauto.
+    (* match_stmt_state_Incr *)
+    eapply match_stmt_state_incr; eauto.
+  -       
     (* 2 cases, pc is in g or pc not in g and all selector in s is disjoint with  *)
     
   (* - rewrite  *)
