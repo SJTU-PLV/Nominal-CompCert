@@ -730,7 +730,7 @@ Lemma instr_at_incr:
   state_incr s1 s2 -> s1.(st_code)!n = Some i -> s2.(st_code)!n = Some i.
 Proof.
   intros. inv H.
-  destruct (H2 n); congruence.
+  destruct (INCL n); congruence.
 Qed.
 
 (* Lemma tr_stmt_incr: *)
@@ -944,6 +944,20 @@ Inductive selector_disjoint : selector -> selector -> Prop :=
     selector_disjoint l1 l2 ->
     selector_disjoint (s::l1) (s::l2).
 
+(* list_sel_norepet: selector version of list_norepet except that we
+strength the neq to selector_disjoint *)
+Inductive list_sel_norepet : list selector -> Prop :=
+  | list_sel_norepet_nil:
+      list_sel_norepet nil
+  | list_norepet_cons: forall hd tl
+      (DIS: forall sel, In sel tl -> selector_disjoint hd sel)
+      (NOREP: list_sel_norepet tl),
+      list_sel_norepet (hd :: tl).
+
+(* list_sel_disjoint: selector version of list_disjoint except that we
+strength the neq to selector_disjoint *)
+Definition list_sel_disjoint (l1 l2: list selector) : Prop :=
+  forall (x y: selector), In x l1 -> In y l2 -> selector_disjoint x y.
 
 
 Lemma select_stmt_nil: forall s,
@@ -1207,7 +1221,7 @@ Proof.
   - inv TRANSL. congruence.
   - monadInv TRANSL.
     (* case analysis of pc in s *)
-    inv INCR0. generalize (H0 pc). intros [A1|A2].
+    inv INCR0. generalize (INCL pc). intros [A1|A2].
     + exploit IHs1; eauto. intros (l & A3). subst.
       erewrite <- app_assoc. eauto.
     + erewrite A2 in G2.
@@ -1220,7 +1234,7 @@ Proof.
       destruct peq in G2; try congruence. }
     (* case analysis of pc in s *)
     generalize INCR1. intros.
-    inv INCR5. generalize (H0 pc). intros [A1|A2].
+    inv INCR5. generalize (INCL pc). intros [A1|A2].
     + exploit IHs2; eauto. intros (l & A3). subst.
       erewrite <- app_assoc. eauto.
     + erewrite A2 in G3.
@@ -1299,36 +1313,36 @@ Lemma transl_on_instrs_incr_unchanged: forall l1 l2 body body1 body2 sel1 s
     (SEL: select_stmt body1 sel1 = Some s),
     select_stmt body2 sel1 = Some s.
 Proof.
-  induction l1; intros; simpl in *.
-  - inv TR1. eapply transl_on_instrs_unchanged. eauto.
-    eauto.
-    (* disjointness *)
-    intros. eapply DISJOINT. congruence. eauto.
-  - destruct a. simpl in *.
-    destruct (transl_on_instr body p i) eqn: A.
-    2: { erewrite transl_on_instrs_error in TR1. congruence. }
-    unfold transl_on_instr in A. destruct i.
-    + inv A. eapply IHl1; eauto.
-      eapply incl_cons_inv. eauto. 
-      intros. eapply DISJOINT; eauto. intro.
-      destruct H1. inv H1. congruence.
-    + destruct (select_stmt body s1) eqn: SEL1; try congruence.
-      Errors.monadInv A.
-      in_split
+  (* induction l1; intros; simpl in *. *)
+  (* - inv TR1. eapply transl_on_instrs_unchanged. eauto. *)
+  (*   eauto. *)
+  (*   (* disjointness *) *)
+  (*   intros. eapply DISJOINT. congruence. eauto. *)
+  (* - destruct a. simpl in *. *)
+  (*   destruct (transl_on_instr body p i) eqn: A. *)
+  (*   2: { erewrite transl_on_instrs_error in TR1. congruence. } *)
+  (*   unfold transl_on_instr in A. destruct i. *)
+  (*   + inv A. eapply IHl1; eauto. *)
+  (*     eapply incl_cons_inv. eauto.  *)
+  (*     intros. eapply DISJOINT; eauto. intro. *)
+  (*     destruct H1. inv H1. congruence. *)
+  (*   + destruct (select_stmt body s1) eqn: SEL1; try congruence. *)
+  (*     Errors.monadInv A. *)
+  (*     in_split *)
 
-        PTree.fold_spec
-        PTree.fold1_spec
+  (*       PTree.fold_spec *)
+  (*       PTree.fold1_spec *)
 
         
-    + inv A. eapply IHl1; eauto.
-      eapply incl_cons_inv. eauto. 
-      intros. eapply DISJOINT; eauto. intro.
-      destruct H1. inv H1. congruence.
-    + inv A. eapply IHl1; eauto.
-      eapply incl_cons_inv. eauto. 
-      intros. eapply DISJOINT; eauto. intro.
-      destruct H1. inv H1. congruence.
-
+  (*   + inv A. eapply IHl1; eauto. *)
+  (*     eapply incl_cons_inv. eauto.  *)
+  (*     intros. eapply DISJOINT; eauto. intro. *)
+  (*     destruct H1. inv H1. congruence. *)
+  (*   + inv A. eapply IHl1; eauto. *)
+  (*     eapply incl_cons_inv. eauto.  *)
+  (*     intros. eapply DISJOINT; eauto. intro. *)
+  (*     destruct H1. inv H1. congruence. *)
+Admitted.
 
 Lemma transl_on_cfg_state_incr_unchanged: forall body body1 body2 g1 g2 sel1 s
     (TR1: transl_on_cfg body (st_code g1) = OK body1)
@@ -1343,14 +1357,7 @@ Proof.
   intros.
   unfold transl_on_cfg in *.
   rewrite PTree.fold_spec in *.
-  set (transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
-                    transl_on a (fst p) (snd p))) in *.
-  incl
-
-  
-  induction body; intros.
-  - 
-  
+Admitted.  
 
 Lemma match_stmt_state_incr: forall s ts body g1 g2 pc succ cont brk nret,
     match_stmt body (st_code g1) s ts pc succ cont brk nret ->
@@ -1358,9 +1365,10 @@ Lemma match_stmt_state_incr: forall s ts body g1 g2 pc succ cont brk nret,
     match_stmt body (st_code g2) s ts pc succ cont brk nret.
 Proof.
   induction s; intros until nret; intros MSTMT INCR; inv MSTMT; try econstructor; eauto.
-  all : inv INCR; destruct (H0 pc); try congruence;
+  all : inv INCR; destruct (INCL pc); try congruence;
     erewrite H1; auto.
 Qed.
+
 
 (** Key proof of transl_on_cfg_meet_spec  *)
 Lemma transl_on_cfg_charact: forall s body1 body2 n succ cont brk nret sel g g' R
@@ -1371,6 +1379,8 @@ Lemma transl_on_cfg_charact: forall s body1 body2 n succ cont brk nret sel g g' 
   (TRANSL: transl_on_cfg body1 (st_code g') = OK body2)
   (DISJOINT: forall pc sel1 n, (st_code g) ! pc = Some (Isel sel1 n) ->
                           selector_disjoint sel sel1),
+  (* disjointness in the g *)
+  (* list_norepet_app *)
   exists ts,
     select_stmt body2 sel = Some ts
     /\ match_stmt body1 (st_code g') s ts n succ cont brk nret.
@@ -1400,7 +1410,7 @@ Proof.
     eapply select_stmt_nil.
     (* prove disjointness: the new selectors in s not in g must be (sel++[Selseqleft]++l)) *)
     intros. generalize INCR as A. intros. inv A.
-    generalize (H1 pc). intros [B1|B2].
+    generalize (INCL pc). intros [B1|B2].
     exploit transl_stmt_selectors_prefix. eapply EQ. eauto. eauto.
     intros (l & B3). subst.
     eapply selector_disjoint_app1.
