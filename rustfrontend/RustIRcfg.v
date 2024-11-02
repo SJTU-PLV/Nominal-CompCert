@@ -1027,6 +1027,28 @@ Proof.
   eapply update_stmt_select; eauto.
 Qed.  
 
+(* select and then set has no problem *)
+Lemma select_stmt_then_update: forall sel body s1 s2,
+    select_stmt body sel = Some s1 ->
+    exists body', update_stmt body sel s2 = Some body'.
+Proof.
+  induction sel; intros; simpl in *.
+  - rewrite select_stmt_nil in H. inv H.
+    exists s2. eapply update_stmt_nil.
+  - destruct a; destruct body; simpl in *; try congruence.
+    1-5: edestruct IHsel; eauto; erewrite H0; eauto.   
+Qed.
+    
+(* select and then set has no problem *)
+Lemma select_stmt_then_set: forall sel body s1 s2 pc,
+    select_stmt body sel = Some s1 ->
+    exists body', set_stmt pc body sel s2 = OK body'.
+Proof.
+  intros. unfold set_stmt.
+  edestruct select_stmt_then_update; eauto.
+  erewrite H0. eauto.
+Qed.
+
 Lemma transl_on_instrs_error: forall l msg,
     fold_left (fun (a : Errors.res statement) (p : positive * instruction) =>
                  transl_on a (fst p) (snd p)) l (Error msg) = Error msg.
@@ -1065,7 +1087,42 @@ Proof.
         simpl. eauto.
 Qed.
 
-                
+(* Not like update_stmt_disjoint_select, the premise says that we can
+get a statement from the body2 and the conclusion says that we can get
+the same statement from the original body (body1)*)
+Lemma update_stmt_disjoint_select_inv: forall sel1 sel2 body1 body2 s1 s2,
+    select_stmt body2 sel1 = Some s1 ->
+    update_stmt body1 sel2 s2 = Some body2 ->
+    selector_disjoint sel1 sel2 ->
+    select_stmt body1 sel1 = Some s1.
+Proof.
+  induction sel1; intros.
+  - inv H1.
+  - inv H1.
+    + destruct body1; destruct s3; simpl in *; try congruence.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence.
+        inv H0. destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence.
+        inv H0. destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence.
+        inv H0. destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence.
+        inv H0. destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1 l2 s2) eqn: A; try congruence.
+        inv H0. destruct a; simpl in *; try congruence.
+    + destruct body1; destruct a; simpl in *; try congruence.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence.
+        inv H0. eauto.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence.
+        inv H0. eauto.
+      * destruct (update_stmt body1_1 l2 s2) eqn: A; try congruence.
+        inv H0. eauto.
+      * destruct (update_stmt body1_2 l2 s2) eqn: A; try congruence.
+        inv H0. eauto.
+      * destruct (update_stmt body1 l2 s2) eqn: A; try congruence.
+        inv H0. eauto.
+Qed.        
+            
 Lemma set_stmt_disjoint_select: forall sel1 sel2 body1 body2 s1 s2 pc,
     select_stmt body1 sel1 = Some s1 ->
     set_stmt pc body1 sel2 s2 = OK body2 ->
@@ -1078,7 +1135,93 @@ Proof.
   eapply update_stmt_disjoint_select; eauto.
 Qed.
 
+Lemma set_stmt_disjoint_select_inv: forall sel1 sel2 body1 body2 s1 s2 pc,
+    select_stmt body2 sel1 = Some s1 ->
+    set_stmt pc body1 sel2 s2 = OK body2 ->
+    selector_disjoint sel1 sel2 ->
+    select_stmt body1 sel1 = Some s1.
+Proof. 
+  intros. unfold set_stmt in H0.
+  destruct (update_stmt body1 sel2 s2) eqn: A in H0; try congruence.
+  inv H0.
+  eapply update_stmt_disjoint_select_inv; eauto.
+Qed.
 
+Lemma update_stmt_disjoint_reorder: forall sel1 sel2 (DIS: selector_disjoint sel1 sel2) body1 body2 body2' body3 stmt1 stmt2, 
+    update_stmt body1 sel1 stmt1 = Some body2 ->
+    update_stmt body2 sel2 stmt2 = Some body3 ->
+    update_stmt body1 sel2 stmt2 = Some body2' ->
+    update_stmt body2' sel1 stmt1 =Some  body3.
+Proof.
+  induction 1; intros.
+  - destruct s1; destruct s2; try congruence; destruct body1; simpl in * ; try congruence.
+    + destruct (update_stmt body1_1 l1 stmt1) eqn: A; try congruence.
+      inv H0. simpl in *.
+      destruct (update_stmt body1_2 l2 stmt2) eqn: B; try congruence.
+      inv H1. inv H2. simpl. rewrite A. auto.
+    + destruct (update_stmt body1_2 l1 stmt1) eqn: A; try congruence.
+      inv H0. simpl in *.
+      destruct (update_stmt body1_1 l2 stmt2) eqn: B; try congruence.
+      inv H1. inv H2. simpl. rewrite A. auto.
+    + destruct (update_stmt body1_1 l1 stmt1) eqn: A; try congruence.
+      inv H0. simpl in *.
+      destruct (update_stmt body1_2 l2 stmt2) eqn: B; try congruence.
+      inv H1. inv H2. simpl. rewrite A. auto.
+    + destruct (update_stmt body1_2 l1 stmt1) eqn: A; try congruence.
+      inv H0. simpl in *.
+      destruct (update_stmt body1_1 l2 stmt2) eqn: B; try congruence.
+      inv H1. inv H2. simpl. rewrite A. auto.
+  - destruct s; destruct body1; simpl in * ; try congruence.
+    + destruct (update_stmt body1_1 l2 stmt2) eqn: A; try congruence.
+      inv H1. simpl in *.
+      destruct (update_stmt body1_1 l1 stmt1) eqn: B; try congruence.
+      inv H. simpl in *.
+      destruct (update_stmt s0 l2 stmt2) eqn: C; try congruence.
+      inv H0. erewrite IHDIS; eauto.
+    + destruct (update_stmt body1_2 l2 stmt2) eqn: A; try congruence.
+      inv H1. simpl in *.
+      destruct (update_stmt body1_2 l1 stmt1) eqn: B; try congruence.
+      inv H. simpl in *.
+      destruct (update_stmt s0 l2 stmt2) eqn: C; try congruence.
+      inv H0. erewrite IHDIS; eauto.
+    + destruct (update_stmt body1_1 l2 stmt2) eqn: A; try congruence.
+      inv H1. simpl in *.
+      destruct (update_stmt body1_1 l1 stmt1) eqn: B; try congruence.
+      inv H. simpl in *.
+      destruct (update_stmt s0 l2 stmt2) eqn: C; try congruence.
+      inv H0. erewrite IHDIS; eauto.
+    + destruct (update_stmt body1_2 l2 stmt2) eqn: A; try congruence.
+      inv H1. simpl in *.
+      destruct (update_stmt body1_2 l1 stmt1) eqn: B; try congruence.
+      inv H. simpl in *.
+      destruct (update_stmt s0 l2 stmt2) eqn: C; try congruence.
+      inv H0. erewrite IHDIS; eauto.
+    + destruct (update_stmt body1 l2 stmt2) eqn: A; try congruence.
+      inv H1. simpl in *.
+      destruct (update_stmt body1 l1 stmt1) eqn: B; try congruence.
+      inv H. simpl in *.
+      destruct (update_stmt s0 l2 stmt2) eqn: C; try congruence.
+      inv H0. erewrite IHDIS; eauto.
+Qed.
+
+Lemma set_stmt_disjoint_reorder: forall sel1 sel2 body1 body2 body2' body3 s1 s2 pc1 pc2, 
+    selector_disjoint sel1 sel2 ->
+    set_stmt pc1 body1 sel1 s1 = OK body2 ->
+    set_stmt pc2 body2 sel2 s2 = OK body3 ->
+    set_stmt pc2 body1 sel2 s2 = OK body2' ->
+    set_stmt pc1 body2' sel1 s1 = OK body3.
+Proof.
+  intros. unfold set_stmt in *.
+  destruct (update_stmt body1 sel1 s1) eqn: A; try congruence.
+  inv H0.
+  destruct (update_stmt body2 sel2 s2) eqn: B; try congruence.
+  inv H1.
+  destruct (update_stmt body1 sel2 s2) eqn: C; try congruence.
+  inv H2.
+  erewrite update_stmt_disjoint_reorder; eauto.
+Qed.
+
+  
 Lemma transl_on_instrs_unchanged: forall l sel body1 body2 s
     (SEL: select_stmt body1 sel = Some s)
     (TRANSL: fold_left (fun (a : Errors.res statement) (p : positive * instruction) =>
@@ -1298,14 +1441,110 @@ Proof.
   - simpl. eapply sel_disjoint_cons. eauto.
 Qed.
 
+Definition itosels (l: list (positive * instruction)) :=
+  map (fun i => match i with | Isel sel _ => sel | _ => [] end)
+  (filter (fun i => match i with | Isel _ _ => true | _ => false end)
+    (map snd l)).
 
 Let transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
                  transl_on a (fst p) (snd p)).
 
-(* Lemma transl_on_instrs_sel_norepet: forall body g1 g2, *)
-(*     list_sel_norepet (PTree.elements (st_code g1)) -> *)
-(*     RustIRcfg.transl_stmt nret body n succ cont brk = Res n  *)
 
+(* The selectors generated by RustIRcfg.transl_stmt are norepet *)
+Lemma transl_stmt_sel_norepet: forall body g1 g2 R nret n1 n2 cont brk sel1
+    (NOREP: list_sel_norepet (itosels (PTree.elements (st_code g1))))
+    (TR: RustIRcfg.transl_stmt nret body sel1 n1 cont brk g1 = Res n2 g2 R)
+    (DISJOINT: forall pc sel2 succ, (st_code g1) ! pc = Some (Isel sel2 succ) ->
+                               selector_disjoint sel1 sel2),
+    list_sel_norepet (itosels (PTree.elements (st_code g2))).
+Proof.
+Admitted.  
+
+(* key proof: transl_on_instrs is unchanged during the
+permutation. Prove by induciton on the permutation *)
+Lemma transl_on_instrs_permutation_same: forall l1 l2 (PERM: Permutation l1 l2) body body1    
+    (TR: fold_left transl l1 (OK body) = OK body1)    
+    (NOREP: list_sel_norepet (itosels l1)),
+    fold_left transl l2 (OK body) = OK body1.
+Proof.
+  induction 1; intros.
+  - simpl in *. inv TR. auto.
+  - simpl in *. destruct x. simpl in *.
+    destruct (transl_on_instr body p i) eqn: A.
+    2:{ erewrite transl_on_instrs_error in TR. inv TR. }
+    eapply IHPERM; eauto.
+    (* itosels properties *)
+    admit.
+  (** IMPORTANT: swap case *)
+  - destruct y. destruct x.
+    simpl in *.
+    destruct (transl_on_instr body p i) eqn: A1.
+    2: { simpl in TR. erewrite transl_on_instrs_error in TR. inv TR. }
+    simpl in TR.
+    destruct (transl_on_instr s p0 i0) eqn: A2.
+    2: { simpl in TR. erewrite transl_on_instrs_error in TR. inv TR. }
+    (* case analysis of i *)
+    destruct i; simpl in *.
+    (* Inop *)
+    + inv A1.
+      assert (B1: transl (transl_on_instr s p0 i0) (p, Inop n) = OK s0).
+      { destruct i0; simpl in *; inv A2; auto.
+        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
+        rewrite EQ. simpl. rewrite EQ0. auto. }
+      rewrite B1. auto.
+    (* i is Isel *)
+    + destruct (select_stmt body s1) eqn: S1; try congruence.
+      Errors.monadInv A1.
+      (* case analysis of i0 *)
+      destruct i0; simpl in *.
+      (* i0 is Inop *)
+      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
+      (* i0 is Isel *)
+      * destruct (select_stmt s s3) eqn: S2; try congruence.
+        Errors.monadInv A2.
+        exploit set_stmt_disjoint_select_inv; eauto.
+        (* prove disjointness of s3 and s1 *)
+        admit.
+        intros C1.        
+        rewrite C1. rewrite EQ1. simpl.
+        (* set_stmt to body *)
+        unfold transl at 2. simpl.
+        unfold transl_on. simpl.
+        exploit select_stmt_then_set. eapply C1. instantiate (1 := x0). instantiate (1 := p0).
+        intros (body' & C2).
+        erewrite C2. simpl.
+        (* select disjoint statement in body' *)
+        exploit set_stmt_disjoint_select. eapply S1. eapply C2.
+        (* prove disjointness between s1 and s3 *)
+        admit.
+        intros C3. rewrite C3.
+        rewrite EQ. simpl.
+        erewrite set_stmt_disjoint_reorder; eauto.
+        (* prove disjointness between s1 and s3 *)
+        admit.
+      (* i0 is Icond *)
+      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
+      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.              
+    (* Icond *)
+    + inv A1.
+      assert (B1: transl (transl_on_instr s p0 i0) (p, Icond e n n0) = OK s0).
+      { destruct i0; simpl in *; inv A2; auto.
+        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
+        rewrite EQ. simpl. rewrite EQ0. auto. }
+      rewrite B1. auto.
+    (* Iend *)
+    + inv A1.
+      assert (B1: transl (transl_on_instr s p0 i0) (p, Iend) = OK s0).
+      { destruct i0; simpl in *; inv A2; auto.
+        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
+        rewrite EQ. simpl. rewrite EQ0. auto. }
+      rewrite B1. auto.      
+  - eapply IHPERM2. eapply IHPERM1. auto.
+    auto.
+    (* sel_norepet under permutation *)
+    admit.
+Admitted.
+    
 Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
     transl_on_cfg body1 (st_code g2) = OK body2 ->
     state_incr g1 g2 ->
