@@ -58,14 +58,16 @@ Definition generate_drop_flags_for (mayinit mayuninit universemap: PathsMap.t) (
       []
   end.
 
-Definition generate_place_map {A} (l: list (place * A)) : PTree.t (list (place * A)) :=
-  fold_left (fun m elt => let id := local_of_place (fst elt) in
+Definition generate_place_map_fun {A: Type} := (fun m (elt: place * A) => let id := local_of_place (fst elt) in
                        match PTree.get id m with
                        | Some l =>
                            PTree.set id (elt :: l) m
                        | None =>
                            PTree.set id [elt] m
-                       end) l
+                       end).
+
+Definition generate_place_map {A} (l: list (place * A)) : PTree.t (list (place * A)) :=
+  fold_left generate_place_map_fun l
     (PTree.empty (list (place * A))).
 
 Section INIT_UNINIT.

@@ -31,6 +31,35 @@ Inductive select_kind : Type :=
 
 Definition selector := list select_kind.
 
+Inductive selector_disjoint : selector -> selector -> Prop :=
+| sel_disjoint_neq: forall s1 s2 l1 l2,
+    s1 <> s2 ->
+    selector_disjoint (s1::l1) (s2::l2)
+| sel_disjoint_cons: forall s l1 l2,
+    selector_disjoint l1 l2 ->
+    selector_disjoint (s::l1) (s::l2).
+
+(* list_sel_norepet: selector version of list_norepet except that we
+strength the neq to selector_disjoint *)
+Inductive list_sel_norepet : list selector -> Prop :=
+  | list_sel_norepet_nil:
+      list_sel_norepet nil
+  | list_norepet_cons: forall hd tl
+      (DIS: forall sel, In sel tl -> selector_disjoint hd sel)
+      (NOREP: list_sel_norepet tl),
+      list_sel_norepet (hd :: tl).
+
+(* list_sel_disjoint: selector version of list_disjoint except that we
+strength the neq to selector_disjoint *)
+Definition list_sel_disjoint (l1 l2: list selector) : Prop :=
+  forall (x y: selector), In x l1 -> In y l2 -> selector_disjoint x y.
+
+Lemma list_sel_norepet_app:
+  forall (l1 l2: list selector),
+  list_sel_norepet (l1 ++ l2) <->
+  list_sel_norepet l1 /\ list_sel_norepet l2 /\ list_sel_disjoint l1 l2.
+Admitted.
+
 
 (* Definition select_stmt_aux (sel: select_kind) (stmt: option statement)  *)
 (* : option statement := *)
@@ -936,30 +965,6 @@ statement -> node -> node -> option node -> option node -> node -> Prop :=
 .
 
 
-Inductive selector_disjoint : selector -> selector -> Prop :=
-| sel_disjoint_neq: forall s1 s2 l1 l2,
-    s1 <> s2 ->
-    selector_disjoint (s1::l1) (s2::l2)
-| sel_disjoint_cons: forall s l1 l2,
-    selector_disjoint l1 l2 ->
-    selector_disjoint (s::l1) (s::l2).
-
-(* list_sel_norepet: selector version of list_norepet except that we
-strength the neq to selector_disjoint *)
-Inductive list_sel_norepet : list selector -> Prop :=
-  | list_sel_norepet_nil:
-      list_sel_norepet nil
-  | list_norepet_cons: forall hd tl
-      (DIS: forall sel, In sel tl -> selector_disjoint hd sel)
-      (NOREP: list_sel_norepet tl),
-      list_sel_norepet (hd :: tl).
-
-(* list_sel_disjoint: selector version of list_disjoint except that we
-strength the neq to selector_disjoint *)
-Definition list_sel_disjoint (l1 l2: list selector) : Prop :=
-  forall (x y: selector), In x l1 -> In y l2 -> selector_disjoint x y.
-
-
 Lemma select_stmt_nil: forall s,
     select_stmt s [] = Some s.
   induction s; auto.
@@ -1293,14 +1298,20 @@ Proof.
   - simpl. eapply sel_disjoint_cons. eauto.
 Qed.
 
+
+Let transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
+                 transl_on a (fst p) (snd p)).
+
+(* Lemma transl_on_instrs_sel_norepet: forall body g1 g2, *)
+(*     list_sel_norepet (PTree.elements (st_code g1)) -> *)
+(*     RustIRcfg.transl_stmt nret body n succ cont brk = Res n  *)
+
 Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
     transl_on_cfg body1 (st_code g2) = OK body2 ->
     state_incr g1 g2 ->
     exists body3, transl_on_cfg body1 (st_code g1) = OK body3.
 Admitted.
 
-Let transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
-                 transl_on a (fst p) (snd p)).
 
 (* auxilary lemma for transl_on_cfg_state_incr_unchanged *)
 Lemma transl_on_instrs_incr_unchanged: forall l1 l2 body body1 body2 sel1 s
