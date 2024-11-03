@@ -25,8 +25,10 @@ program.  *)
 Inductive select_kind : Type :=
 | Selseqleft: select_kind
 | Selseqright: select_kind
-| Selifthen: select_kind
-| Selifelse: select_kind
+(* Then and else are guarded by the conditional expression to ensure
+that this experssion is unchanged during the translation *)
+| Selifthen : select_kind
+| Selifelse : select_kind
 | Selloop: select_kind.
 
 Definition selector := list select_kind.
@@ -944,11 +946,12 @@ statement -> node -> node -> option node -> option node -> node -> Prop :=
     (MSTMT1: match_stmt body cfg s1 ts1 n1 n2 cont brk endn)
     (MSTMT2: match_stmt body cfg s2 ts2 n2 n3 cont brk endn),
     match_stmt body cfg (Ssequence s1 s2) (Ssequence ts1 ts2) n1 n3 cont brk endn
-| match_Sifthenelse: forall s1 ts1 s2 ts2 n1 n2 endif cont brk endn e
+| match_Sifthenelse: forall s1 ts1 s2 ts2 n n1 n2 endif cont brk endn e
     (MSTMT1: match_stmt body cfg s1 ts1 n1 endif cont brk endn)
-    (MSTMT2: match_stmt body cfg s2 ts2 n2 endif cont brk endn),
+    (MSTMT2: match_stmt body cfg s2 ts2 n2 endif cont brk endn)
+    (MCOND: cfg ! n = Some (Icond e n1 n2)),
     (* For now, no way to compile the expression in Icond *)
-    match_stmt body cfg (Sifthenelse e s1 s2) (Sifthenelse e ts1 ts2) n1 endif cont brk endn
+    match_stmt body cfg (Sifthenelse e s1 s2) (Sifthenelse e ts1 ts2) n endif cont brk endn
 | match_Sloop: forall s ts next loop_start loop_jump_node cont brk endn
     (MSTMT: match_stmt body cfg s ts loop_start loop_jump_node (Some loop_jump_node) (Some next) endn)
     (START: cfg ! loop_jump_node = Some (Inop loop_start)),
@@ -1647,8 +1650,23 @@ Admitted.
 Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
     transl_on_cfg body1 (st_code g2) = OK body2 ->
     state_incr g1 g2 ->
+    (* ensure that g1 is also norepet so that the order of the
+    instructions does not matter *)
+    list_sel_norepet (itosels (PTree.elements (st_code g2))) ->
     exists body3, transl_on_cfg body1 (st_code g1) = OK body3.
 Admitted.
+
+
+(* Two statements are equal except for their children statements. This
+predicate is designed only for relating the condition expressions in
+Sifthenelse *)
+Definition stmt_memb_eq (s1 s2: statement) : Prop :=
+  match s1, s2 with
+  | Ssequence _ _, Ssequence _ _ => True
+  | Sifthenelse e1 _ _, Sifthenelse e2 _ _ => e1 = e2
+  | Sloop _, Sloop _ => True
+  | _, _ => s1 = s2
+  end.
 
 
 (* Adding disjoint selectors in the graph does not change the section
@@ -1662,7 +1680,7 @@ Lemma transl_on_cfg_state_incr_unchanged: forall body body1 body2 g1 g2 sel1 s
                             (st_code g2) ! pc = Some (Isel sel2 n) ->
                             selector_disjoint sel1 sel2)
     (NOREP: list_sel_norepet (itosels (PTree.elements (st_code g2)))),
-    select_stmt body2 sel1 = Some s.
+    select_stmt body2 sel1 = Some s.    
 Proof.
   intros.
   unfold transl_on_cfg in *.
@@ -1776,7 +1794,7 @@ Proof.
     intros (ts1 & SEL1 & MSTMT1).
     (* use IHs2 *)
     (* first prove that transl_on_cfg s also success *)
-    exploit transl_on_cfg_state_incr. eapply TRANSL. eapply INCR1. 
+    exploit transl_on_cfg_state_incr. eapply TRANSL. eapply INCR1. auto.
     intros (body3 & T1).
     exploit IHs2. eauto. eapply select_stmt_app. eauto. simpl. 
     eapply select_stmt_nil.
@@ -1796,7 +1814,7 @@ Proof.
       exploit transl_stmt_selectors_prefix. eapply EQ1. eauto. eauto.
       intros (l & A). subst.
       rewrite <- app_assoc. eapply selector_disjoint_app2. econstructor.
-      congruence. }
+      congruence. auto. }
     exploit select_stmt_app_inv. eapply SEL1. intros (b1 & S1 & S2).
     exploit select_stmt_app_inv. eapply SEL3. intros (b2 & S3 & S4).
     rewrite S1 in S3. inv S3. destruct b2; simpl in *; try congruence.
@@ -1805,10 +1823,77 @@ Proof.
     econstructor; eauto.
     (* match_stmt_state_Incr *)
     eapply match_stmt_state_incr; eauto.
-  -       
-    (* 2 cases, pc is in g or pc not in g and all selector in s is disjoint with  *)
+  (* Sifthenelse *)
+  - monadInv TRSTMT.
+    exploit add_instr_at; eauto. intros COND.
+    assert (NOREP3: list_sel_norepet (itosels (PTree.elements (st_code s0)))).
+    { eapply state_incr_norepet; eauto. }    
+    assert (NOREP2: list_sel_norepet (itosels (PTree.elements (st_code s)))).
+    { eapply state_incr_norepet; eauto. }
+    assert (NOREP1: list_sel_norepet (itosels (PTree.elements (st_code g)))).
+    { eapply state_incr_norepet; eauto. }
+    (* prove that transl_on_cfg s0 also success *)
+    exploit transl_on_cfg_state_incr. eapply TRANSL. eapply INCR3. auto.
+    intros (body3 & TRANSL1).
+    exploit transl_on_cfg_state_incr. eapply TRANSL1. eapply INCR1. auto.
+    intros (body4 & TRANSL2).    
+    exploit IHs1; eauto. eapply select_stmt_app. eauto. simpl. 
+    eapply select_stmt_nil.
+    (* prove disjointness *)
+    intros. eapply selector_disjoint_app_left. eauto.
+    intros (ts1 & SEL1 & MSTMT1).
+    (* use IHs2 *)
+    exploit IHs2. eauto. eapply select_stmt_app. eauto. simpl. 
+    eapply select_stmt_nil.
+    eauto.    
+    (* prove disjointness *)
+    intros. generalize INCR. intros. inv INCR5.
+    destruct (INCL pc).
+    exploit transl_stmt_selectors_prefix. eapply EQ. eauto. eauto.
+    intros (l & A). subst. rewrite <- app_assoc. eapply selector_disjoint_app2.
+    econstructor. congruence.
+    eapply selector_disjoint_app_left.
+    eapply DISJOINT. erewrite <- H0. eauto. auto.
+    intros (ts2 & SEL2 & MSTMT2).
+    (* selection of the then and else branches remain the same in body2 *)
+    assert (SEL3: select_stmt body2 (sel++[Selifelse]) = Some ts2).
+    { eapply transl_on_cfg_state_incr_unchanged.
+      eapply TRANSL1. eauto. eauto. eauto.
+      (* prove disjointness *)
+      intros.
+      unfold add_instr in EQ0. inv EQ0. simpl in *.
+      erewrite PTree.gsspec in H0. destruct peq in H0; try congruence.
+      auto. }
+    assert (SEL4: select_stmt body2 (sel++[Selifthen]) = Some ts1).
+    { eapply transl_on_cfg_state_incr_unchanged.
+      eapply TRANSL1. eauto. eauto.
+      eapply transl_on_cfg_state_incr_unchanged.
+      eapply TRANSL2. eauto. auto. auto.
+      (* prove disjointness *)
+      intros. exploit transl_stmt_selectors_prefix. eapply EQ1.
+      1-2: eauto. intros (l & A). subst.
+      rewrite <- app_assoc.
+      eapply selector_disjoint_app2. econstructor. congruence.
+      auto.
+      intros.
+      unfold add_instr in EQ0. inv EQ0. simpl in *.
+      erewrite PTree.gsspec in H0. destruct peq in H0; try congruence.
+      auto. }
+    (* how to prove that the condition expression is unchanged?? *)
     
-  (* - rewrite  *)
+    (* The element of non-atomic statements remain the same under the translation *)
+    Lemma transl_on_cfg_state_incr_non_atomic_same: forall 
+    
+    
+    exploit select_stmt_app_inv. eapply SEL3. intros (b1 & S1 & S2).
+    exploit select_stmt_app_inv. eapply SEL4. intros (b2 & S3 & S4).
+    rewrite S1 in S3. inv S3. destruct b2; simpl in *; try congruence.
+    erewrite select_stmt_nil in *. inv S2. inv S4.
+    exists ( ts1 ts2). split; auto.
+    econstructor; eauto.
+    
+    
+
 Admitted.
 
 Lemma transl_on_cfg_meet_spec: forall f ts cfg entry
