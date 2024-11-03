@@ -1668,6 +1668,21 @@ Definition stmt_memb_eq (s1 s2: statement) : Prop :=
   | _, _ => s1 = s2
   end.
 
+Lemma stmt_memb_eq_refl: forall s,
+    stmt_memb_eq s s.
+Proof.
+  destruct s; red; auto.
+Qed.
+
+Lemma stmt_memb_eq_trans: forall s1 s2 s3,
+    stmt_memb_eq s1 s2 ->
+    stmt_memb_eq s2 s3 ->
+    stmt_memb_eq s1 s3.
+Proof.
+  intros.
+  destruct s1; destruct s2; simpl in *; try congruence; destruct s3; try congruence; simpl; auto.
+Qed.
+
 
 (* Adding disjoint selectors in the graph does not change the section
 of the statement disjointed with the inserted selectors *)
@@ -1756,6 +1771,134 @@ Lemma transl_on_cfg_update_non_sel_instr_unchanged_inv: forall instr g1 g2 body1
 Admitted.
 
 
+(* For a selector sel1, set a selector sel2 witch is not the
+   prefix of sel1, then the selection of sel1 is stmt_memb_eq to
+   the original result *)
+Lemma update_stmt_not_prefix_memb_eq: forall sel1 sel2 body1 body2 s s1
+  (NOTPRE: forall l, sel2 ++ l <> sel1)
+  (SET: update_stmt  body1 sel2 s = Some body2)
+  (SEL: select_stmt body1 sel1 = Some s1),
+  exists s2, select_stmt body2 sel1 = Some s2
+              /\ stmt_memb_eq s1 s2.
+Proof.
+  induction sel1; intros.
+  - rewrite select_stmt_nil in SEL. inv SEL.
+    exists body2. rewrite select_stmt_nil.
+    split; auto.
+    destruct (update_stmt s1 sel2 s) eqn: A; try congruence.
+    inv SET.    
+    destruct sel2. generalize (NOTPRE []). simpl. congruence.
+    destruct s0; destruct s1; simpl in A; try congruence.
+    + destruct (update_stmt s1_1 sel2 s) eqn: B; try congruence.
+      inv A. simpl. auto.
+    + destruct (update_stmt s1_2 sel2 s) eqn: B; try congruence.
+      inv A. simpl. auto.
+    + destruct (update_stmt s1_1 sel2 s) eqn: B; try congruence.
+      inv A. simpl. auto.
+    + destruct (update_stmt s1_2 sel2 s) eqn: B; try congruence.
+      inv A. simpl. auto.
+    + destruct (update_stmt s1 sel2 s) eqn: B; try congruence.
+      inv A. simpl. auto.
+  - destruct (update_stmt body1 sel2 s) eqn: A. inv SET.
+    2: { inv SET. }        
+    destruct a; destruct body1; simpl in *; try congruence.        
+    + destruct sel2; simpl in A; try congruence.
+      (* contradition: sel2 must not be empty *)
+      * inv A. exfalso. eapply NOTPRE. simpl. eauto.
+      * destruct s0; simpl in A; try congruence.
+        -- destruct (update_stmt body1_1 sel2 s) eqn: B; try congruence.
+           inv A. simpl. eapply IHsel1; eauto.
+           intro. intro. subst. eapply NOTPRE. simpl. f_equal.
+        -- destruct (update_stmt body1_2 sel2 s) eqn: B; try congruence.
+           inv A. simpl. exists s1. split; auto. apply stmt_memb_eq_refl.
+    (* mostly the same as above case *)
+    + destruct sel2; simpl in A; try congruence.
+      (* contradition: sel2 must not be empty *)
+      * inv A. exfalso. eapply NOTPRE. simpl. eauto.
+      * destruct s0; simpl in A; try congruence.
+        -- destruct (update_stmt body1_1 sel2 s) eqn: B; try congruence.
+           inv A. simpl. exists s1. split; auto. apply stmt_memb_eq_refl. 
+        -- destruct (update_stmt body1_2 sel2 s) eqn: B; try congruence.
+           inv A. simpl. eapply IHsel1; eauto.
+           intro. intro. subst. eapply NOTPRE. simpl. f_equal.
+    + destruct sel2; simpl in A; try congruence.
+      (* contradition: sel2 must not be empty *)
+      * inv A. exfalso. eapply NOTPRE. simpl. eauto.
+      * destruct s0; simpl in A; try congruence.
+        -- destruct (update_stmt body1_1 sel2 s) eqn: B; try congruence.
+           inv A. simpl. eapply IHsel1; eauto.
+           intro. intro. subst. eapply NOTPRE. simpl. f_equal.
+        -- destruct (update_stmt body1_2 sel2 s) eqn: B; try congruence.
+           inv A. simpl. exists s1. split; auto. apply stmt_memb_eq_refl.
+    + destruct sel2; simpl in A; try congruence.
+      (* contradition: sel2 must not be empty *)
+      * inv A. exfalso. eapply NOTPRE. simpl. eauto.
+      * destruct s0; simpl in A; try congruence.
+        -- destruct (update_stmt body1_1 sel2 s) eqn: B; try congruence.
+           inv A. simpl. exists s1. split; auto. apply stmt_memb_eq_refl. 
+        -- destruct (update_stmt body1_2 sel2 s) eqn: B; try congruence.
+           inv A. simpl. eapply IHsel1; eauto.
+           intro. intro. subst. eapply NOTPRE. simpl. f_equal.
+    + destruct sel2; simpl in A; try congruence.
+      (* contradition: sel2 must not be empty *)
+      * inv A. exfalso. eapply NOTPRE. simpl. eauto.
+      * destruct s0; simpl in A; try congruence.
+        -- destruct (update_stmt body1 sel2 s) eqn: B; try congruence.
+           inv A. simpl. eapply IHsel1; eauto.
+           intro. intro. subst. eapply NOTPRE. simpl. f_equal.
+Qed.    
+
+(* For a selector sel1, set a selector sel2 witch is not the
+   prefix of sel1, then the selection of sel1 is stmt_memb_eq to
+   the original result *)
+Lemma set_stmt_not_prefix_memb_eq: forall sel1 sel2 body1 body2 s s1 pc
+  (NOTPRE: forall l, sel2 ++ l <> sel1)
+  (SET: set_stmt pc body1 sel2 s = OK body2)
+  (SEL: select_stmt body1 sel1 = Some s1),
+  exists s2, select_stmt body2 sel1 = Some s2
+              /\ stmt_memb_eq s1 s2.
+Proof.
+  intros.
+  unfold set_stmt in SET. destruct (update_stmt body1 sel2 s) eqn: A; try congruence.
+  inv SET.
+  eapply update_stmt_not_prefix_memb_eq; eauto.
+Qed.
+
+(* Auxilary function for transl_on_cfg_unchanged_statement_member,
+proved by induction on instrs *)
+Lemma transl_on_instrs_unchanged_statement_member: forall instrs body1 body2 sel s
+  (TR: fold_left transl instrs (OK body1) = OK body2)
+  (SEL: select_stmt body1 sel = Some s)
+  (NOTIN: forall pc sel1 l n1, In (pc, Isel sel1 n1) instrs ->
+                          sel1 ++ l <> sel),
+  exists s', select_stmt body2 sel = Some s'
+        /\ stmt_memb_eq s s'.
+Proof.
+  induction instrs; intros; simpl in *.
+  - inv TR. exists s. split; auto.
+    destruct s; red; auto.
+  - destruct (transl_on_instr body1 (fst a) (snd a)) eqn: A.
+    2: {  erewrite transl_on_instrs_error in TR. inv TR. }
+    destruct a. simpl in A.
+    destruct i; simpl in *. 
+    + inv A. eapply IHinstrs; eauto.
+    + destruct (select_stmt body1 s1) eqn: B.
+      2: inv A.
+      Errors.monadInv A.
+      assert (NOTPRE: forall l, s1 ++ l <> sel).
+      { intros. eapply NOTIN; eauto. }
+      exploit set_stmt_not_prefix_memb_eq; eauto.
+      intros (s3 & SEL2 & SEQ).          
+      exploit IHinstrs. eauto. eapply SEL2.
+      intros. eapply NOTIN. eauto.
+      intros (s' & SEL3 & SEQ1). exists s'.
+      split; auto.
+      eapply stmt_memb_eq_trans; eauto.
+    + inv A. eapply IHinstrs; eauto.
+    + inv A. eapply IHinstrs; eauto.
+Qed.
+
+      
 (* If the selector and its parent are not in the graph, then
    translating the AST based on this graph does not change the member
     (e.g., conditional expression in Sifthenelse) of the element in
@@ -1767,8 +1910,14 @@ Lemma transl_on_cfg_unchanged_statement_member: forall body1 body2 g sel s
                           sel1 ++ l <> sel),
   exists s', select_stmt body2 sel = Some s'
         /\ stmt_memb_eq s s'.
-Admitted.
-
+Proof.
+  intros. unfold transl_on_cfg in TR.
+  rewrite PTree.fold_spec in TR.
+  eapply transl_on_instrs_unchanged_statement_member; eauto.
+  intros. eapply NOTIN.
+  eapply PTree.elements_complete. eauto.
+Qed.  
+  
 (** Key proof of transl_on_cfg_meet_spec  *)
 Lemma transl_on_cfg_charact: forall s body1 body2 n succ cont brk nret sel g g' R
   (* similar to transl_stmt_charact *)
