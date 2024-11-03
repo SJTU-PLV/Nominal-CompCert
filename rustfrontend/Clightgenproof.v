@@ -1517,40 +1517,6 @@ Proof.
 Qed.
 
 
-Lemma PTree_elements_one (A: Type) : forall id (elt: A),
-    PTree.elements (PTree.set id elt (PTree.empty A)) = (id, elt) :: nil.
-Proof.
-  intros.
-  generalize (PTree.elements_correct (PTree.set id elt (PTree.empty A)) id (PTree.gss _ _ _)).
-  intros IN.
-  generalize (PTree.elements_keys_norepet (PTree.set id elt (PTree.empty A))).
-  intros NOREPEAT.
-  destruct (PTree.elements (PTree.set id elt (PTree.empty A))) eqn: LIST.
-  inv IN.
-  destruct p. 
-  inv IN.
-  - inv H.
-    destruct l. auto. destruct p.
-    assert (IN1: In (p,a) ((id,elt)::(p,a)::l)).
-    eapply in_cons. econstructor. auto.
-    simpl in NOREPEAT. inv NOREPEAT. 
-    generalize (PTree.elements_complete (PTree.set id elt (PTree.empty A)) p a).
-    rewrite LIST. intros B. apply B in IN1.
-    erewrite PTree.gsspec in IN1.
-    destruct (peq p id) eqn: PEQ. inv IN1.
-    exfalso. eapply H1. econstructor. auto.
-    rewrite PTree.gempty in IN1. congruence.
-  - simpl in NOREPEAT. inv NOREPEAT.
-    assert (GP: (PTree.set id elt (PTree.empty A))! p = Some a).
-    eapply PTree.elements_complete. rewrite LIST.
-    econstructor. auto.
-    erewrite PTree.gsspec in GP.
-    destruct (peq p id) eqn: PEQ. inv GP.
-    exfalso. eapply H2. replace id with (fst (id, a)). eapply in_map.
-    auto. auto.
-    rewrite PTree.gempty in GP. congruence.
-Qed.
-
 Lemma drop_glue_children_types_last: forall tys ty hty,
     drop_glue_children_types ty = hty :: tys ->
     ty = last tys hty.
