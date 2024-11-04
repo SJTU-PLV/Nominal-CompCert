@@ -444,7 +444,8 @@ intros.
     intros. rewrite PTree.grspec.
     destruct s. simpl in *.
     destruct (st_wf0 i0).
-    - destruct PTree.elt_eq. subst. unfold n in H. unfold Plt in H. lia.
+    - destruct PTree.elt_eq. subst.
+      unfold n in H. unfold Plt in H. exfalso. eapply Pos.lt_irrefl. eauto.
       erewrite PTree.gso; auto.
     - destruct PTree.elt_eq. subst. auto.
       erewrite PTree.gso; auto. }
@@ -735,41 +736,6 @@ Proof.
   eapply PTree.gss.
 Qed.
 
-(* Lemma ret_instr_at: *)
-(*   forall (succ:positive) n s s' R, ret succ s = Res n s' R -> *)
-(*   n = succ. *)
-(* Proof. *)
-(*   intros. inversion H. auto. *)
-(* Qed. *)
-
-(* Lemma select_stmt_sequence_first : *)
-(*   forall body sel stmt1 stmt2, *)
-(*     select_stmt body sel = Some (Ssequence stmt1 stmt2) -> *)
-(*     select_stmt body (Selseqleft :: sel) = Some stmt1 *)
-(* with select_stmt_sequence_second : *)
-(*   forall body sel stmt1 stmt2, *)
-(*     select_stmt body sel = Some (Ssequence stmt1 stmt2) -> *)
-(*     select_stmt body (Selseqright :: sel) = Some stmt2 *)
-(* with select_stmt_ifelse_if : *)
-(*   forall body sel e stmt1 stmt2, *)
-(*   select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) -> *)
-(*   select_stmt body (Selifthen :: sel) = Some stmt1 *)
-(* with select_stmt_ifelse_else : *)
-(*   forall body sel e stmt1 stmt2, *)
-(*   select_stmt body sel = Some (Sifthenelse e stmt1 stmt2) -> *)
-(*   select_stmt body (Selifelse :: sel) = Some stmt2 *)
-(* with select_stmt_loop : *)
-(*   forall body sel stmt, *)
-(*   select_stmt body sel = Some (Sloop stmt) -> *)
-(*   select_stmt body (Selloop :: sel) = Some stmt. *)
-(* Proof. *)
-(*   intros. simpl. rewrite H. reflexivity. *)
-(*   intros. simpl. rewrite H. reflexivity. *)
-(*   intros. simpl. rewrite H. reflexivity. *)
-(*   intros. simpl. rewrite H. reflexivity. *)
-(*   intros. simpl. rewrite H. reflexivity. *)
-(* Qed. *)
-
 Lemma instr_at_incr:
   forall s1 s2 n i,
   state_incr s1 s2 -> s1.(st_code)!n = Some i -> s2.(st_code)!n = Some i.
@@ -777,97 +743,6 @@ Proof.
   intros. inv H.
   destruct (INCL n); congruence.
 Qed.
-
-(* Lemma tr_stmt_incr: *)
-(*   forall s1 s2, state_incr s1 s2 -> *)
-(*   forall body stmt n succ cont brk nret, *)
-(*   tr_stmt body (st_code s1) stmt n succ cont brk nret -> *)
-(*   tr_stmt body (st_code s2) stmt n succ cont brk nret. *)
-(* Proof. *)
-(*   intros s1 s2 EXT. *)
-(*   pose (AT:= fun pc i => instr_at_incr s1 s2 pc i EXT). *)
-(*   induction 1; econstructor; eauto. *)
-(* Qed. *)
-
-
-(* (* tr_stmt matches transl_stmt *) *)
-(* Lemma transl_stmt_charact: forall body sel stmt nret succ cont brk s s' n R, *)
-(*     select_stmt body sel = Some stmt -> *)
-(*     transl_stmt nret stmt sel succ cont brk s = Res n s' R -> *)
-(*     tr_stmt body s'.(st_code) stmt n succ cont brk nret. *)
-(* Proof. *)
-(* intros until stmt. generalize dependent sel. *)
-(* induction stmt; intros; simpl in H0. *)
-(* (* Sskip *) *)
-(* apply ret_instr_at in H0. subst. constructor. *)
-(* (* Sassign *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Sassign_variant *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Sbox *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Sstoragelive *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Sstoragedead *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Sdrop *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Scall *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* (* Ssequence *) *)
-(* monadInv H0. econstructor.  *)
-(* eapply IHstmt1. eapply select_stmt_sequence_first. eauto. eauto. *)
-(* eapply (tr_stmt_incr s0 s'). congruence. *)
-(* eapply IHstmt2. eapply select_stmt_sequence_second. eauto. eauto. *)
-(* (* Sifthenelse *) *)
-(* monadInv H0. econstructor. eapply (tr_stmt_incr s0 s'). *)
-(* eapply state_incr_trans; eauto. *)
-(* eapply IHstmt1. eapply select_stmt_ifelse_if. eauto. eauto. *)
-(* eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto. *)
-(* eapply IHstmt2. eapply select_stmt_ifelse_else. eauto. eauto. *)
-(* eapply add_instr_at. eauto. *)
-(* (* Sloop *) *)
-(* monadInv H0. econstructor.  *)
-(* eapply (tr_stmt_incr s1 s'). eapply state_incr_trans; eauto. *)
-(* eapply IHstmt. eapply select_stmt_loop. eauto. eauto. *)
-(* eapply update_instr_at. eauto. *)
-(* (* Sbreak *) *)
-(* destruct brk. *)
-(*   apply add_instr_next in H0. subst n0. apply tr_Sbreak. *)
-(*   inversion H0. *)
-(* (* Scontinue *) *)
-(* destruct cont. *)
-(*   apply add_instr_next in H0. subst n0. apply tr_Scontinue. *)
-(*   inversion H0. *)
-(* (* Sreturn *) *)
-(* econstructor. eapply add_instr_at. eauto. eauto. *)
-(* Qed. *)
-
-(* Lemma generate_cfg_charact: forall f entry cfg, *)
-(*     generate_cfg f.(fn_body) = OK (entry, cfg) -> *)
-(*     exists nret, tr_fun f nret entry cfg. *)
-(* Proof. *)
-(*   intros f entry cfg GEN. *)
-(*   generalize GEN. intros GEN'. *)
-(*   unfold generate_cfg in GEN. *)
-(*   destruct (generate_cfg' (fn_body f) init_state) eqn: GCFG; try congruence. *)
-(*   inv GEN. unfold generate_cfg' in GCFG. *)
-(*   monadInv GCFG. exists x. econstructor. eapply GEN'. *)
-(*   eapply transl_stmt_charact with (sel:=nil). eauto. *)
-(*   eauto. eapply add_instr_res_incr in EQ. *)
-(*   eapply add_instr_at in EQ. eapply EQ.  *)
-(*   eauto. eauto. Unshelve. eauto. *)
-(*   (** Unshelve? *) *)
-(* Qed. *)
-
-(* Lemma generate_cfg_exists_nret: forall f entry cfg, *)
-(*     generate_cfg f.(fn_body) = OK (entry, cfg) -> *)
-(*     exists nret, cfg ! nret = Some Iend. *)
-(* Proof. *)
-(*   intros. exploit generate_cfg_charact; eauto. *)
-(*   intros (nret & TRFUN). inv TRFUN. *)
-(*   eauto. *)
-(* Qed. *)
 
 
 (** * A general framework for CFG compilation based on selectors *)
@@ -1043,10 +918,29 @@ property is used to ensure that whatever the position of the added
 instruction in the graph, the translation of others instruction cannot
 affect its translation.
 
-2.2 Induction case of [transl_on_cfg_charact]:
+2.2 Induction case of [transl_on_cfg_charact]: the key proof that
+adding a set of disjoint selectors does not change the selction result
+(proved by [transl_on_cfg_state_incr_unchanged]). To prove this
+property, we need to strength the unchanged property because the
+adding selectors may be put into arbitary position of the graph. So we
+need to prove that if all the selectors of a graph are norepet
+(defined by list_sel_norepet and itosels), then any permutaion of the
+graph nodes does not change the result of the translation on this
+graph (lemma [transl_on_instrs_permutation_same]). The lemma
+[transl_stmt_sel_norepet] shows that the CFG generated by
+RustIRcfg.transl_stmt does not introduce repeated selectors.
 
-2.2.1
-
+Some tricky proof in the induction case is about the unchanged
+property of the condition expression in the Sifthenelse statment. We
+need to show that the translation on the graph does not change the
+condition expression but it is not easy because there may be some
+selectors whose children contain some condition expression (we do not
+enforce that every selector in the graph is leaf selector). We can
+weaken the unchanged property by showing that when for a selector sel
+which is under translation, if there is no selctor that is a prefix of
+sel, we can say that the statement (before and after the translation)
+selected by this selctor satisfies [stmt_memb_eq]. It is proved by
+[transl_on_cfg_unchanged_statement_member]
 
  *)
 
@@ -1398,7 +1292,7 @@ Proof.
     (* st_code must not contain pc by st_wf *)
     symmetry.
     destruct (st_wf g pc). unfold pc in *.
-    unfold Plt in H. lia.
+    unfold Plt in H. exfalso. eapply Pos.lt_irrefl. eauto.
     auto.
     erewrite PTree.gso; auto. }
   erewrite PTree.elements_extensional in B2; eauto.
@@ -1649,7 +1543,7 @@ Proof.
   2: { intros. rewrite PTree.grspec.
        destruct PTree.elt_eq. subst.
        destruct (st_wf g1 (st_nextnode g1)).
-       unfold Plt in H. lia.
+       unfold Plt in H. exfalso. eapply Pos.lt_irrefl. eauto.
        rewrite H. auto.
        rewrite PTree.gso; eauto. }
   rewrite A1. rewrite A2 in NOREP.
@@ -2039,7 +1933,7 @@ Proof.
   2: { intros. rewrite PTree.grspec.
        destruct PTree.elt_eq. subst.
        destruct (st_wf g1 (st_nextnode g1)).
-       unfold Plt in H. lia.
+       unfold Plt in H. exfalso. eapply Pos.lt_irrefl. eauto.
        rewrite H. auto.
        rewrite PTree.gso; eauto. }
   rewrite A2.
