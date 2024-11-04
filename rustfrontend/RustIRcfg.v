@@ -14,8 +14,7 @@ Require Import Cop RustOp.
 Require Import LanguageInterface.
 Require Import Clight Rustlight Rustlightown.
 Require Import InitDomain RustIR.
-Require Import Sorting.Permutation.
-
+Require Import Permutation.
 
 Import ListNotations.
 
@@ -445,7 +444,7 @@ intros.
     intros. rewrite PTree.grspec.
     destruct s. simpl in *.
     destruct (st_wf0 i0).
-    - destruct PTree.elt_eq. subst. extlia.
+    - destruct PTree.elt_eq. subst. unfold n in H. unfold Plt in H. lia.
       erewrite PTree.gso; auto.
     - destruct PTree.elt_eq. subst. auto.
       erewrite PTree.gso; auto. }
@@ -1006,15 +1005,47 @@ instructions that would execute, like assignments) a selector. This
 selector represents a path leading to a leaf node in the AST.
 
 The compilation or static checking process (handled by the function
-transl_on_cfg) traverses the Control Flow Graph (CFG). For each
-instruction, it extracts the selector (if present) and then directly
-translates the corresponding statement in the original AST using the
-function transl_on_instr. This approach allows us to perform
-transformations on the AST based on the structure and information
-obtained from the CFG.
+transl_on_cfg) traverses the CFG. For each instruction, it extracts
+the selector (if present) and then directly translates the
+corresponding statement in the original AST using the function
+transl_on_instr. This approach allows us to perform transformations on
+the AST based on the structure and information obtained from the CFG.
 
+To connect the statements before and after compilation, we define a
+translation relation that uses the intermediate CFG as a bridge. This
+relation is divided into two groups: one for executable statements and
+another for control statements. Specifically, we use the translation
+function "transl_stmt" to relate executable statements, while control
+statements are linked through a tuple structure (pc, next, cont, brk),
+which represents the current program counter, the next program
+counter, the continuation point and the break point.
 
+The final theorem, transl_on_cfg_meet_spec, asserts that if an AST can
+be successfully translated into a CFG and then processed by
+transl_on_cfg, we can establish the match_stmt relation between the
+original AST and the transformed AST. The following comments outline
+our strategy for proving transl_on_cfg_meet_spec.
 
+2. Proof structure
+
+Top-level theorem [transl_on_cfg_meet_spec]: the translation on a
+generated CFG satisfies the translation specification. It is proved by
+[transl_on_cfg_charact] which says that the translation of a fragment
+of an AST (by converting it to a fragment of the CFG) satisfies the
+specification. This lemma is proved by induction on the AST:
+
+2.1 Base case of [transl_on_cfg_charact]: If is mainly proved by
+add_instr_charact, which says that adding an instruction (whose
+selctor (called sel)is disjoint with all others selector in the graph)
+to the graph, and then selecting the statement using sel in the
+transformed AST returns the translated result. The disjointness
+property is used to ensure that whatever the position of the added
+instruction in the graph, the translation of others instruction cannot
+affect its translation.
+
+2.2 Induction case of [transl_on_cfg_charact]:
+
+2.2.1
 
 
  *)
@@ -1366,7 +1397,9 @@ Proof.
     destruct PTree.elt_eq. subst.
     (* st_code must not contain pc by st_wf *)
     symmetry.
-    destruct (st_wf g pc). unfold pc in *. extlia. auto.
+    destruct (st_wf g pc). unfold pc in *.
+    unfold Plt in H. lia.
+    auto.
     erewrite PTree.gso; auto. }
   erewrite PTree.elements_extensional in B2; eauto.
   (* simplify TRANSL *)
@@ -1615,7 +1648,9 @@ Proof.
   erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
   2: { intros. rewrite PTree.grspec.
        destruct PTree.elt_eq. subst.
-       destruct (st_wf g1 (st_nextnode g1)). extlia. rewrite H. auto.
+       destruct (st_wf g1 (st_nextnode g1)).
+       unfold Plt in H. lia.
+       rewrite H. auto.
        rewrite PTree.gso; eauto. }
   rewrite A1. rewrite A2 in NOREP.
   rewrite itosels_app in *.
@@ -2003,7 +2038,9 @@ Proof.
   erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
   2: { intros. rewrite PTree.grspec.
        destruct PTree.elt_eq. subst.
-       destruct (st_wf g1 (st_nextnode g1)). extlia. rewrite H. auto.
+       destruct (st_wf g1 (st_nextnode g1)).
+       unfold Plt in H. lia.
+       rewrite H. auto.
        rewrite PTree.gso; eauto. }
   rewrite A2.
   rewrite A1 in TRANSL.
