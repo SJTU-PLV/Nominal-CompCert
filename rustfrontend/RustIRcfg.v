@@ -890,6 +890,13 @@ Context {AN: Type} {An: Type} (get_an: AN -> node -> An).
 Context (ae: AN).
 Context (transl_stmt: An -> statement -> Errors.res statement).
 
+(* There is no way to translate the condition expression because we do
+not know its location in the AST, we can only check its validity
+(e.g., in the move checking). To support translation of the condition
+expression, we need to add selector for it, but it would make the
+proof more compilated. *)
+Context (check_expr: An -> expr -> Errors.res unit).
+
 Definition transl_on_instr (src: statement) (pc: node) (instr: instruction)
  : Errors.res statement :=
   match instr with
@@ -901,6 +908,9 @@ Definition transl_on_instr (src: statement) (pc: node) (instr: instruction)
       | None =>
           Error [CTX pc; MSG " select_stmt error in transl_on_instr"]
       end
+  | Icond e _ _ =>
+      do _ <- check_expr (get_an ae pc) e;
+      OK src
   (* no way to translate them in the AST side without selector *)
   | _ => OK src
   end.
@@ -964,7 +974,8 @@ statement -> node -> node -> option node -> option node -> node -> Prop :=
 | match_Sifthenelse: forall s1 ts1 s2 ts2 n n1 n2 endif cont brk endn e
     (MSTMT1: match_stmt body cfg s1 ts1 n1 endif cont brk endn)
     (MSTMT2: match_stmt body cfg s2 ts2 n2 endif cont brk endn)
-    (MCOND: cfg ! n = Some (Icond e n1 n2)),
+    (MCOND: cfg ! n = Some (Icond e n1 n2))
+    (CHECK: check_expr (get_an ae n) e = OK tt),
     (* For now, no way to compile the expression in Icond *)
     match_stmt body cfg (Sifthenelse e s1 s2) (Sifthenelse e ts1 ts2) n endif cont brk endn
 | match_Sloop: forall s ts next loop_start loop_jump_node cont brk endn
@@ -981,6 +992,35 @@ statement -> node -> node -> option node -> option node -> node -> Prop :=
     (TR: transl_stmt (get_an ae pc) (Sreturn e) = OK ts),
     match_stmt body cfg (Sreturn e) ts pc succ cont brk endn
 .
+
+(** * Proof of the translation on the CFG meets the specification (match_stmt) *)
+
+(* 1. Background:
+
+During the compilation and static checking process of RustIR, we
+temporarily convert it into a Control Flow Graph (CFG). We then use
+the analysis results from this CFG to transform the original Abstract
+Syntax Tree (AST). To maintain a mapping between the nodes in the CFG
+and the original AST, we assign each instruction (specifically, those
+instructions that would execute, like assignments) a selector. This
+selector represents a path leading to a leaf node in the AST.
+
+The compilation or static checking process (handled by the function
+transl_on_cfg) traverses the Control Flow Graph (CFG). For each
+instruction, it extracts the selector (if present) and then directly
+translates the corresponding statement in the original AST using the
+function transl_on_instr. This approach allows us to perform
+transformations on the AST based on the structure and information
+obtained from the CFG.
+
+
+
+
+
+ *)
+
+
+
 
 (* Copy from Cminorgenproof *)
 Remark permutation_norepet:
@@ -1276,7 +1316,7 @@ Proof.
       exploit set_stmt_disjoint_select. eapply SEL. eauto. auto.
       intros SEL3.
       eapply IHl; eauto.
-    + inv A. eapply IHl; eauto.
+    + Errors.monadInv A. eapply IHl; eauto.
     + inv A. eapply IHl; eauto.
 Qed.
     
@@ -1751,7 +1791,9 @@ Proof.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Inop n) = OK s0).
       { destruct i0; simpl in *; inv A2; auto.
         destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ. simpl. rewrite EQ0. auto. }
+        rewrite EQ. simpl. rewrite EQ0. auto.
+        (* Icond *)
+        Errors.monadInv H0. rewrite EQ. simpl. auto. }
       rewrite B1. auto.
     (* i is Isel *)
     + destruct (select_stmt body s1) eqn: S1; try congruence.
@@ -1785,21 +1827,26 @@ Proof.
         rewrite EQ. simpl.
         erewrite set_stmt_disjoint_reorder; eauto.
       (* i0 is Icond *)
-      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
+      * Errors.monadInv A2. rewrite EQ1. simpl.
+        rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
       * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
     (* Icond *)
-    + inv A1.
+    + Errors.monadInv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Icond e n n0) = OK s0).
-      { destruct i0; simpl in *; inv A2; auto.
+      { destruct i0; simpl in *; try rewrite EQ; inv A2; auto.
         destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ. simpl. rewrite EQ0. auto. }
+        rewrite EQ0. simpl. rewrite EQ1. simpl. rewrite EQ. auto.
+        (* Icond *)
+        Errors.monadInv H0. rewrite EQ0. simpl. rewrite EQ. auto. }
       rewrite B1. auto.
     (* Iend *)
     + inv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Iend) = OK s0).
       { destruct i0; simpl in *; inv A2; auto.
         destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ. simpl. rewrite EQ0. auto. }
+        rewrite EQ. simpl. rewrite EQ0. auto.
+        (* Icond *)
+        Errors.monadInv H0. rewrite EQ. simpl. auto. }
       rewrite B1. auto.      
   - eapply IHPERM2. eapply IHPERM1. auto.
     auto.
@@ -1969,6 +2016,8 @@ Proof.
   2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
   destruct instr; simpl in *; inv B; auto.
   generalize (NSEL s1 n). congruence.
+  (* Icond *)
+  Errors.monadInv H0. simpl. eauto.
 Qed.     
   
 (* update an instruction witch is not a selctor does not change the
@@ -2003,7 +2052,9 @@ Proof.
   2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
   destruct instr; simpl in *; inv B; auto.
   generalize (NSEL s1 n). congruence.
-Qed.     
+  (* Icond *)
+  Errors.monadInv H0. simpl. eauto.  
+Qed.
   
 
 (* For a selector sel1, set a selector sel2 witch is not the
@@ -2129,7 +2180,7 @@ Proof.
       intros (s' & SEL3 & SEQ1). exists s'.
       split; auto.
       eapply stmt_memb_eq_trans; eauto.
-    + inv A. eapply IHinstrs; eauto.
+    + Errors.monadInv A. eapply IHinstrs; eauto.
     + inv A. eapply IHinstrs; eauto.
 Qed.
 
@@ -2331,6 +2382,18 @@ Proof.
     econstructor; eauto.
     eapply match_stmt_state_incr; eauto.
     eapply match_stmt_state_incr; eauto.
+    (* check_expr succeeds. Maybe we should lift it to a lemma? *)
+    exploit add_instr_at. eauto. intros B1.
+    exploit PTree.elements_remove. eauto. intros (l1 & l2 & B2 & B3).
+    unfold transl_on_cfg in TRANSL. rewrite PTree.fold_spec in TRANSL.
+    rewrite B2 in TRANSL. rewrite fold_left_app in TRANSL.
+    fold transl in TRANSL.
+    destruct (fold_left transl l1 (OK body1)) eqn: C1.
+    2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+    simpl in TRANSL.
+    destruct ((do _ <- check_expr (get_an ae n) e; OK s3)) eqn: C2.
+    2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+    Errors.monadInv C2. auto. destruct x1. auto.
   (* Sloop *)
   - monadInv TRSTMT.
     exploit update_instr_at; eauto. intros LOOPSTART.
@@ -2411,4 +2474,3 @@ Qed.
 End SPEC.
 
 End TRANSL.
-

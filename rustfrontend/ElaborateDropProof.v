@@ -343,7 +343,7 @@ Let ce := ge.(genv_cenv).
 
 Hypothesis GE: match_stbls injp w se tse.
 
-Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce).
+Let match_stmt (ae: AN) (flagm: FM) := match_stmt get_init_info ae (elaborate_stmt flagm ce) uncheck_expr.
 
 
 Lemma match_stbls_incr : forall j m1 m2 MEM,

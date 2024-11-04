@@ -287,6 +287,8 @@ Definition init_drop_flags_bot (mayInit mayUninit: IM.t) (universe: PathsMap.t) 
       Error (msg "impossible in init_drop_flags_bot")
   end.
 
+Definition uncheck_expr : (IM.t * IM.t * PathsMap.t) -> expr -> Errors.res unit := (fun _ _ => OK tt).
+  
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do (entry, cfg) <- generate_cfg f.(fn_body);
   do analysis_res <- analyze ce f cfg entry;
@@ -296,7 +298,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   do flags <- generate_drop_flags mayinit mayuninit universe ce f cfg;
   let flagm := generate_place_map flags in
   (** step 2: elaborate the statements *)
-  do stmt <- transl_on_cfg get_init_info (mayinit, mayuninit, universe) (elaborate_stmt flagm ce) f.(fn_body) cfg;
+  do stmt <- transl_on_cfg get_init_info (mayinit, mayuninit, universe) (elaborate_stmt flagm ce) uncheck_expr f.(fn_body) cfg;
   (* do stmt <- elaborate_stmt mayinit mayuninit universe flagm ce f cfg; *)
   (** step 3: initialize drop flags *)
   let entry_init := mayinit!!entry in

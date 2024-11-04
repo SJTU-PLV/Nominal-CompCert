@@ -181,10 +181,21 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
   | _, _ => OK stmt
   end.
 
+Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res unit :=
+  let '(mayInit, mayUninit, universe) := an in
+  match mayInit, mayUninit with
+  | IM.State mayinit, IM.State mayuninit =>      
+      if move_check_expr ce mayinit mayuninit universe e then
+        OK tt
+      else
+        Error (msg "move_check_expr error")
+  | _, _ => OK tt
+  end.
+
 Definition move_check_function (ce: composite_env) (f: function) : Errors.res unit :=
   do (entry, cfg) <- generate_cfg f.(fn_body);
   do analysis_res <- analyze ce f cfg entry;
-  do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) f.(fn_body) cfg;
+  do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) (check_expr ce) f.(fn_body) cfg;
   OK tt.
                                                                     
 Definition transf_fundef (ce : composite_env) (id : ident) (fd : fundef) : Errors.res fundef :=
