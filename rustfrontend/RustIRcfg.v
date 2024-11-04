@@ -60,8 +60,27 @@ Lemma list_sel_norepet_app:
   forall (l1 l2: list selector),
   list_sel_norepet (l1 ++ l2) <->
   list_sel_norepet l1 /\ list_sel_norepet l2 /\ list_sel_disjoint l1 l2.
-Admitted.
-
+Proof.
+  induction l1; simpl; intros; split; intros.
+  - intuition. constructor. red;simpl;auto.
+    tauto.
+  - intuition.
+  - inv H. rewrite IHl1 in NOREP.
+    destruct NOREP as (A1 & A2 & A3).
+    repeat apply conj; auto.
+    + constructor. intros. eapply DIS. eapply in_app. auto.
+      auto.
+    + red. intros. inv H.
+      * eapply DIS. eapply in_app. auto.
+      * eapply A3; auto.
+  - destruct H as (A1 & A2 & A3). inv A1.
+    econstructor.
+    + intros. eapply in_app in H. destruct H.
+      * eauto.
+      * eapply A3. constructor. auto. auto.
+    + eapply IHl1. repeat apply conj; auto.
+      red. intros. eapply A3. eapply in_cons. auto. auto.
+Qed.
 
 (* Definition select_stmt_aux (sel: select_kind) (stmt: option statement)  *)
 (* : option statement := *)
@@ -706,13 +725,6 @@ Proof.
   intros. monadInv H. simpl. rewrite PTree.gss. auto.
 Qed.
 
-(* Lemma add_instr_next: *)
-(*     forall n0 s n s' R, *)
-(*     add_instr (Inop n0) s = Res n s' R -> *)
-(*     n0 = n. *)
-(* Proof. *)
-(*   intros. monadInv H. inversion R. subst. *)
-(*   Admitted. *)
 
 Lemma update_instr_at:
     forall i n x s s' R, update_instr n i s = Res x s' R ->
@@ -1473,7 +1485,79 @@ Definition itosels (l: list (positive * instruction)) :=
 Let transl := (fun (a : Errors.res statement) (p : positive * instruction) =>
                  transl_on a (fst p) (snd p)).
 
+(* Permutation is preserved if applying filter in two lists *)
+Lemma Permutation_filter {A: Type} : forall (f: A -> bool) (l1 l2: list A),
+    Permutation l1 l2 ->
+    Permutation (filter f l1) (filter f l2).
+Proof.
+  induction 1.
+  - simpl. constructor.
+  - simpl. destruct (f x). apply perm_skip. auto.
+    auto.
+  - simpl. destruct (f x); destruct (f y).
+    apply perm_swap. auto.    
+    apply perm_skip. auto.
+    reflexivity.
+  - etransitivity. eauto. auto.
+Qed.
 
+Lemma Permutation_itosels : forall l1 l2,
+    Permutation l1 l2 ->
+    Permutation (itosels l1) (itosels l2).
+Proof.
+  unfold itosels. intros.
+  apply Permutation_map. apply Permutation_filter.
+  apply Permutation_map. auto.
+Qed.
+
+(* The list_sel_norepet property is preserved under the
+  permutation *)
+Lemma list_sel_norepet_permutation: forall l1 l2,
+    Permutation l1 l2 ->
+    list_sel_norepet l1 ->    
+    list_sel_norepet l2.
+Proof.
+  induction 1; intros.
+  - constructor.
+  - inv H0. constructor; auto.
+    intros. eapply DIS. eapply Permutation_in.
+    symmetry. eauto. eauto.
+  - inv H. inv NOREP. econstructor.
+    + intros. inv H.
+      apply selector_disjoint_sym.
+      eapply DIS. constructor. auto.
+      eapply DIS0; auto.
+    + econstructor.
+      -- intros. eapply DIS. apply in_cons. auto.
+      -- auto.
+  - auto.
+Qed.
+
+Lemma itosels_app: forall l1 l2,
+    itosels (l1 ++ l2) = itosels l1 ++ itosels l2.
+Proof.
+  intros. unfold itosels.
+  rewrite map_app. rewrite filter_app. rewrite map_app. auto.
+Qed.
+
+Lemma in_itosels: forall sel l,
+    In sel (itosels l) ->
+    exists pc n, In (pc, Isel sel n) l.
+Proof.
+  intros. unfold itosels in H.
+  eapply in_map_iff in H. destruct H. destruct x.
+  - destruct H. eapply filter_In in H0. destruct H0. congruence.
+  - destruct H. eapply filter_In in H0. destruct H0.
+    eapply in_map_iff in H0. destruct H0 as ((pc & i) & A1 & A2).
+    simpl in A1. subst. eauto.
+  - destruct H. eapply filter_In in H0. destruct H0. congruence.
+  - destruct H. eapply filter_In in H0. destruct H0. congruence.
+Qed.
+
+(* Adding an instruction to a graph which does not contain repeated
+selctors. The new graph also does not contain repeated selctors as
+long as the added instruction is not a selctor or its selector is
+disjoint with all the selectors in the graph *)
 Lemma add_instr_sel_norepet: forall g1 g2 instr n2 R
     (DISJOINT: forall sel1 n1 pc sel2 succ,
         instr = Isel sel1 n1 ->
@@ -1482,9 +1566,47 @@ Lemma add_instr_sel_norepet: forall g1 g2 instr n2 R
     (ADD: add_instr instr g1 = Res n2 g2 R)
     (NOREP: list_sel_norepet (itosels (PTree.elements (st_code g1)))),
     list_sel_norepet (itosels (PTree.elements (st_code g2))).
-Admitted.
+Proof.
+  intros. unfold add_instr in ADD.
+  inv ADD. simpl in *.
+  exploit PTree.elements_remove.
+  instantiate (3 := (PTree.set (st_nextnode g1) instr (st_code g1))).
+  eapply PTree.gss. intros (l1 & l2 & A1 & A2).
+  erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
+  2: { intros. rewrite PTree.grspec.
+       destruct PTree.elt_eq. subst.
+       destruct (st_wf g1 (st_nextnode g1)). extlia. rewrite H. auto.
+       rewrite PTree.gso; eauto. }
+  rewrite A1. rewrite A2 in NOREP.
+  rewrite itosels_app in *.
+  eapply list_sel_norepet_app in NOREP. destruct NOREP as (B1 & B2 & B3).
+  eapply list_sel_norepet_app.
+  destruct instr.
+  - repeat apply conj; auto.
+  - repeat apply conj; auto.
+    + unfold itosels.
+      erewrite map_cons. simpl. econstructor.
+      intros.
+      exploit in_itosels. eauto. intros (pc & n1 & IN).
+      eapply DISJOINT. eauto. 
+      eapply PTree.elements_complete.
+      rewrite A2. eapply in_app_iff. right. eauto.
+      auto.
+    + red. intros. inv H0; auto.
+      simpl. exploit in_itosels. eauto.
+      intros (pcx & nx & IN).
+      eapply selector_disjoint_sym.
+      eapply DISJOINT. eauto. eapply PTree.elements_complete.
+      rewrite A2. eapply in_app. eauto.
+  - repeat apply conj; auto.
+  - repeat apply conj; auto.
+Qed.    
 
-(* Because pc must be None, so no need to  *)
+
+(* Updating an instruction to a graph which does not contain repeated
+selctors. The new graph also does not contain repeated selctors as
+long as the added instruction is not a selctor or its selector is
+disjoint with all the selectors in the graph *)
 Lemma update_instr_sel_norepet: forall g1 g2 instr n2 R pc
     (DISJOINT: forall sel1 n1 pc sel2 succ,
         instr = Isel sel1 n1 ->
@@ -1493,7 +1615,43 @@ Lemma update_instr_sel_norepet: forall g1 g2 instr n2 R pc
     (UPDATE: update_instr pc instr g1 = Res n2 g2 R)
     (NOREP: list_sel_norepet (itosels (PTree.elements (st_code g1)))),
     list_sel_norepet (itosels (PTree.elements (st_code g2))).
-Admitted.
+Proof.  
+  intros. unfold update_instr in UPDATE.
+  destruct plt in UPDATE; try congruence.
+  destruct (check_empty_node g1 pc) eqn: EMP; try congruence.
+  inv UPDATE. simpl in *.
+  exploit PTree.elements_remove.
+  instantiate (3 := (PTree.set pc instr (st_code g1))).
+  eapply PTree.gss. intros (l1 & l2 & A1 & A2).
+  erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
+  2: { intros. rewrite PTree.grspec.
+       destruct PTree.elt_eq. subst. auto.
+       rewrite PTree.gso; eauto. }
+  rewrite A1. rewrite A2 in NOREP.
+  rewrite itosels_app in *.
+  eapply list_sel_norepet_app in NOREP. destruct NOREP as (B1 & B2 & B3).
+  eapply list_sel_norepet_app.
+  (* rest of this proof is the same as that in add_instr_sel_norepet *)
+  destruct instr.
+  - repeat apply conj; auto.
+  - repeat apply conj; auto.
+    + unfold itosels.
+      erewrite map_cons. simpl. econstructor.
+      intros.
+      exploit in_itosels. eauto. intros (pc1 & n1 & IN).
+      eapply DISJOINT. eauto. 
+      eapply PTree.elements_complete.
+      rewrite A2. eapply in_app_iff. right. eauto.
+      auto.
+    + red. intros. inv H0; auto.
+      simpl. exploit in_itosels. eauto.
+      intros (pcx & nx & IN).
+      eapply selector_disjoint_sym.
+      eapply DISJOINT. eauto. eapply PTree.elements_complete.
+      rewrite A2. eapply in_app. eauto.
+  - repeat apply conj; auto.
+  - repeat apply conj; auto.
+Qed.
 
 
 (* The selectors generated by RustIRcfg.transl_stmt are norepet *)
@@ -1575,7 +1733,9 @@ Proof.
     2:{ erewrite transl_on_instrs_error in TR. inv TR. }
     eapply IHPERM; eauto.
     (* itosels properties *)
-    admit.
+    replace ((p,i)::l) with ([(p,i)] ++ l) in NOREP by auto.
+    rewrite itosels_app in NOREP. eapply list_sel_norepet_app in NOREP.
+    intuition.
   (** IMPORTANT: swap case *)
   - destruct y. destruct x.
     simpl in *.
@@ -1601,11 +1761,14 @@ Proof.
       (* i0 is Inop *)
       * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
       (* i0 is Isel *)
-      * destruct (select_stmt s s3) eqn: S2; try congruence.
+      * assert (DIS: selector_disjoint s1 s3).
+        { unfold itosels in NOREP. simpl in NOREP. inv NOREP.
+          inv NOREP0. eapply DIS. econstructor. auto. }
+        destruct (select_stmt s s3) eqn: S2; try congruence.
         Errors.monadInv A2.
         exploit set_stmt_disjoint_select_inv; eauto.
         (* prove disjointness of s3 and s1 *)
-        admit.
+        eapply selector_disjoint_sym. auto.
         intros C1.        
         rewrite C1. rewrite EQ1. simpl.
         (* set_stmt to body *)
@@ -1617,15 +1780,13 @@ Proof.
         (* select disjoint statement in body' *)
         exploit set_stmt_disjoint_select. eapply S1. eapply C2.
         (* prove disjointness between s1 and s3 *)
-        admit.
+        auto.
         intros C3. rewrite C3.
         rewrite EQ. simpl.
         erewrite set_stmt_disjoint_reorder; eauto.
-        (* prove disjointness between s1 and s3 *)
-        admit.
       (* i0 is Icond *)
       * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
-      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.              
+      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
     (* Icond *)
     + inv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Icond e n n0) = OK s0).
@@ -1643,10 +1804,12 @@ Proof.
   - eapply IHPERM2. eapply IHPERM1. auto.
     auto.
     (* sel_norepet under permutation *)
-    admit.
-Admitted.
+    eapply Permutation_itosels in PERM1.
+    eapply list_sel_norepet_permutation; eauto.
+Qed.
 
-
+(* If the translation on the graph succeeds in a larger graph (i.e.,
+g2) then the translation also succeed in a smaller graph (i.e., g1) *)
 Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
     transl_on_cfg body1 (st_code g2) = OK body2 ->
     state_incr g1 g2 ->
@@ -1654,9 +1817,22 @@ Lemma transl_on_cfg_state_incr: forall body1 body2 g1 g2,
     instructions does not matter *)
     list_sel_norepet (itosels (PTree.elements (st_code g2))) ->
     exists body3, transl_on_cfg body1 (st_code g1) = OK body3.
-Admitted.
-
-
+Proof.
+  intros until g2. intros TRANSL INCR NOREP.
+  unfold transl_on_cfg in *.
+  rewrite PTree.fold_spec in *.
+  inv INCR.
+  destruct PERMU as (l & PERM).
+  exploit transl_on_instrs_permutation_same; eauto.
+  intros TRANSL1.
+  rewrite fold_left_app in TRANSL1.
+  destruct (fold_left transl (PTree.elements (st_code g1))
+              (OK body1)) eqn: A.
+  2: { rewrite transl_on_instrs_error in TRANSL1. inv TRANSL1. }
+  fold transl.
+  erewrite A. eauto.
+Qed.
+  
 (* Two statements are equal except for their children statements. This
 predicate is designed only for relating the condition expressions in
 Sifthenelse *)
@@ -1746,12 +1922,22 @@ Proof.
     erewrite H1; auto.
 Qed.
 
+
+(* If the graph with more nodes does not contain repeated selectors,
+so do its subset *)
 Lemma state_incr_norepet: forall g1 g2,
     list_sel_norepet (itosels (PTree.elements (st_code g2))) ->
     state_incr g1 g2 ->
     list_sel_norepet (itosels (PTree.elements (st_code g1))).
-Admitted.
-
+Proof.
+  intros. inv H0. destruct PERMU as (l & PERM).
+  exploit Permutation_itosels. eauto. intros PERM1.
+  generalize (list_sel_norepet_permutation _ _ PERM1 H).
+  intros NOREP.
+  erewrite itosels_app in NOREP.    
+  eapply list_sel_norepet_app in NOREP. intuition.
+Qed. 
+ 
 (* add an instruction witch is not a selctor does not change the
 result of transl_on_cfg *)
 Lemma transl_on_cfg_add_non_sel_instr_unchanged_inv: forall instr g1 g2 body1 body2 n R,
@@ -1759,8 +1945,32 @@ Lemma transl_on_cfg_add_non_sel_instr_unchanged_inv: forall instr g1 g2 body1 bo
     add_instr instr g1 = Res n g2 R ->
     (forall sel n2, instr <> Isel sel n2) ->
     transl_on_cfg body1 (st_code g1) = OK body2.
-Admitted.
-
+Proof.
+  intros until R; intros TRANSL ADD NSEL.
+  unfold transl_on_cfg in *.
+  rewrite PTree.fold_spec in *.
+  unfold add_instr in ADD. inv ADD. simpl in *.  
+  exploit PTree.elements_remove.
+  instantiate (3 := (PTree.set (st_nextnode g1) instr (st_code g1))).
+  eapply PTree.gss. intros (l1 & l2 & A1 & A2).
+  erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
+  2: { intros. rewrite PTree.grspec.
+       destruct PTree.elt_eq. subst.
+       destruct (st_wf g1 (st_nextnode g1)). extlia. rewrite H. auto.
+       rewrite PTree.gso; eauto. }
+  rewrite A2.
+  rewrite A1 in TRANSL.
+  fold transl. fold transl in TRANSL.
+  rewrite fold_left_app in *.
+  destruct (fold_left transl l1 (OK body1)) eqn: A3.
+  2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+  simpl in TRANSL.
+  destruct (transl_on_instr s (st_nextnode g1) instr) eqn: B.
+  2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+  destruct instr; simpl in *; inv B; auto.
+  generalize (NSEL s1 n). congruence.
+Qed.     
+  
 (* update an instruction witch is not a selctor does not change the
 result of transl_on_cfg *)
 Lemma transl_on_cfg_update_non_sel_instr_unchanged_inv: forall instr g1 g2 body1 body2 n R pc,
@@ -1768,8 +1978,33 @@ Lemma transl_on_cfg_update_non_sel_instr_unchanged_inv: forall instr g1 g2 body1
     update_instr pc instr g1 = Res n g2 R ->
     (forall sel n2, instr <> Isel sel n2) ->
     transl_on_cfg body1 (st_code g1) = OK body2.
-Admitted.
-
+Proof.
+  intros until pc; intros TRANSL ADD NSEL.
+  unfold transl_on_cfg in *.
+  rewrite PTree.fold_spec in *.
+  unfold update_instr in ADD. destruct plt in ADD; try congruence.
+  destruct (check_empty_node g1 pc) eqn: C in ADD; try congruence.
+  inv ADD. simpl in *.
+  exploit PTree.elements_remove.
+  instantiate (3 := (PTree.set pc instr (st_code g1))).
+  eapply PTree.gss. intros (l1 & l2 & A1 & A2).
+  erewrite PTree.elements_extensional with (n:= (st_code g1))in A2.
+  2: { intros. rewrite PTree.grspec.
+       destruct PTree.elt_eq. subst. auto.
+       rewrite PTree.gso; eauto. }
+  rewrite A2.
+  rewrite A1 in TRANSL.
+  fold transl. fold transl in TRANSL.
+  rewrite fold_left_app in *.
+  destruct (fold_left transl l1 (OK body1)) eqn: A3.
+  2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+  simpl in TRANSL.
+  destruct (transl_on_instr s pc instr) eqn: B.
+  2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
+  destruct instr; simpl in *; inv B; auto.
+  generalize (NSEL s1 n). congruence.
+Qed.     
+  
 
 (* For a selector sel1, set a selector sel2 witch is not the
    prefix of sel1, then the selection of sel1 is stmt_memb_eq to
