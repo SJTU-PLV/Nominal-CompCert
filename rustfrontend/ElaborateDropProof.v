@@ -232,6 +232,13 @@ Definition sound_flagm ce (body: statement) (cfg: rustcfg) (flagm: FM) (init uni
        (* or must unowned *)
        may_init mayinit mayuninit universe p1 = false).
 
+
+Lemma get_dropflag_temp_in_list: forall l p id,
+    get_dropflag_temp (generate_place_map l) p = Some id ->
+    In (p, id) l.
+Admitted.
+
+
 (** Key lemma used in generate_flag_map_sound  *)
 Lemma in_drop_flags_for_splits: forall p init uninit universe drops,
     In p drops ->
@@ -324,7 +331,31 @@ Proof.
   unfold generate_drop_flags_for. rewrite SPLIT.
   auto.
 Admitted.
-  
+
+Lemma get_place_map_injective: forall (p1 p2 : place) (id1 id2 : ident) l,
+    list_norepet (map snd l) ->
+    get_dropflag_temp (generate_place_map l) p1 = Some id1 ->
+    get_dropflag_temp (generate_place_map l) p2 = Some id2 ->
+    p1 <> p2 ->
+    id1 <> id2.
+Proof.        
+  intros p1 p2 id1 id2 l NOREP G1 G2 NEQ.
+  exploit get_dropflag_temp_in_list. eapply G1. intros IN1.
+  exploit get_dropflag_temp_in_list. eapply G2. intros IN2.
+  intro. subst. 
+  exploit in_split. eapply IN1.
+  intros (l1 & l2 & A). subst.
+  exploit in_elt_inv. eapply IN2. intros [A|B]. inv A. auto.
+  rewrite map_app in NOREP. simpl in NOREP.
+  replace (id2 :: map snd l2) with ((id2::nil) ++ (map snd l2)) in NOREP by auto.
+  eapply list_norepet_append_commut2 in NOREP. rewrite app_assoc in NOREP.
+  eapply list_norepet_app in NOREP.
+  destruct NOREP as (A1 & A2 & A3).
+  rewrite <- map_app in A3.
+  eapply A3. eapply in_map. eauto. econstructor. eauto.
+  auto.
+Qed.
+
 Section PRESERVATION.
 
 Variable prog: program.
@@ -375,9 +406,22 @@ Lemma type_of_fundef_preserved:
   transf_fundef ce fd = OK tfd -> type_of_fundef tfd = type_of_fundef fd.
 Proof.
   intros. destruct fd; monadInv H; auto.
-  monadInv EQ. destruct x2. destruct p.
-  monadInv EQ2.
+  monadInv EQ. destruct x2. destruct p.  
+  monadInv EQ2. destruct list_disjoint_dec in EQ3; try congruence.
+  monadInv EQ3.
   simpl; unfold type_of_function; simpl. auto.
+Qed.
+
+Lemma good_fundef_preserved: forall fd tfd,
+    transf_fundef ce fd = OK tfd ->
+    good_function fd ->
+    good_function tfd.
+Proof.
+  intros. destruct fd; monadInv H; auto.
+  monadInv EQ. destruct x2. destruct p.
+  monadInv EQ2. destruct list_disjoint_dec in EQ3; try congruence.
+  monadInv EQ3.
+  simpl in *. destruct (fn_drop_glue f); auto.
 Qed.
 
 
@@ -834,6 +878,20 @@ Proof.
     eauto.  
 Qed. 
 
+Lemma alloc_variables_in: forall l ge e1 m1 e2 m2 id b ty,
+    alloc_variables ge e1 m1 l e2 m2 ->
+    e2 ! id = Some (b,ty) ->
+    e1 ! id = Some (b,ty) \/ In (id, ty) l.
+Proof.
+  induction l; intros.
+  - inv H. auto.
+  - inv H. exploit IHl; eauto. intros [A|B]; auto.
+    rewrite PTree.gsspec in A. destruct peq in A. inv A.
+    right. econstructor. auto.
+    auto.
+    right. eapply in_cons. auto.
+Qed.    
+    
 Lemma alloc_variables_match: forall vars m1 tm1  e2 m2  hi  thi j1 
     (ALLOC: alloc_variables ge empty_env m1 vars e2 m2)
     (INCL: Mem.sup_include hi (Mem.support m1))
@@ -1671,8 +1729,8 @@ Lemma eval_init_drop_flag_wf: forall te id tb tm1 m1 j1 init uninit universe p s
    (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable)
    (REACH: forall ofs : Z, loc_out_of_reach j1 m1 tb ofs)
    (STMT: init_drop_flag init uninit universe p id = OK stmt)
-   (OWN: sound_own own init uninit universe)
-   (IN: Paths.In p (PathsMap.get (local_of_place p) universe)),
+   (OWN: sound_own own init uninit universe),
+   (* (IN: Paths.In p (PathsMap.get (local_of_place p) universe)), *)
   exists tm2 v,
     star RustIRsem.step tge (RustIRsem.State tf stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
     /\ Mem.inject j1 m1 tm2 
@@ -1721,8 +1779,8 @@ Lemma eval_init_drop_flags_wf: forall flags init uninit universe init_stmt j1 e 
   (* we require that te is injective *)
   (INJ: forall id1 b1 ty1 id2 b2 ty2, te!id1 = Some(b1, ty1) -> te!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2)
   (* idents in flags are norepet *)
-  (NOREPET: list_norepet (map snd flags))
-  (INUNI: forall p, In p (map fst flags) -> Paths.In p (PathsMap.get (local_of_place p) universe)),
+  (NOREPET: list_norepet (map snd flags)),
+  (* (INUNI: forall p, In p (map fst flags) -> Paths.In p (PathsMap.get (local_of_place p) universe)), *)
   exists tm2,
     star RustIRsem.step tge (RustIRsem.State tf init_stmt k te tm1) E0 (RustIRsem.State tf Sskip k te tm2)
     /\ Mem.inject j1 m1 tm2
@@ -2523,7 +2581,27 @@ Proof.
     econstructor; eauto.
     auto. auto.
   (* step_dropstate_enum *)
-  - admit.
+  - inv VINJ.
+    exploit deref_loc_rec_inject; eauto.
+    intros (tv & DEREF1 & VINJ1). inv VINJ1.
+    exploit Mem.loadv_inject; eauto.
+    intros (v2 & TAG2 & VINJ2). inv VINJ2.
+    erewrite <- comp_env_preserved in *; eauto.
+    eexists. split.
+    econstructor. econstructor. econstructor; eauto.
+    replace (Ptrofs.add (Ptrofs.add ofs1 (Ptrofs.repr delta)) (Ptrofs.repr fofs)) with (Ptrofs.add (Ptrofs.add ofs1 (Ptrofs.repr fofs)) (Ptrofs.repr delta)).
+    eauto.
+    repeat rewrite Ptrofs.add_assoc. f_equal.
+    apply Ptrofs.add_commut.
+    eapply star_refl.
+    auto.
+    (* match_states *)
+    erewrite <- type_to_drop_member_state_eq.
+    econstructor. econstructor.
+    econstructor; eauto.
+    eauto. eauto.
+    econstructor; eauto.
+    auto. auto.    
   (* step_dropstate_box *)
   - inv VINJ.
     exploit (drop_box_rec_injp_acc m m' tm); eauto.
@@ -2570,7 +2648,7 @@ Proof.
     eauto.
     (* match_states *)
     econstructor; eauto.
-Admitted.
+Qed.
 
 (** To move  *)
 Lemma sound_own_after_drop: forall own drops init uninit universe p
@@ -2652,7 +2730,14 @@ Proof.
       + eapply PathsMap.eq_trans; eauto. eapply sound_own_universe; eauto.
 Admitted.
 
-
+Lemma map_split_l {A B: Type} : forall (l: list (A*B)),
+    map fst l = fst (split l).
+Proof.
+  induction l; simpl; intros; auto.
+  destruct a. destruct (split l) eqn: S.
+  simpl in *. f_equal. auto.
+Qed.  
+  
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
     exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
@@ -2774,10 +2859,9 @@ Proof.
     rename H0 into GETINIT. rename H into GETUNINIT.
     unfold elaborate_drop_for in TR.
     (** sound_own property *)
-    assert (UNIEQ: PathsMap.eq (own_universe own) universe0) by admit.
     erewrite split_drop_place_eq_universe in TR.
     unfold ce in TR. erewrite SPLIT in TR.
-    2: { symmetry. eapply UNIEQ. }
+    2: { eapply sound_own_universe. eauto. }
     inv TR.
     (* end of getting ts *)
     (* how to prevent stuttering? *)
@@ -2894,8 +2978,8 @@ Proof.
     (* eval function call *)
     econstructor; eauto.
     erewrite type_of_fundef_preserved; eauto.
-    (** TODO: add good_function in RustIRown *)
-    admit.
+    (** good_function in RustIRown *)
+    eapply good_fundef_preserved; eauto.
     eapply star_refl.
     1-5: eauto.
     (* construct sound_own and get_IM *)
@@ -2934,7 +3018,8 @@ Proof.
     unfold transf_fundef in TRFUN.
     monadInv TRFUN. unfold transf_function in EQ.
     monadInv EQ. destruct x2 as [[mayinitMap mayuninitMap] universe].
-    monadInv EQ2.
+    monadInv EQ2. destruct list_disjoint_dec in EQ3; try congruence.
+    monadInv EQ3.
     (* use transl_on_cfg_meet_spec to get match_stmt in fuction entry *)
     exploit (@transl_on_cfg_meet_spec AN); eauto. 
     intros (nret & MSTMT & RET).
@@ -2955,16 +3040,17 @@ Proof.
     (* alloc drop flag in the target program *)
     rename x2 into drop_flags.
     set (flags := combine (map snd drop_flags) (repeat type_bool (Datatypes.length drop_flags))) in *.
+    (* norepet of drop flags *)
+    assert (NOREP_FLAGS: list_norepet (map snd drop_flags)).
+    { unfold generate_drop_flags in EQ1.
+      destruct list_norepet_dec in EQ1; try congruence.
+      destruct list_norepet_dec in EQ1; try congruence. inv EQ1. auto. }    
     exploit alloc_drop_flags_match; eauto.
-    instantiate (1 := drop_flags).
-    (* easy: added a norepet check in target program to ensure that
-    source env does not contains identities of drop flags *)
-    admit.
-    (* norepet of drop_flags, using the norepet checking in generate_drop_flags *)
-    unfold generate_drop_flags in EQ1.
-    destruct list_norepet_dec in EQ1; try congruence.
-    destruct list_norepet_dec in EQ1; try congruence. inv EQ1. auto.
-    instantiate (1 := Hm1).
+    (* A disjoint check between the drop flags and the local variables *)
+    intros. destruct (e!id) eqn: A; auto. destruct p.
+    exploit alloc_variables_in. eapply H0. eauto.
+    intros [B1|B2]. erewrite PTree.gempty in B1. inv B1.
+    exfalso. eapply l. eauto. eapply in_map_iff. eauto. simpl. auto.
     intros (te2 & tm2 & Hm2 & ALLOC2 & INJP2 & WFFLAG & NOTIN & MENV2 ).
     (* bind_parameters in target program *)
     exploit bind_parameters_injp_acc. eauto. inv MENV2. eauto.  
@@ -2983,10 +3069,6 @@ Proof.
     exploit eval_init_drop_flags_wf; eauto.
     intros. exploit WFFLAG. instantiate (1:= id). eapply pair_snd_in. eauto. eauto.  
     eapply me_tinj; eauto.
-    (* norepet of drop_flags *)
-    admit.
-    (** prove p is in universe: properties of generate_dropflag *)
-    intros p IN. admit.
     instantiate (1 := (RustIRsem.Kseq body tk)).
     intros (tm4 & INITFLAGS & MINJ4 & WFFLAGM & MENV4 & UNC1 & RO1).
     (** establish injp_acc (j,m,tm) ~-> (j2, m', tm4)  *)
@@ -3008,13 +3090,22 @@ Proof.
     (* function entry *)
     econstructor; simpl.
     (* list_norepet *)
-    admit.
+    assert (A: map fst flags = map snd drop_flags).
+    { unfold flags.
+      rewrite map_split_l. 
+      rewrite combine_split. simpl. auto.
+      rewrite repeat_length. rewrite map_length. auto. }      
+    unfold var_names.
+    erewrite map_app. rewrite A. rewrite app_assoc.
+    unfold var_names in H.
+    eapply list_norepet_append; eauto.
+    eapply list_disjoint_sym. rewrite <- map_app. auto.
     (* alloc_variables *)
     simpl. rewrite app_assoc.
     eapply alloc_variables_app; eauto.
     (* bind_parameters *)
     eauto.
-    (** TODO: evaluate init statement *)
+    (** evaluate init statement *)
     simpl. eapply star_step.
     econstructor.
     eapply star_right. 
@@ -3037,8 +3128,9 @@ Proof.
     econstructor. econstructor; eauto.
     eapply match_cont_injp_acc. eauto.
     eauto.
-    (** TODO: match_cont implies sup_include lo (Mem.support m) *)
-    admit. admit.
+    (** sup_include lo (Mem.support m) by match_envs_flagm *)
+    eapply me_incr. eapply me_envs. eauto.
+    eapply me_tincr. eapply me_envs. eauto.
     (* match_envs_flagm in match_cont *)
     eapply match_envs_flagm_injp_acc; eauto.
     auto.
@@ -3049,9 +3141,11 @@ Proof.
     (* prove wf_flagm *)
     intros. eapply WFFLAGM.
     (* property of generate_place_map *)
-    admit.
-    (** injective of get_dropflag_temp of the generated flagm *)
-    admit.
+    eapply get_dropflag_temp_in_list. auto.
+    (** injective of get_dropflag_temp of the generated flagm. Prove
+    by norepet of drop_flags *)
+    intros.
+    eapply get_place_map_injective; eauto.
     (** sound_flagm *)
     eapply generate_flag_map_sound; eauto.
   (* step_external_function *)

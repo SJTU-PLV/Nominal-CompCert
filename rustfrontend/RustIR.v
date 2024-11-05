@@ -86,6 +86,23 @@ Definition type_of_fundef (f: fundef) : type :=
       Tfunction orgs org_rels typs typ cc
   end.
 
+(* A good interal function must be not the drop glue function holder,
+a good external function must not be malloc/free *)
+Definition good_function fd : Prop :=
+  match fd with
+  | Internal f =>
+    match fn_drop_glue f with
+    | None => True
+    | Some _ => False
+    end
+  | External _ _ EF _ _ _ =>
+    match EF with
+    | EF_malloc => False
+    | EF_free => False
+    | _ => True
+    end
+  end.
+
 (* some helper function *)
 
 Fixpoint makeseq (l: list statement) : statement :=
@@ -326,3 +343,16 @@ Proof.
     auto. auto.
     rewrite PTree.gempty in GP. congruence.
 Qed.
+
+Lemma list_norepet_append_commut2 {A: Type} : forall (a b c: list A),
+    list_norepet (a++b++c) ->
+    list_norepet (a++c++b).
+Proof.
+  intros. apply list_norepet_app in H.
+  destruct H as (A1 & A2 & A3).
+  eapply list_norepet_app. split; auto.
+  split. apply list_norepet_append_commut. auto.
+  red. intros. apply A3. auto. 
+  apply in_app in H0. apply in_app. destruct H0; auto.
+Qed.
+    

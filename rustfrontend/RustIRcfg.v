@@ -45,7 +45,7 @@ strength the neq to selector_disjoint *)
 Inductive list_sel_norepet : list selector -> Prop :=
   | list_sel_norepet_nil:
       list_sel_norepet nil
-  | list_norepet_cons: forall hd tl
+  | list_sel_norepet_cons: forall hd tl
       (DIS: forall sel, In sel tl -> selector_disjoint hd sel)
       (NOREP: list_sel_norepet tl),
       list_sel_norepet (hd :: tl).

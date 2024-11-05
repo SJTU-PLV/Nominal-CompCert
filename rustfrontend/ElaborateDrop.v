@@ -296,25 +296,28 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
   (** step 1: generate drop flags *)
   do flags <- generate_drop_flags mayinit mayuninit universe ce f cfg;
-  let flagm := generate_place_map flags in
-  (** step 2: elaborate the statements *)
-  do stmt <- transl_on_cfg get_init_info (mayinit, mayuninit, universe) (elaborate_stmt flagm ce) uncheck_expr f.(fn_body) cfg;
-  (* do stmt <- elaborate_stmt mayinit mayuninit universe flagm ce f cfg; *)
-  (** step 3: initialize drop flags *)
-  let entry_init := mayinit!!entry in
-  let entry_uninit := mayuninit!!entry in
-  (* init drop flags: if no flags, it would be a Sskip *)
-  do init_stmt <- init_drop_flags_bot entry_init entry_uninit universe flags;
-  let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
-  Errors.OK (mkfunction f.(fn_generic_origins)
-                        f.(fn_origins_relation)
-                        f.(fn_drop_glue)
-                        f.(fn_return)
-                        f.(fn_callconv)
-                        (f.(fn_vars) ++ flag_vars)
-                        f.(fn_params)
-                        (Ssequence init_stmt stmt))
-. 
+  (* check the disjointness between the drop flags and the variales *)
+  if list_disjoint_dec ident_eq (map snd flags) (map fst (f.(fn_params) ++ f.(fn_vars))) then
+    let flagm := generate_place_map flags in
+    (** step 2: elaborate the statements *)
+    do stmt <- transl_on_cfg get_init_info (mayinit, mayuninit, universe) (elaborate_stmt flagm ce) uncheck_expr f.(fn_body) cfg;
+    (** step 3: initialize drop flags *)
+    let entry_init := mayinit!!entry in
+    let entry_uninit := mayuninit!!entry in
+    (* init drop flags: if no flags, it would be a Sskip *)
+    do init_stmt <- init_drop_flags_bot entry_init entry_uninit universe flags;
+    let flag_vars := combine (map snd flags) (repeat type_bool (length flags)) in
+    Errors.OK (mkfunction f.(fn_generic_origins)
+                          f.(fn_origins_relation)
+                          f.(fn_drop_glue)
+                          f.(fn_return)
+                          f.(fn_callconv)
+                          (f.(fn_vars) ++ flag_vars)
+                          f.(fn_params)
+                          (Ssequence init_stmt stmt))
+  else
+    Error (msg "The generated drop flags are overlap with the parameters and variables") 
+  . 
 
 
 Definition transf_fundef (ce: composite_env) (fd: fundef) : Errors.res fundef :=

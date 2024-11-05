@@ -199,22 +199,6 @@ Inductive step_drop_mem_error : state -> Prop :=
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m)
 .
 
-Definition good_function fd : Prop :=
-  match fd with
-  | Internal f =>
-    match fn_drop_glue f with
-    | None => True
-    | Some _ => False
-    end
-  | External _ _ EF _ _ _ =>
-    match EF with
-    | EF_malloc => False
-    | EF_free => False
-    | _ => True
-    end
-  end.
-    
-
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m1 m2 b ofs v v1,

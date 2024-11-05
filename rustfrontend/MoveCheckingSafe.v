@@ -3833,11 +3833,6 @@ Lemma valid_owner_same: forall p ty fid,
     valid_owner p = p.
 Admitted.
 
-Lemma list_norepet_append_commut2 {A: Type} : forall (a b c: list A),
-    list_norepet (a++b++c) ->
-    list_norepet (a++c++b).
-Admitted. 
-
 (* norepet (l ++ fpm) where l is a general list which can
     represent other elements in the frame *)
 Lemma set_disjoint_footprint_norepet: forall fpm1 fpm2 vfp id phl,
