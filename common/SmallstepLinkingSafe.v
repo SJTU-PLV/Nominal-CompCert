@@ -620,20 +620,111 @@ Definition lts_safek {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: 
          (* This lts does not get stuck in any k steps *)
          /\ (forall k, safek se L IA IB SI wI k s).
 
+(* This intermediate definition is used to prepare the activation for
+the module in the proof of compositionality *)
 Definition module_safek_se {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI se :=
   forall w,
     symtbl_inv IB w se ->
     lts_safek se (L se) IA IB SI w.
 
+(* SI here takes symtbl as its first argument because in parctice the
+SI may depend on the symtbl (such as memory_error_state) *)
 Definition module_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI :=
   forall se,
     Genv.valid_for (skel L) se ->
-    module_safek_se L IA IB SI se.
+    module_safek_se L IA IB (SI se) se.
 
 (* Module total safety (SI is False) *)
-Definition SIF {liA liB S} : lts liA liB S -> S -> Prop := (fun _ _ => False).
+Definition SIF {liA liB S} : Genv.symtbl -> lts liA liB S -> S -> Prop := (fun _ _ _ => False).
 
 Definition module_total_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) := module_safek L IA IB SIF.
+
+(** Prove Safety by Invariant Preservation and Progress *)
+
+Record lts_preserves_progress {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (IS: inv_world IB -> S -> Prop) (w: inv_world IB) (PS: lts liA liB S -> S -> Prop) :=
+  {
+    internal_step_preserves: forall s t s',
+      IS w s ->
+      Step L s t s' ->
+      IS w s';
+    internal_state_progress: forall s,
+      IS w s ->
+      not_stuck L s \/ PS L s;
+    
+    initial_preserves_progress: forall q,
+      valid_query L q = true ->
+      query_inv IB w q ->
+      exists s, initial_state L q s
+           /\ IS w s;
+
+    external_preserves_progress: forall s q,
+      IS w s ->
+      at_external L s q ->
+      exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\
+              forall r, reply_inv IA wA r ->
+                   (* after external progress, why it is different
+                   from initial state? *)
+                   (exists s', after_external L s r s'
+                          /\ IS w s');
+
+    final_state_preserves: forall s r,
+      IS w s ->
+      final_state L s r ->
+      reply_inv IB w r;
+  }.
+
+
+Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> lts liA liB (state L) -> (state L) -> Prop) :=
+  Module_ksafe_components
+  {
+    msafek_invariant: Genv.symtbl -> inv_world IB -> state L -> Prop;
+
+    msafek_preservation_progress: forall se wB,
+      symtbl_inv IB wB se ->
+      Genv.valid_for (skel L) se ->
+      lts_preserves_progress se (L se) IA IB (msafek_invariant se) wB (PS se);
+  }.
+
+
+(* for any state satisfies the invariant, then it is k-safe *)
+Lemma lts_preserves_progress_safek {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS se w SI: forall k s,
+    lts_preserves_progress se (L se) IA IB (SI se) w (PS se) ->
+    SI se w s ->
+    safek se (L se) IA IB (PS se) w k s.
+Proof.
+  induction k; intros s PRE SINV.
+  - econstructor.
+  - exploit (@internal_state_progress liA); eauto.
+    intros [A|B].
+    + destruct A as [(r & FINAL)|[(q & EXT)|(t1 & s1 & STEP1)]].
+      * eapply safek_final. eauto.
+        eapply final_state_preserves; eauto.
+      * exploit (@external_preserves_progress liA); eauto.
+        intros (wA & SYM & QINV & AFEXT).
+        eapply safek_external; eauto.
+        intros. exploit AFEXT; eauto.
+        intros (s' & AFEXT1 & SIEXT). exists s'. split; auto.
+      * eapply safek_step; eauto.
+        intros. eapply IHk. eauto.
+        eapply internal_step_preserves; eauto.
+    + eapply safek_SI. eauto.
+Qed.
+
+    
+(* soundness of module_safe_components *)
+Lemma module_safek_components_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS:
+  module_safek_components L IA IB PS ->
+  module_safek L IA IB PS.
+Proof.
+  intros SAFE. inv SAFE.
+  red. intros se VSE w WTSE.
+  exploit msafek_preservation_progress0; eauto. intros PRE.
+  red. intros q VQ QINV.
+  exploit (@initial_preserves_progress liA); eauto.
+  intros (inits & INIT & SINV1). exists inits. split; auto.
+  intros. eapply lts_preserves_progress_safek; eauto.
+Qed.    
+
 
 (** Compositionality *)
 
@@ -735,23 +826,23 @@ Inductive wfk_frames w : list (frame L) -> list nat -> inv_world I -> Prop :=
     (PGS: forall r, reply_inv I w2 r ->
                  exists s', after_external (L i se) s r s'
                        (* Is (forall k) too strong? The choice of k depends on w2... *)
-                     /\ safek se (L i se) I I SIF w1 k s'),
+                     /\ safek se (L i se) I I (SIF se) w1 k s'),
     wfk_frames w ((st L i s) :: fms) (k :: kl) w2.
 
 Inductive wfk_state w: list (frame L) -> list nat -> Prop :=
 | wfk_state_cons: forall i s frs w1 k kl
     (WFS: wfk_frames w frs kl w1)
     (VSE: symtbl_inv I w1 se)
-    (SAFEK: safek se (L i se) I I SIF w1 k s),
+    (SAFEK: safek se (L i se) I I (SIF se) w1 k s),
     wfk_state w (st L i s :: frs) (k :: kl).
 
 Hypothesis L_determ: forall i, open_determinate (L i).
-Hypothesis (SAFE: forall i, module_safek_se (L i) I I SIF se).
+Hypothesis (SAFE: forall i, module_safek_se (L i) I I (SIF se) se).
 
 Lemma wf_state_safek: forall k kl s w
     (WF: wfk_state w s kl)
     (GT: forall n, In n kl -> (k <= n)%nat),
-    safek se (SmallstepLinking.semantics L sk se) I I SIF w k s.
+    safek se (SmallstepLinking.semantics L sk se) I I (SIF se) w k s.
 Proof.
   induction k; intros.
   econstructor.
@@ -918,7 +1009,7 @@ Proof.
     eapply (link_linkorder _ _ _ Hsk). eauto.
     eapply Genv.valid_for_linkorder.
     eapply (link_linkorder _ _ _ Hsk). eauto. }
-  assert (SAFE: forall i, module_safek_se (L i) I I SIF se).
+  assert (SAFE: forall i, module_safek_se (L i) I I (SIF se) se).
   { intros i. generalize (VALIDSE i). intros VSE.
     destruct i.
     eapply SAFE1; eauto.
@@ -1607,9 +1698,9 @@ of safek in the source and the simulation? *)
   
 
 Lemma step_safek: forall s1 s2 t
-    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1)
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1)
     (STEP: Step (L1 se1) s1 t s2),
-    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+    forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2.    
 Proof.
   intros.
   generalize (SAFEK (S k)). intros SAFE1.
@@ -1623,8 +1714,8 @@ Qed.
 
 Lemma star_safek: forall s1 s2 t
     (STAR: Star (L1 se1) s1 t s2)
-    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
-    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1),
+    forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2.    
 Proof.
   induction 1; intros; eauto.
   eapply IHSTAR. eapply step_safek; eauto.
@@ -1632,8 +1723,8 @@ Qed.
 
 Lemma plus_safek: forall s1 s2 t
     (PLUS: Plus (L1 se1) s1 t s2)
-    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
-    forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s2.    
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1),
+    forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2.    
 Proof.
   intros. inv PLUS.
   eapply star_safek; eauto. intros.
@@ -1648,7 +1739,7 @@ Qed.
 (* Proof. *)
 
 Lemma safek_internal_safe : forall s1
-    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 SIF wB1 k s1),
+    (SAFEK: forall k, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1),
     safe (L1 se1) s1.
 Proof.
   unfold safe. induction 2.
@@ -1662,9 +1753,9 @@ Qed.
       
 (* Key proof of module_total_safek_preservation *)
 Lemma bsim_safek_preservation: forall k s1 s2 i
-    (SAFEK: forall n, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1)
+    (SAFEK: forall n, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 n s1)
     (MATCH: bsim_match_states se1 se2 ccwB i s1 s2),
-    safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) SIF (wB1, ccwB) k s2.
+    safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) (SIF se1) (wB1, ccwB) k s2.
 Proof.
   induction k; intros.
   econstructor.
@@ -1679,7 +1770,7 @@ Proof.
   - exploit (@bsim_match_final_states liA1); eauto.
     intros (s1' & r1 & STAT1 & FINAL1 & MR).
     (* prove s1' is safek *)
-    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1').
+    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 n s1').
     { eapply star_safek; eauto. }
     generalize (SAFEK1' 1%nat). intros SAFE1.
     (* s1' have three cases, by determinism, it must be in final state *)
@@ -1697,7 +1788,7 @@ Proof.
   - exploit (@bsim_match_external liA1); eauto.
     intros (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MENV1 & AFEXT1).
     (* prove s1' is safek *)
-    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 SIF wB1 n s1').
+    assert (SAFEK1': forall n : nat, safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 n s1').
     { eapply star_safek; eauto. }
     generalize (SAFEK1' (S k)%nat). intros SAFE1.
     inv SAFE1.
@@ -1729,7 +1820,6 @@ Proof.
       exists s2'. split; auto.
       eapply IHk. 2: eapply MATCH'.
       (** Difficult *)
-      starN
       admit.
   - eapply safek_step; eauto.
     intros t' s2'' STEP.
@@ -1775,5 +1865,5 @@ Proof.
   (* use s2 as the initial state of L2 *)
   exists s2. split. auto.
   (** Key part: prove safek by generalization of s2 *)
-  intros. eapply bsim_safek_preservation; eauto.
+  intros. exploit bsim_safek_preservation; eauto.
 Qed.
