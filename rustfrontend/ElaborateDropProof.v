@@ -2937,9 +2937,282 @@ Proof.
     econstructor; eauto. econstructor.
     etransitivity. eauto. eauto.
   (* step_assign_variant *)
-  - admit.
+  - inv MSTMT. simpl in TR. inv IM.
+    rewrite <- H0 in TR. rewrite <- H in TR.
+    rename H0 into GETINIT. rename H into GETUNINIT.
+    monadInv TR.
+    set (own2:=(move_place_option own1 (moved_place e))).
+    set (own3:=(own_transfer_assign own2 p)).
+    (* evaluate x: the statement updating drop flags for the rhs (the expression) *)
+    exploit eval_dropflag_option_match; eauto.
+    eapply PathsMap.eq_sym. eapply sound_own_universe. eauto.
+    instantiate (1 := (RustIRsem.Kseq (Ssequence x0 (Sassign_variant p enum_id fid e)) tk)).
+    instantiate (1 := tf).
+    intros (tm2 & STEP1 & MINJ1 & MENV1 & UNC1 & RO1).
+    (* evaluate x0: the statement upadting drop flags for the lhs (the place) *)    
+    exploit eval_dropflag_match; eauto.
+    eapply PathsMap.eq_sym. eapply PathsMap.eq_trans.
+    eapply sound_own_universe. eauto.
+    eapply move_place_option_eq_universe.
+    instantiate (1 := (RustIRsem.Kseq (Sassign_variant p enum_id fid e) tk)).
+    instantiate (1 := tf).
+    intros (tm3 & STEP2 & MINJ2 & MENV2 & UNC2 & RO2).
+    (* evaluate assign_variant *)
+    exploit eval_expr_inject; eauto.
+    intros (tv & TEXPR & VINJ).
+    exploit eval_place_inject. eapply PADDR1. eauto. eauto.
+    intros (tb & tofs & EVALP & VINJ1).
+    exploit sem_cast_inject; eauto.
+    intros (tv1 & CAST1 & VINJ2).
+    inv VINJ1.
+    exploit assign_loc_injp_acc; eauto.
+    instantiate (1 := MINJ2).
+    intros (tm4 & MINJ3 & ASSIGN & INJP2).
+    assert (OFSEQ: (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr fofs)) (Ptrofs.repr delta)) =
+                     (Ptrofs.add (Ptrofs.add ofs (Ptrofs.repr delta)) (Ptrofs.repr fofs))).
+    { rewrite !Ptrofs.add_assoc. f_equal. apply Ptrofs.add_commut. }
+    rewrite OFSEQ in ASSIGN.
+    (* match_envs_flagm *)
+    assert (SUP1: Mem.sup_include thi (Mem.support tm3)).
+    { eapply Mem.sup_include_trans. eauto.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support. eauto.
+      eapply Mem.unchanged_on_support. eauto. }    
+    exploit match_envs_flagm_injp_acc. eapply MENV2. eauto.
+    auto. auto.    
+    intros MENV3.
+    (* evaluate the address of the place again and then set the tag *)
+    exploit eval_place_inject. eapply PADDR2. eauto. eauto.
+    intros (tb1 & tofs1 & EVALP1 & VINJ4).
+    exploit Mem.storev_mapped_inject. eapply MINJ3. eauto. eauto. econstructor.
+    intros (tm5 & STORETAG & MINJ4).
+    exploit injp_acc_storev. eapply STAG. eauto. eauto. econstructor.
+    instantiate (1 := MINJ4). instantiate (1 := MINJ3).
+    intros INJP3.
+    assert (SUPm2: Mem.sup_include hi (Mem.support m2)).
+    { erewrite assign_loc_support. eauto. eauto. }
+    assert (SUPtm4: Mem.sup_include thi (Mem.support tm4)).
+    { erewrite assign_loc_support. eauto. eauto. }    
+    exploit match_envs_flagm_injp_acc. eapply MENV3. eauto.
+    auto. auto.
+    intros MENV4.
+    (* match_cont *)
+    assert (UNC13: Mem.unchanged_on (fun b _ => sup_In b tlo) tm tm3).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto. }
+    exploit match_cont_bound_unchanged;eauto.
+    intros MCONT1.
+    exploit match_cont_injp_acc. eauto.
+    etransitivity. eauto. eauto.
+    eapply Mem.sup_include_trans.
+    eapply me_incr. eapply me_envs. eauto. auto.
+    eapply Mem.sup_include_trans.
+    eapply me_tincr. eapply me_envs. eauto. auto.
+    intros MCONT2.        
+    (* injp_acc *)
+    assert (RO3: ValueAnalysis.ro_acc tm tm3).
+    { eapply ValueAnalysis.ro_acc_trans. eauto.
+      auto. }
+    assert (INJP1: injp_acc w (injpw j m1 tm3 MINJ2)).
+    { generalize me_tinitial. intros TINIT.
+      unfold wm2 in TINIT.
+      destruct w. inv RO3.
+      eapply injp_acc_local_simple. eauto.
+      auto. auto.
+      eapply Mem.unchanged_on_implies. eauto.
+      intros. simpl. destruct H3.
+      eapply TINIT. eapply me_envs; eauto. auto. }
+    (* step *)
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor; eauto.
+    1-2: rewrite comp_env_preserved; eauto.    
+    eapply star_refl. 1-8: eauto.
+    (* match_states *)
+    assert (SUP2: Mem.sup_include hi (Mem.support m3)).
+    { eapply Mem.sup_include_trans. eauto. 
+      erewrite Mem.support_storev; eauto. }
+    assert (SUP3: Mem.sup_include thi (Mem.support tm5)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite Mem.support_storev; eauto. }
+    (* construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
+    exploit move_option_place_sound; eauto.
+    instantiate (1 := (moved_place e)). intros SOUND1.
+    exploit init_place_sound; eauto.
+    intros (mayinit3 & mayuninit3 & A & B).
+    (* end of construct *)    
+    econstructor; eauto. econstructor.
+    etransitivity. eauto.
+    etransitivity. eauto. eauto.
   (* step_box *)
-  - admit.
+  - inv MSTMT. simpl in TR. inv IM.
+    rewrite <- H8 in TR. rewrite <- H9 in TR.
+    rename H8 into GETINIT. rename H9 into GETUNINIT.
+    monadInv TR.
+    set (own2:=(move_place_option own1 (moved_place e))).
+    set (own3:=(own_transfer_assign own2 p)).
+    (* evaluate x: the statement updating drop flags for the rhs (the expression) *)
+    exploit eval_dropflag_option_match; eauto.
+    eapply PathsMap.eq_sym. eapply sound_own_universe. eauto.
+    instantiate (1 := (RustIRsem.Kseq (Ssequence x0 (Sbox p e)) tk)).
+    instantiate (1 := tf).
+    intros (tm2 & STEP1 & MINJ1 & MENV1 & UNC1 & RO1).
+    (* evaluate x0: the statement upadting drop flags for the lhs (the place) *)    
+    exploit eval_dropflag_match; eauto.
+    eapply PathsMap.eq_sym. eapply PathsMap.eq_trans.
+    eapply sound_own_universe. eauto.
+    eapply move_place_option_eq_universe.
+    instantiate (1 := (RustIRsem.Kseq (Sbox p e) tk)).
+    instantiate (1 := tf).
+    intros (tm3 & STEP2 & MINJ2 & MENV2 & UNC2 & RO2).
+    (* evaluate Sbox *)
+    exploit Mem.alloc_parallel_inject. eauto. eauto.
+    eapply Z.le_refl. rewrite <- comp_env_preserved.
+    eapply Z.le_refl.
+    intros (j1 & tm4 & tb & TALLOC & MINJ3 & INCR1 & A1 & A2).
+    exploit injp_acc_alloc. eapply H0. rewrite <- comp_env_preserved. eauto.
+    eauto. auto. auto.
+    instantiate (1 := MINJ3). instantiate (1 := MINJ2).
+    intros INJP1.
+    (* store size to the allocated block *)
+    exploit Mem.store_mapped_inject. eapply MINJ3. eauto. eauto.
+    eapply Vptrofs_inject. rewrite <- comp_env_preserved.
+    intros (tm5 & STORE1 & MINJ4).
+    exploit injp_acc_store. eapply H1. eauto. rewrite comp_env_preserved.
+    eapply Vptrofs_inject. eauto.
+    instantiate (1 := MINJ4). instantiate (1 := MINJ3).
+    intros INJP2.
+    assert (SUPtm3: Mem.sup_include thi (Mem.support tm3)).
+    { eapply Mem.sup_include_trans. eauto.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support. eauto.
+      eapply Mem.unchanged_on_support. eauto. }    
+    (* prove match_env in (m3, tm5) *)
+    exploit match_envs_flagm_injp_acc. eauto.
+    etransitivity. eauto. eauto. auto. auto.
+    intros MENV3.
+    exploit eval_expr_inject; eauto.
+    intros (tv & TEXPR & VINJ).
+    exploit sem_cast_inject; eauto. intros (tv1 & TCAST & VINJ1).
+    (* assign the value to the allocated block *)
+    exploit assign_loc_injp_acc. eapply H4. econstructor. eauto.
+    rewrite Ptrofs.add_zero_l. eauto. eauto.
+    instantiate (1 := MINJ4).
+    intros (tm6 & MINJ5 & TAS1 & INJP3).
+    assert (SUPm3: Mem.sup_include hi (Mem.support m3)).
+    { eapply Mem.sup_include_trans. eauto.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support. inv INJP1. eauto.
+      eapply Mem.unchanged_on_support. inv INJP2. eauto. }
+    assert (SUPtm5: Mem.sup_include thi (Mem.support tm5)).
+    { eapply Mem.sup_include_trans. eauto.
+      eapply Mem.sup_include_trans.
+      eapply Mem.unchanged_on_support. inv INJP1. eauto.
+      eapply Mem.unchanged_on_support. inv INJP2. eauto. }    
+    exploit match_envs_flagm_injp_acc. eauto.
+    eauto. auto. auto.
+    intros MENV4.    
+    exploit eval_place_inject; eauto. 
+    intros (tb1 & tofs1 & EVALP & VINJ2).
+    exploit assign_loc_injp_acc. eapply H6. eauto. eauto.
+    instantiate (1 := MINJ5).
+    intros (tm7 & MINJ6 & ASSIGN & INJP4).
+    (* match_envs_flagm *)
+    assert (SUPm4: Mem.sup_include hi (Mem.support m4)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eauto. eauto. }
+    assert (SUPtm6: Mem.sup_include thi (Mem.support tm6)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eauto. eauto. }    
+    exploit match_envs_flagm_injp_acc. eapply MENV4. eauto.
+    auto. auto.
+    intros MENV5.
+    (* match_cont *)
+    assert (UNC13: Mem.unchanged_on (fun b _ => sup_In b tlo) tm tm3).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto. }
+    assert (INJP15: injp_acc (injpw j m1 tm3 MINJ2) (injpw j1 m5 tm7 MINJ6)).
+    { etransitivity. eauto.
+      etransitivity. eauto.
+      etransitivity. eauto. eauto. }
+    exploit match_cont_bound_unchanged;eauto.
+    intros MCONT1.
+    exploit match_cont_injp_acc. eauto. eauto.
+    eapply Mem.sup_include_trans.
+    eapply me_incr. eapply me_envs. eauto. auto.
+    eapply Mem.sup_include_trans.
+    eapply me_tincr. eapply me_envs. eauto. auto.
+    intros MCONT2.        
+    (* injp_acc *)
+    assert (RO3: ValueAnalysis.ro_acc tm tm3).
+    { eapply ValueAnalysis.ro_acc_trans. eauto.
+      auto. }
+    assert (INJP0: injp_acc w (injpw j m1 tm3 MINJ2)).
+    { generalize me_tinitial. intros TINIT.
+      unfold wm2 in TINIT.
+      destruct w. inv RO3.
+      eapply injp_acc_local_simple. eauto.
+      auto. auto.
+      eapply Mem.unchanged_on_implies. eauto.
+      intros. simpl. destruct H10.
+      eapply TINIT. eapply me_envs; eauto. auto. }
+    assert (INJP05: injp_acc w (injpw j1 m5 tm7 MINJ6)).
+    { etransitivity; eauto. }
+    (* step *)
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor.
+    eapply star_trans. eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eapply star_step. econstructor; eauto.
+    eapply star_refl. 1-7: eauto.
+    (* match_states *)
+    assert (SUPm5: Mem.sup_include hi (Mem.support m5)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eauto. eauto. }
+    assert (SUPtm7: Mem.sup_include thi (Mem.support tm7)).
+    { eapply Mem.sup_include_trans. eauto.
+      erewrite <- assign_loc_support. eauto. eauto. }    
+    (** *** How to make it a lemma? construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
+    exploit move_option_place_sound; eauto.
+    instantiate (1 := (moved_place e)). intros SOUND1.
+    exploit init_place_sound; eauto.
+    intros (mayinit3 & mayuninit3 & A & B).
+    (** *** end of construct *)
+    econstructor; eauto. econstructor.
   (* step_to_dropplace *)
   - inv MSTMT. simpl in TR.
     generalize IM as IM1. intros. inv IM.
