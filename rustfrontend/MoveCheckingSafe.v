@@ -1161,7 +1161,7 @@ Record wf_own_env (own: own_env) : Prop := {
       ~ In (ph_downcast ty fid) (snd (path_of_place p));
 
     (* all place in the universe is not scalar type and if it is not
-    full, it must be box type *)
+    full, it must be box type. Remember that if a struct is in the universe, it must be full. *)
     wf_own_type: forall p,
       in_universe own p = true ->
       scalar_type (typeof_place p) = false

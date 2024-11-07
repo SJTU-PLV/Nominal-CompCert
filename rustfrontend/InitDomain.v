@@ -416,18 +416,6 @@ End SPLIT.
 
 Require Import Wfsimpl.
 
-(* To ensure the soundness of init analysis which uses big step
-analysis in Sdrop *)
-Definition check_drops_complete (universe: Paths.t) (p: place) (drops: list place) : bool :=
-  (* all places in the universe which are children of p must in drops *)
-  Paths.for_all (fun p1 => in_dec place_eq p drops) (Paths.filter (fun p1 => is_prefix p p1) universe).
-
-Definition split_drop_place (ce: composite_env) (universe: Paths.t) (p: place) (ty: type) : res (list (place * bool)) :=
-  do drops <- Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce p ty;
-  if check_drops_complete universe p (fst (split drops)) then
-    OK drops
-  else Error (msg "there is some place in universe but not in the split places (split_drop_place) ").
-
 (** Specification of split_drop_place  *)
 
 (* similar to sound_split_drop_place in BorrowCheckSafe.v *)
@@ -440,6 +428,24 @@ Inductive split_places_ordered : list place -> Prop :=
     split_places_ordered (p :: l)
 .
 
+Lemma split_places_ordered_dec: forall l, {split_places_ordered l} + {~ split_places_ordered l}.
+Proof.
+  induction l.
+  - left. constructor.
+  - destruct IHl.
+    + destruct (forallb (fun p1 => negb (is_prefix a p1)) l) eqn: A.
+      * left. constructor. eapply Forall_forall.
+        intros. 
+        eapply forallb_forall in A. eapply negb_true_iff. eauto.
+        auto. auto.
+      * right. intro.
+        eapply not_false_iff_true.  2: eauto.
+        inv H. eapply forallb_forall. intros.
+        eapply Forall_forall in H2.
+        eapply negb_true_iff. eauto. auto.
+    + right. intro. eapply n. inv H. auto.
+Qed.
+      
 Definition is_full_internal (universe: Paths.t) (p: place) : bool :=
   Paths.for_all (fun p1 => negb (is_prefix_strict p p1)) universe.
   
@@ -447,33 +453,292 @@ Definition is_full (universe: PathsMap.t) (p: place) : bool :=
     let w := PathsMap.get (local_of_place p) universe in
     is_full_internal w p.
 
+
+Lemma is_full_internal_eq_universe: forall u1 u2 p,
+    Paths.Equal u1 u2 ->
+    is_full_internal u1 p = is_full_internal u2 p.
+Proof.
+  intros. unfold is_full_internal.
+  eapply eq_bool_prop_intro. split.
+  - intros. apply Is_true_eq_left.
+    apply Paths.for_all_1.
+    red. solve_proper.
+    red. intros.
+    apply Is_true_eq_true in H0.
+    apply Paths.for_all_2 in H0.
+    red in H0. apply H0. apply H. auto.
+    red. solve_proper.
+  - intros. apply Is_true_eq_left.
+    apply Paths.for_all_1.
+    red. solve_proper.
+    red. intros.
+    apply Is_true_eq_true in H0.
+    apply Paths.for_all_2 in H0.
+    red in H0. apply H0. apply H. auto.
+    red. solve_proper.
+Qed.
+
+
 Lemma is_full_same: forall w1 w2 p,
     PathsMap.eq w1 w2 ->
     is_full w1 p = is_full w2 p.
-Admitted.
-
+Proof.
+  intros. unfold is_full.
+  erewrite is_full_internal_eq_universe.
+  eauto. red. intros. split; intros.
+  eapply H. auto.
+  eapply H. auto.
+Qed.
 
 Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : Prop :=
   { split_sound: forall p, In p (map fst drops) -> Paths.In p universe /\ is_prefix r p = true;
     split_complete: forall p, Paths.In p universe -> is_prefix r p = true -> In p (map fst drops);
     split_norepet: list_norepet (map fst drops);
-    split_ordered: split_places_ordered  (map fst drops);
-    (** TODO: current implementation does not guarantee this property.*)
+    split_ordered: split_places_ordered (map fst drops);
+    (** TODO: current implementation does not guarantee this
+    property. This property is an invariant of the universe *)
     split_correct_full: forall p full,
       In (p,full) drops ->
       (* no p's children in universe if p is full *)
       is_full_internal universe p = full
   }.
 
+
+(** Prove split_drop_place satisfies the specification by translation
+validation, because it is too compilcated and techenical to fully
+verify it. We leave it as future work. *)
+
+Definition check_split_drops_sound (universe: Paths.t) (r: place) (drops: list place) : bool :=
+  (* all places in the drops are children of p and are in the universe *)
+  forallb (fun p1 => Paths.mem p1 universe && is_prefix r p1) drops.
+
+Definition check_split_drops_complete (universe: Paths.t) (r: place) (drops: list place) : bool :=
+  (* all places in the universe which are children of p must in drops *)
+  Paths.for_all (fun p1 => in_dec place_eq p1 drops) (Paths.filter (fun p1 => is_prefix r p1) universe).
+
+Definition check_split_correct_full (universe: Paths.t) (drops: list (place * bool)) : bool :=
+  (* check that full flag is correct w.r.t is_full_internal *)
+  forallb (fun '(p, full) => eqb (is_full_internal universe p) full) drops.
+
+Definition check_split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : bool :=
+  check_split_drops_sound universe r (map fst drops)
+  && check_split_drops_complete universe r (map fst drops)
+  && list_norepet_dec place_eq (map fst drops)
+  && split_places_ordered_dec (map fst drops)
+  && check_split_correct_full universe drops.
+                                      
+
+Definition split_drop_place (ce: composite_env) (universe: Paths.t) (p: place) (ty: type) : res (list (place * bool)) :=
+  do drops <- Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce p ty;
+  (* It checks split_complete property, because the iteration cannot
+  ensure that all the childre of p in the universe would be
+  collected. *)
+  if check_split_drop_place_spec universe p drops then
+    OK drops
+  else Error (msg "The generated split drop places do not satisfy the specification (split_drop_place) ").
+
 Lemma split_drop_place_meet_spec: forall ce universe p drops,
     split_drop_place ce universe p (typeof_place p) = OK drops ->
     split_drop_place_spec universe p drops.
-Admitted.
+Proof.
+  intros. unfold split_drop_place in H.
+  monadInv H.
+  destruct (check_split_drop_place_spec universe p x) eqn: A; try congruence.
+  inv EQ0.
+  unfold check_split_drop_place_spec in A.
+  rewrite !andb_true_iff in A.
+  rewrite !and_assoc in A.
+  destruct A as (C1 & C2 & C3 & C4 & C5).
+  constructor.
+  (* sound *)
+  - intros. unfold check_split_drops_sound in C1.
+    eapply forallb_forall in C1; eauto.
+    eapply andb_true_iff in C1. destruct C1.
+    split.
+    apply Paths.mem_2; eauto. auto.
+  (* complete *)
+  - unfold check_split_drops_complete in C2.
+    eapply Paths.for_all_2 in C2.
+    intros. red in C2.
+    exploit C2. eapply Paths.filter_3; eauto.
+    red. solve_proper.
+    intros. eapply proj_sumbool_true in H1. auto.
+    red. solve_proper.
+  - eapply proj_sumbool_true. eauto.
+  - eapply proj_sumbool_true. eauto.
+  - unfold check_split_correct_full in C5.
+    intros.
+    eapply forallb_forall in C5. 2: eauto.
+    simpl in C5. eapply eqb_true_iff. auto.
+Qed.
 
 (** Properties of split_drop_place *)
 
+Lemma check_split_drops_sound_eq_universe: forall u1 u2 p l,
+    Paths.Equal u1 u2 ->
+    check_split_drops_sound u1 p l = check_split_drops_sound u2 p l.
+Proof.
+  intros. unfold check_split_drops_sound.
+  eapply eq_bool_prop_intro. split.
+  - intros. apply Is_true_eq_left.    
+    apply forallb_forall.
+    intros.
+    apply Is_true_eq_true in H0.
+    eapply forallb_forall in H0. 2: eauto.
+    eapply andb_true_iff in H0. destruct H0.
+    eapply andb_true_iff. split.
+    setoid_rewrite H in H0. auto.
+    auto.    
+  - intros. apply Is_true_eq_left.    
+    apply forallb_forall.
+    intros.
+    apply Is_true_eq_true in H0.
+    eapply forallb_forall in H0. 2: eauto.
+    eapply andb_true_iff in H0. destruct H0.
+    eapply andb_true_iff. split.
+    setoid_rewrite H. auto.
+    auto.
+Qed.    
+
+Lemma check_split_drops_complete_eq_universe: forall u1 u2 p l,
+    Paths.Equal u1 u2 ->
+    check_split_drops_complete u1 p l = check_split_drops_complete u2 p l.
+Proof.
+  intros. unfold check_split_drops_complete.
+  eapply eq_bool_prop_intro. split.
+  - intros. apply Is_true_eq_left.    
+    apply Paths.for_all_1.
+    red. solve_proper.
+    red. intros.
+    apply Is_true_eq_true in H0.
+    eapply Paths.for_all_2 in H0.
+    red in H0. eapply H0.
+    setoid_rewrite H. auto.
+    red. solve_proper.
+  - intros. apply Is_true_eq_left.    
+    apply Paths.for_all_1.
+    red. solve_proper.
+    red. intros.
+    apply Is_true_eq_true in H0.
+    eapply Paths.for_all_2 in H0.
+    red in H0. eapply H0.
+    setoid_rewrite H in H1. auto.
+    red. solve_proper.
+Qed.
+
+  
+Lemma check_split_correct_full_eq_universe: forall u1 u2 l,
+    Paths.Equal u1 u2 ->
+    check_split_correct_full u1 l = check_split_correct_full u2 l.
+Proof.
+  intros. unfold check_split_correct_full.
+  eapply eq_bool_prop_intro. split.
+  - intros. apply Is_true_eq_left.    
+    apply forallb_forall.
+    intros. destruct x.
+    apply Is_true_eq_true in H0.
+    eapply forallb_forall in H0. 2: eauto.
+    simpl in H0.
+    erewrite <- is_full_internal_eq_universe; eauto.
+  - intros. apply Is_true_eq_left.    
+    apply forallb_forall.
+    intros. destruct x.
+    apply Is_true_eq_true in H0.
+    eapply forallb_forall in H0. 2: eauto.
+    simpl in H0.
+    erewrite is_full_internal_eq_universe; eauto.
+Qed.
+
+Lemma check_split_drop_place_spec_eq_universe: forall u1 u2 p drops,
+    Paths.Equal u1 u2 ->
+    check_split_drop_place_spec u1 p drops = check_split_drop_place_spec u2 p drops.
+Proof.
+  intros.
+  unfold check_split_drop_place_spec.
+  erewrite check_split_drops_sound_eq_universe. 2: eauto.
+  erewrite check_split_drops_complete_eq_universe. 2: eauto.
+  erewrite check_split_correct_full_eq_universe. 2: eauto.
+  auto.
+Qed.
+
+Lemma split_drop_place_fixm_eq_universe: forall ce u1 u2 p ty,
+    Paths.Equal u1 u2 ->
+    Fixm (@PTree_Properties.cardinal composite) (split_drop_place' u1) ce p ty = Fixm (@PTree_Properties.cardinal composite) (split_drop_place' u2) ce p ty.
+Proof.
+  intros ce. pattern ce. apply well_founded_ind with (R := ltof _ (@PTree_Properties.cardinal composite)).
+  apply well_founded_ltof.
+  intros.  
+  erewrite !unroll_Fixm.
+  generalize dependent p.
+  induction ty; intros p; simpl; auto.
+  -  assert (A: Paths.mem p u1 = Paths.mem p u2).
+     { setoid_rewrite H0. auto. }
+    rewrite A. destruct (Paths.mem p u2) eqn: MEM; auto.
+    assert (B: Paths.exists_ (fun p' : Paths.elt => is_prefix_strict p p') u1 =
+                 Paths.exists_ (fun p' : Paths.elt => is_prefix_strict p p') u2).
+    {  destruct (Paths.exists_ (fun p' : Paths.elt => is_prefix_strict p p') u1) eqn: EX.
+      symmetry.
+      eapply Paths.exists_1.
+      red. solve_proper.
+      eapply Paths.exists_2 in EX. red. red in EX.
+      destruct EX as (r & B1 & B2). exists r. split; auto.
+      eapply H0. auto.
+      red. solve_proper.
+      symmetry.
+      eapply not_true_iff_false. intro.
+      eapply not_true_iff_false in EX. eapply EX.
+      eapply Paths.exists_1.
+      red. solve_proper.
+      eapply Paths.exists_2 in H1. red. red in H1.
+      destruct H1 as (r & B1 & B2). exists r. split; auto.
+      eapply H0. auto.
+      red. solve_proper. }
+    rewrite B.
+    destruct (Paths.exists_ (fun p' : Paths.elt => is_prefix_strict p p') u2); simpl; auto.
+    generalize (IHty (Pderef p ty)). intros IHty1.
+    destruct (split_drop_place' u1 x
+      (fun (y : PTree.t composite)
+         (_ : (PTree_Properties.cardinal y < PTree_Properties.cardinal x)%nat) =>
+       Fixm (PTree_Properties.cardinal (V:=composite)) (split_drop_place' u1) y)
+      (Pderef p ty) ty) eqn: C.    
+    rewrite <- IHty1. auto.
+    rewrite <- IHty1. auto.
+  -  assert (A: Paths.mem p u1 = Paths.mem p u2).
+     { setoid_rewrite H0. auto. }
+     rewrite A. destruct (Paths.mem p u2) eqn: MEM; auto.
+     destruct (get_composite x i); auto.
+     (* induction on the list of fields *)
+     generalize (OK (@nil (place * bool))).          
+     generalize ((map
+       (fun elt : member =>
+        match elt with
+        | Member_plain fid fty => (Pfield p fid fty, fty)
+        end) (co_members co))).
+     induction l0.
+     + auto.
+     + intros. simpl. destruct a. erewrite IHl0.
+       destruct (fold_right
+     (fun '(subfld, fty) (acc : res (list (place * bool))) =>
+      do drops <- acc;
+      do drops' <-
+      Fixm (PTree_Properties.cardinal (V:=composite)) (split_drop_place' u2)
+        (PTree.remove id1 x) subfld fty; OK (drops' ++ drops))) eqn: FOLD.
+       * simpl. erewrite H; eauto.
+         red. eapply PTree_Properties.cardinal_remove. eauto.
+       * simpl. auto.
+  - assert (A: Paths.mem p u1 = Paths.mem p u2).
+     { setoid_rewrite H0. auto. }
+     rewrite A. destruct (Paths.mem p u2) eqn: MEM; auto.
+Qed.
+      
 Lemma split_drop_place_eq_universe: forall ce u1 u2 p ty,
     Paths.Equal u1 u2 ->
     split_drop_place ce u1 p ty = split_drop_place ce u2 p ty.
-Admitted.
-
+Proof.
+  intros.
+  unfold split_drop_place.
+  erewrite split_drop_place_fixm_eq_universe; eauto.
+  destruct (Fixm (PTree_Properties.cardinal (V:=composite)) (split_drop_place' u2) ce p ty); eauto.
+  simpl.
+  erewrite check_split_drop_place_spec_eq_universe; eauto.
+Qed.  

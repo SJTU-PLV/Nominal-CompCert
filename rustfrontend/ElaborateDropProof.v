@@ -2738,7 +2738,8 @@ Proof.
     econstructor; eauto.
 Qed.
 
-(** To move  *)
+(** Soundness of the analysis in drop statement w.r.t. the dynamic
+(small-step) update of the ownership environment *)
 Lemma sound_own_after_drop: forall own drops init uninit universe p
     (SOUND: sound_own own init uninit universe)
     (SPEC: split_drop_place_spec (PathsMap.get (local_of_place p) (own_universe own)) p drops)
