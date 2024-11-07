@@ -247,42 +247,129 @@ Lemma in_drop_flags_for_splits: forall p init uninit universe drops,
     exists id, In (p, id) (generate_drop_flags_for_splits init uninit universe drops).
 Admitted.
 
-Theorem fold_ptree_set_exists:
-  forall (a : place) (l1 l2: list (place * ident))
-    (m : PTree.t (list (place * ident))),
-    m ! (local_of_place a) = Some l2 ->
-    exists l3,
-      (fold_left generate_place_map_fun l1 m) ! (local_of_place a) = Some l3 
-      /\  incl l2 l3.
+
+Lemma not_comm: forall (p1:positive) p2, p1 <> p2 <-> p2 <> p1.
+Proof.
+  unfold not. intros. split; intros; subst; auto.
+Qed.
+
+(* First attampt but the scend lemma is false.
+Lemma f_d_f_f:
+  forall A B, (A \/ B -> False) -> (A -> False) /\ (B -> False).
+Proof.
+  intros. split; intros; auto.
+Qed.
+
+Lemma False_lemma: forall l (m:PTree.tree (list (place * ident))) p, 
+  ~ In p (map fst l) -> (fold_left generate_place_map_fun l m) ! (local_of_place p)
+  = m ! (local_of_place p).
+Proof.
+  induction l as [ | [k1 v1] l]; simpl; intros.
+  - auto.
+  - rewrite IHl by tauto. unfold generate_place_map_fun.
+    unfold not in H. apply f_d_f_f in H. destruct H as [H0 H1].
+    destruct (m ! (local_of_place (fst (k1, v1)))).
+    + apply PTree.gso. unfold not. intuition auto.
+Admitted. *)
+
+Lemma scend_set_of_no_use: forall (l1:list (place * ident)) l2 l3 p1 p2 m, 
+(fold_left generate_place_map_fun l1 (PTree.set p1 l2 (PTree.set p1 l3 m))) ! p2=
+(fold_left generate_place_map_fun l1 (PTree.set p1 l2 m)) ! p2.
+Proof.
+induction l1; intros; destruct (peq p1 p2) eqn:E.
+- simpl. subst. rewrite PTree.gss. rewrite PTree.gss. reflexivity.
+- simpl. repeat(rewrite PTree.gso); auto; repeat(rewrite not_comm; apply n).
+- subst. unfold generate_place_map_fun. simpl. 
+    + destruct (peq p2 (local_of_place (fst a))) eqn:E2.
+      * subst. repeat(rewrite PTree.gss). admit.
+      * subst. admit.
+Admitted.
+
+Lemma Ptree_set_comm: forall (l1:list (place * ident)) l2 l3 p1 p2 m, p1 <> p2 ->
+  (fold_left generate_place_map_fun l1 (PTree.set p1 l2 (PTree.set p2 l3 m))) ! p1=
+  (fold_left generate_place_map_fun l1 (PTree.set p2 l3 (PTree.set p1 l2 m))) ! p1.
+Proof.
+  induction l1.
+  - intros. simpl. rewrite PTree.gss. rewrite PTree.gso. rewrite PTree.gss. 
+    reflexivity. apply H.
+  - intros. simpl. unfold generate_place_map_fun at 2 4. 
+      destruct (peq p1 (local_of_place (fst a))) eqn:E.
+      + destruct (peq p2 (local_of_place (fst a))) eqn:E1.
+        * subst. simpl in E1. congruence.
+        * subst. rewrite PTree.gss. rewrite PTree.gso. rewrite PTree.gss.
+Admitted.
+
+
+Lemma PTree_get_eq_in: forall (l1:list (place * ident)) l2 p1 p2 m,
+  local_of_place p1 <> local_of_place p2 ->
+  (fold_left generate_place_map_fun l1 
+    (PTree.set (local_of_place p2) l2 m)) ! (local_of_place p1) = 
+  (fold_left generate_place_map_fun l1 
+    m) ! (local_of_place p1).
+Proof.
+  induction l1.
+  - intros. apply PTree.gso.  apply H.
+  - intros. simpl.  unfold generate_place_map_fun at 2 4. 
+    destruct ((PTree.set (local_of_place p2) l2 m) ! (local_of_place (fst a))) eqn:E.
+    * destruct (m ! (local_of_place (fst a))) eqn:E1; simpl.
+      + destruct (peq (local_of_place p1) (local_of_place (fst a))) eqn:E2.
+        rewrite <- e in E. rewrite (PTree.gso _ _ H) in E.  rewrite <- e in E1.
+        rewrite E1 in E. inversion E.
+Admitted.
+
+Lemma set_in_list_must_get: forall (l1:list (place * ident)) l2 p m,
+  exists l3, (fold_left generate_place_map_fun l1 
+    (PTree.set (local_of_place p) l2 m)) ! (local_of_place p) = Some l3.
+Proof.
+  induction l1 as [|h1 l1' IH].
+  - simpl. intros. rewrite PTree.gss. exists l2. auto.
+  - simpl. intros. unfold generate_place_map_fun at 2. 
+    destruct ((PTree.set (local_of_place p) l2 m) ! (local_of_place (fst h1))) eqn:E.
+    + eapply IH. eapply H.
+Admitted.
+
+Lemma in_list_incl: forall (l1:list (place * ident)) l2 l3 p m,
+  (fold_left generate_place_map_fun l1 
+    (PTree.set (local_of_place p) l2 m)) ! (local_of_place p) = Some l3 ->
+  incl l2 l3.
+Proof.
+  induction l1 as [|h1 l1' IH].
+  - simpl. intros. rewrite PTree.gss in H. inversion H. unfold incl. auto.
+  - simpl. intros. unfold generate_place_map_fun at 2 in H. 
+    destruct ((PTree.set (local_of_place p) l2 m) ! (local_of_place (fst h1))) eqn:E.
+    + eapply IH. eapply H.
 Admitted.
 
 Lemma In_list_map_some_and_find:
-  forall (l:list (place * ident)) p m,
-    In p (map fst l) ->
-    ((exists l1', m!(local_of_place p) = Some l1')
-     \/ m!(local_of_place p) = None) ->
+  forall (l:list (place * ident)) p m, In p (map fst l) ->
   exists l1, (fold_left generate_place_map_fun l m) ! (local_of_place p) = Some l1 
-  /\ exists p0 i, find (fun elt : place * ident => place_eq p (fst elt)) l1
-  = Some (p0,i).
+  /\ exists e, find (fun elt : place * ident => place_eq p (fst elt)) l1
+  = Some e.
 Proof.
-  induction l.
+  induction l as [|h l' IH].
   - intros. simpl in H. destruct H.
   - simpl. intros. destruct H.
-    + destruct (in_dec place_eq p (map fst l)).
-      * destruct a. simpl in H. subst.
-        eapply IHl. auto.
-        admit.
-      * destruct H0.
-        -- destruct H0.
+    + destruct (in_dec place_eq p (map fst l')).
+      * destruct h. simpl in H. subst.
+        eapply IH. auto.
+      * unfold generate_place_map_fun. 
+        destruct (m ! (local_of_place (fst h))) as [l''|] eqn:E.
+        ** subst. exists (h::l''). assert(H:forall am,(fold_left
+           (fun (m0 : PTree.tree (list (place * ident))) (elt : place * ident) =>
+           match m0 ! (local_of_place (fst elt)) with
+           | Some l0 => PTree.set (local_of_place (fst elt)) (elt :: l0) m0
+           | None => PTree.set (local_of_place (fst elt)) [elt] m0
+           end) l' am) ! (local_of_place (fst h)) 
+           = am ! (local_of_place (fst h))). { admit. }
+           rewrite H. 
            admit.
-        -- destruct a. simpl in *. inv H.
-           unfold generate_place_map_fun at 2.
-           simpl.
-           rewrite H0.
-           generalize (fold_ptree_set_exists p l [(p, i)] (PTree.set (local_of_place p) [(p, i)] m) (PTree.gss _ _ _)).
-           intros (l3 & A & B).
-           exists l3. split. auto.
-           admit.      
+        ** subst. rewrite fold_of_list by tauto. rewrite PTree.gss. exists [h].
+           split; auto. simpl. admit.
+           (* destruct (place_eq (fst h) (fst h)) eqn:E1;
+           destruct proj_sumbool; exists h; auto. *)
+    + unfold generate_place_map_fun at 2. destruct (m ! (local_of_place (fst h))).
+      * apply IH. apply H.
+      * apply IH. apply H.
 Admitted.
 
 (** IMPORTANT TODO: generate_drop_flags searches all the Sdrop
@@ -305,7 +392,8 @@ Proof.
                         (generate_drop_flags_at mayinitMap mayuninitMap universe ce f) cfg))) in *.  
   (* use G1 to prove that p1 is not in the flags list *)
   assert (NOTIN: ~ In p1 (map fst (concat (map snd flags)))).
-  { admit. }
+  { unfold generate_place_map in G1. unfold get_dropflag_temp in G1. unfold not.
+    intros. admit.  }
   clear G1.                     (* G1 is useless *)
   (* Prove by contradiction *)
   destruct (must_init mayinit mayuninit universe p1) eqn: MUST; auto.
