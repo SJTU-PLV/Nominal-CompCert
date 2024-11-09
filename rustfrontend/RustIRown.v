@@ -573,10 +573,11 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.free_list m1 lb = Some m2 ->
     step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
 
-| step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
+| step_returnstate: forall p v b ofs m1 m2 e f k own1 own2
     (TFASSIGN: own_transfer_assign own1 p = own2),
     eval_place ge e m1 p b ofs ->
-    assign_loc ge ty m1 b ofs v m2 ->    
+    val_casted v (typeof_place p) ->
+    assign_loc ge (typeof_place p) m1 b ofs v m2 ->    
     step (Returnstate v (Kcall p f e own1 k) m1) E0 (State f Sskip k e own2 m2)
 
 (* Control flow statements *)

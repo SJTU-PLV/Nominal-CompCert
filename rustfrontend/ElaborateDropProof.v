@@ -47,9 +47,105 @@ Record match_prog (p tp: RustIR.program) : Prop :=
     tp.(prog_types) = p.(prog_types);
     match_prog_def:
     forall id, Coqlib.option_rel (match_glob p.(prog_comp_env)) ((prog_defmap p)!id) ((prog_defmap tp)!id);
+    match_dropm:
+    generate_dropm p = generate_dropm tp;
     match_prog_skel:
     erase_program tp = erase_program p;
   }.
+
+Lemma match_erase_globdef: forall l tl ce,
+    transf_globdefs (fun (_ : ident) (f : fundef) => transf_fundef ce f)
+      (fun (_ : ident) (v : type) => OK v) l = OK tl ->
+    map (fun '(id, g) => (id, erase_globdef g)) l = map (fun '(id, g) => (id, erase_globdef g)) tl.
+Proof.
+  induction l; simpl; intros tl ce TR.
+  inv TR. auto.
+  destruct a. destruct g.
+  destruct transf_fundef eqn: TF in TR; try congruence.  
+  monadInv TR. simpl. f_equal.
+  eauto.
+  monadInv TR. simpl. f_equal.
+  eauto.
+Qed.
+
+Lemma match_globdef: forall l tl ce id,
+    transf_globdefs (fun (_ : ident) (f : fundef) => transf_fundef ce f)
+      (fun (_ : ident) (v : type) => OK v) l = OK tl ->
+    Coqlib.option_rel (match_glob ce) ((PTree_Properties.of_list l) ! id) ((PTree_Properties.of_list tl) ! id).
+Proof.
+  intros l tl ce id TR.
+  eapply PTree_Properties.of_list_related.
+  generalize dependent tl.
+  generalize dependent l.
+  induction l; simpl; intros.
+  inv TR. econstructor.
+  destruct a. destruct g.
+  destruct transf_fundef eqn: TF in TR; try congruence.  
+  monadInv TR. econstructor.
+  split; auto.
+  eapply IHl. eauto.
+  monadInv TR. econstructor.
+  split; auto.
+  simpl. destruct v. simpl.
+  constructor. auto.
+  eauto.
+Qed.
+
+Lemma check_drop_glue_match: forall id f f0 ce,
+    transf_fundef ce f = OK f0 ->
+    check_drop_glue (id, Gfun f) = check_drop_glue (id, Gfun f0).
+Proof.
+  intros.
+  unfold transf_fundef in H. destruct f; auto.
+  - monadInv H.
+    unfold transf_function in EQ.
+    monadInv EQ. destruct x2. destruct p.
+    monadInv EQ2. destruct list_disjoint_dec in EQ3; try congruence.
+    monadInv EQ3. simpl. auto.
+  - inv H. auto.
+Qed.
+
+    
+Lemma extract_drop_id_match: forall id f f0 ce,
+    transf_fundef ce f = OK f0 ->
+    extract_drop_id (id, Gfun f) = extract_drop_id (id, Gfun f0).
+Proof.
+  intros.
+  unfold transf_fundef in H. destruct f; auto.
+  - monadInv H.
+    unfold transf_function in EQ.
+    monadInv EQ. destruct x2. destruct p.
+    monadInv EQ2. destruct list_disjoint_dec in EQ3; try congruence.
+    monadInv EQ3. simpl. auto.
+  - inv H. auto.
+Qed.
+        
+Lemma match_generate_dropm: forall l tl ce id,
+    transf_globdefs (fun (_ : ident) (f : fundef) => transf_fundef ce f)
+      (fun (_ : ident) (v : type) => OK v) l = OK tl ->
+    Coqlib.option_rel eq (PTree_Properties.of_list (map extract_drop_id (filter check_drop_glue l))) ! id  (PTree_Properties.of_list (map extract_drop_id (filter check_drop_glue tl))) ! id.
+Proof.
+  intros l tl ce id TR.
+  eapply PTree_Properties.of_list_related.
+  generalize dependent tl.
+  generalize dependent l.
+  induction l; simpl; intros.
+  inv TR. econstructor.
+  destruct a. destruct g.
+  - destruct transf_fundef eqn: TF in TR; try congruence.  
+    monadInv TR. 
+    erewrite check_drop_glue_match; eauto.
+    destruct (check_drop_glue (i, Gfun f0)) eqn: A.
+    + replace (map extract_drop_id (filter check_drop_glue ((i, Gfun f0) :: x))) with
+        (extract_drop_id (i, Gfun f0) :: (map extract_drop_id (filter check_drop_glue x))).
+      2: { unfold filter at 2. rewrite A. auto. }
+      rewrite map_cons.
+      econstructor; auto.
+      erewrite extract_drop_id_match; eauto.
+    + unfold filter at 2.
+      rewrite A. auto.
+  - monadInv TR. simpl. auto.
+Qed.
 
 Lemma match_transf_program: forall p tp,
     transl_program p = OK tp ->
@@ -57,7 +153,20 @@ Lemma match_transf_program: forall p tp,
 Proof.
   intros. unfold transl_program in H. monadInv H. unfold transform_partial_program in EQ.
   destruct p. simpl in *. unfold transform_partial_program2 in EQ. 
-Admitted. 
+  monadInv EQ. simpl. econstructor; eauto.
+  - intros. unfold prog_defmap. simpl in *.
+    eapply match_globdef. eauto.
+  (* generate_dropm *)
+  - unfold generate_dropm. simpl in *.
+    eapply PTree.extensionality. intros.
+    exploit match_generate_dropm; eauto. instantiate (1 := i).
+    intros.
+    destruct ((PTree_Properties.of_list (map extract_drop_id (filter check_drop_glue prog_defs))) ! i) eqn: A.
+    inv H. auto. inv H. auto.
+  - unfold erase_program.
+    simpl in *. f_equal.
+    erewrite <- match_erase_globdef with (ce:= prog_comp_env); eauto. 
+Qed.
 
 (* Prove match_genv for this specific match_prog *)
 
@@ -293,141 +402,25 @@ Proof.
 Qed.
 
 (** Key lemma used in generate_flag_map_sound  *)
-Lemma in_drop_flags_for_splits: forall p init uninit universe drops,
+Lemma in_drop_flags_for_splits: forall drops p init uninit universe,
     In p drops ->
     must_init init uninit universe p = false ->
     may_init init uninit universe p = true ->
     exists id, In (p, id) (generate_drop_flags_for_splits init uninit universe drops).
-Admitted.
-
-
-Lemma not_comm: forall (p1:positive) p2, p1 <> p2 <-> p2 <> p1.
 Proof.
-  unfold not. intros. split; intros; subst; auto.
+  induction drops.
+  intros. inv H.
+  intros. inv H.
+  - simpl. rewrite H0. rewrite H1.
+    exists (fresh_atom tt). econstructor. auto.
+  - exploit IHdrops; eauto.
+    intros (id & IN).
+    exists id. simpl.
+    destruct (must_init init uninit universe a); auto.
+    destruct (may_init init uninit universe a).
+    eapply in_cons; auto. auto.
 Qed.
 
-(* First attampt but the scend lemma is false.
-Lemma f_d_f_f:
-  forall A B, (A \/ B -> False) -> (A -> False) /\ (B -> False).
-Proof.
-  intros. split; intros; auto.
-Qed.
-
-Lemma False_lemma: forall l (m:PTree.tree (list (place * ident))) p, 
-  ~ In p (map fst l) -> (fold_left generate_place_map_fun l m) ! (local_of_place p)
-  = m ! (local_of_place p).
-Proof.
-  induction l as [ | [k1 v1] l]; simpl; intros.
-  - auto.
-  - rewrite IHl by tauto. unfold generate_place_map_fun.
-    unfold not in H. apply f_d_f_f in H. destruct H as [H0 H1].
-    destruct (m ! (local_of_place (fst (k1, v1)))).
-    + apply PTree.gso. unfold not. intuition auto.
-Admitted. *)
-
-Lemma scend_set_of_no_use: forall (l1:list (place * ident)) l2 l3 p1 p2 m, 
-(fold_left generate_place_map_fun l1 (PTree.set p1 l2 (PTree.set p1 l3 m))) ! p2=
-(fold_left generate_place_map_fun l1 (PTree.set p1 l2 m)) ! p2.
-Proof.
-induction l1; intros; destruct (peq p1 p2) eqn:E.
-- simpl. subst. rewrite PTree.gss. rewrite PTree.gss. reflexivity.
-- simpl. repeat(rewrite PTree.gso); auto; repeat(rewrite not_comm; apply n).
-- subst. unfold generate_place_map_fun. simpl. 
-    + destruct (peq p2 (local_of_place (fst a))) eqn:E2.
-      * subst. repeat(rewrite PTree.gss). admit.
-      * subst. admit.
-Admitted.
-
-Lemma Ptree_set_comm: forall (l1:list (place * ident)) l2 l3 p1 p2 m, p1 <> p2 ->
-  (fold_left generate_place_map_fun l1 (PTree.set p1 l2 (PTree.set p2 l3 m))) ! p1=
-  (fold_left generate_place_map_fun l1 (PTree.set p2 l3 (PTree.set p1 l2 m))) ! p1.
-Proof.
-  induction l1.
-  - intros. simpl. rewrite PTree.gss. rewrite PTree.gso. rewrite PTree.gss. 
-    reflexivity. apply H.
-  - intros. simpl. unfold generate_place_map_fun at 2 4. 
-      destruct (peq p1 (local_of_place (fst a))) eqn:E.
-      + destruct (peq p2 (local_of_place (fst a))) eqn:E1.
-        * subst. simpl in E1. congruence.
-        * subst. rewrite PTree.gss. rewrite PTree.gso. rewrite PTree.gss.
-Admitted.
-
-
-Lemma PTree_get_eq_in: forall (l1:list (place * ident)) l2 p1 p2 m,
-  local_of_place p1 <> local_of_place p2 ->
-  (fold_left generate_place_map_fun l1 
-    (PTree.set (local_of_place p2) l2 m)) ! (local_of_place p1) = 
-  (fold_left generate_place_map_fun l1 
-    m) ! (local_of_place p1).
-Proof.
-  induction l1.
-  - intros. apply PTree.gso.  apply H.
-  - intros. simpl.  unfold generate_place_map_fun at 2 4. 
-    destruct ((PTree.set (local_of_place p2) l2 m) ! (local_of_place (fst a))) eqn:E.
-    * destruct (m ! (local_of_place (fst a))) eqn:E1; simpl.
-      + destruct (peq (local_of_place p1) (local_of_place (fst a))) eqn:E2.
-        rewrite <- e in E. rewrite (PTree.gso _ _ H) in E.  rewrite <- e in E1.
-        rewrite E1 in E. inversion E.
-Admitted.
-
-Lemma set_in_list_must_get: forall (l1:list (place * ident)) l2 p m,
-  exists l3, (fold_left generate_place_map_fun l1 
-    (PTree.set (local_of_place p) l2 m)) ! (local_of_place p) = Some l3.
-Proof.
-  induction l1 as [|h1 l1' IH].
-  - simpl. intros. rewrite PTree.gss. exists l2. auto.
-  - simpl. intros. unfold generate_place_map_fun at 2. 
-    destruct ((PTree.set (local_of_place p) l2 m) ! (local_of_place (fst h1))) eqn:E.
-(*     + eapply IH. eapply H. *)
-(* Admitted. *)
-Admitted.
-    
-Lemma in_list_incl: forall (l1:list (place * ident)) l2 l3 p m,
-  (fold_left generate_place_map_fun l1 
-    (PTree.set (local_of_place p) l2 m)) ! (local_of_place p) = Some l3 ->
-  incl l2 l3.
-Proof.
-  induction l1 as [|h1 l1' IH].
-  - simpl. intros. rewrite PTree.gss in H. inversion H. unfold incl. auto.
-  - simpl. intros. unfold generate_place_map_fun at 2 in H. 
-    destruct ((PTree.set (local_of_place p) l2 m) ! (local_of_place (fst h1))) eqn:E.
-(*     + eapply IH. eapply H. *)
-(* Admitted. *)
-Admitted.
-
-Lemma In_list_map_some_and_find:
-  forall (l:list (place * ident)) p m, In p (map fst l) ->
-  exists l1, (fold_left generate_place_map_fun l m) ! (local_of_place p) = Some l1 
-  /\ exists e, find (fun elt : place * ident => place_eq p (fst elt)) l1
-  = Some e.
-Proof.
-  induction l as [|h l' IH].
-  - intros. simpl in H. destruct H.
-  - simpl. intros. destruct H.
-    + destruct (in_dec place_eq p (map fst l')).
-      * destruct h. simpl in H. subst.
-        eapply IH. auto.
-      * unfold generate_place_map_fun. 
-        destruct (m ! (local_of_place (fst h))) as [l''|] eqn:E.
-        ** subst. exists (h::l''). assert(H:forall am,(fold_left
-           (fun (m0 : PTree.tree (list (place * ident))) (elt : place * ident) =>
-           match m0 ! (local_of_place (fst elt)) with
-           | Some l0 => PTree.set (local_of_place (fst elt)) (elt :: l0) m0
-           | None => PTree.set (local_of_place (fst elt)) [elt] m0
-           end) l' am) ! (local_of_place (fst h)) 
-           = am ! (local_of_place (fst h))). { admit. }
-           rewrite H. 
-           admit.
-(*         ** subst. rewrite fold_of_list by tauto. rewrite PTree.gss. exists [h]. *)
-(*            split; auto. simpl. admit. *)
-(*            (* destruct (place_eq (fst h) (fst h)) eqn:E1; *)
-(*            destruct proj_sumbool; exists h; auto. *) *)
-(*     + unfold generate_place_map_fun at 2. destruct (m ! (local_of_place (fst h))). *)
-(*       * apply IH. apply H. *)
-(*       * apply IH. apply H. *)
-(* Admitted. *)
-Admitted.
-           
 (** IMPORTANT TODO: generate_drop_flags searches all the Sdrop
 statement in the CFG and then generate drop flags for those are maybe
 initialized. The conclusion states that the drop flag map generated by
@@ -475,7 +468,7 @@ Proof.
   rewrite STMT.
   unfold generate_drop_flags_for. rewrite SPLIT.
   auto.
-Admitted.
+Qed.
 
 Lemma get_place_map_injective: forall (p1 p2 : place) (id1 id2 : ident) l,
     list_norepet (map snd l) ->
@@ -541,11 +534,9 @@ Qed.
 Lemma dropm_preserved:
   genv_dropm tge = genv_dropm ge.
 Proof.
-  unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSL as [_ EQ]. 
-  simpl in EQ. unfold generate_dropm. simpl in *. 
-Admitted.
-
-
+  unfold tge, ge. symmetry. eapply  match_dropm; eauto.
+Qed.
+  
 Lemma type_of_fundef_preserved:
   forall fd tfd,
   transf_fundef ce fd = OK tfd -> type_of_fundef tfd = type_of_fundef fd.
@@ -1230,8 +1221,9 @@ Proof.
   eapply match_envs_flagm_incr_bounds; eauto.
 Qed.
 
-(** Only support m1 unchanged: because we cannot ensure that the
-out_of_reach block becomes mapped in m1 *)
+(** It is used in the case that tm1 changes to tm2 by modifying the
+drop flags. Only support m1 unchanged: because we cannot ensure that
+the out_of_reach block becomes mapped in m1 *)
 Lemma match_cont_bound_unchanged: forall k tk j an fm body cfg pc cont brk nret m1 tm1 tm2 lo tlo
    (MCONT:match_cont j an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)   
    (UNC: Mem.unchanged_on (fun b _ => Mem.sup_In b tlo) tm1 tm2),
@@ -2180,7 +2172,10 @@ Proof.
   apply own_consistent. eapply Paths.union_2. auto.
 Qed.
 
-(** important *)
+(** important: it performs the evaluation of the statement generated
+by add_dropflag whichs sets the drop flag for the place. The
+conclusion includes some helpful result of the evaluation, such as
+unchanged_on and ro_acc *)
 Lemma eval_dropflag_match: forall j own1 own2 le tle lo hi tlo thi flagm m tm1 (flag: bool) p tk tf stmt universe
   (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm1 tlo thi)
   (MINJ: Mem.inject j m tm1)
@@ -3260,9 +3255,37 @@ Proof.
   - eapply step_dropstate_simulation. eauto.
     econstructor; eauto.
   (* step_storagelive *)
-  - admit.
+  - inv MSTMT. simpl in TR.
+    generalize IM as IM1. intros. inv IM.
+    rewrite <- H0 in TR. rewrite <- H in TR.
+    rename H0 into GETINIT. rename H into GETUNINIT.
+    monadInv TR.
+    eexists. split.
+    eapply plus_one. econstructor.
+    (* construct sound_own and get_IM *)
+    exploit analyze_succ. 1-3: eauto. simpl. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    eauto.
+    intros (mayinit3 & mayuninit3 & A & B).
+    econstructor; eauto.
+    econstructor.
   (* step_storagedead *)
-  - admit.
+  - inv MSTMT. simpl in TR.
+    generalize IM as IM1. intros. inv IM.
+    rewrite <- H0 in TR. rewrite <- H in TR.
+    rename H0 into GETINIT. rename H into GETUNINIT.
+    monadInv TR.
+    eexists. split.
+    eapply plus_one. econstructor.
+    (* construct sound_own and get_IM *)
+    exploit analyze_succ. 1-3: eauto. simpl. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT. eauto.
+    eauto.
+    intros (mayinit3 & mayuninit3 & A & B).
+    econstructor; eauto.
+    econstructor.
   (* step_call *)
   - inv MSTMT. simpl in TR.
     generalize IM as IM1. intros. inv IM.
@@ -3488,9 +3511,205 @@ Proof.
     (** sound_flagm *)
     eapply generate_flag_map_sound; eauto.
   (* step_external_function *)
+  - simpl in FIND.
+    assert (GE1: Genv.match_stbls j se tse).
+    { replace j with (mi injp (injpw j m tm Hm)) by auto.
+      eapply match_stbls_proj.
+      eapply match_stbls_acc; eauto. }
+    exploit find_funct_match; eauto.
+    intros (tf & TFIND & TRFUN).
+    (* destruct tf *)
+    unfold transf_fundef in TRFUN.
+    monadInv TRFUN.
+    (* injp_acc *)
+    exploit external_call_mem_inject; eauto.
+    intros (j1 & tv1 & tm1 & TEXT & VINJ1 & MINJ1 & UNC1 & TUNC1 & INCR1 & SEP1).
+    eexists. split.
+    econstructor. eapply RustIRsem.step_external_function; eauto.
+    eapply star_refl.
+    eapply app_nil_end.
+    (* match_state *)
+    assert (INJP: injp_acc (injpw j m tm Hm) (injpw j1 m' tm1 MINJ1)).
+    { econstructor; eauto.
+      red. eauto using external_call_readonly.
+      red. eauto using external_call_readonly.
+      red. eauto using external_call_max_perm; eauto.
+      red. eauto using external_call_max_perm; eauto. }    
+    econstructor; eauto.
+    etransitivity; eauto.
+    (* match_stacks *)
+    eapply match_stacks_incr_bounds.
+    eapply match_stacks_injp_acc. eauto. eauto.
+    eapply Mem.sup_include_refl. eapply Mem.sup_include_refl.
+    eapply Mem.unchanged_on_support. eauto.
+    eapply Mem.unchanged_on_support. eauto.
+  (* step_return_0 *)
   - admit.
-    
-  Admitted.
+  (* step_return_1 *)
+  - admit.
+  (* step_skip_call *)
+  - admit.
+  (* step_returnstate *)
+  - inv MCONT.
+    generalize IM as IM1. intros. inv IM.
+    rename H3 into GETINIT. rename H4 into GETUNINIT.
+    exploit eval_place_inject; eauto.
+    intros (tb1 & tofs1 & EVALP & VINJ1). inv VINJ1.
+    exploit assign_loc_injp_acc; eauto.
+    instantiate (1 := Hm).
+    intros (tm2 & Hm2 & AS2 & INJP2).
+    (* evaluate the add_dropflag statement *)
+    exploit match_envs_flagm_injp_acc. eauto. eauto.
+    eapply Mem.sup_include_refl. eapply Mem.sup_include_refl.
+    intros MENV2.
+    exploit eval_dropflag_match; eauto.
+    unfold init_place in OWN. inv OWN. simpl in *.
+    eapply PathsMap.eq_sym. eauto.
+    instantiate (1 := tk0).
+    instantiate (1 := tf).
+    intros (tm3 & STEP2 & MINJ2 & MENV3 & UNC2 & RO2).
+    (* step *)
+    eexists. split.
+    econstructor. econstructor; eauto.
+    eapply val_casted_inject; eauto.
+    eapply star_step. eapply RustIRsem.step_skip_seq.
+    eauto. 1-2: eauto.
+    (* match_state *)
+    assert (INJP3: injp_acc w (injpw j m2 tm3 MINJ2)).
+    { inv RO2.
+      generalize me_tinitial. intros SUP.
+      unfold wm2 in SUP.
+      destruct w. 
+      eapply injp_acc_local_simple.
+      etransitivity. eauto. eauto. eauto. eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. destruct H6. intros.
+      intro. subst.
+      (* tb is not valid in m2 *)
+      eapply me_trange. eapply me_envs; eauto.
+      eauto. eapply SUP. eapply me_envs; eauto.
+      eapply H6. }
+    econstructor. eauto. econstructor.    
+    (* match_cont *)    
+    eapply match_cont_bound_unchanged.
+    eapply match_cont_injp_acc. eauto. eauto.
+    eapply me_incr. eapply me_envs. eauto.
+    eapply me_tincr. eapply me_envs. eauto.
+    (* unchanged on the blocks in tlo from tm2 to tm3 *)
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. intros. intro. subst.
+    eapply me_trange. eapply me_envs; eauto. eauto. auto.
+    (* injp_acc w ~-> (j, m2, tm3) *)
+    eauto.
+    eauto. eauto. eauto.
+    (* sound_own *)
+    eauto.
+    (* sup_include *)
+    inv INJP2. eapply Mem.unchanged_on_support; eauto.
+    inv RO2. eapply Mem.sup_include_trans. 2: eauto.
+    inv INJP2. eapply Mem.unchanged_on_support; eauto.
+  (* step_seq *)
+  - inv MSTMT.
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor; eauto.
+  (* step_skip_seq *)
+  - inv MSTMT. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRsem.step_skip_seq.
+    eapply star_refl. auto.
+    econstructor; eauto.
+  (* step_continue_seq *)
+  - inv MSTMT. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRsem.step_continue_seq.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor.
+  (* step_break_seq *)
+  - inv MSTMT. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRsem.step_break_seq.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor.
+  (* step_ifthenelse *)
+  - inv MSTMT.
+    generalize IM as IM1. intros. inv IM.
+    rename H2 into GETINIT. rename H3 into GETUNINIT.
+    exploit eval_expr_inject; eauto.
+    intros (tv & EVAL & VINJ).
+    eexists. split.
+    econstructor. econstructor; eauto.
+    eapply Cop.bool_val_inject; eauto.
+    eapply star_refl. auto.
+    destruct b.
+    + exploit analyze_succ; eauto.
+      simpl. left. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite MCOND. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite MCOND. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      (* match_state *)
+      econstructor; eauto.
+    + exploit analyze_succ; eauto.
+      simpl. right. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite MCOND. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite MCOND. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      (* match_state *)
+      econstructor; eauto.
+  (* step_loop *)
+  - inv MSTMT.
+    generalize IM as IM1. intros. inv IM.
+    rename H0 into GETINIT. rename H into GETUNINIT.
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_refl. auto.
+    (* sound_own *)
+    exploit analyze_succ; eauto.
+    simpl. left. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+    intros (mayinit3 & mayuninit3 & GIM & SO).
+    econstructor; eauto.
+    econstructor; eauto.    
+  (* step_skip_or_continue_loop *)
+  - inv MCONT.
+    generalize IM as IM1. intros. inv IM.
+    rename H1 into GETINIT. rename H2 into GETUNINIT.
+    destruct H; subst; inv MSTMT.
+    + eexists. split.
+      econstructor. eapply RustIRsem.step_skip_or_continue_loop; auto.
+      eapply star_refl. auto.
+      (* sound_own *)
+      exploit analyze_succ; eauto.
+      simpl. left. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      econstructor; eauto.
+      econstructor; eauto.
+    + eexists. split.
+      econstructor. eapply RustIRsem.step_skip_or_continue_loop; auto.
+      eapply star_refl. auto.
+      (* sound_own *)
+      exploit analyze_succ; eauto.
+      simpl. left. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      econstructor; eauto.
+      econstructor; eauto.
+  (* step_break_loop *)
+  - inv MSTMT. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRsem.step_break_loop; auto.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor.
+Admitted.
 
 Lemma initial_states_simulation:
   forall q1 q2 S1, match_query (cc_rs injp) w q1 q2 -> initial_state ge q1 S1 ->
