@@ -104,6 +104,10 @@ Record function : Type := mkfunction {
   fn_drop_glue : option ident;
   fn_return: type;
   fn_callconv: calling_convention;
+  (* Variables are allocated in the function entry but they are usable
+  only after their declaration (i.e., Slet statement). TODO: add
+  fn_vars to Rustsyntax and generate it in Rustsurface.ml *)
+  fn_vars: list (ident * type);
   fn_params: list (ident * type);
   fn_body: statement
 }.
@@ -111,19 +115,19 @@ Record function : Type := mkfunction {
 Definition var_names (vars: list(ident * type)) : list ident :=
   List.map (@fst ident type) vars.
 
-(* Used in Rustlightown and RustIRgen *)
-Fixpoint extract_vars (stmt: Rustlight.statement) : list (ident * type) :=
-  match stmt with
-  | Slet id ty s =>
-      (id,ty) :: extract_vars s
-  | Rustlight.Ssequence s1 s2 =>
-      extract_vars s1 ++ extract_vars s2
-  | Rustlight.Sifthenelse _ s1 s2 =>
-      extract_vars s1 ++ extract_vars s2
-  | Rustlight.Sloop s =>
-      extract_vars s
-  | _ => nil
-  end.
+(* (* Used in Rustlightown and RustIRgen *) *)
+(* Fixpoint extract_vars (stmt: Rustlight.statement) : list (ident * type) := *)
+(*   match stmt with *)
+(*   | Slet id ty s => *)
+(*       (id,ty) :: extract_vars s *)
+(*   | Rustlight.Ssequence s1 s2 => *)
+(*       extract_vars s1 ++ extract_vars s2 *)
+(*   | Rustlight.Sifthenelse _ s1 s2 => *)
+(*       extract_vars s1 ++ extract_vars s2 *)
+(*   | Rustlight.Sloop s => *)
+(*       extract_vars s *)
+(*   | _ => nil *)
+(*   end. *)
 
 Definition fundef := Rusttypes.fundef function.
 
@@ -473,6 +477,9 @@ Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   | nil => (e::nil)::nil
   | l' :: l => (e::l') :: l
   end.
+
+Definition vars_to_drops ce (vars: list (ident * type)) : list place :=
+  map (fun elt => Plocal (fst elt) (snd elt)) (filter (fun elt => own_type ce (snd elt)) vars).
 
 (** ** Notations of Rustlight program *)
 

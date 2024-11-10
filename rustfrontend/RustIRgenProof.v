@@ -11,41 +11,73 @@ Require Import RustIR Rustlight RustOp RustIRgen.
 Require Import RustIRown.
 Require Import Rustlightown.    
 
+Import ListNotations.
+Local Open Scope list_scope.
+Local Open Scope error_monad_scope.
 
-Section TRANSLATION.
-(* Variable ce: composite_env. *)
+(** Semantics preservation of the generation of RustIR programs from
+Rustlight programs. The key parts of the proof are to 1. relate the
+semantics drops expressed in the continuation to the drop statements
+explicitly inserted in the program; 2. handle the discrepency between
+the source (mem, env, own_env) and the target (mem, env, own_env) due
+to the new generated return variable which is used to store the return
+value before dropping all the in-scope variables and parameters. *)
+
+Definition match_glob (ctx: composite_env) (gd: globdef Rustlight.fundef type) (tgd: globdef RustIR.fundef type) : Prop :=
+  match gd, tgd with
+  | Gvar v1, Gvar v2 =>
+      match_globvar eq v1 v2
+  | Gfun fd1, Gfun fd2 =>
+      transl_fundef ctx fd1 = OK fd2
+  | _, _ => False
+  end.
+
+Record match_prog (p : Rustlight.program) (tp : RustIR.program) : Prop := {
+    match_prog_main:
+    tp.(prog_main) = p.(prog_main);
+    match_prog_public:
+    tp.(prog_public) = p.(prog_public);
+    match_prog_types:
+    tp.(prog_types) = p.(prog_types);
+    match_prog_defs:
+    list_forall2 (fun '(id1, gd) '(id2, tgd) => id1 = id2 /\ match_glob p.(prog_comp_env) gd tgd) p.(prog_defs) tp.(prog_defs);
+    match_dropm:
+    generate_dropm p = RustIR.generate_dropm tp;
+    match_prog_skel:
+    erase_program tp = erase_program p;
+}.
+
+
+Section PRESERVATION.
+
 
 Variable prog: program.
 Variable tprog: RustIR.program.
 
+Hypothesis TRANSL: match_prog prog tprog.
+Variable w: inj_world.
 
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
+(* Variable dropflags: PTree.t (list (place * ident)). *)
 
 Let ge := globalenv se prog.
 Let tge := RustIR.globalenv tse tprog.
 
-Record match_prog (p : Rustlight.program) (tp : RustIR.program) : Prop := {
-  match_prog_main:
-    tp.(prog_main) = p.(prog_main);
-  match_prog_public:
-    tp.(prog_public) = p.(prog_public);
-  match_prog_skel:
-    erase_program tp = erase_program p;
-  match_prog_defs:
-    list_norepet (prog_defs_names p)
-}.
-
 Inductive match_states: Rustlightown.state -> RustIRown.state -> Prop := 
-  | match_regular_state: 
-    forall f s k e own m tf ts tk te town tm params_drops oretv vars j
-    (MSTMT: transl_stmt ge params_drops oretv s vars = ts)
-    (* (OWN: own_type ce (typeof_place p)) *)
-    (* (SPLIT: InitDomain.split_drop_place ge universe p (typeof_place p) = OK drops) *)
+| match_regular_state: 
+  forall f s k e own m tf ts tk te town tm oretv vars j
+    (* It is no need to relate two functions *)
+    (TRSTMT: transl_stmt ge f.(fn_params) oretv s vars = ts)
+    (* The in-scope variables collected in transl_stmt are the same as
+    those collected in the continuation *)
+    (CONTVARS: cont_vars k = vars)
+    (* relation between (e, own) and (te, town) *)
+    (MENV: 
     (MINJ: Mem.inject j m tm),
     match_states (State f s k e own m) (RustIRown.State tf ts tk te town tm) 
-  | match_drop_insert_state:
-    forall f l dk k le own m tf ts tk te town tm j
+| match_dropinsert_state:
+  forall f l dk k le own m tf ts tk te town tm j
     (MINJ: Mem.inject j m tm),
     (* Dropinsert f l dk k le own m *)
     match_states (Dropinsert f l dk k le own m) (RustIRown.State tf ts tk te town tm).
