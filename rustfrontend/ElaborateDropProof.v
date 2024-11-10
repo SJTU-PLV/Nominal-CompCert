@@ -2437,6 +2437,181 @@ Proof.
     + simpl. right. eapply IHl. eauto.
 Qed.
 
+
+Lemma blocks_of_env_translated:
+forall e, blocks_of_env tge e = blocks_of_env ge e.
+Proof.
+intros. unfold blocks_of_env, block_of_binding.
+rewrite comp_env_preserved; auto.
+Qed.
+
+
+
+Fixpoint freelist_no_overlap (l: list (block * Z * Z)) : Prop :=
+match l with
+| nil => True
+| (b, lo, hi) :: l' =>
+    freelist_no_overlap l' /\
+    (forall b' lo' hi', In (b', lo', hi') l' ->
+     b' <> b \/ hi' <= lo \/ hi <= lo')
+end.
+
+
+Lemma can_free_list:
+forall l m,
+(forall b lo hi, In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable) ->
+freelist_no_overlap l ->
+exists m', Mem.free_list m l = Some m'.
+Proof.
+induction l; simpl; intros.
+- exists m; auto.
+- destruct a as [[b lo] hi]. destruct H0.
+destruct (Mem.range_perm_free m b lo hi) as [m1 A]; auto.
+rewrite A. apply IHl; auto.
+intros. red. intros. eapply Mem.perm_free_1; eauto.
+exploit H1; eauto. intros [B|B]. auto. right; lia.
+eapply H; eauto.
+Qed.
+
+Lemma free_list_freeable:
+forall l m m',
+Mem.free_list m l = Some m' ->
+forall b lo hi,
+In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable.
+Proof.
+induction l; simpl; intros.
+contradiction.
+revert H. destruct a as [[b' lo'] hi'].
+caseEq (Mem.free m b' lo' hi'); try congruence.
+intros m1 FREE1 FREE2.
+destruct H0. inv H.
+eauto with mem.
+red; intros. eapply Mem.perm_free_3; eauto. exploit IHl; eauto.
+Qed.
+
+
+Lemma free_list_perm':
+forall b lo hi l m m',
+Mem.free_list m l = Some m' ->
+In (b, lo, hi) l ->
+Mem.range_perm m b lo hi Cur Freeable.
+Proof.
+induction l; simpl; intros.
+contradiction.
+destruct a as [[b1 lo1] hi1].
+destruct (Mem.free m b1 lo1 hi1) as [m1|] eqn:?; try discriminate.
+destruct H0. inv H0. eapply Mem.free_range_perm; eauto.
+red; intros. eapply Mem.perm_free_3; eauto. eapply IHl; eauto.
+Qed.
+
+Lemma free_blocks_of_env_perm_2:
+forall m e m' id b ty,
+Mem.free_list m (blocks_of_env ce e) = Some m' ->
+e!id = Some(b, ty) ->
+Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable.
+Proof.
+intros. eapply free_list_perm'; eauto.
+unfold blocks_of_env. change (b, 0, sizeof ce ty) with (block_of_binding ce (id, (b, ty))).
+apply in_map. apply PTree.elements_correct. auto.
+Qed.
+
+Search Mem.perm.  
+
+Lemma blocks_of_env_no_overlap:
+forall (ge: genv) j m e lo hi te tlo thi m' tm,
+match_envs j e m lo hi te m' tlo thi ->
+Mem.inject j m tm ->
+(* (forall id b ty,
+ e!id = Some(b, ty) -> Mem.range_perm m b 0 (sizeof ge ty) Cur Freeable) -> *)
+forall l,
+list_norepet (List.map fst l) ->
+(forall id bty, In (id, bty) l -> te!id = Some bty) ->
+freelist_no_overlap (List.map (block_of_binding ge) l).
+Proof.
+(* intros until tm; intros ME MINJ PERMS. induction l; simpl; intros.
+- auto.
+- destruct a as [id [b ty]]. simpl in *. inv H. split.
+  + apply IHl; auto.
+  + intros. exploit list_in_map_inv; eauto. intros [[id' [b'' ty']] [A B]].
+    simpl in A. inv A. rename b'' into b'.
+    assert (TE: te!id = Some(b, ty)). eauto. 
+    assert (TE': te!id' = Some(b', ty')) by eauto.
+    inv ME. generalize (me_tinj0 id b ty id' b' ty' TE TE').
+
+
+    exploit me_mapped. eauto. eexact TE. intros [b0 [INJ E]].
+    exploit me_mapped. eauto. eexact TE'. intros [b0' [INJ' E']].
+    destruct (zle (sizeof ge0 ty) 0); auto.
+    destruct (zle (sizeof ge0 ty') 0); auto.
+    assert (b0 <> b0').
+    { eapply me_inj; eauto. red; intros; subst; elim H3.
+      change id' with (fst (id', (b', ty'))). apply List.in_map; auto. }
+    assert (Mem.perm m b0 0 Max Nonempty).
+    { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable.
+      eapply PERMS; eauto. lia. auto with mem. }
+    assert (Mem.perm m b0' 0 Max Nonempty).
+    { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable.
+      eapply PERMS; eauto. lia. auto with mem. }
+    exploit Mem.mi_no_overlap; eauto. intros [A|A]. auto. extlia. *)
+Admitted. 
+
+(* match_envs j e m lo hi te tm tlo thi *)
+Theorem match_envs_free_blocks:
+forall j e m lo hi te tlo thi m' tm,
+match_envs j e m lo hi te tm tlo thi ->
+Mem.inject j m tm ->
+Mem.free_list m (blocks_of_env ge e) = Some m' ->
+exists tm',
+   Mem.free_list tm (blocks_of_env tge te) = Some tm'
+/\ Mem.inject j m' tm'.
+Proof.
+intros until tm. 
+intros ME INJ FREE. 
+assert (X: exists tm', Mem.free_list tm (blocks_of_env tge te) = Some tm'). 
+{
+  rewrite blocks_of_env_translated. eapply can_free_list. 
+  
+  (* every one in there is freeable *)
+  intros. unfold blocks_of_env in H. 
+  exploit list_in_map_inv; eauto. intros [[id [b' ty]] [EQ IN]].
+  unfold block_of_binding in EQ. inv EQ.
+  eapply PTree.elements_complete in IN. 
+  destruct (e ! id) eqn: F. 
+  (* (e ! id) not None *)
+  destruct p. 
+  inv ME. exploit me_vars0; eauto.
+  intros.  
+  destruct H0 as [tb [A B]].
+  rewrite IN in A. inv A. 
+  change 0 with (0 + 0).
+  replace (sizeof (prog_comp_env prog) t) with (sizeof (prog_comp_env prog) t + 0) by lia.
+
+  eapply Mem.range_perm_inject; eauto. 
+  eapply (free_blocks_of_env_perm_2); eauto.  
+  (* (e ! id) is None *)
+  inv ME. exploit me_protect0; eauto. 
+  intros. destruct H0 as (A & B). 
+  simpl in A.
+  red. intros. red in A. 
+  assert (sizeof (prog_comp_env prog) ty = 1). 
+  (* need to chenge  Mem.range_perm tm b 0
+              (size_chunk Mint8unsigned) Cur
+              Freeable /\
+            (forall ofs : Z,
+             loc_out_of_reach j m b ofs)*)
+
+(* size_chunk Mint8unsigned to sizeof ty  *)
+  admit. 
+  rewrite H1 in H0. 
+  eapply A in H0.
+  eauto. 
+  (* no overlap *)
+  inv ME. 
+  admit. 
+} 
+Admitted. 
+
+
 (* gen_drop_place_state in simulation and drop_fully_own in compilation match *)
 Lemma gen_drop_place_state_match: forall p,
     match_drop_place_state (Some (gen_drop_place_state p)) (drop_fully_own p).
@@ -3544,7 +3719,17 @@ Proof.
     eapply Mem.unchanged_on_support. eauto.
     eapply Mem.unchanged_on_support. eauto.
   (* step_return_0 *)
-  - admit.
+  - inv MSTMT. inv TR. inv IM. rewrite <- H2 in H1. rewrite <- H in H1.
+    inv H1. 
+    eexists. split. eapply plus_one. eapply RustIRsem.step_return_0.
+    inv MENV. intros.  
+    exploit match_envs_free_blocks; eauto. 
+    intros (tm' & A & B). 
+    (* complete type *)
+    eauto.
+    admit. eauto. 
+    admit. 
+    admit. 
   (* step_return_1 *)
   - admit.
   (* step_skip_call *)
