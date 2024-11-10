@@ -416,7 +416,38 @@ Next Obligation.
   eapply own_consistent.
 Defined.
 Next Obligation.
-Admitted.
+  destruct own. simpl.
+  unfold remove_place, add_place.
+  set (pid := (local_of_place p)) in *.
+  generalize (own_disjoint0 pid). intros DIS.
+  generalize (own_consistent0 pid). intros CON.
+  do 2 erewrite PathsMap.gsspec.
+  destruct (peq id pid).
+  - subst. red. red. intros.    
+    split.
+    + intros IN. exfalso.
+      eapply Paths.empty_1. eapply DIS.
+      instantiate (1 := a).
+      eapply Paths.inter_3.
+      * exploit Paths.inter_1; eauto. intros IN1.
+        exploit Paths.inter_2; eauto. intros IN2.
+        eapply Paths.union_1 in IN1.
+        destruct IN1 as [IN3|IN4].
+        -- auto.
+        (* IN1 and IN4 are contradict *)
+        -- eapply Paths.filter_2 in IN2.
+           eapply Paths.filter_2 in IN4.
+           rewrite IN4 in IN2. simpl in IN2. congruence.
+           red. Morphisms.solve_proper.
+           red. Morphisms.solve_proper.
+      * eapply Paths.inter_2 in IN.
+        eapply Paths.filter_1 in IN. auto.
+        red. Morphisms.solve_proper.
+    + intros IN. exfalso.
+      eapply Paths.empty_1. eauto.
+  - auto.
+Defined.
+  
 
 (* Definition own_check_assign (own: own_env) (p: place) : bool := *)
 (*   (* check that the dominator of p is owned (initialized) because we *)
@@ -760,7 +791,7 @@ from continuation *)
 (* The action actually need to do after the inserted drop *)
 Inductive dropcont : Type :=
 (* for [p := q], we insert drop(p) to get [drop(p); p:=q] and the
-assignment after this drop is recorde in this Dassign *)
+assignment after this drop is recorded in this Dassign *)
 | Dassign: place -> expr -> dropcont
 | Dassign_variant : place -> ident -> ident -> expr -> dropcont
 | Dbreak
@@ -821,8 +852,6 @@ Fixpoint cont_vars (k: cont) : list (list (ident * type)) :=
       []
   end.
 
-Definition vars_to_drops ce (vars: list (ident * type)) : list place :=
-  map (fun elt => Plocal (fst elt) (snd elt)) (filter (fun elt => own_type ce (snd elt)) vars).
 
 (** States *)
 
@@ -955,7 +984,7 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   end.
 
 Definition collect_func (f: function) : Errors.res PathsMap.t :=
-  let vars := f.(fn_params) ++ extract_vars f.(fn_body) in  
+  let vars := f.(fn_params) ++ f.(fn_vars) in  
   if list_norepet_dec ident_eq (map fst vars) then
     let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
     (** TODO: add all the parameters and variables to l (may be useless?) *)
@@ -1043,7 +1072,7 @@ Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res o
   let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
   let init := add_place_list whole pl empty_pathmap in
   (* initialize maybeUninit with the variables *)
-  let vl := map (fun elt => Plocal (fst elt) (snd elt)) (extract_vars f.(fn_body)) in
+  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
   let uninit := add_place_list whole vl empty_pathmap in
   (** Is it reasonable? Translation validation: check (whole = init ∪
   uninit) and (∅ = init ∩ uninit) *)
@@ -1067,7 +1096,7 @@ Next Obligation.
               (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
   set (uninit :=(add_place_list whole
              (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
-                (extract_vars (fn_body f)))
+                f.(fn_vars))
              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
   clear B.
   eapply PathsMap_lub_union.
@@ -1084,7 +1113,7 @@ Next Obligation.
               (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
   set (uninit :=(add_place_list whole
              (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
-                (extract_vars (fn_body f)))
+                f.(fn_vars))
              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
   red in B.
   generalize (B id). intros EQ.
@@ -1135,10 +1164,10 @@ Defined.
 (* Use extract_vars to extract the local variables *)
 
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
-| function_entry_intro: forall m1 vars
-    (VARS: vars = extract_vars f.(fn_body))
-    (NOREP: list_norepet (var_names f.(fn_params) ++ var_names vars))
-    (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ vars) e m1)
+| function_entry_intro: forall m1
+    (* (VARS: vars = extract_vars f.(fn_body)) *)
+    (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
+    (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
     (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2)
     (* initialize own_env *)
     (INITOWN: init_own_env ge f = OK own),

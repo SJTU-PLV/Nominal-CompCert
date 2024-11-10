@@ -107,7 +107,7 @@ Definition good_function fd : Prop :=
 
 Fixpoint makeseq (l: list statement) : statement :=
   match l with
-  (* To ensure that target program must move at least one step *)
+  (* To ensure that target program must move at least one step. It is used to handle the empty list execution in dropplace. Because we should use plus simulation diagram so we should let target program makes a step. *)
   | nil => (Ssequence Sskip Sskip)
   | s :: l' => Ssequence s (makeseq l')
   end.
