@@ -41,12 +41,14 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
                     IM.State (add_place S p (remove_place_list pl before))
                   else
                     IM.State (remove_place p (add_place_list S pl before))
-              | Sreturn (Some e) =>
-                  let p' := moved_place e in
-                  if flag then
-                    IM.State (remove_option p' before)
-                  else
-                    IM.State (add_option S p' before)
+              | Sreturn p =>
+                  (* let p' := moved_place e in *)
+                  (* if flag then *)
+                  (*   IM.State (remove_option p' before) *)
+                  (* else *)
+                  (*   IM.State (add_option S p' before) *)
+                  (** Do we need to move out the return place?  *)
+                  IM.State before
               | Sdrop p =>
                   if flag then
                     IM.State (remove_place p before)

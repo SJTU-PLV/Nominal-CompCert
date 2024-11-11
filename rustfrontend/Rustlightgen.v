@@ -377,8 +377,8 @@ Fixpoint replace_binder_in_stmt (id: ident) (p: place) (s: statement) : statemen
       Sifthenelse e (replace_binder_in_stmt id p s1) (replace_binder_in_stmt id p s2)
   | Sloop s =>
       Sloop (replace_binder_in_stmt id p s)
-  | Sreturn (Some e) =>
-      Sreturn (Some (replace_binder_in_expr id p e))
+  | Sreturn p =>
+      Sreturn (replace_binder_in_place id p p)
   | _ => s
   end.
          
@@ -505,15 +505,10 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       do s' <- transl_stmt s;
       ret (Sloop s')
   | Rustsyntax.Sreturn e =>
-      match e with
-      | Some e =>
-          do (sl, e') <- transl_value_expr e;
-          (* The lifetime of the temporary variable must exceed the return statement *)
-          do s' <- finish_stmt (sl ++ [Sreturn (Some e')]);
-          ret s'
-      | None =>
-          ret (Sreturn None)
-      end
+      do (sl, p) <- transl_place_expr e;
+      (* The lifetime of the temporary variable must exceed the return statement *)
+      do s' <- finish_stmt (sl ++ [Sreturn p]);
+      ret s'
   | Rustsyntax.Sbreak =>
       ret Sbreak
   | Rustsyntax.Scontinue =>
@@ -627,6 +622,7 @@ Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
                             f.(Rustsyntax.fn_drop_glue)
                             f.(Rustsyntax.fn_return)
                             f.(Rustsyntax.fn_callconv)
+                            f.(Rustsyntax.fn_params)
                             f.(Rustsyntax.fn_params)
                             stmt)
   | Err msg => Errors.Error msg

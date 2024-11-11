@@ -1556,16 +1556,28 @@ Proof.
     eexists. split. econstructor; eauto. auto.
 Qed. 
   
-Lemma drop_box_rec_injp_acc: forall m1 m2 tm1 j Hm b ofs tb tofs tyl ge tge
+Lemma drop_box_rec_injp_acc: forall tyl m1 m2 tm1 j Hm b ofs tb tofs ge tge
         (DROP: drop_box_rec ge b ofs m1 tyl m2)
         (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)),
       exists tj tm2 tHm,
         drop_box_rec tge tb tofs tm1 tyl tm2
         /\ injp_acc (injpw j m1 tm1 Hm) (injpw tj m2 tm2 tHm).
-Proof. 
-  
-Admitted. 
-
+Proof.
+  induction tyl. 
+  - simpl. intros.  inv DROP. inv VINJ. simpl. exists j. exists tm1. exists Hm.
+    split. econstructor. reflexivity. 
+  - simpl.
+    intros. inv DROP.
+    exploit deref_loc_rec_inject; eauto.
+    intros (tv & A & B).
+    exploit extcall_free_injp. eauto. instantiate (2:=j). eauto.
+    intros (tm' & Hm' & C & D).
+    exploit IHtyl; eauto.
+    intros (tj' & tm2' & tHm' & E & F).
+    inv B. 
+    exists tj'. exists tm2'. exists tHm'. split; eauto. econstructor; eauto.
+    transitivity  (injpw j m0 tm' Hm'); eauto. 
+Qed.
 
 
 Lemma eval_pexpr_inject:
@@ -2556,8 +2568,6 @@ unfold blocks_of_env. change (b, 0, sizeof ce ty) with (block_of_binding ce (id,
 apply in_map. apply PTree.elements_correct. auto.
 Qed.
 
-Search Mem.perm.  
-
 Lemma blocks_of_env_no_overlap:
 forall (ge: genv) j m e lo hi te tlo thi m' tm,
 match_envs j e m lo hi te m' tlo thi ->
@@ -2960,7 +2970,7 @@ Proof.
     auto. auto.    
   (* step_dropstate_box *)
   - inv VINJ.
-    exploit (drop_box_rec_injp_acc m m' tm); eauto.
+    exploit (drop_box_rec_injp_acc tys m m' tm); eauto.
     instantiate (1:= Hm). instantiate (1 := tge).
     intros (tj & tm2 & tHm & TDROP & INJP1).
     erewrite <- comp_env_preserved in *; eauto.
@@ -3759,21 +3769,7 @@ Proof.
     eapply Mem.sup_include_refl. eapply Mem.sup_include_refl.
     eapply Mem.unchanged_on_support. eauto.
     eapply Mem.unchanged_on_support. eauto.
-  (* step_return_0 *)
-  - inv MSTMT. inv TR. inv IM. rewrite <- H2 in H1. rewrite <- H in H1.
-    inv H1. 
-    eexists. split. eapply plus_one. eapply RustIRsem.step_return_0.
-    inv MENV. intros.  
-    exploit match_envs_free_blocks; eauto. 
-    intros (tm' & A & B). 
-    (* complete type *)
-    eauto.
-    admit. eauto. 
-    admit. 
-    admit. 
   (* step_return_1 *)
-  - admit.
-  (* step_skip_call *)
   - admit.
   (* step_returnstate *)
   - inv MCONT.

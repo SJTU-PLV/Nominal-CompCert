@@ -972,8 +972,8 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
       collect_place ce p (collect_expr ce e m)
   | Scall p _ al =>
       collect_place ce p (collect_exprlist ce al m)
-  | Sreturn (Some e) =>
-      collect_expr ce e m
+  | Sreturn p =>
+      collect_place ce p m
   | Ssequence s1 s2 =>
       collect_stmt s1 (collect_stmt s2 m)
   | Sifthenelse e s1 s2 =>
@@ -1624,26 +1624,33 @@ Inductive step : state -> trace -> state -> Prop :=
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
-(** Return cases *)
-| step_return_0: forall e f k own drops param_drops m
-    (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
-    (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
-    step (State f (Sreturn None) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
-| step_return_1: forall le a v v1 m f k own1 own2 drops param_drops
-    (TFEXPR: move_place_option own1 (moved_place a) = own2)
-    (EXPR: eval_expr ge le m a v)
+(** Return cases: for now, we do not allow return None (i.e., a
+function has void return type). All functions must have some return
+type, at least unit type. *)
+(* | step_return_0: forall e f k own drops param_drops m *)
+(*     (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k))) *)
+(*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
+(*     step (State f (Sreturn p) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
+| step_return_1: forall le p v v1 m f k own1 drops param_drops
+    (* (TFEXPR: move_place_option own1 (moved_place a) = own2) *)
+    (EXPR: eval_expr ge le m (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
-    (CAST: sem_cast v (typeof a) f.(fn_return) = Some v1)
+    (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1)
     (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
-    step (State f (Sreturn (Some a)) k le own1 m) E0 (Dropinsert f (drops++param_drops) (Dreturn v1) k le own2 m)
+    (* We do not need to update the own_env because
+    (drops++param_drops) cannot contain the return variable. This
+    property can be checked in the move checking *)
+    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drops++param_drops) (Dreturn v1) k le own1 m)
 
-(* no return statement but reach the end of the function *)
-| step_skip_call: forall e f k own drops param_drops m
-    (CALLCONT: is_call_cont k)
-    (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k)))
-    (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)),
-    step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m)
+(** no return statement but reach the end of the function. How to
+support it in rust semantics? How to compile it to Clight? In Clight,
+return nothing is only valid in void function! *)
+(* | step_skip_call: forall e f k own drops param_drops m *)
+(*     (CALLCONT: is_call_cont k) *)
+(*     (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k))) *)
+(*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
+(*     step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
 
 | step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
     (TFASSIGN: own_transfer_assign own1 p = own2),

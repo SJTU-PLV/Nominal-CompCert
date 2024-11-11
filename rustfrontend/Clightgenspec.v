@@ -860,10 +860,9 @@ Proof.
   - monadInv_comb TRANSL. monadInv_sym EQ0.
     eapply tr_ifthenelse; eauto. 
   - eapply tr_loop. eauto. 
-  - destruct o.
-    monadInv_comb TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl.
+  - monadInv_comb TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl.
     rewrite EQ. auto.  
-    monadInv_sym TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl. auto. 
+    (* monadInv_sym TRANSL. econstructor. simpl. auto. instantiate (1:= g'). simpl. auto.  *)
 Qed.
 
 Lemma transl_function_meet_spec: forall f tf,
