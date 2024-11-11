@@ -394,254 +394,52 @@ Proof.
     + eapply IHl; eauto.
 Qed.
 
-(*if p dose not in l, the first (p,i) will be set and we will get i 
-eventually.*)
-Lemma generate_place_map_not_in_list_id_same : forall l p i id m,
-  ~ In p (map fst l) ->
-  get_dropflag_temp
-    (fold_left generate_place_map_fun l (generate_place_map_fun m (p, i))) p
-     = Some id ->
-  i = id.
-Proof.
-  induction l.
-  - simpl. intros. unfold get_dropflag_temp, generate_place_map_fun in H0.
-    simpl in H0. destruct (m ! (local_of_place p)).
-    + rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p); simpl in H0; try congruence; auto.
-    + rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p); simpl in H0; try congruence; auto.
-  - intros. simpl in H0. simpl in H. eapply Decidable.not_or in H. 
-    destruct H. destruct a. simpl in H. eapply IHl. apply H1. 
-Admitted.
-
-(* limit the id, getting by generate_place_map_dom *)
-Lemma generate_place_map_dom': forall l p id m,
-  In p (map fst l) ->
+Lemma generate_place_map_in_list_or_m: forall l p id m,
   get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id ->
-  get_dropflag_temp (generate_place_map l) p = Some id.
-Proof.
-  intros. unfold generate_place_map.
-  generalize (PTree.empty (list (place * ident))).
-  generalize dependent m.
-  induction l. 
-  - intros. simpl in H. contradiction.
-  - simpl. intros. destruct a. simpl in H. destruct H.
-    + subst. destruct (in_dec place_eq p (map fst l)).
-      * eapply IHl. apply i0. apply H0.
-      * eapply generate_place_map_in_map_not_in_list. apply n.
-        unfold get_dropflag_temp, generate_place_map_fun.
-        simpl. destruct (t ! (local_of_place p)).
-        ** rewrite PTree.gss. simpl. 
-           destruct (place_eq p p); simpl; try congruence; auto. admit.
-        ** rewrite PTree.gss. simpl. 
-           destruct (place_eq p p); simpl; try congruence; auto. admit.
-    + simpl. eapply IHl. apply H. apply H0.
-Admitted.
-
-(*the simplest case of exchage two different set*)
-Lemma generate_map_comm': forall (p0:place) p1 (i0:ident) i1 m,
-      local_of_place p0 <> local_of_place p1 ->
-      (generate_place_map_fun (generate_place_map_fun m (p1, i1))
-          (p0, i0))
-=
-      (generate_place_map_fun (generate_place_map_fun m (p0, i0))
-          (p1, i1)).
-Proof.
-  intros. apply PTree.extensionality. intros k.
-  unfold generate_place_map_fun. simpl. 
-  destruct (m ! (local_of_place p1)) eqn:E.
-  - rewrite PTree.gso by auto. destruct (m ! (local_of_place p0)) eqn:E1.
-    + replace (PTree.set (local_of_place p0) ((p0, i0) :: l0) m) !
-                  (local_of_place p1) with (m ! (local_of_place p1)).
-      destruct (m ! (local_of_place p1)) eqn:E2.
-      * destruct (ident_eq (local_of_place p0) k).
-        -- destruct (ident_eq (local_of_place p1) k).
-          ++ rewrite <-e0 in e. contradiction.
-          ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-             rewrite PTree.gss. reflexivity.
-        -- destruct (ident_eq (local_of_place p1) k).
-          ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-            rewrite PTree.gss. inv E. reflexivity.
-          ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-      * destruct (ident_eq (local_of_place p0) k).
-        -- destruct (ident_eq (local_of_place p1) k).
-          ++ rewrite <-e0 in e. contradiction.
-          ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-            rewrite PTree.gss. reflexivity.
-        -- destruct (ident_eq (local_of_place p1) k).
-          ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-            rewrite PTree.gss. inv E.
-          ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-      * rewrite PTree.gso by auto. reflexivity.
-    + replace (PTree.set (local_of_place p0) [(p0, i0)] m) !
-                (local_of_place p1) with (m ! (local_of_place p1)).
-                destruct (m ! (local_of_place p1)) eqn:E3.
-                * destruct (ident_eq (local_of_place p0) k).
-                  -- destruct (ident_eq (local_of_place p1) k).
-                    ++ rewrite <-e0 in e. contradiction.
-                    ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                       rewrite PTree.gss. reflexivity.
-                  -- destruct (ident_eq (local_of_place p1) k).
-                    ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                      rewrite PTree.gss. inv E. reflexivity.
-                    ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-                * destruct (ident_eq (local_of_place p0) k).
-                  -- destruct (ident_eq (local_of_place p1) k).
-                    ++ rewrite <-e0 in e. contradiction.
-                    ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                      rewrite PTree.gss. reflexivity.
-                  -- destruct (ident_eq (local_of_place p1) k).
-                    ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                      rewrite PTree.gss. inv E.
-                    ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-                * rewrite PTree.gso by auto. reflexivity.
-  - rewrite PTree.gso by auto. destruct (m ! (local_of_place p0)) eqn:E1.
-  + replace (PTree.set (local_of_place p0) ((p0, i0) :: l) m) !
-                (local_of_place p1) with (m ! (local_of_place p1)).
-    destruct (m ! (local_of_place p1)) eqn:E2.
-    * destruct (ident_eq (local_of_place p0) k).
-      -- destruct (ident_eq (local_of_place p1) k).
-        ++ rewrite <-e0 in e. contradiction.
-        ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-           rewrite PTree.gss. reflexivity.
-      -- destruct (ident_eq (local_of_place p1) k).
-        ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-          rewrite PTree.gss. inv E.
-        ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-    * destruct (ident_eq (local_of_place p0) k).
-      -- destruct (ident_eq (local_of_place p1) k).
-        ++ rewrite <-e0 in e. contradiction.
-        ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-          rewrite PTree.gss. reflexivity.
-      -- destruct (ident_eq (local_of_place p1) k).
-        ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-          rewrite PTree.gss. inv E. reflexivity.
-        ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-    * rewrite PTree.gso by auto. reflexivity.
-  + replace (PTree.set (local_of_place p0) [(p0, i0)] m) !
-              (local_of_place p1) with (m ! (local_of_place p1)).
-              destruct (m ! (local_of_place p1)) eqn:E3.
-              * destruct (ident_eq (local_of_place p0) k).
-                -- destruct (ident_eq (local_of_place p1) k).
-                  ++ rewrite <-e0 in e. contradiction.
-                  ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                     rewrite PTree.gss. reflexivity.
-                -- destruct (ident_eq (local_of_place p1) k).
-                  ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                    rewrite PTree.gss. inv E. 
-                  ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-              * destruct (ident_eq (local_of_place p0) k).
-                -- destruct (ident_eq (local_of_place p1) k).
-                  ++ rewrite <-e0 in e. contradiction.
-                  ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                    rewrite PTree.gss. reflexivity.
-                -- destruct (ident_eq (local_of_place p1) k).
-                  ++ subst. rewrite PTree.gss. rewrite PTree.gso by auto.
-                    rewrite PTree.gss. inv E. reflexivity.
-                  ++ subst. repeat (rewrite PTree.gso by auto). reflexivity.
-              * rewrite PTree.gso by auto. reflexivity.
-Qed.
-
-(*if we can get (p,id) from l, then it dose not matter of m*)
-Lemma generate_map_list_replace_map: forall l p id m,
-  get_dropflag_temp (generate_place_map l) p = Some id ->
-  get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id.
+  In (p, id) l \/ get_dropflag_temp m p = Some id.
 Proof.
   induction l.
-  - intros. unfold generate_place_map, get_dropflag_temp in H. simpl in H.
-    discriminate.
-  - intros. destruct a. destruct (place_eq p p0).
-    + unfold generate_place_map in H.
-      unfold get_dropflag_temp, generate_place_map_fun in *.
-      simpl in *.  
-Admitted.
-
-(*if two place is different, we can exchange them and get same result*)
-Lemma generate_map_comm: forall (p0:place) p (i0:ident) i id m l,
-  p <> p0 ->
-  get_dropflag_temp
-    (fold_left generate_place_map_fun l
-      (generate_place_map_fun (generate_place_map_fun m (p, i)) (p0, i0)))
-        p = Some id ->
-  get_dropflag_temp
-    (fold_left generate_place_map_fun l
-      (generate_place_map_fun (generate_place_map_fun m (p0, i0)) (p, i)))
-        p = Some id.
-Proof.
-  intros. destruct (ident_eq (local_of_place p0) (local_of_place p)).
-  + induction l.
-    - intros. simpl in *. 
-      unfold get_dropflag_temp, generate_place_map_fun in *.
-      simpl in *. rewrite !e in *.
-      destruct (m ! (local_of_place p)) eqn:E.
-      * repeat (rewrite PTree.gss in *; simpl in *). 
-        destruct (place_eq p p0); simpl in *; try congruence; auto.
-      * repeat (rewrite PTree.gss in *; simpl in *). 
-        destruct (place_eq p p0); simpl in *; try congruence; auto.
-    - simpl. destruct (in_dec place_eq p (map fst l)).
-      * apply generate_place_map_dom in i1. destruct i1 as [id1 i1].
-Admitted.
-
-(* Setting different place will not influence the result*)
-Lemma dif_set_not_influence_get: forall l p p0 i id m, p <> p0 ->
-  get_dropflag_temp (fold_left generate_place_map_fun ((p0, i) :: l) m) p
-  = Some id -> get_dropflag_temp (fold_left generate_place_map_fun l m) p
-  = Some id.
-Proof.
-induction l.
-- intros. simpl in *. unfold get_dropflag_temp, generate_place_map_fun in H0.
-  simpl in H0. unfold get_dropflag_temp.
-  destruct (ident_eq (local_of_place p) (local_of_place p0)).
-  + rewrite <- !e in H0. destruct (m ! (local_of_place p)) eqn:E.
-    * rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p0); simpl in H0; try congruence; auto.
-    * rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p0); simpl in H0; try congruence; auto.
-  + destruct (m ! (local_of_place p0)) eqn:E1; rewrite PTree.gso in H0 by auto.
-    * destruct (m ! (local_of_place p)). auto. auto.
-    * destruct (m ! (local_of_place p)). auto. auto.
-- intros. simpl. eapply IHl with (i:=i). apply H. simpl. simpl in H0.
-  destruct a. destruct (ident_eq (local_of_place p0) (local_of_place p1)).
-  + subst. unfold generate_place_map_fun at 2 3 in H0. simpl in H0.
-    rewrite <-!e in H0. unfold generate_place_map_fun at 2 3. simpl.
-    rewrite <-!e. destruct (m ! (local_of_place p0)) eqn:E.
-    * rewrite PTree.gss in *. auto.
-  + rewrite generate_map_comm in H0. apply H0. auto.
+  - intros. simpl in H. right. apply H.
+  - intros. simpl in H. apply IHl in H. destruct H.
+    + left. simpl. right. apply H.
+    + destruct a. destruct (place_eq p p0).
+      * unfold generate_place_map_fun in H. simpl in H. subst p0. left.
+        destruct (m ! (local_of_place p)). 
+        ** unfold get_dropflag_temp in H.
+           rewrite PTree.gss in H. simpl in H. 
+           destruct (place_eq p p); simpl in H; try congruence; auto.
+           inv H. simpl. left. reflexivity.
+        ** unfold get_dropflag_temp in H.
+           rewrite PTree.gss in H. simpl in H. 
+           destruct (place_eq p p); simpl in H; try congruence; auto.
+           inv H. simpl. left. reflexivity.
+      * right. unfold generate_place_map_fun in H. simpl in H.
+        destruct (ident_eq (local_of_place p0) (local_of_place p)).
+        ++ rewrite !e in *. unfold get_dropflag_temp.
+         destruct (m ! (local_of_place p)).
+          ** unfold get_dropflag_temp in H.
+            rewrite PTree.gss in H. simpl in H. 
+            destruct (place_eq p p0); simpl in H; try congruence; auto.
+          ** unfold get_dropflag_temp in H.
+            rewrite PTree.gss in H. simpl in H. 
+            destruct (place_eq p p0); simpl in H; try congruence; auto.
+        ++ destruct (m ! (local_of_place p0)). 
+          ** unfold get_dropflag_temp in H.
+            rewrite PTree.gso in H by auto. simpl in H. 
+            destruct (place_eq p p0); simpl in H; try congruence; auto.
+          ** unfold get_dropflag_temp in H.
+            rewrite PTree.gso in H by auto. simpl in H. 
+            destruct (place_eq p p0); simpl in H; try congruence; auto.
 Qed.
 
-(*Element in l will reset the ident of p*)
-Lemma latter_set_cover_first: forall l p i id m, i <> id ->
-  get_dropflag_temp (fold_left generate_place_map_fun ((p, i) :: l) m) p = Some id ->
-  get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id.
-Proof.
-  induction l.
-  - intros. unfold get_dropflag_temp, generate_place_map_fun in H0. simpl in H0. 
-    destruct (m ! (local_of_place p)).
-    + rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p); simpl in H0; try congruence; auto.
-    + rewrite PTree.gss in H0. simpl in H0. 
-      destruct (place_eq p p); simpl in H0; try congruence; auto.
-  - intros. simpl. destruct a. eapply IHl. apply H. simpl. simpl in H0.
-    destruct (place_eq p p0).
-    + subst. admit.(*destruct (in_dec place_eq p (map fst l))*)
-    + eapply generate_map_comm in H0. apply H0. auto.
-Admitted.
 
 Lemma generate_place_map_in_list: forall l p id,
     get_dropflag_temp (generate_place_map l) p = Some id ->
     In (p, id) l.
 Proof.
-  induction l.
-  - intros. unfold generate_place_map,get_dropflag_temp in H. simpl in H. discriminate.
-  - intros. simpl. destruct a. 
-    destruct (place_eq p p0); destruct (ident_eq i id).
-    (*(p0, i) = (p, id)*)
-    + left. subst; reflexivity.
-    (*(p0, i) <> (p, id), so we apply IHl*)
-    + right. apply IHl. unfold generate_place_map in H. unfold generate_place_map.
-      subst p0. eapply latter_set_cover_first. eapply n. eapply H. 
-    + right. apply IHl. eapply dif_set_not_influence_get. eapply n. eapply H. 
-    + right. apply IHl. eapply dif_set_not_influence_get. eapply n. eapply H.
+  intros. apply generate_place_map_in_list_or_m in H.
+  unfold get_dropflag_temp in H. simpl in H. destruct H.
+  apply H. discriminate.
 Qed. 
 
 (** Key lemma used in generate_flag_map_sound  *)
