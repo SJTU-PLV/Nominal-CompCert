@@ -38,13 +38,14 @@ Inductive cont : Type :=
 
 (** Pop continuation until a call or stop *)
 
-Fixpoint call_cont (k: cont) : cont :=
+(* Return from dropstate and dropplace is UB *)
+Fixpoint call_cont (k: cont) : option cont :=
   match k with
-  | Kseq _ k
-  | Kloop _ k
-  | Kdropplace _ _ _ _ _ k
-  | Kdropcall _ _ _ _ k  => call_cont k
-  | _ => k
+  | Kseq _ k => call_cont k
+  | Kloop _ k => call_cont k
+  | Kdropplace _ _ _ _ _ _ => None
+  | Kdropcall _ _ _ _ _  => None                             
+  | _ => Some k
   end.
 
 Definition is_call_cont (k: cont) : Prop :=
@@ -558,7 +559,8 @@ skip return, see Rustlightown.v *)
 (*     Mem.free_list m1 lb = Some m2 -> *)
 (*     (* return unit or Vundef? *) *)
 (*     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2) *)
-| step_return_1: forall le p v v1 lb m1 m2 f k own1 (* own2 *)
+| step_return_1: forall le p v v1 lb m1 m2 f k ck own1 (* own2 *)
+    (CONT: call_cont k = Some ck)
     (* (TFEXPR: move_place_option own1 (moved_place a) = own2), *)
     (EVAL: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
@@ -566,7 +568,7 @@ skip return, see Rustlightown.v *)
     (* drop the stack blocks *)
     (STK: blocks_of_env ge le = lb)
     (FREE: Mem.free_list m1 lb = Some m2),
-    step (State f (Sreturn p) k le own1 m1) E0 (Returnstate v1 (call_cont k) m2)
+    step (State f (Sreturn p) k le own1 m1) E0 (Returnstate v1 ck m2)
 (* no return statement but reach the end of the function *)
 (* | step_skip_call: forall e lb m1 m2 f k own, *)
 (*     is_call_cont k -> *)

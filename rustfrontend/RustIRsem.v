@@ -34,11 +34,15 @@ Inductive cont : Type :=
 
 (** Pop continuation until a call or stop *)
 
-Fixpoint call_cont (k: cont) : cont :=
+(* Return from dropstate is UB *)
+Fixpoint call_cont (k: cont) : option cont :=
   match k with
   | Kseq s k => call_cont k
   | Kloop s k => call_cont k
-  | _ => k
+  | Kdropcall _ _ _ _ _ => None
+  (* Adhoc: Kcall None represents calling drop glue. This should be replaced by a new cont *)
+  | Kcall None _ _ k => None
+  | _ => Some k
   end.
 
 Definition is_call_cont (k: cont) : Prop :=
@@ -320,7 +324,8 @@ Inductive step : state -> trace -> state -> Prop :=
 (*     Mem.free_list m1 lb = Some m2 -> *)
 (*     (* return unit or Vundef? *) *)
 (*     step (State f (Sreturn None) k e m1) E0 (Returnstate Vundef (call_cont k) m2) *)
-| step_return_1: forall le p v v1 lb m1 m2 f k,
+| step_return_1: forall le p v v1 lb m1 m2 f k ck
+    (CONT: call_cont k = Some ck),
     eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v ->
     (** TODO: reconsider this condition and check it in Clightgen *)
     (forall id b t, le ! id = Some (b, t) -> complete_type ge t = true) ->
@@ -329,7 +334,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (* drop the stack blocks *)
     blocks_of_env ge le = lb ->
     Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn p) k le m1) E0 (Returnstate v1 (call_cont k) m2)
+    step (State f (Sreturn p) k le m1) E0 (Returnstate v1 ck m2)
 (* no return statement but reach the end of the function *)
 (* | step_skip_call: forall e lb m1 m2 f k, *)
 (*     is_call_cont k -> *)

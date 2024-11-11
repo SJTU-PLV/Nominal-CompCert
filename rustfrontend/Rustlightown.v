@@ -816,15 +816,18 @@ Inductive cont : Type :=
 
 (** Pop continuation until a call or stop *)
 
-Fixpoint call_cont (k: cont) : cont :=
+(* Return from dropstate, dropplace and dropinsert is UB *)
+Fixpoint call_cont (k: cont) : option cont :=
   match k with
-  | Kseq _ k
-  | Kloop _ k
-  | Kdropplace _ _ _ _ _ k
-  | Kdropcall _ _ _ _ k
-  | Kdropinsert _ _ k => call_cont k
-  | _ => k
+  | Kseq _ k => call_cont k
+  | Kloop _ k => call_cont k
+  | Klet _ _ k => call_cont k
+  | Kdropplace _ _ _ _ _ _ => None
+  | Kdropcall _ _ _ _ _  => None
+  | Kdropinsert _ _ _ => None
+  | _ => Some k
   end.
+
 
 Definition is_call_cont (k: cont) : Prop :=
   match k with
@@ -1546,12 +1549,13 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_continue_loop: forall f s k le own m,
     step_dropinsert (Dropinsert f [] Dcontinue (Kloop s k) le own m) E0
       (State f s (Kloop s k) le own m)
-| step_dropinsert_return: forall f v k le own m1 m2 lb,
+| step_dropinsert_return: forall f v k ck le own m1 m2 lb
+    (CONT: call_cont k = Some ck),
     (* free stack blocks *)
     blocks_of_env ge le = lb ->
     Mem.free_list m1 lb = Some m2 ->    
     step_dropinsert (Dropinsert f [] (Dreturn v) k le own m1) E0
-      (Returnstate v (call_cont k) m2)
+      (Returnstate v ck m2)
 | step_dropinsert_endlet: forall f k le own m,
     step_dropinsert (Dropinsert f [] Dendlet k le own m) E0
       (State f Sskip k le own m)

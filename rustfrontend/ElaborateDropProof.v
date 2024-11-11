@@ -639,6 +639,9 @@ Record match_envs (j: meminj) (e: env) (m: mem) (lo hi: Mem.sup) (te: env) (tm: 
       te ! id = Some (b, ty) ->
       ~ sup_In b tlo /\ sup_In b thi;
 
+    (* used in free_list verification *)
+    me_initial:
+      Mem.sup_include (Mem.support wm1) lo;
     me_tinitial:
       Mem.sup_include (Mem.support wm2) tlo;
     
@@ -683,6 +686,7 @@ Record match_envs_flagm (j: meminj) (own: own_env) (e: env) (m: mem) (lo hi: Mem
 Lemma match_empty_envs: forall j m tm lo hi tlo thi,
     Mem.sup_include lo hi ->
     Mem.sup_include tlo thi ->
+    Mem.sup_include (Mem.support wm1) lo ->
     Mem.sup_include (Mem.support wm2) tlo ->
     match_envs j empty_env m lo hi empty_env tm tlo thi.
 Proof.
@@ -692,7 +696,7 @@ Proof.
   erewrite PTree.gempty in *. congruence.
   erewrite PTree.gempty in *. congruence.
   erewrite PTree.gempty in *. congruence.
-  auto.
+  auto. auto.
   auto. auto.
   erewrite PTree.gempty in *. congruence.
   (* erewrite PTree.gempty in *. congruence. *)
@@ -847,8 +851,8 @@ Proof.
     unfold Mem.sup_include in SINCR. apply SINCR in H1.
     exploit Mem.support_alloc; eauto. intros. rewrite H. unfold sup_incr. simpl.
     right. auto.
-    (* me_tinitial0 *)
-    auto.
+    (* me_tinitial0 and me_initial *)
+    auto. auto.
     (*me_incr0*)
     auto.
     (*me_tincr0*)
@@ -1100,6 +1104,7 @@ Proof.
     (* trange *)
     intros. exploit alloc_variables_range. exact ALLOC'. eauto.
     rewrite PTree.gempty. intuition congruence.
+    unfold wm1.  destruct w. eapply Mem.unchanged_on_support. inv INJP. eauto.  
     unfold wm2.  destruct w. eapply Mem.unchanged_on_support. inv INJP. eauto.  
     inv INJP. 
     eapply alloc_variables_support. eauto. 
@@ -1148,6 +1153,7 @@ Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> R
 | match_Kdropplace: forall f tf st l k tk e te own1 own2 flagm cfg nret cont brk pc ts1 ts2 m tm lo tlo hi thi maybeInit maybeUninit universe entry mayinit mayuninit
     (** Do we need match_stacks here?  *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
+    (RETY: f.(fn_return) = tf.(fn_return))
     (MSTK: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc cont brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 e m lo hi te flagm tm tlo thi)
     (SFLAGM: sound_flagm ce f.(fn_body) cfg flagm maybeInit maybeUninit universe)
@@ -1166,6 +1172,7 @@ with match_stacks (j: meminj) : cont -> RustIRsem.cont -> mem -> mem -> sup -> s
     match_stacks j Kstop (RustIRsem.Kstop) m tm bound tbound
 | match_stacks_call: forall flagm f tf nret cfg pc contn brk k tk own1 own2 p le tle m tm lo tlo hi thi maybeInit maybeUninit universe entry stmt mayinit mayuninit
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
+    (RETY: f.(fn_return) = tf.(fn_return))
     (* callee use stacks hi and thi, so caller f uses lo and tlo*)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk pc contn brk nret m tm lo tlo)
     (MENV: match_envs_flagm j own1 le m lo hi tle flagm tm tlo thi)
@@ -1333,12 +1340,125 @@ Proof.
   - econstructor; eauto.
 Qed.
 
+(* generalized version of match_cont_bound_unchanged used in
+match_cont after free_list. We do not allow memory expansion because
+it would cause some out_of_reach block to be reachable by allocating
+some blocks in source memory *)
+Lemma match_cont_bound_unchanged_gen: forall k tk j an fm body cfg pc cont brk nret m1 m2 tm1 tm2 lo tlo
+   (MCONT:match_cont j an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)
+   (MINJ: Mem.inject j m1 tm1)
+   (UNC1: Mem.unchanged_on (fun b _ => Mem.sup_In b lo) m1 m2)
+   (UNC2: Mem.unchanged_on (fun b _ => Mem.sup_In b tlo) tm1 tm2)
+   (* prevent assigning permission to freed block so that makes it
+   reachable *)
+   (DEC: injp_max_perm_decrease m1 m2)
+   (* make sure m1 is larger than lo *)
+   (INCL: Mem.sup_include lo (Mem.support m1))
+   (* make sure m1 cannot expand *)
+   (SUP1: Mem.support m1 = Mem.support m2),
+   (* (SUP2: Mem.support tm1 = Mem.support tm2), *)
+    match_cont j an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo.
+Proof.
+  induction k; intros; inv MCONT.
+  - constructor. auto.
+  - econstructor; eauto.
+  - econstructor; eauto.
+  - inv MSTK.
+    econstructor; eauto.
+    econstructor; eauto.
+    eapply IHk; eauto.
+    (* m1 -> m2 *)
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply me_incr. eapply me_envs; eauto. auto.
+    (* tm1 -> tm2 *)
+    eapply Mem.unchanged_on_implies; eauto.        
+    intros. simpl. eapply me_tincr. eapply me_envs; eauto. auto.
+    (* sup_include *)
+    eapply Mem.sup_include_trans. eapply me_incr. eapply me_envs; eauto. auto.
+    (* match_envs_flagm *)
+    generalize MENV. intros MENV1.
+    inv MENV.
+    econstructor; eauto.
+    (* wf_flagm *)
+    intros. exploit me_wf_flagm0; eauto.
+    intros (tb & v & A1 & A2 & A3 & A4).
+    exists tb, v. repeat apply conj; auto.
+    eapply Mem.load_unchanged_on; eauto.
+    intros. simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    (* mathc_envs *)
+    inv me_envs0.
+    constructor; eauto.
+    intros. exploit me_protect0; eauto.
+    intros (B1 & B2).
+    split.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    eapply Mem.perm_valid_block; eauto.
+    (* out_of_reach *)
+    intros. red. intros.
+    (* b0 is in lo or not*)
+    destruct (Sup.sup_dec b0 lo).
+    + intro. eapply B2; eauto. eapply Mem.unchanged_on_perm; eauto.
+      eapply INCL. auto.
+    + intro. eapply B2; eauto. eapply DEC.
+      eapply Mem.perm_valid_block in H2. unfold Mem.valid_block.
+      rewrite SUP1. auto. eauto.
+  - econstructor; eauto.
+    eapply IHk. eauto. eauto.
+    (* m1 -> m2 *)
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply me_incr. eapply me_envs; eauto. auto.
+    (* tm1 -> tm2 *)
+    eapply Mem.unchanged_on_implies; eauto.        
+    intros. simpl. eapply me_tincr. eapply me_envs; eauto. auto.
+    (* max_perm_decrease *)
+    auto.
+    (* sup_include *)
+    eapply Mem.sup_include_trans. eapply me_incr. eapply me_envs; eauto. auto.
+    auto. 
+    (* match_envs_flagm *)
+    generalize MENV. intros MENV1.
+    inv MENV.
+    econstructor; eauto.
+    (* wf_flagm *)
+    intros. exploit me_wf_flagm0; eauto.
+    intros (tb & v & A1 & A2 & A3 & A4).
+    exists tb, v. repeat apply conj; auto.
+    eapply Mem.load_unchanged_on; eauto.
+    intros. simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    (* mathc_envs *)
+    inv me_envs0.
+    constructor; eauto.
+    intros. exploit me_protect0; eauto.
+    intros (B1 & B2).
+    split.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. eapply me_trange.
+    eapply me_envs; eauto. eauto.
+    eapply Mem.perm_valid_block; eauto.
+    (* out_of_reach *)
+    intros. red. intros.
+    (* b0 is in lo or not*)
+    destruct (Sup.sup_dec b0 lo).
+    + intro. eapply B2; eauto. eapply Mem.unchanged_on_perm; eauto.
+      eapply INCL. auto.
+    + intro. eapply B2; eauto. eapply DEC.
+      eapply Mem.perm_valid_block in H2. unfold Mem.valid_block.
+      rewrite SUP1. auto. eauto.
+  - econstructor; eauto.
+Qed.
+
+
 Inductive match_states : state -> RustIRsem.state -> Prop := 
 | match_regular_state:
   forall f s k e own m tf ts tk te tm j flagm maybeInit maybeUninit universe cfg nret cont brk next pc Hm lo tlo hi thi entry mayinit mayuninit
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MSTMT: match_stmt (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg s ts pc next cont brk nret)
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
+    (RETY: f.(fn_return) = tf.(fn_return))
     (MINJ: injp_acc w (injpw j m tm Hm))
     (* well-formedness of the flag map *)
     (MENV: match_envs_flagm j own e m lo hi te flagm tm tlo thi)
@@ -1353,6 +1473,7 @@ Inductive match_states : state -> RustIRsem.state -> Prop :=
     match_states (State f s k e own m) (RustIRsem.State tf ts tk te tm)
 | match_dropplace: forall f tf st l k tk e te own1 own2 m tm j flagm  maybeInit maybeUninit universe cfg nret cont brk next ts1 ts2 Hm lo tlo hi thi entry mayinit mayuninit
     (AN: analyze ce f cfg entry= OK (maybeInit, maybeUninit, universe))
+    (RETY: f.(fn_return) = tf.(fn_return))
     (MCONT: match_cont j (maybeInit, maybeUninit, universe) flagm f.(fn_body) cfg k tk next cont brk nret m tm lo tlo)
     (MDPS: match_drop_place_state st ts1)
     (MSPLIT: match_split_drop_places flagm own1 l ts2)
@@ -2511,73 +2632,87 @@ end.
 
 
 Lemma can_free_list:
-forall l m,
-(forall b lo hi, In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable) ->
-freelist_no_overlap l ->
-exists m', Mem.free_list m l = Some m'.
+  forall l m,
+    (forall b lo hi, In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable) ->
+    freelist_no_overlap l ->
+    exists m', Mem.free_list m l = Some m'.
 Proof.
-induction l; simpl; intros.
-- exists m; auto.
-- destruct a as [[b lo] hi]. destruct H0.
-destruct (Mem.range_perm_free m b lo hi) as [m1 A]; auto.
-rewrite A. apply IHl; auto.
-intros. red. intros. eapply Mem.perm_free_1; eauto.
-exploit H1; eauto. intros [B|B]. auto. right; lia.
-eapply H; eauto.
+  induction l; simpl; intros.
+  - exists m; auto.
+  - destruct a as [[b lo] hi]. destruct H0.
+    destruct (Mem.range_perm_free m b lo hi) as [m1 A]; auto.
+    rewrite A. apply IHl; auto.
+    intros. red. intros. eapply Mem.perm_free_1; eauto.
+    exploit H1; eauto. intros [B|B]. auto. right; lia.
+    eapply H; eauto.
 Qed.
 
 Lemma free_list_freeable:
-forall l m m',
-Mem.free_list m l = Some m' ->
-forall b lo hi,
-In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable.
+  forall l m m',
+    Mem.free_list m l = Some m' ->
+    forall b lo hi,
+      In (b, lo, hi) l -> Mem.range_perm m b lo hi Cur Freeable.
 Proof.
-induction l; simpl; intros.
-contradiction.
-revert H. destruct a as [[b' lo'] hi'].
-caseEq (Mem.free m b' lo' hi'); try congruence.
-intros m1 FREE1 FREE2.
-destruct H0. inv H.
-eauto with mem.
-red; intros. eapply Mem.perm_free_3; eauto. exploit IHl; eauto.
+  induction l; simpl; intros.
+  contradiction.
+  revert H. destruct a as [[b' lo'] hi'].
+  caseEq (Mem.free m b' lo' hi'); try congruence.
+  intros m1 FREE1 FREE2.
+  destruct H0. inv H.
+  eauto with mem.
+  red; intros. eapply Mem.perm_free_3; eauto. exploit IHl; eauto.
 Qed.
 
 
 Lemma free_list_perm':
-forall b lo hi l m m',
-Mem.free_list m l = Some m' ->
-In (b, lo, hi) l ->
-Mem.range_perm m b lo hi Cur Freeable.
+  forall b lo hi l m m',
+    Mem.free_list m l = Some m' ->
+    In (b, lo, hi) l ->
+    Mem.range_perm m b lo hi Cur Freeable.
 Proof.
-induction l; simpl; intros.
-contradiction.
-destruct a as [[b1 lo1] hi1].
-destruct (Mem.free m b1 lo1 hi1) as [m1|] eqn:?; try discriminate.
-destruct H0. inv H0. eapply Mem.free_range_perm; eauto.
-red; intros. eapply Mem.perm_free_3; eauto. eapply IHl; eauto.
+  induction l; simpl; intros.
+  contradiction.
+  destruct a as [[b1 lo1] hi1].
+  destruct (Mem.free m b1 lo1 hi1) as [m1|] eqn:?; try discriminate.
+  destruct H0. inv H0. eapply Mem.free_range_perm; eauto.
+  red; intros. eapply Mem.perm_free_3; eauto. eapply IHl; eauto.
 Qed.
 
 Lemma free_blocks_of_env_perm_2:
-forall m e m' id b ty,
-Mem.free_list m (blocks_of_env ce e) = Some m' ->
-e!id = Some(b, ty) ->
-Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable.
+  forall m e m' id b ty,
+    Mem.free_list m (blocks_of_env ce e) = Some m' ->
+    e!id = Some(b, ty) ->
+    Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable.
 Proof.
-intros. eapply free_list_perm'; eauto.
-unfold blocks_of_env. change (b, 0, sizeof ce ty) with (block_of_binding ce (id, (b, ty))).
-apply in_map. apply PTree.elements_correct. auto.
+  intros. eapply free_list_perm'; eauto.
+  unfold blocks_of_env. change (b, 0, sizeof ce ty) with (block_of_binding ce (id, (b, ty))).
+  apply in_map. apply PTree.elements_correct. auto.
 Qed.
 
+Lemma blocks_of_env_in_list: forall b lo hi e ce,
+    In (b, lo, hi) (blocks_of_env ce e) ->
+    exists id ty, e ! id = Some (b, ty)
+             /\ sizeof ce ty = hi - lo.
+Proof.
+  intros. unfold blocks_of_env in *.
+  eapply in_map_iff in H. destruct H as ((id & (b1 & ty)) & A1 & A2).
+  simpl in A1. inv A1.
+  exists id, ty. split.
+  eapply PTree.elements_complete. auto.
+  symmetry. apply Z.sub_0_r.
+Qed.
+
+
 Lemma blocks_of_env_no_overlap:
-forall (ge: genv) j m e lo hi te tlo thi m' tm,
-match_envs j e m lo hi te m' tlo thi ->
-Mem.inject j m tm ->
-(* (forall id b ty,
+  forall (ge: genv) j m e lo hi te tlo thi m' tm,
+    match_envs j e m lo hi te m' tlo thi ->
+    Mem.inject j m tm ->
+    (* (forall id b ty,
  e!id = Some(b, ty) -> Mem.range_perm m b 0 (sizeof ge ty) Cur Freeable) -> *)
-forall l,
-list_norepet (List.map fst l) ->
-(forall id bty, In (id, bty) l -> te!id = Some bty) ->
-freelist_no_overlap (List.map (block_of_binding ge) l).
+    forall l,
+      list_norepet (List.map fst l) ->
+      (forall id bty, In (id, bty) l -> te!id = Some bty) ->
+      freelist_no_overlap (List.map (block_of_binding ge) l).
 Proof.
 (* intros until tm; intros ME MINJ PERMS. induction l; simpl; intros.
 - auto.
@@ -2608,60 +2743,149 @@ Admitted.
 
 (* match_envs j e m lo hi te tm tlo thi *)
 Theorem match_envs_free_blocks:
-forall j e m lo hi te tlo thi m' tm,
-match_envs j e m lo hi te tm tlo thi ->
-Mem.inject j m tm ->
-Mem.free_list m (blocks_of_env ge e) = Some m' ->
-exists tm',
-   Mem.free_list tm (blocks_of_env tge te) = Some tm'
-/\ Mem.inject j m' tm'.
+  forall j e m lo hi te tlo thi m' tm,
+    match_envs j e m lo hi te tm tlo thi ->
+    Mem.inject j m tm ->
+    Mem.free_list m (blocks_of_env ge e) = Some m' ->
+    exists tm',
+      Mem.free_list tm (blocks_of_env tge te) = Some tm'
+      /\ Mem.inject j m' tm'.
 Proof.
-intros until tm. 
-intros ME INJ FREE. 
-assert (X: exists tm', Mem.free_list tm (blocks_of_env tge te) = Some tm'). 
-{
-  rewrite blocks_of_env_translated. eapply can_free_list. 
-  
-  (* every one in there is freeable *)
-  intros. unfold blocks_of_env in H. 
-  exploit list_in_map_inv; eauto. intros [[id [b' ty]] [EQ IN]].
-  unfold block_of_binding in EQ. inv EQ.
-  eapply PTree.elements_complete in IN. 
-  destruct (e ! id) eqn: F. 
-  (* (e ! id) not None *)
-  destruct p. 
-  inv ME. exploit me_vars0; eauto.
-  intros.  
-  destruct H0 as [tb [A B]].
-  rewrite IN in A. inv A. 
-  change 0 with (0 + 0).
-  replace (sizeof (prog_comp_env prog) t) with (sizeof (prog_comp_env prog) t + 0) by lia.
+  intros until tm. 
+  intros ME INJ FREE. 
+  assert (X: exists tm', Mem.free_list tm (blocks_of_env tge te) = Some tm'). 
+  {
+    rewrite blocks_of_env_translated. eapply can_free_list. 
+    
+    (* every one in there is freeable *)
+    intros. unfold blocks_of_env in H. 
+    exploit list_in_map_inv; eauto. intros [[id [b' ty]] [EQ IN]].
+    unfold block_of_binding in EQ. inv EQ.
+    eapply PTree.elements_complete in IN. 
+    destruct (e ! id) eqn: F. 
+    (* (e ! id) not None *)
+    destruct p. 
+    inv ME. exploit me_vars0; eauto.
+    intros.  
+    destruct H0 as [tb [A B]].
+    rewrite IN in A. inv A. 
+    change 0 with (0 + 0).
+    replace (sizeof (prog_comp_env prog) t) with (sizeof (prog_comp_env prog) t + 0) by lia.
 
-  eapply Mem.range_perm_inject; eauto. 
-  eapply (free_blocks_of_env_perm_2); eauto.  
-  (* (e ! id) is None *)
-  inv ME. exploit me_protect0; eauto. 
-  intros. destruct H0 as (A & B). 
-  simpl in A.
-  red. intros. red in A. 
-  assert (sizeof (prog_comp_env prog) ty = 1). 
-  (* need to chenge  Mem.range_perm tm b 0
+    eapply Mem.range_perm_inject; eauto. 
+    eapply (free_blocks_of_env_perm_2); eauto.  
+    (* (e ! id) is None *)
+    inv ME. exploit me_protect0; eauto. 
+    intros. destruct H0 as (A & B). 
+    simpl in A.
+    red. intros. red in A. 
+    assert (sizeof (prog_comp_env prog) ty = 1). 
+    (* need to chenge  Mem.range_perm tm b 0
               (size_chunk Mint8unsigned) Cur
               Freeable /\
             (forall ofs : Z,
              loc_out_of_reach j m b ofs)*)
 
-(* size_chunk Mint8unsigned to sizeof ty  *)
-  admit. 
-  rewrite H1 in H0. 
-  eapply A in H0.
-  eauto. 
-  (* no overlap *)
-  inv ME. 
-  admit. 
-} 
+    (* size_chunk Mint8unsigned to sizeof ty  *)
+    admit. 
+    rewrite H1 in H0. 
+    eapply A in H0.
+    eauto. 
+    (* no overlap *)
+    inv ME. 
+    admit. 
+  } 
 Admitted. 
 
+Lemma injp_acc_free_list: forall m1 m2 le tle tm1 tm2 j Hm1 Hm2 lo hi tlo thi
+  (FREE1: Mem.free_list m1 (blocks_of_env ge le) = Some m2)
+  (FREE2: Mem.free_list tm1 (blocks_of_env tge tle) = Some tm2)
+  (INJP: injp_acc w (injpw j m1 tm1 Hm1))
+  (MENV: match_envs j le m1 lo hi tle tm1 tlo thi),
+    injp_acc w (injpw j m2 tm2 Hm2).
+Proof.
+  intros. destruct w eqn: Hw. 
+  eapply SimplLocalsproof.injp_acc_local; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply SimplLocalsproof.free_list_max_perm; eauto.
+  - eapply SimplLocalsproof.free_list_max_perm; eauto.
+  - inv INJP. auto.
+  - eapply Mem.unchanged_on_implies.
+    eapply SimplLocalsproof.free_list_unchanged_on; eauto.
+    instantiate (1 := fun b => Mem.valid_block m0 b).
+    simpl. intros.
+    exploit blocks_of_env_in_list; eauto.
+    intros (id & ty & A1 & A2).
+    (* b in le so b must not valid in m0 *)
+    intro. 
+    eapply me_range; eauto. eapply me_initial. eauto.
+    unfold wm1. rewrite Hw. auto.
+    intuition.
+  - eapply Mem.unchanged_on_implies.
+    eapply SimplLocalsproof.free_list_unchanged_on; eauto.
+    instantiate (1 := fun b => Mem.valid_block m3 b).
+    simpl. intros.
+    exploit blocks_of_env_in_list; eauto.
+    intros (id & ty & A1 & A2).
+    (* b in le so b must not valid in m3 *)
+    intro. 
+    eapply me_trange; eauto. eapply me_tinitial. eauto.
+    unfold wm2. rewrite Hw. auto.
+    intuition.
+Qed.
+
+(* free_list preserves match_cont *)
+Lemma match_cont_free_env: forall k tk j1 own le tle m1 m2 lo hi flagm tm1 tm2 tlo thi an fm body cfg pc cont brk nret
+    (MENV: match_envs_flagm j1 own le m1 lo hi tle flagm tm1 tlo thi)
+    (MCONT: match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)
+    (INCL1: Mem.sup_include hi (Mem.support m1))
+    (* (INCL2: Mem.sup_include thi (Mem.support tm1)) *)
+    (MINJ: Mem.inject j1 m1 tm1)
+    (FREE1: Mem.free_list m1 (blocks_of_env ge le) = Some m2)
+    (FREE2: Mem.free_list tm1 (blocks_of_env tge tle) = Some tm2),
+    match_cont j1 an fm body cfg k tk pc cont brk nret m2 tm2 lo tlo
+.
+Proof.
+  intros.
+  eapply match_cont_bound_unchanged_gen. eauto. eauto.
+  (* prove lo and tlo unchanged *)
+  (* m1 -> m2 *)
+  eapply Mem.unchanged_on_implies.
+  eapply SimplLocalsproof.free_list_unchanged_on; eauto.
+  instantiate (1 := fun b => Mem.sup_In b lo). intros.
+  exploit blocks_of_env_in_list; eauto. intros (id & ty & A1 & A2).
+  simpl. eapply me_range; eauto. eapply me_envs; eauto.
+  simpl. auto.
+  (* tm1 -> tm2 *)
+  eapply Mem.unchanged_on_implies.
+  eapply SimplLocalsproof.free_list_unchanged_on; eauto.
+  instantiate (1 := fun b => Mem.sup_In b tlo). intros.
+  exploit blocks_of_env_in_list; eauto. intros (id & ty & A1 & A2).
+  simpl. eapply me_trange; eauto. eapply me_envs; eauto.
+  simpl. auto.
+  (* max_perm_decrease *)
+  eapply SimplLocalsproof.free_list_max_perm. eauto.
+  eapply Mem.sup_include_trans. eapply me_incr. eapply me_envs; eauto.
+  auto.
+  symmetry. eapply SimplLocalsproof.free_list_support. eauto.
+Qed.
+
+(* used in return step *)
+Lemma match_cont_call_cont: forall k ck tk j1 an fm body cfg pc cont brk nret m1 tm1 lo tlo
+    (MCONT: match_cont j1 an fm body cfg k tk pc cont brk nret m1 tm1 lo tlo)
+    (CCONT: call_cont k = Some ck),
+  exists tck,
+    RustIRsem.call_cont tk = Some tck /\
+      match_stacks j1 ck tck m1 tm1 lo tlo.
+Proof.
+  induction k; intros; simpl; inv CCONT; inv MCONT; simpl.
+  - eexists. split; eauto. econstructor.
+  - exploit IHk; eauto.
+  - exploit IHk; eauto.
+  - inv MSTK. eexists. split; eauto.
+    econstructor; eauto.
+Qed.
 
 (* gen_drop_place_state in simulation and drop_fully_own in compilation match *)
 Lemma gen_drop_place_state_match: forall p,
@@ -2766,7 +2990,7 @@ Proof.
       1-7: eauto.
       intro. subst. rewrite Int.eq_true in ISOWN. congruence.
       (* match_states *)
-      econstructor. eauto.
+      econstructor. eauto. auto.
       (* match_cont *)
       eapply match_cont_bound_unchanged. eauto.
       eapply Mem.unchanged_on_implies; eauto.
@@ -3622,6 +3846,8 @@ Proof.
     eapply match_empty_envs.
     eapply Mem.sup_include_refl.
     eapply Mem.sup_include_refl. 
+    unfold wm1. destruct w.
+    inv MINJ. eapply Mem.unchanged_on_support. eauto.
     unfold wm2. destruct w.
     inv MINJ. eapply Mem.unchanged_on_support. eauto.    
     intros (j1 & tm1 & Hm1 & te1 & ALLOC1 & MENV1 & INJP1).
@@ -3770,7 +3996,44 @@ Proof.
     eapply Mem.unchanged_on_support. eauto.
     eapply Mem.unchanged_on_support. eauto.
   (* step_return_1 *)
-  - admit.
+  - inv MSTMT. simpl in TR.
+    generalize IM as IM1. intros. inv IM.
+    rewrite <- H0 in TR. rewrite <- H in TR.
+    rename H0 into GETINIT. rename H into GETUNINIT.
+    monadInv TR.
+    (* evaluate the return place value *)
+    exploit eval_expr_inject; eauto. intros (tv & TEVAL & VINJ).
+    (* sem_cast *)
+    exploit sem_cast_inject; eauto. intros (tv1 & TCAST & VINJ1).
+    (* free_list in target *)
+    exploit match_envs_free_blocks. eapply me_envs; eauto.
+    eauto. eauto.
+    intros (tm2 & TFREE & MINJ2).
+    (* injp_acc for free_list, may be lift to a lemma *)
+    exploit injp_acc_free_list; eauto.
+    eapply me_envs; eauto. instantiate (1 := MINJ2).
+    intros INJP2.
+    (* match_cont *)
+    exploit match_cont_free_env; eauto.
+    intros MCONT1.
+    exploit match_cont_incr_bounds. eauto.
+    eapply Mem.sup_include_trans. eapply me_incr. eapply me_envs; eauto. eauto.
+    eapply Mem.sup_include_trans. eapply me_tincr. eapply me_envs; eauto. eauto.
+    intros MCONT2.
+    (* call_cont *)
+    exploit match_cont_call_cont; eauto.
+    intros (tck & CCONT & MSTK).    
+    (* step *)    
+    eexists. split.
+    econstructor. econstructor. eauto. eauto.
+    (* complete type *)
+    admit.
+    rewrite <- RETY. eauto.
+    eauto. eauto.
+    eapply star_refl. auto.
+    econstructor; eauto. 
+    erewrite SimplLocalsproof.free_list_support. 2: eapply FREE.
+    erewrite (SimplLocalsproof.free_list_support _ _ _ TFREE). eauto.     
   (* step_returnstate *)
   - inv MCONT.
     generalize IM as IM1. intros. inv IM.
@@ -3821,6 +4084,7 @@ Proof.
     eapply Mem.unchanged_on_implies; eauto.
     intros. simpl. intros. intro. subst.
     eapply me_trange. eapply me_envs; eauto. eauto. auto.
+    auto.
     (* injp_acc w ~-> (j, m2, tm3) *)
     eauto.
     eauto. eauto. eauto.

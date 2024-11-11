@@ -2996,11 +2996,14 @@ Qed.
 
 (* From cfrontend/SimplLocalsproof.v *)
 Lemma match_cont_call_cont:
-  forall j k tk m tm bs,
-  match_cont j k tk m tm bs ->
-  match_cont j (call_cont k) (Clight.call_cont tk) m tm bs.
+  forall j k ck tk m tm bs,
+    match_cont j k tk m tm bs ->
+    call_cont k = Some ck ->
+  match_cont j ck (Clight.call_cont tk) m tm bs.
 Proof. 
-  intros. induction H; simpl in *; try econstructor; eauto. 
+  intros. induction H; simpl in *; try congruence; try econstructor; eauto.
+  inv H0. econstructor.
+  inv H0. econstructor; eauto.
 Qed.  
 
 
