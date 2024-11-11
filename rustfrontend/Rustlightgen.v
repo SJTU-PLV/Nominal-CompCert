@@ -593,7 +593,8 @@ with transl_arm_statements (sl: arm_statements) (p: place) (co: composite) : mon
       end
   end.
 
-(* Extract the let declared variables *)
+(* Extract the let declared variables in Rustsyntax, which are used to
+generate fresh variables *)
 Fixpoint extract_vars (stmt: Rustsyntax.statement) : list (ident * type) :=
   match stmt with
   | Rustsyntax.Slet id ty _ s =>
@@ -609,6 +610,21 @@ Fixpoint extract_vars (stmt: Rustsyntax.statement) : list (ident * type) :=
   | _ => nil
   end.
 
+(* Extract the let declared variables which are used to construct the
+variables list. *)
+Fixpoint extract_rustlight_vars (stmt: statement) : list (ident * type) :=
+  match stmt with
+  | Slet id ty s =>
+      (id,ty) :: extract_rustlight_vars s
+  | Ssequence s1 s2 =>
+      extract_rustlight_vars s1 ++ extract_rustlight_vars s2
+  | Sifthenelse _ s1 s2 =>
+      extract_rustlight_vars s1 ++ extract_rustlight_vars s2
+  | Sloop s =>
+      extract_rustlight_vars s
+  | _ => nil
+  end.
+
 
 Open Scope error_monad_scope.
 
@@ -617,12 +633,22 @@ Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
   let next_temp := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) vars 1%positive) in
   match transl_stmt f.(Rustsyntax.fn_body) initial_generator with
   | Res stmt g =>
+      (** IMPORTANT: collect the declared variables here, before this
+      pass, function does not contain the variable list. We collect
+      them in this pass because after this pass, the declared variable
+      would not be changed a lot. *)
+      let vars := extract_rustlight_vars stmt in
+      if in_dec ident_eq (fst f.(Rustsyntax.fn_return)) (var_names vars) then
+        Errors.Error (msg "The return variable is declared in the function (Rustlightgen) ")
+      else
       Errors.OK (mkfunction f.(Rustsyntax.fn_generic_origins)
                             f.(Rustsyntax.fn_origins_relation)
                             f.(Rustsyntax.fn_drop_glue)
-                            f.(Rustsyntax.fn_return)
+                            (snd f.(Rustsyntax.fn_return))
                             f.(Rustsyntax.fn_callconv)
-                            f.(Rustsyntax.fn_params)
+                            (** Note that we should add the return
+                            variable to the variables list *)
+                            (f.(Rustsyntax.fn_return) :: vars)
                             f.(Rustsyntax.fn_params)
                             stmt)
   | Err msg => Errors.Error msg

@@ -51,10 +51,10 @@ let rec print_stmt p (s: RustIR.statement) =
     fprintf p "break;"
   | Scontinue ->
     fprintf p "continue;"
-  | Sreturn None ->
-    fprintf p "return;"
-  | Sreturn (Some e) ->
-    fprintf p "return %a;" print_expr e
+  (* | Sreturn None ->
+    fprintf p "return;" *)
+  | Sreturn v ->
+    fprintf p "return %a;" print_place v
   | Sbox(v, e) ->
     fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place v   print_expr e
   | Sstoragelive id ->
