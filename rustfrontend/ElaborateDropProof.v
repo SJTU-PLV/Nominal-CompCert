@@ -394,6 +394,8 @@ Proof.
     + eapply IHl; eauto.
 Qed.
 
+(*if p dose not in l, the first (p,i) will be set and we will get i 
+eventually.*)
 Lemma generate_place_map_not_in_list_id_same : forall l p i id m,
   ~ In p (map fst l) ->
   get_dropflag_temp
@@ -436,6 +438,7 @@ Proof.
     + simpl. eapply IHl. apply H. apply H0.
 Admitted.
 
+(*the simplest case of exchage two different set*)
 Lemma generate_map_comm': forall (p0:place) p1 (i0:ident) i1 m,
       local_of_place p0 <> local_of_place p1 ->
       (generate_place_map_fun (generate_place_map_fun m (p1, i1))
@@ -539,6 +542,7 @@ Proof.
               * rewrite PTree.gso by auto. reflexivity.
 Qed.
 
+(*if we can get (p,id) from l, then it dose not matter of m*)
 Lemma generate_map_list_replace_map: forall l p id m,
   get_dropflag_temp (generate_place_map l) p = Some id ->
   get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id.
@@ -552,6 +556,7 @@ Proof.
       simpl in *.  
 Admitted.
 
+(*if two place is different, we can exchange them and get same result*)
 Lemma generate_map_comm: forall (p0:place) p (i0:ident) i id m l,
   p <> p0 ->
   get_dropflag_temp
@@ -577,9 +582,11 @@ Proof.
       * apply generate_place_map_dom in i1. destruct i1 as [id1 i1].
 Admitted.
 
+(* Setting different place will not influence the result*)
 Lemma dif_set_not_influence_get: forall l p p0 i id m, p <> p0 ->
-  get_dropflag_temp (fold_left generate_place_map_fun ((p0, i) :: l) m) p = Some id
-  -> get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id.
+  get_dropflag_temp (fold_left generate_place_map_fun ((p0, i) :: l) m) p
+  = Some id -> get_dropflag_temp (fold_left generate_place_map_fun l m) p
+  = Some id.
 Proof.
 induction l.
 - intros. simpl in *. unfold get_dropflag_temp, generate_place_map_fun in H0.
@@ -602,6 +609,7 @@ induction l.
   + rewrite generate_map_comm in H0. apply H0. auto.
 Qed.
 
+(*Element in l will reset the ident of p*)
 Lemma latter_set_cover_first: forall l p i id m, i <> id ->
   get_dropflag_temp (fold_left generate_place_map_fun ((p, i) :: l) m) p = Some id ->
   get_dropflag_temp (fold_left generate_place_map_fun l m) p = Some id.
@@ -613,9 +621,11 @@ Proof.
       destruct (place_eq p p); simpl in H0; try congruence; auto.
     + rewrite PTree.gss in H0. simpl in H0. 
       destruct (place_eq p p); simpl in H0; try congruence; auto.
-  - intros. simpl. destruct a. eapply IHl. apply H. simpl. simpl in H0. 
-    erewrite generate_map_comm in H0. apply H0.
-Qed.
+  - intros. simpl. destruct a. eapply IHl. apply H. simpl. simpl in H0.
+    destruct (place_eq p p0).
+    + subst. admit.(*destruct (in_dec place_eq p (map fst l))*)
+    + eapply generate_map_comm in H0. apply H0. auto.
+Admitted.
 
 Lemma generate_place_map_in_list: forall l p id,
     get_dropflag_temp (generate_place_map l) p = Some id ->
@@ -625,7 +635,9 @@ Proof.
   - intros. unfold generate_place_map,get_dropflag_temp in H. simpl in H. discriminate.
   - intros. simpl. destruct a. 
     destruct (place_eq p p0); destruct (ident_eq i id).
+    (*(p0, i) = (p, id)*)
     + left. subst; reflexivity.
+    (*(p0, i) <> (p, id), so we apply IHl*)
     + right. apply IHl. unfold generate_place_map in H. unfold generate_place_map.
       subst p0. eapply latter_set_cover_first. eapply n. eapply H. 
     + right. apply IHl. eapply dif_set_not_influence_get. eapply n. eapply H. 
