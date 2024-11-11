@@ -477,8 +477,6 @@ Ltac DestructM :=
   eapply compose_identity_pass.
     eapply Renumberproof.transf_program_correct; eassumption.
   eapply st_fsim_vcomp.
-    eapply RTL_injp_selfsim.
-  eapply st_fsim_vcomp.
   { unfold match_if in M7. destruct (optim_constprop tt).
     eapply ConstpropproofC.transf_program_correct; eassumption.
     subst. apply va_interface_selfsim. }

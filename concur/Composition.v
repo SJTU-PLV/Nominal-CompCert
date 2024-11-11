@@ -704,7 +704,7 @@ Lemma cc_collapse :
       c_injp @
       (wt_c @ c_ext) @ c_ext @
       c_injp @
-      c_ext @ c_injp @ c_injp @
+      c_ext @ c_injp @
       (ro @ c_injp) @ (ro @ c_injp) @ (ro @ c_injp) @
       c_injp @                                   (* Unusedglob *)
       (wt_c @ c_ext @ cc_c_locset) @            (* Alloc *)
@@ -739,9 +739,6 @@ Proof.
   rewrite (cc_compose_assoc_1 (c_injp @ c_ext)).
   rewrite (cc_compose_assoc_2 c_injp).
   rewrite cctrans_injp_ext.
-
-  rewrite (cc_compose_assoc_1 c_injp).
-  rewrite cctrans_injp_comp.
 
   rewrite (cc_compose_assoc_1 ro).
   rewrite cctrans_ro_wt_c.
