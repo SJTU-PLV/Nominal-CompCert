@@ -317,19 +317,45 @@ Qed.
 Lemma is_prefix_antisym: forall p1 p2,
     is_prefix_strict p1 p2 = true ->
     is_prefix p2 p1 = false.
-Admitted.
-
+Proof.
+  unfold is_prefix, is_prefix_strict. intros. unfold orb in *.
+  destruct (place_eq p2 p1); simpl; try congruence; auto.
+  - subst. destruct in_dec in H; cbn in * |-. 
+    apply In_place_no_eql in i. contradiction.
+    discriminate.
+  - destruct in_dec in *; cbn in * |-.
+    destruct in_dec; simpl; try congruence; auto.
+    eapply In_place_trans in i0. 2:{ eapply i. } 
+    apply In_place_no_eql in i0. contradiction.
+    discriminate.
+Qed.
 
 Lemma is_prefix_valid_owner: forall p,
     is_prefix (valid_owner p) p = true.
-Admitted.
+Proof.
+  intros. unfold is_prefix. unfold orb.
+  destruct (place_eq (valid_owner p) p); simpl; auto.
+  destruct in_dec; simpl; auto. exfalso. apply n0.
+  unfold valid_owner.
+  induction p; unfold parent_paths; simpl in *; try congruence.
+  right.
+  apply IHp. eapply Decidable.not_or in n0; destruct n0; auto.
+  eapply Decidable.not_or in n0; destruct n0; auto.
+Qed.
 
 (* similar to is_prefix_strict_trans_prefix *)
 Lemma is_prefix_strict_trans_prefix2: forall p1 p2 p3,
     is_prefix p1 p2 = true ->
     is_prefix_strict p2 p3 = true ->
     is_prefix_strict p1 p3 = true.
-Admitted.
+Proof.
+  unfold is_prefix, is_prefix_strict. intros. unfold orb in *.
+  destruct (place_eq p1 p2); simpl in *; try congruence; subst; auto.
+  destruct in_dec in *; simpl in *; try congruence; subst; auto.
+  destruct in_dec in *; simpl in *; try congruence; subst; auto.
+  destruct in_dec in *; simpl in *; try congruence; subst; auto.
+  exfalso. apply n0. eapply In_place_trans; eauto.
+Qed.
 
 
 Lemma is_prefix_strict_implies: forall p1 p2,
