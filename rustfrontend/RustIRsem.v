@@ -327,8 +327,8 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_return_1: forall le p v v1 lb m1 m2 f k ck
     (CONT: call_cont k = Some ck),
     eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v ->
-    (** TODO: reconsider this condition and check it in Clightgen *)
-    (forall id b t, le ! id = Some (b, t) -> complete_type ge t = true) ->
+    (** check it in Clightgen *)
+    (* (forall id b t, le ! id = Some (b, t) -> complete_type ge t = true) -> *)
     (* sem_cast to the return type *)
     sem_cast v (typeof_place p) f.(fn_return) = Some v1 ->
     (* drop the stack blocks *)

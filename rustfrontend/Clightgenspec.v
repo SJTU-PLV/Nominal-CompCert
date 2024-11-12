@@ -813,7 +813,8 @@ tr_composite relation *)
 Inductive tr_function: function -> Clight.function -> Prop :=
 | tr_function_normal: forall f tf
     (* It is necessary to prove te!drop_id = None in eval_Evar_global *)
-    (WFNAMES: list_disjoint (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm)))),
+    (WFNAMES: list_disjoint (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))))
+    (COMPLETE: forall id ty, In (id, ty) (f.(fn_params) ++ f.(fn_vars)) -> complete_type ce ty = true),
     f.(fn_drop_glue) = None ->
     tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
     Clight.fn_return tf = to_ctype (fn_return f) ->
@@ -880,8 +881,12 @@ Proof.
   destruct (list_norepet_dec ident_eq (Clight.var_names (gen_trail g'))) eqn: A in TR; try congruence.
   destruct (list_disjoint_dec ident_eq (var_names (fn_params f ++ fn_vars f))
               (malloc_id :: free_id :: map snd (PTree.elements dropm))) in TR; try congruence.
+  destruct (forallb (fun ty : type => complete_type ce ty) (map snd (fn_params f ++ fn_vars f))) eqn: COMPLETE; try congruence.
   inv TR.
   eapply tr_function_normal; eauto.
+  (* complete type *)
+  intros. eapply forallb_forall in COMPLETE; eauto. eapply in_map_iff.
+  exists (id,ty). auto.  
   simpl. eapply transl_stmt_meet_spec. eauto.
 Qed.
 

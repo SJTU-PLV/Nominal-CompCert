@@ -297,8 +297,13 @@ Qed.
 
 (* We need to maintain the well-formedness of local environment in the
 simulation *)
-Definition well_formed_env (f: function) (e: env) : Prop :=
-  forall id, ~ In id (var_names (f.(fn_params) ++ f.(fn_vars))) -> e!id = None.
+Record well_formed_env (f: function) (e: env) : Prop :=
+  { wf_env_dom:
+    forall id, ~ In id (var_names (f.(fn_params) ++ f.(fn_vars))) -> e!id = None;
+
+    wf_env_complete_type:
+    forall id b t, e ! id = Some (b, t) -> complete_type ge t = true;
+  }.
 
 Lemma var_names_app: forall a b, 
   var_names (a ++ b) = var_names a ++ var_names b. 
@@ -341,14 +346,21 @@ Proof.
   auto.
 Qed.
 
-Lemma function_entry_wf_env: forall ge f vargs e m1 m2,
+
+Lemma function_entry_wf_env: forall ge f vargs e m1 m2
+    (COMPLETE: forall id ty, In (id, ty) (f.(fn_params) ++ f.(fn_vars)) -> complete_type ce ty = true),
     function_entry ge f vargs m1 e m2 ->
     well_formed_env f e.
 Proof.
-  intros until m2.
+  intros until m2. intro.
   intros FENTRY. inv FENTRY.
-  red. intros.
-  eapply alloc_variables_wf_env; eauto.
+  constructor.
+  intros. eapply alloc_variables_wf_env; eauto.
+  (* complete type *)
+  intros. exploit alloc_variables_in; eauto.
+  intros [A|B].
+  erewrite PTree.gempty in A. inv A.
+  eapply COMPLETE; eauto.
 Qed.
 
 (* Can be proved by tr_composite *)
@@ -3678,7 +3690,10 @@ Proof.
     + eapply plus_one. econstructor;eauto.
     + econstructor.
       (* initial env is well_formed *)
-      eapply function_entry_wf_env. eauto. eauto.
+      eapply function_entry_wf_env.
+      (* complete type *)
+      eauto.
+      eauto. eauto.
       eapply tr_function_normal;eauto.
       eauto.
       instantiate (1 := j').
@@ -3725,22 +3740,23 @@ Proof.
   (*   exploit match_cont_call_cont; eauto.  *)
   (*   etransitivity; eauto.   *)
   (* step_return_1 *)
-  - inv MSTMT. unfold transl_stmt in H4. monadInv_comb H4. 
+  - inv MSTMT. unfold transl_stmt in H3. monadInv_comb H3. 
     exploit eval_expr_inject; eauto. intros (tv & TEVAL & VINJ1).
     exploit sem_cast_to_ctype_inject; eauto. 
     (* type *)
     intros (tv1 & CAST1 & INJCAST).
     exploit expr_to_cexpr_type; eauto.
     intros CTY.
-    inv MFUN. 
+    inv MFUN.
+    generalize (wf_env_complete_type _ _ WFENV). intros COMPLETE1. 
     exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2).
     eexists. split. eapply plus_one. eapply Clight.step_return_1; eauto. 
-    rewrite <- CTY. simpl. rewrite H6. eauto. 
+    rewrite <- CTY. simpl. rewrite H5. eauto. 
     econstructor; eauto. intros. generalize (MCONT m tm0 bs). intros.
     exploit match_cont_call_cont; eauto. 
     etransitivity; eauto. 
     (* contradiction *)
-    rewrite NORMALF in H4. inv H4. 
+    rewrite NORMALF in H3. inv H3. 
   (* (* step_skip_call *) *)
   (* - inv MSTMT. inv H3.  *)
   (*   exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2). *)
@@ -3932,8 +3948,8 @@ Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_rs inj @ cc_rust_c) (cc_rs inj @ cc_rust_c) (RustIRsem.semantics prog) (Clight.semantics1 tprog).
 Proof.
-  set (ms := fun wj s s' => match_states prog tprog wj s s').
-  fsim eapply forward_simulation_plus with (match_states := ms (snd (fst w))).
+  set (ms := fun wj se s s' => match_states prog tprog wj se s s').
+  fsim eapply forward_simulation_plus with (match_states := ms (snd (fst w)) se1).
     (* try destruct w as [[sei wj] ut], Hse; subst. *)
   - inv MATCH. auto.
   - intros. destruct w as [[sei w] ut].
@@ -3953,7 +3969,7 @@ Proof.
     destruct Hse. simpl in *. subst. auto.
   (* final state *)
   - destruct w as [[sei w] ut].
-    eapply final_states_simulation with (se := sei); eauto.
+    eapply final_states_simulation with (se := se1); eauto.
   (* external state *)
   - destruct w as [[sei w] ut].
     eapply external_states_simulation; eauto.

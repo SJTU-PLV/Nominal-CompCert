@@ -1064,19 +1064,6 @@ Proof.
     eauto.  
 Qed. 
 
-Lemma alloc_variables_in: forall l ge e1 m1 e2 m2 id b ty,
-    alloc_variables ge e1 m1 l e2 m2 ->
-    e2 ! id = Some (b,ty) ->
-    e1 ! id = Some (b,ty) \/ In (id, ty) l.
-Proof.
-  induction l; intros.
-  - inv H. auto.
-  - inv H. exploit IHl; eauto. intros [A|B]; auto.
-    rewrite PTree.gsspec in A. destruct peq in A. inv A.
-    right. econstructor. auto.
-    auto.
-    right. eapply in_cons. auto.
-Qed.    
     
 Lemma alloc_variables_match: forall vars m1 tm1  e2 m2  hi  thi j1 
     (ALLOC: alloc_variables ge empty_env m1 vars e2 m2)
@@ -4089,8 +4076,6 @@ Proof.
     (* step *)    
     eexists. split.
     econstructor. econstructor. eauto. eauto.
-    (* complete type *)
-    admit.
     rewrite <- RETY. eauto.
     eauto. eauto.
     eapply star_refl. auto.
@@ -4258,7 +4243,7 @@ Proof.
     eapply star_refl. auto.
     econstructor; eauto.
     econstructor.
-Admitted.
+Qed.
 
 Lemma initial_states_simulation:
   forall q1 q2 S1, match_query (cc_rs injp) w q1 q2 -> initial_state ge q1 S1 ->

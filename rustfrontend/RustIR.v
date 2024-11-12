@@ -355,4 +355,18 @@ Proof.
   red. intros. apply A3. auto. 
   apply in_app in H0. apply in_app. destruct H0; auto.
 Qed.
-    
+
+(* Used in ElaborateDropProof and Clightgenproof *)
+Lemma alloc_variables_in: forall l ge e1 m1 e2 m2 id b ty,
+    alloc_variables ge e1 m1 l e2 m2 ->
+    e2 ! id = Some (b,ty) ->
+    e1 ! id = Some (b,ty) \/ In (id, ty) l.
+Proof.
+  induction l; intros.
+  - inv H. auto.
+  - inv H. exploit IHl; eauto. intros [A|B]; auto.
+    rewrite PTree.gsspec in A. destruct peq in A. inv A.
+    right. econstructor. auto.
+    auto.
+    right. eapply in_cons. auto.
+Qed.    

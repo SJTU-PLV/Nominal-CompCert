@@ -702,14 +702,20 @@ Definition transl_function_normal (f: function) : Errors.res Clight.function :=
       (* check that temporaries are not repeated *)
       if list_norepet_dec ident_eq (Clight.var_names g.(gen_trail)) then
         if list_disjoint_dec ident_eq (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))) then
-      (* update the next atom *)
-        Errors.OK (Clight.mkfunction
-              (to_ctype f.(fn_return))
-              f.(fn_callconv)
-              params
-              vars
-              g.(gen_trail)
-              stmt')
+          (** check the types of all the variables are complete. It
+          should be changed if we want to support encapsulated
+          type. *)
+          if forallb (fun ty => complete_type ce ty) (map snd (f.(fn_params) ++ f.(fn_vars))) then
+        (* update the next atom *)
+          Errors.OK (Clight.mkfunction
+                (to_ctype f.(fn_return))
+                f.(fn_callconv)
+                params
+                vars
+                g.(gen_trail)
+                stmt')
+          else
+            Errors.Error [MSG "parameter and variable types are not complete"]
         else
           Errors.Error [MSG "parameter and variable names are not disjoint with drop id"]
         else
