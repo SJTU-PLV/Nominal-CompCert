@@ -2996,11 +2996,14 @@ Qed.
 
 (* From cfrontend/SimplLocalsproof.v *)
 Lemma match_cont_call_cont:
-  forall j k tk m tm bs,
-  match_cont j k tk m tm bs ->
-  match_cont j (call_cont k) (Clight.call_cont tk) m tm bs.
+  forall j k ck tk m tm bs,
+    match_cont j k tk m tm bs ->
+    call_cont k = Some ck ->
+  match_cont j ck (Clight.call_cont tk) m tm bs.
 Proof. 
-  intros. induction H; simpl in *; try econstructor; eauto. 
+  intros. induction H; simpl in *; try congruence; try econstructor; eauto.
+  inv H0. econstructor.
+  inv H0. econstructor; eauto.
 Qed.  
 
 
@@ -3714,15 +3717,15 @@ Proof.
       eapply (Mem.unchanged_on_support _ _ _ J).
       eauto using val_inject_incr. 
   (* step_return_0 *)
-  - inv MSTMT. inv H2. 
-    exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2).  
-    eexists. split. eapply plus_one. eapply Clight.step_return_0. eauto.
-    econstructor; eauto. intros. 
-    generalize (MCONT m tm0 bs). intros.  
-    exploit match_cont_call_cont; eauto. 
-    etransitivity; eauto.  
+  (* - inv MSTMT. inv H2.  *)
+  (*   exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2).   *)
+  (*   eexists. split. eapply plus_one. eapply Clight.step_return_0. eauto. *)
+  (*   econstructor; eauto. intros.  *)
+  (*   generalize (MCONT m tm0 bs). intros.   *)
+  (*   exploit match_cont_call_cont; eauto.  *)
+  (*   etransitivity; eauto.   *)
   (* step_return_1 *)
-  - inv MSTMT. inv H4. monadInv_comb H6. 
+  - inv MSTMT. unfold transl_stmt in H4. monadInv_comb H4. 
     exploit eval_expr_inject; eauto. intros (tv & TEVAL & VINJ1).
     exploit sem_cast_to_ctype_inject; eauto. 
     (* type *)
@@ -3732,23 +3735,23 @@ Proof.
     inv MFUN. 
     exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2).
     eexists. split. eapply plus_one. eapply Clight.step_return_1; eauto. 
-    rewrite <- CTY. eauto. rewrite H6. eauto. 
+    rewrite <- CTY. simpl. rewrite H6. eauto. 
     econstructor; eauto. intros. generalize (MCONT m tm0 bs). intros.
     exploit match_cont_call_cont; eauto. 
     etransitivity; eauto. 
     (* contradiction *)
     rewrite NORMALF in H4. inv H4. 
-  (* step_skip_call *)
-  - inv MSTMT. inv H3. 
-    exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2).
-    inv MFUN. 
-    eexists. split. eapply plus_one. eapply Clight.step_skip_call; eauto. 
-    eapply match_cont_is_call_cont. instantiate (1:=nil). instantiate (1:=tm). 
-    instantiate (1:=tm). auto. auto.   
-    econstructor; eauto. intros. generalize (MCONT m tm0 bs). intros. 
-    inv H9; try contradiction; econstructor; eauto.
-    etransitivity; eauto. 
-    rewrite NORMALF in H3. inv H3. 
+  (* (* step_skip_call *) *)
+  (* - inv MSTMT. inv H3.  *)
+  (*   exploit free_list_inject; eauto. intros (tm' & FREE & MINJ1 & INJR2). *)
+  (*   inv MFUN.  *)
+  (*   eexists. split. eapply plus_one. eapply Clight.step_skip_call; eauto.  *)
+  (*   eapply match_cont_is_call_cont. instantiate (1:=nil). instantiate (1:=tm).  *)
+  (*   instantiate (1:=tm). auto. auto.    *)
+  (*   econstructor; eauto. intros. generalize (MCONT m tm0 bs). intros.  *)
+  (*   inv H9; try contradiction; econstructor; eauto. *)
+  (*   etransitivity; eauto.  *)
+  (*   rewrite NORMALF in H3. inv H3.  *)
   (* step_returnstate *)
   - exploit MCONT; eauto. 
   (* these list, memories are just place holder to avoid Unshelve cases *)

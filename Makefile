@@ -168,12 +168,12 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 RUSTFRONTEND=Rusttypes.v Rustsyntax.v Rustlight.v RustIR.v\
   Rustlightown.v RustIRsem.v RustIRown.v\
   Rustlightgen.v\
-  RustIRgen.v RustIRgenProof.v RustIRcfg.v\
+  RustIRgen.v RustIRcfg.v\
   InitDomain.v InitAnalysis.v ElaborateDrop.v ElaborateDropProof.v\
-  MoveChecking.v MoveCheckingSafe.v\
-  BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v\
+  MoveChecking.v\
   Clightgen.v Clightgenspec.v Clightgenproof.v\
   RustOp.v \
+  # BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v
   # BorrowCheckSafe.v
 
 # Parser

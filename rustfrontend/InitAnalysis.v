@@ -41,12 +41,14 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
                     IM.State (add_place S p (remove_place_list pl before))
                   else
                     IM.State (remove_place p (add_place_list S pl before))
-              | Sreturn (Some e) =>
-                  let p' := moved_place e in
-                  if flag then
-                    IM.State (remove_option p' before)
-                  else
-                    IM.State (add_option S p' before)
+              | Sreturn p =>
+                  (* let p' := moved_place e in *)
+                  (* if flag then *)
+                  (*   IM.State (remove_option p' before) *)
+                  (* else *)
+                  (*   IM.State (add_option S p' before) *)
+                  (** Do we need to move out the return place?  *)
+                  IM.State before
               | Sdrop p =>
                   if flag then
                     IM.State (remove_place p before)
@@ -1174,24 +1176,24 @@ Qed.
 
 
 (* Some properties of call_cont *)
-Lemma sound_call_cont: forall k,
-    sound_cont k -> sound_cont (call_cont k).
+Lemma sound_call_cont: forall k ck,
+    sound_cont k -> call_cont k = Some ck -> sound_cont ck.
 Proof.
-  intros k SOUND.
-  induction k; inv SOUND; simpl; try econstructor; eauto.
+  intros k ck SOUND A.
+  induction k; inv SOUND; inv A; simpl; try econstructor; eauto.  
 Qed.
 
-Lemma tr_stacks_call_cont: forall k body cfg pc cont brk nret
-    (SOUND: tr_cont body cfg k pc cont brk nret),
-  tr_stacks (call_cont k).
-Proof.
-  induction k; intros; inv SOUND; simpl; try (econstructor; eauto; fail).
-  - eapply IHk. eauto.
-  - eapply IHk. eauto.
-  - inv STK. econstructor; eauto.
-  - eapply IHk. eauto.
-  - eapply IHk. eauto.
-Qed.
+(* Lemma tr_stacks_call_cont: forall k body cfg pc cont brk nret *)
+(*     (SOUND: tr_cont body cfg k pc cont brk nret), *)
+(*   tr_stacks (call_cont k). *)
+(* Proof. *)
+(*   induction k; intros; inv SOUND; simpl; try (econstructor; eauto; fail). *)
+(*   - eapply IHk. eauto. *)
+(*   - eapply IHk. eauto. *)
+(*   - inv STK. econstructor; eauto. *)
+(*   - eapply IHk. eauto. *)
+(*   - eapply IHk. eauto. *)
+(* Qed. *)
 
   
 (* use fixpoint_soulution to prove that the final abstract env

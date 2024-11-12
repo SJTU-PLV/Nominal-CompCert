@@ -1874,7 +1874,8 @@ Let ge := globalenv se prog.
 Let ce := ge.(genv_cenv).
 
 Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
-Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) body cfg s s.
+                                                                  
+Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s s.
 
 (* Hypothesis CONSISTENT: composite_env_consistent ce. *)
 

@@ -28,7 +28,7 @@ Definition match_glob (ctx: composite_env) (gd: globdef Rustlight.fundef type) (
   | Gvar v1, Gvar v2 =>
       match_globvar eq v1 v2
   | Gfun fd1, Gfun fd2 =>
-      transl_fundef ctx fd1 = OK fd2
+      transl_fundef ctx fd1 = fd2
   | _, _ => False
   end.
 

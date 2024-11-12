@@ -52,7 +52,7 @@ Inductive statement : Type :=
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak: statement                      (**r [break] statement *)
 | Scontinue: statement                   (**r [continue] statement *)
-| Sreturn: option expr -> statement.      (**r [return] statement *)
+| Sreturn: place -> statement.      (**r [return p] statement. [p] is the specific return variable. *)
 
 
 Record function : Type := mkfunction {
@@ -213,8 +213,8 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
       collect_place ce p (collect_expr ce e m)
   | Scall p _ al =>
       collect_place ce p (collect_exprlist ce al m)
-  | Sreturn (Some e) =>
-      collect_expr ce e m
+  | Sreturn p =>
+      collect_place ce p m
   | Ssequence s1 s2 =>
       collect_stmt s1 (collect_stmt s2 m)
   | Sifthenelse e s1 s2 =>

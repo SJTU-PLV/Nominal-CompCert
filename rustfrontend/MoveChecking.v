@@ -154,6 +154,7 @@ Definition move_check_assign (p : place) :=
 
 End INIT.
 
+
 Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement) : Errors.res statement :=
   let '(mayInit, mayUninit, universe) := an in
   match mayInit, mayUninit with
@@ -173,8 +174,13 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
           then
             if move_check_assign mayinit mayuninit universe p0
             then OK stmt
-            else Error (msg "move_check_assign error")
-          else Error (msg "move_check_exprlist error")
+            else Error (msg "move_check_assign error in Scall")
+          else Error (msg "move_check_exprlist error in Scall")
+      | Sreturn p =>
+          if move_check_expr ce mayinit mayuninit universe (Epure (Eplace p (typeof_place p))) then
+            OK stmt
+          else
+            Error (msg "move_check_expr error in Sreturn")
       | _ => OK stmt
       end
   (* impossible *)
@@ -191,6 +197,7 @@ Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res 
         Error (msg "move_check_expr error")
   | _, _ => OK tt
   end.
+
 
 Definition move_check_function (ce: composite_env) (f: function) : Errors.res unit :=
   do (entry, cfg) <- generate_cfg f.(fn_body);

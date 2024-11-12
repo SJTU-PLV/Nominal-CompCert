@@ -558,16 +558,16 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
 | safek_step: forall s1 t s2 k
     (* Ensure that this internal state can make a step *)
     (STEP: Step L s1 t s2)
-    (* We allow internal nondeterminism so every states in the next
-    step must be safek. *)
+    (* We allow internal nondeterminism so every states in the next *)
+(*     step must be safek. *)
     (SAFEK: forall t' s2', Step L s1 t' s2' ->
                       safek se L IA IB SI wI k s2'),
     safek se L IA IB SI wI (S k) s1
 | safek_SI: forall s k
-    (* SI as a special final state. It can be False to define total
-    safe or memory_error to define partial safe *)
+    (* SI as a special final state. It can be False to define total *)
+(*     safe or memory_error to define partial safe *)
     (SINV: SI L s),
-    safek se L IA IB SI wI k s              
+    safek se L IA IB SI wI k s
 | safek_final: forall s r k
     (FINAL: final_state L s r)
     (* The reply satisfies the post-condition *)
@@ -583,16 +583,22 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
                        /\ safek se L IA IB SI wI k s2),
     safek se L IA IB SI wI (S k) s1
 .
-  
+
+(** Experiment safek based on internal multiple steps  *)
 (* Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop := *)
 (* | safek_O: forall s, *)
 (*     safek se L IA IB SI wI O s *)
-(* | safek_step: forall s1 s2 k t *)
+(* | safek_step: forall s1 t s2 k *)
+(*     (* Ensure that this internal state can make a step *) *)
 (*     (STEP: Step L s1 t s2) *)
-(*     (SAFEK: safek se L IA IB SI wI k s2), *)
-(*     safek se L IA IB SI wI (S k) s1 *)
+(*     (* We allow internal nondeterminism so every states in the next *) *)
+(*     (* step must be safek. *) *)
+(*     (SAFEK: forall t' s2', Plus L s1 t' s2' -> *)
+(*                       safek se L IA IB SI wI k s2'), *)
+(*     safek se L IA IB SI wI k s1 *)
 (* | safek_SI: forall s k *)
-(*     (* SI as a special final state *) *)
+(*     (* SI as a special final state. It can be False to define total *) *)
+(* (* safe or memory_error to define partial safe *) *)
 (*     (SINV: SI L s), *)
 (*     safek se L IA IB SI wI k s *)
 (* | safek_final: forall s r k *)
@@ -600,13 +606,14 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
 (*     (* The reply satisfies the post-condition *) *)
 (*     (RINV: reply_inv IB wI r), *)
 (*     safek se L IA IB SI wI k s *)
-(* | safek_external: forall s1 k w q r *)
+(* | safek_external: forall s1 k w q *)
 (*     (ATEXT: at_external L s1 q) *)
+(*     (SYMBINV: symtbl_inv IA w se) *)
 (*     (QINV: query_inv IA w q) *)
 (*     (* We require that the incoming reply satisfies its condition *) *)
-(*     (AFEXT: reply_inv IA w r -> *)
-(*             exists s2, after_external L s1 r s2 *)
-(*                   /\ safek se L IA IB SI wI k s2), *)
+(*     (AFEXT: forall r, reply_inv IA w r -> *)
+(*                  exists s2, after_external L s1 r s2 *)
+(*                        /\ safek se L IA IB SI wI k s2), *)
 (*     safek se L IA IB SI wI (S k) s1 *)
 (* . *)
      
@@ -687,44 +694,43 @@ Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant l
 
 
 (* for any state satisfies the invariant, then it is k-safe *)
-Lemma lts_preserves_progress_safek {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS se w SI: forall k s,
-    lts_preserves_progress se (L se) IA IB (SI se) w (PS se) ->
-    SI se w s ->
-    safek se (L se) IA IB (PS se) w k s.
-Proof.
-  induction k; intros s PRE SINV.
-  - econstructor.
-  - exploit (@internal_state_progress liA); eauto.
-    intros [A|B].
-    + destruct A as [(r & FINAL)|[(q & EXT)|(t1 & s1 & STEP1)]].
-      * eapply safek_final. eauto.
-        eapply final_state_preserves; eauto.
-      * exploit (@external_preserves_progress liA); eauto.
-        intros (wA & SYM & QINV & AFEXT).
-        eapply safek_external; eauto.
-        intros. exploit AFEXT; eauto.
-        intros (s' & AFEXT1 & SIEXT). exists s'. split; auto.
-      * eapply safek_step; eauto.
-        intros. eapply IHk. eauto.
-        eapply internal_step_preserves; eauto.
-    + eapply safek_SI. eauto.
-Qed.
+(* Lemma lts_preserves_progress_safek {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS se w SI: forall k s, *)
+(*     lts_preserves_progress se (L se) IA IB (SI se) w (PS se) -> *)
+(*     SI se w s -> *)
+(*     safek se (L se) IA IB (PS se) w k s. *)
+(* Proof. *)
+(*   induction k; intros s PRE SINV. *)
+(*   - econstructor. *)
+(*   - exploit (@internal_state_progress liA); eauto. *)
+(*     intros [A|B]. *)
+(*     + destruct A as [(r & FINAL)|[(q & EXT)|(t1 & s1 & STEP1)]]. *)
+(*       * eapply safek_final. eauto. *)
+(*         eapply final_state_preserves; eauto. *)
+(*       * exploit (@external_preserves_progress liA); eauto. *)
+(*         intros (wA & SYM & QINV & AFEXT). *)
+(*         eapply safek_external; eauto. *)
+(*         intros. exploit AFEXT; eauto. *)
+(*         intros (s' & AFEXT1 & SIEXT). exists s'. split; auto. *)
+(*       * eapply safek_step; eauto. *)
+(*         intros. eapply IHk. eauto. *)
+(*         eapply internal_step_preserves; eauto. *)
+(*     + eapply safek_SI. eauto. *)
+(* Qed. *)
 
     
 (* soundness of module_safe_components *)
-Lemma module_safek_components_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS:
-  module_safek_components L IA IB PS ->
-  module_safek L IA IB PS.
-Proof.
-  intros SAFE. inv SAFE.
-  red. intros se VSE w WTSE.
-  exploit msafek_preservation_progress0; eauto. intros PRE.
-  red. intros q VQ QINV.
-  exploit (@initial_preserves_progress liA); eauto.
-  intros (inits & INIT & SINV1). exists inits. split; auto.
-  intros. eapply lts_preserves_progress_safek; eauto.
-Qed.    
-
+(* Lemma module_safek_components_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS: *)
+(*   module_safek_components L IA IB PS -> *)
+(*   module_safek L IA IB PS. *)
+(* Proof. *)
+(*   intros SAFE. inv SAFE. *)
+(*   red. intros se VSE w WTSE. *)
+(*   exploit msafek_preservation_progress0; eauto. intros PRE. *)
+(*   red. intros q VQ QINV. *)
+(*   exploit (@initial_preserves_progress liA); eauto. *)
+(*   intros (inits & INIT & SINV1). exists inits. split; auto. *)
+(*   intros. eapply lts_preserves_progress_safek; eauto. *)
+(* Qed.     *)
 
 (** Compositionality *)
 
@@ -752,6 +758,342 @@ Record lts_open_determinate {liA liB st} (L: lts liA liB st) : Prop :=
 
 Definition open_determinate {liA liB} (L: semantics liA liB) :=
   forall se, lts_open_determinate (L se).
+
+
+
+(** * The following code is experiment code *)
+
+(* The preservation of safety in k step *)
+
+(* Section SAFETYK_PRESERVATION. *)
+
+(* Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2). *)
+(* Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2). *)
+(* Context (IA1 : invariant liA1) (IB1: invariant liB1). *)
+
+(* Hypothesis L1_determ: open_determinate L1. *)
+(* Hypothesis L2_determ: open_determinate L2. *)
+
+(* Section BSIM. *)
+  
+(* Context se1 se2 ccwB (wB1: inv_world IB1) bsim_index bsim_order bsim_match_states *)
+(*   (BSIMP: bsim_properties ccA ccB se1 se2 ccwB (L1 se1) (L2 se2) bsim_index bsim_order (bsim_match_states se1 se2 ccwB)). *)
+
+(* Context (MENV: match_senv ccB ccwB se1 se2). *)
+
+(* Let mst i s1 s2 := bsim_match_states se1 se2 ccwB i s1 s2. *)
+  
+
+(* Lemma step_safek: forall s1 s2 t k *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1) *)
+(*     (STEP: Step (L1 se1) s1 t s2), *)
+(*     safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2. *)
+(* Proof. *)
+(*   intros.   *)
+(*   inv SAFEK; eauto. *)
+(*   + constructor. *)
+(*   + eapply SAFEK0. eapply plus_one. eauto. *)
+(*   + red in SINV. contradiction. *)
+(*   + exfalso. *)
+(*     eapply od_final_nostep; eauto. *)
+(*   + exfalso. *)
+(*     eapply od_at_external_nostep; eauto. *)
+(* Qed. *)
+
+(* Lemma star_safek: forall s1 s2 t k *)
+(*     (STAR: Star (L1 se1) s1 t s2) *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1), *)
+(*     safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2. *)
+(* Proof. *)
+(*   induction 1; intros; eauto. *)
+(*   eapply IHSTAR. eapply step_safek; eauto. *)
+(* Qed. *)
+
+(* Lemma plus_safek: forall s1 s2 t k *)
+(*     (PLUS: Plus (L1 se1) s1 t s2) *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1), *)
+(*     safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s2. *)
+(* Proof. *)
+(*   intros. inv PLUS. *)
+(*   eapply star_safek; eauto. intros. *)
+(*   eapply step_safek; eauto. *)
+(* Qed. *)
+
+(* (* The safe index must not be zero *) *)
+(* Lemma safek_internal_safe : forall s1 k *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1), *)
+(*     safe (L1 se1) s1. *)
+(* Proof. *)
+(*   unfold safe. induction 2. *)
+(*   - inv SAFEK; eauto. *)
+(*     red in SINV. contradiction. *)
+(*   - eapply IHstar. *)
+(*     intros. *)
+(*     eapply step_safek; eauto. *)
+(* Qed. *)
+
+(* (* Prove by induction on k *) *)
+(* (* Key proof of module_total_safek_preservation *) *)
+(* Lemma bsim_safek_preservation: forall k s1 s2 i *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1) *)
+(*     (MATCH: bsim_match_states se1 se2 ccwB i s1 s2), *)
+(*     safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) (SIF se1) (wB1, ccwB) k s2. *)
+(* Proof. *)
+(*   induction k; intros. *)
+(*   econstructor. *)
+(*   (* prove s1 is internal safe (to get Smallstep.safe) and then use *)
+(*      bsim_progress *) *)
+(*   generalize (safek_internal_safe s1 k SAFEK). intros ISAFE1. *)
+(*   eapply safe_implies in ISAFE1. *)
+(*   generalize (bsim_progress BSIMP i _ MATCH ISAFE1). *)
+(*   (* 3 cases of s2 *) *)
+(*   intros [(r2 & FINAL2)|[(q2 & ATEXT2)|(t2 & s2' & STEP2)]]. *)
+(*   (* s2 is final state *) *)
+(*   -  exploit (@bsim_match_final_states liA1); eauto. *)
+(*     intros (s1' & r1 & STAT1 & FINAL1 & MR). *)
+(*     (* prove s1' is safek *) *)
+(*     assert (SAFEK1': safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1'). *)
+(*     { eapply star_safek; eauto. } *)
+(*     (* s1' have three cases, by determinism, it must be in final state *) *)
+(*     inv SAFEK1'. *)
+(*     + exfalso. *)
+(*       eapply od_final_nostep; eauto. *)
+(*     + red in SINV. contradiction. *)
+(*     (* final state *) *)
+(*     + eapply od_final_determ in FINAL1; eauto. subst. *)
+(*       eapply safek_final. eauto. *)
+(*       econstructor. split; eauto. *)
+(*     + exfalso. *)
+(*       eapply od_final_noext; eauto.   *)
+(*   (* s2 is at_external state *) *)
+(*   - exploit (@bsim_match_external liA1); eauto. *)
+(*     intros (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MENV1 & AFEXT1). *)
+(*     (* prove s1' is safek *) *)
+(*     assert (SAFEK1': safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1'). *)
+(*     { eapply star_safek; eauto. } *)
+(*     inv SAFEK1'. *)
+(*     + exfalso. *)
+(*       eapply od_at_external_nostep; eauto. *)
+(*     + red in SINV. contradiction. *)
+(*     + exfalso. *)
+(*       eapply od_final_noext; eauto. *)
+(*     (* at_external *) *)
+(*     + eapply od_at_external_determ in ATEXT1; eauto. subst. *)
+(*       eapply safek_external. eauto. *)
+(*       instantiate (1 := (w, ccwA)). *)
+(*       (* symtbl_inv *) *)
+(*       econstructor. split; eauto. *)
+(*       (* query_inv *) *)
+(*       econstructor. split; eauto. *)
+(*       (* reply *) *)
+(*       intros r2 (r1 & RINV1 & MR). *)
+(*       exploit AFEXT; eauto. *)
+(*       intros (s1'' & AFEXT'' & SAFEK''). *)
+(*       (* use AFEXT1 *) *)
+(*       exploit AFEXT1. eauto. *)
+(*       intros [EXIST MATCHEXT]. *)
+(*       exploit EXIST; eauto. intros (s2' & AFEXT2'). *)
+(*       exploit MATCHEXT; eauto. *)
+(*       intros (s1''' & AFEXT''' & (i' & MATCH')). *)
+(*       (* use L1 after_external determinate to show s1'' = s1''' *) *)
+(*       eapply od_after_external_determ in AFEXT''; eauto. subst. *)
+(*       exists s2'. split; auto. *)
+(*       eapply IHk. 2: eapply MATCH'. *)
+(*       auto. *)
+      
+  (* (* s2 can take a step *) *)
+  (* - eapply safek_step. eauto. *)
+  (*   induction 1 using plus_ind2. *)
+  (*   (* may be induction on the index? *) *)
+    
+  (*   intros. *)
+  (*   (* consider that s1 may not take step, which would make inv SAFEK does not work *) *)
+  (*   plus_ind2 *)
+  (*   exploit (@bsim_simulation liA1); eauto. *)
+  (*   intros (i' & s1' & OR & MATCH'). *)
+  (*   destruct OR as [PLUS| (STAR & ORD)]. *)
+  (*   + eapply  *)
+  (*     eapply IHk. 2: eapply MATCH'. *)
+  (*     eapply plus_safek; eauto. *)
+  (*   + eapply IHk. 2: eapply MATCH'. *)
+  (*     eapply star_safek; eauto. *)
+(* Admitted. *)
+
+(* Prove by induction on SAFEK *)
+(* Key proof of module_total_safek_preservation *)
+(* Lemma bsim_safek_preservation: forall k s1 *)
+(*     (SAFEK: safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 k s1) *)
+(*     s2 i *)
+(*     (MATCH: bsim_match_states se1 se2 ccwB i s1 s2), *)
+(*     safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) (SIF se1) (wB1, ccwB) k s2. *)
+(* Proof. *)
+(*   induction 1; intros. *)
+(*   - econstructor. *)
+(*   - destruct k. constructor. *)
+(*     (* show that s2 is safek *) *)
+(*     exploit SAFEK. eapply plus_one; eauto. intros SAFEKs2.     *)
+(*     (* prove s1 is internal safe (to get Smallstep.safe) and then use *) *)
+(*     (*   bsim_progress *) *)
+(*     assert (ISAFE1: safe (L1 se1) s1). *)
+(*     { red. destruct 1. *)
+(*       + right. right. eauto. *)
+(*       + eapply safek_internal_safe. eapply SAFEK. *)
+(*         econstructor; eauto. eapply star_refl. }     *)
+(*     eapply safe_implies in ISAFE1. *)
+(*     generalize (bsim_progress BSIMP i _ MATCH ISAFE1). *)
+(*     (* 3 cases of s0 *) *)
+(*     intros [(r2 & FINAL2)|[(q2 & ATEXT2)|(t2 & s2' & STEP2)]].         *)
+(*     (* s0 is final state *) *)
+(*     + exploit (@bsim_match_final_states liA1); eauto. *)
+(*       intros (s1' & r1 & STAR1 & FINAL1 & MR). *)
+(*       (* s1 must not be final state because it can take a step! *) *)
+(*       inv STAR1. exfalso. *)
+(*       eapply od_final_nostep; eauto.       *)
+(*       (* prove s1' is safek *) *)
+(*       assert (SAFEK1': safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1'). *)
+(*       { eapply SAFEK; eauto. *)
+(*         econstructor; eauto. } *)
+(*       (* s1' have three cases, by determinism, it must be in final state *) *)
+(*       inv SAFEK1'. *)
+(*       * exfalso. *)
+(*         eapply od_final_nostep; eauto. *)
+(*       * red in SINV. contradiction. *)
+(*       (* final state *) *)
+(*       * eapply od_final_determ in FINAL1; eauto. subst. *)
+(*         eapply safek_final. eauto. *)
+(*         econstructor. split; eauto. *)
+(*       * exfalso. *)
+(*         eapply od_final_noext; eauto. *)
+(*     (* s1' is at_external state *) *)
+(*     + exploit (@bsim_match_external liA1); eauto. *)
+(*       intros (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MENV1 & AFEXT1). *)
+(*       (* s1 must not be final state because it can take a step! *) *)
+(*       inv STAR. exfalso. *)
+(*       eapply od_at_external_nostep; eauto. *)
+(*       (* prove s1' is safek *) *)
+(*       assert (SAFEK1': safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1'). *)
+(*       { eapply SAFEK; eauto. *)
+(*         econstructor; eauto. } *)
+(*       inv SAFEK1'. *)
+(*       * exfalso. *)
+(*         eapply od_at_external_nostep; eauto. *)
+(*       * red in SINV. contradiction. *)
+(*       * exfalso. *)
+(*         eapply od_final_noext; eauto. *)
+(*       (* at_external *) *)
+(*       * eapply od_at_external_determ in ATEXT1; eauto. subst. *)
+(*         eapply safek_external. eauto. *)
+(*         instantiate (1 := (w, ccwA)). *)
+(*         (* symtbl_inv *) *)
+(*         econstructor. split; eauto. *)
+(*         (* query_inv *) *)
+(*         econstructor. split; eauto. *)
+(*         (* reply *) *)
+(*         intros r2 (r1 & RINV1 & MR). *)
+(*         exploit AFEXT; eauto. *)
+(*         intros (s1'' & AFEXT'' & SAFEK''). *)
+(*         (* use AFEXT1 *) *)
+(*         exploit AFEXT1. eauto. *)
+(*         intros [EXIST MATCHEXT]. *)
+(*         exploit EXIST; eauto. intros (s2' & AFEXT2'). *)
+(*         exploit MATCHEXT; eauto. *)
+(*         intros (s1''' & AFEXT''' & (i' & MATCH')). *)
+(*         (* use L1 after_external determinate to show s1'' = s1''' *) *)
+(*         eapply od_after_external_determ in AFEXT''; eauto. subst. *)
+(*         exists s2'. split; auto. *)
+(*         eapply H. 2: eapply MATCH'. *)
+(*         auto. *)
+      
+(*   (* s1' is at_external state *) *)
+(*   - exploit (@bsim_match_external liA1); eauto. *)
+(*     intros (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MENV1 & AFEXT1). *)
+(*     (* prove s1' is safek *) *)
+(*     assert (SAFEK1': safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S k) s1'). *)
+(*     { eapply star_safek; eauto. } *)
+(*     inv SAFEK1'. *)
+(*     + exfalso. *)
+(*       eapply od_at_external_nostep; eauto. *)
+(*     + red in SINV. contradiction. *)
+(*     + exfalso. *)
+(*       eapply od_final_noext; eauto. *)
+(*     (* at_external *) *)
+(*     + eapply od_at_external_determ in ATEXT1; eauto. subst. *)
+(*       eapply safek_external. eauto. *)
+(*       instantiate (1 := (w, ccwA)). *)
+(*       (* symtbl_inv *) *)
+(*       econstructor. split; eauto. *)
+(*       (* query_inv *) *)
+(*       econstructor. split; eauto. *)
+(*       (* reply *) *)
+(*       intros r2 (r1 & RINV1 & MR). *)
+(*       exploit AFEXT; eauto. *)
+(*       intros (s1'' & AFEXT'' & SAFEK''). *)
+(*       (* use AFEXT1 *) *)
+(*       exploit AFEXT1. eauto. *)
+(*       intros [EXIST MATCHEXT]. *)
+(*       exploit EXIST; eauto. intros (s2' & AFEXT2'). *)
+(*       exploit MATCHEXT; eauto. *)
+(*       intros (s1''' & AFEXT''' & (i' & MATCH')). *)
+(*       (* use L1 after_external determinate to show s1'' = s1''' *) *)
+(*       eapply od_after_external_determ in AFEXT''; eauto. subst. *)
+(*       exists s2'. split; auto. *)
+(*       eapply IHk. 2: eapply MATCH'. *)
+(*       auto. *)
+(*   -  *)
+(*     exploit (@bsim_simulation liA1); eauto. *)
+(*     intros (i' & s1' & OR & MATCH'). *)
+(*     destruct OR as [PLUS| (STAR & ORD)]. *)
+(*     + eapply  *)
+(*       eapply IHk. 2: eapply MATCH'. *)
+(*       eapply plus_safek; eauto. *)
+(*     + eapply IHk. 2: eapply MATCH'. *)
+(*       eapply star_safek; eauto. *)
+(* Admitted. *)
+      
+(* End BSIM. *)
+
+
+(* Lemma module_total_safek_preservation: *)
+(*   module_total_safek L1 IA1 IB1 -> *)
+(*   backward_simulation ccA ccB L1 L2 -> *)
+(*   module_total_safek L2 (invcc IA1 ccA) (invcc IB1 ccB). *)
+(* Proof. *)
+(*   intros SAFE [BSIM]. *)
+(*   red. intros se2 VSE2. *)
+(*   red. intros (wB1 & ccwB) (se1 & SYM1 & MENV). *)
+(*   intros q2 VQ2 (q1 & QINV2 & MQ). *)
+(*   assert (VSE1: Genv.valid_for (skel L1) se1). *)
+(*   { eapply match_senv_valid_for; eauto. *)
+(*     erewrite bsim_skel; eauto. } *)
+(*   inv BSIM. *)
+(*   generalize (bsim_lts se1 se2 ccwB MENV VSE1). intros BSIMP. *)
+(*   assert (VQ1: valid_query (L1 se1) q1 = true). *)
+(*   { erewrite <- bsim_match_valid_query; eauto. }   *)
+(*   (* initial_match *) *)
+(*   exploit SAFE; eauto. *)
+(*   intros (s1 & INIT1 & SAFE1). *)
+(*   edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto. *)
+(*   exploit EXIST; eauto. *)
+(*   intros (s2 & INIT2). *)
+(*   exploit MATCH; eauto. *)
+(*   intros (s1' & INIT1' & (i & MST)). *)
+(*   (* use initial_determ *) *)
+(*   eapply od_initial_determ in INIT1; eauto. subst. *)
+(*   (* use s2 as the initial state of L2 *) *)
+(*   exists s2. split. auto. *)
+(*   (** Key part: prove safek by generalization of s2 *) *)
+(*   intros. exploit bsim_safek_preservation; eauto. *)
+(* Qed. *)
+
+
+
+(** *End of experiment code  *)
+
+
+
+
+
+
 
 (** Cannot defined: Composition of safety_invariant (e.g., not_stuck
 or partial_safe). Maybe we cannot define a general composed SI because
@@ -1188,7 +1530,7 @@ Record preservable_inv {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) : Ty
 
 
 (* Using constructive target invariant to prove safe preservatin *)
-Section SAFETY_PRESERVATION_CONSTRUCT.
+(* Section SAFETY_PRESERVATION_CONSTRUCT. *)
 
 (* Context {li1 li2} (cc: callconv li1 li2). *)
 (* Context (L1: semantics li1 li1) (L2: semantics li2 li2). *)
@@ -1381,7 +1723,7 @@ Section SAFETY_PRESERVATION_CONSTRUCT.
 (* Qed. *)
     
     
-End SAFETY_PRESERVATION_CONSTRUCT.
+(* End SAFETY_PRESERVATION_CONSTRUCT. *)
 
 
 (* similar to ccref *)
@@ -1867,3 +2209,5 @@ Proof.
   (** Key part: prove safek by generalization of s2 *)
   intros. exploit bsim_safek_preservation; eauto.
 Qed.
+
+End SAFETYK_PRESERVATION.

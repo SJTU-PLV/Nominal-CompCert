@@ -38,13 +38,14 @@ Inductive cont : Type :=
 
 (** Pop continuation until a call or stop *)
 
-Fixpoint call_cont (k: cont) : cont :=
+(* Return from dropstate and dropplace is UB *)
+Fixpoint call_cont (k: cont) : option cont :=
   match k with
-  | Kseq _ k
-  | Kloop _ k
-  | Kdropplace _ _ _ _ _ k
-  | Kdropcall _ _ _ _ k  => call_cont k
-  | _ => k
+  | Kseq _ k => call_cont k
+  | Kloop _ k => call_cont k
+  | Kdropplace _ _ _ _ _ _ => None
+  | Kdropcall _ _ _ _ _  => None                             
+  | _ => Some k
   end.
 
 Definition is_call_cont (k: cont) : Prop :=
@@ -550,28 +551,30 @@ Inductive step : state -> trace -> state -> Prop :=
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
-(** Return cases *)
-| step_return_0: forall e lb m1 m2 f k own,
-    blocks_of_env ge e = lb ->
-    (* drop the stack blocks *)
-    Mem.free_list m1 lb = Some m2 ->
-    (* return unit or Vundef? *)
-    step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v v1 lb m1 m2 f k own1 own2
-    (TFEXPR: move_place_option own1 (moved_place a) = own2),
-    eval_expr ge le m1 a v ->
+(** Return cases. For the reason why we do not support return None and
+skip return, see Rustlightown.v *)
+(* | step_return_0: forall e lb m1 m2 f k own, *)
+(*     blocks_of_env ge e = lb -> *)
+(*     (* drop the stack blocks *) *)
+(*     Mem.free_list m1 lb = Some m2 -> *)
+(*     (* return unit or Vundef? *) *)
+(*     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2) *)
+| step_return_1: forall le p v v1 lb m1 m2 f k ck own1 (* own2 *)
+    (CONT: call_cont k = Some ck)
+    (* (TFEXPR: move_place_option own1 (moved_place a) = own2), *)
+    (EVAL: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
-    sem_cast v (typeof a) f.(fn_return) = Some v1 ->
+    (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1)
     (* drop the stack blocks *)
-    blocks_of_env ge le = lb ->
-    Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn (Some a)) k le own1 m1) E0 (Returnstate v1 (call_cont k) m2)
+    (STK: blocks_of_env ge le = lb)
+    (FREE: Mem.free_list m1 lb = Some m2),
+    step (State f (Sreturn p) k le own1 m1) E0 (Returnstate v1 ck m2)
 (* no return statement but reach the end of the function *)
-| step_skip_call: forall e lb m1 m2 f k own,
-    is_call_cont k ->
-    blocks_of_env ge e = lb ->
-    Mem.free_list m1 lb = Some m2 ->
-    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
+(* | step_skip_call: forall e lb m1 m2 f k own, *)
+(*     is_call_cont k -> *)
+(*     blocks_of_env ge e = lb -> *)
+(*     Mem.free_list m1 lb = Some m2 -> *)
+(*     step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2) *)
 
 | step_returnstate: forall p v b ofs m1 m2 e f k own1 own2
     (TFASSIGN: own_transfer_assign own1 p = own2),
@@ -801,16 +804,16 @@ Inductive step_mem_error : state -> Prop :=
     (FIND: Genv.find_funct ge vf = Some (Internal f)),
     function_entry_mem_error f vargs m e ->
     step_mem_error (Callstate vf vargs k m)
-| step_return_0_error: forall f k le m own,
+(* | step_return_0_error: forall f k le m own, *)
+(*     Mem.free_list m (blocks_of_env ge le) = None -> *)
+(*     step_mem_error (State f (Sreturn p) k le own m) *)
+| step_return_1_error1: forall f p k le m own,
+    eval_expr_mem_error ge le m (Epure (Eplace p (typeof_place p)))->
+    step_mem_error (State f (Sreturn p) k le own m)
+| step_return_2_error2: forall f p k le m v own,
+    eval_expr ge le m (Epure (Eplace p (typeof_place p))) v ->
     Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn None) k le own m)
-| step_return_1_error1: forall f a k le m own,
-    eval_expr_mem_error ge le m a ->
-    step_mem_error (State f (Sreturn (Some a)) k le own m)
-| step_return_2_error2: forall f a k le m v own,
-    eval_expr ge le m a v ->
-    Mem.free_list m (blocks_of_env ge le) = None ->
-    step_mem_error (State f (Sreturn (Some a)) k le own m)
+    step_mem_error (State f (Sreturn p) k le own m)
 | step_skip_call_error: forall f k le m own,
     is_call_cont k ->
     Mem.free_list m (blocks_of_env ge le) = None ->

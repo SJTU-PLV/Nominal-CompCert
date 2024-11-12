@@ -65,7 +65,7 @@ Inductive statement : Type :=
 | Sloop: statement -> statement                               (**r infinite loop *)
 | Sbreak : statement                      (**r [break] statement *)
 | Scontinue : statement                   (**r [continue] statement *)
-| Sreturn : option expr -> statement     (**r [return] statement *)
+| Sreturn : expr -> statement     (**r [return e] statement where e must be a specific return variable (Evar retv) generated in Rustsurface *)
 | Smatch : expr -> arm_statements -> statement  (**r pattern match statements *)
 
 with arm_statements : Type :=            (**r cases of a [match] *)
@@ -78,13 +78,15 @@ Record function : Type := mkfunction {
   fn_generic_origins : list origin;
   fn_origins_relation: list (origin * origin);
   fn_drop_glue: option ident;   (* It indicates that this function is the drop glue for composite id *)
-  fn_return: type;
-  fn_callconv: calling_convention;
+  (* For now, every function must have *)
+  fn_return: (ident * type);
+  fn_callconv: calling_convention;  
   fn_params: list (ident * type); 
   fn_body: statement
 }.  
 
-Definition empty_drop_function id := mkfunction [] [] (Some id) Tunit cc_default [] Sskip.
+(* Since it is a drop glue, the return variable is irrelevant *)
+Definition empty_drop_function id := mkfunction [] [] (Some id) (1%positive, Tunit) cc_default [] Sskip.
 
 Definition fundef := Rusttypes.fundef function.
 
@@ -105,7 +107,7 @@ Definition program := Rusttypes.program function.
 (* Type of function *)
 
 Definition type_of_function (f: function) : type :=
-  Tfunction (fn_generic_origins f) (fn_origins_relation f) (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+  Tfunction (fn_generic_origins f) (fn_origins_relation f) (type_of_params (fn_params f)) (snd (fn_return f)) (fn_callconv f).
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
@@ -144,8 +146,8 @@ Notation "'do' e" := (Sdo e) (in custom rustsyntax at level 80, e at level 20) :
 Notation "'skip'" := Sskip (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'break'" := Sbreak (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'continue'" := Scontinue (in custom rustsyntax at level 0) : rustsyntax_scope.
-Notation "'return0'" := (Sreturn None) (in custom rustsyntax at level 0) : rustsyntax_scope.
-Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustsyntax at level 80, e at level 20) : rustsyntax_scope.
+(* Notation "'return0'" := (Sreturn (Evar ) (in custom rustsyntax at level 0) : rustsyntax_scope. *)
+Notation "'return' e" := (Sreturn e) (in custom rustsyntax at level 80, e at level 20) : rustsyntax_scope.
 Notation "'let' x : t 'in' s 'endlet' " := (Slet x t None s) (in custom rustsyntax at level 80, s at level 99, x global, t global) : rustsyntax_scope.
 Notation "'let' x : t ':=' e 'in' s 'endlet' " := (Slet x t (Some e) s) (in custom rustsyntax at level 80, s at level 99, x global, t global, e at level 20) : rustsyntax_scope.
 Notation "'loop' s 'endloop'" := (Sloop s) (in custom rustsyntax at level 80, s at level 99) : rustsyntax_scope.
@@ -214,7 +216,7 @@ Definition init_test1_body :=
 Definition init_test1 :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
-    fn_return := Tunit;
+    fn_return := (1%positive, Tunit);
     fn_drop_glue := None;
     fn_callconv := cc_default;
     fn_params := nil;
@@ -234,7 +236,7 @@ Definition init_test2 :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
     fn_drop_glue := None;
-    fn_return := Tunit;
+    fn_return := (1%positive, Tunit);
     fn_callconv := cc_default;
     fn_params := (C, box_int) :: nil;
     fn_body := init_test2_body |}.
@@ -256,9 +258,9 @@ Definition ex1_body :=
 Definition ex1 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
-        fn_drop_glue := None;
-    fn_return := Tunit;
-    fn_callconv := cc_default;
+    fn_drop_glue := None;
+    fn_return := (1%positive, Tunit);
+    fn_callconv := cc_default;    
     fn_params := (A , type_int32s) :: (B , box_int) :: nil;
     fn_body := ex1_body |}.
                                    
@@ -293,7 +295,7 @@ Definition ex2 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
         fn_drop_glue := None;
-    fn_return := box_int;
+    fn_return := (1%positive, box_int);
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := fact 10 |}.
@@ -328,7 +330,7 @@ Definition ex3 : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
         fn_drop_glue := None;
-    fn_return := box_int;
+    fn_return := (1%positive, box_int);
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := fact1 10 |}.
@@ -459,8 +461,8 @@ Definition pop_and_push_func : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
         fn_drop_glue := None;
-    fn_return := box_list;
-    fn_callconv := cc_default;
+    fn_return := (1%positive, box_list);
+    fn_callconv := cc_default;    
     fn_params := (A, box_list) :: (B, type_int32s) :: nil;
     fn_body := pop_and_push |}.
 
@@ -489,7 +491,7 @@ Definition main_func : function :=
   {|fn_generic_origins := nil;
     fn_origins_relation := nil;
         fn_drop_glue := None;
-    fn_return := type_int32s;
+    fn_return := (1%positive, type_int32s);
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := main_body |}.

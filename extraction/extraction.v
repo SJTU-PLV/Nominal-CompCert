@@ -135,8 +135,8 @@ Extract Constant Clightgen.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant ElaborateDrop.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant Rustlightgen.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant Rustlightgen.dummy_origin => "PrintRustsyntax.dummy_origin".
-Extract Constant RustIRgen.fresh_atom => "Camlcoq.fresh_atom".
-Extract Constant ReplaceOrigins.fresh_atom => "Camlcoq.fresh_atom".
+(* Extract Constant RustIRgen.fresh_atom => "Camlcoq.fresh_atom". *)
+(* Extract Constant ReplaceOrigins.fresh_atom => "Camlcoq.fresh_atom". *)
 
 (* Initializers *)
 

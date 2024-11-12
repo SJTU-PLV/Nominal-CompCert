@@ -369,8 +369,8 @@ module To_syntax = struct
         (pp_print_stmt symmap) s
     | S.Sbreak -> pp_print_string pp "break;"
     | S.Scontinue -> pp_print_string pp "continue;"
-    | S.Sreturn None -> pp_print_string pp "return;"
-    | S.Sreturn (Some v) ->
+    (* | S.Sreturn None -> pp_print_string pp "return;" *)
+    | S.Sreturn v ->
       fprintf pp "return %a;" (pp_print_expr symmap) v
     | S.Smatch (e, arms) ->
       fprintf pp "@[<v 2>match %a: %a {@ %a@;<0 -2>}@]"
@@ -405,7 +405,7 @@ module To_syntax = struct
     let open Rustsyntax in
     Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a %a {@ %a@;<0 -2>}@]" x
       (pp_print_origins symmap) f.fn_generic_origins
-      print_args f.fn_params (pp_print_rust_type symmap) f.fn_return
+      print_args f.fn_params (pp_print_rust_type symmap) (snd f.fn_return)
       (pp_print_origin_relations symmap) f.fn_origins_relation (pp_print_stmt symmap) f.fn_body
 
 
@@ -1292,14 +1292,16 @@ module To_syntax = struct
 
 
 
-  let rec lower_case (c: case) (t: Rusttypes.coq_type) : case' monad =
+  let rec lower_case (c: case) (t: Rusttypes.coq_type) (retv: ident) (retty: Rusttypes.coq_type) : case' monad =
      lower_pat c.pattern t >>= fun p ->
-     transl_stmt c.body >>= fun s ->
+     transl_stmt retv retty c.body >>= fun s ->
      return { pattern' = p; body' = s }
 
-  and transl_stmt (s: stmt)
+  (* We pass a return variable to the translation *)
+  and transl_stmt (retv: ident) (retty: Rusttypes.coq_type) (s: stmt)
       : Rustsyntax.statement monad =
     let module S = Rustsyntax in
+    let transl_stmt = transl_stmt retv retty in
     match s with
     | Sskip -> return S.Sskip
     | Sdo e ->
@@ -1366,14 +1368,24 @@ module To_syntax = struct
     | Sbreak -> return S.Sbreak
     | Scontinue -> return S.Scontinue
     | Sreturn v ->
+      let rete = S.Evar(retv,retty) in
+      (* rete is the return variable, we need to assign the return
+      expression to the return variable. Note that this code is not
+      debugged yet *)
       (match v with
-       | Option.None -> return (S.Sreturn None)
+       | Option.None -> 
+        (* FIXME: this inserted assignment can slow down the
+          performance because unit value would be compiled to int in
+          our compiler. *)
+        let assign_ret = S.Sdo (S.Eassign(rete, S.Eunit, Rusttypes.Tunit)) in
+        return (S.Ssequence(assign_ret, (S.Sreturn rete)))
        | Option.Some e ->
          transl_expr e >>= fun e' ->
-         return (S.Sreturn (Option.Some e')))
+         let assign_ret = S.Sdo (S.Eassign(rete, e', Rusttypes.Tunit)) in
+         return (S.Ssequence(assign_ret, (S.Sreturn rete))))
     | Smatch (e, cases) ->
       transl_expr e >>= fun e' ->
-      map_m cases (fun case -> lower_case case (S.typeof e')) >>= fun cases' ->
+      map_m cases (fun case -> lower_case case (S.typeof e') retv retty) >>= fun cases' ->
       let table = Trans_match.skeleton_table cases' e' in
       Trans_match.transl_pat_table table
     | Sscope s ->
@@ -1381,7 +1393,6 @@ module To_syntax = struct
       transl_stmt s >>= fun s' ->
       restore_locals old_locals >>= fun _ ->
       return s'
-
 
   let transl_fn (f: fn) : Rustsyntax.coq_function monad =
     backup_locals >>= fun old_locals ->
@@ -1395,10 +1406,14 @@ module To_syntax = struct
        transl_ty t >>= fun t' ->
        reg_local_type x t' >>= fun i ->
        return (i, t')) >>= fun fn_params ->
-    transl_stmt f.body >>= fun fn_body ->
+    (* Generate the return variable *)
+    get_or_new_ident "_retv" >>= fun retv ->
+    transl_stmt retv fn_return f.body >>= fun fn_body ->
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
-    return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_drop_glue = None; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
+    (* We should add explicit return variable in Rustsyntax function
+    to prevent from not collecting it in Rustlightgen *)
+    return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_drop_glue = None; fn_return = (retv, fn_return); fn_params; fn_body; fn_callconv = AST.cc_default })
 
   (* Convert state to string tables (Camlcoq.atom_of_string and
   Camcoq.string_of_atom) which are used in the pretty printing in the

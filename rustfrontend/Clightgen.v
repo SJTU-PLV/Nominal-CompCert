@@ -666,14 +666,9 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       ret Clight.Sbreak
   | Scontinue =>
       ret Clight.Scontinue
-  | Sreturn e =>
-      match e with
-      | Some e =>
-          docomb e' <- expr_to_cexpr e;
-          ret (Clight.Sreturn (Some e'))
-      | None =>
-          ret (Clight.Sreturn None)
-      end
+  | Sreturn p =>
+      docomb e' <- expr_to_cexpr (Epure (Eplace p (typeof_place p)));
+      ret (Clight.Sreturn (Some e'))
   | Sdrop p =>
       (* drop(p) is expanded to
          temp = &p;

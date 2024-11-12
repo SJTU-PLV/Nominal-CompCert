@@ -95,7 +95,7 @@ Inductive statement : Type :=
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak : statement                      (**r [break] statement *)
 | Scontinue : statement                   (**r [continue] statement *)
-| Sreturn : option expr -> statement.      (**r [return] statement *)
+| Sreturn : place -> statement.      (**r [return] statement *)
 
 
 Record function : Type := mkfunction {
@@ -524,8 +524,8 @@ Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustlight at level 99, right 
 Notation "'skip'" := Sskip (in custom rustlight at level 0) : rustlight_scope.
 Notation "'break'" := Sbreak (in custom rustlight at level 0) : rustlight_scope.
 Notation "'continue'" := Scontinue (in custom rustlight at level 0) : rustlight_scope.
-Notation "'return0'" := (Sreturn None) (in custom rustlight at level 0) : rustlight_scope.
-Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustlight at level 80, e custom rustlight_expr at level 20) : rustlight_scope.
+(* Notation "'return0'" := (Sreturn None) (in custom rustlight at level 0) : rustlight_scope. *)
+Notation "'return' p" := (Sreturn p) (in custom rustlight at level 80, p custom rustlight_place at level 20) : rustlight_scope.
 Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustlight at level 80, s at level 99, x global, t global) : rustlight_scope.
 Notation "'loop' s 'end'" := (Sloop s) (in custom rustlight at level 80, s at level 99) : rustlight_scope.
 Notation "'Box' p := ( e ) " := (Sbox p e) (in custom rustlight at level 80, p custom rustlight_place at level 20, e custom rustlight_expr at level 20) : rustlight_scope.
@@ -583,23 +583,23 @@ Definition test_option_ident_to_expr : option expr  := @Some expr A.
 (* Print Graph. *)
 (* Print Coercion Paths ident expr. *)
 
-Definition test : statement :=
-  <{ let A : type_int32s in
-     A#type_int32s := $1;
-     A#type_int32s := $0;
-     return (copy A#type_int32s);
-     skip; break; return0; return (move A#type_int32s);
-     if (($1) < ($0)) then
-       B#type_int32s := copy C#type_int32s;
-       A#type_int32s := copy B#type_int32s
-     else
-       A#type_int32s := copy C#type_int32s
-     end;
-     loop
-       A#type_int32s := copy C#type_int32s;
-       B#type_int32s := copy A#type_int32s
-     end;
-     return0
-     end }>.
+(* Definition test : statement := *)
+(*   <{ let A : type_int32s in *)
+(*      A#type_int32s := $1; *)
+(*      A#type_int32s := $0; *)
+(*      return (A#type_int32s); *)
+(*      skip; break; return0; return (move A#type_int32s); *)
+(*      if (($1) < ($0)) then *)
+(*        B#type_int32s := copy C#type_int32s; *)
+(*        A#type_int32s := copy B#type_int32s *)
+(*      else *)
+(*        A#type_int32s := copy C#type_int32s *)
+(*      end; *)
+(*      loop *)
+(*        A#type_int32s := copy C#type_int32s; *)
+(*        B#type_int32s := copy A#type_int32s *)
+(*      end; *)
+(*      return0 *)
+(*      end }>. *)
 
 (** ** Pretty printing for Rustlight programs  *)
