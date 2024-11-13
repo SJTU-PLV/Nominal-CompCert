@@ -241,8 +241,8 @@ Inductive match_drop_insert_kind: drop_insert_kind -> RustIR.statement -> Prop :
     match_drop_insert_kind (drop_escape_after id l) (RustIR.Ssequence (Sstoragedead id) (gen_drops_for_escape_vars ge l))
 | match_drop_return: forall l,
     match_drop_insert_kind (drop_return l) (gen_drops_for_vars ge l)
-| match_drop_reassign_end:
-  match_drop_insert_kind drop_reassign_end RustIR.Sskip
+| match_drop_end:
+  match_drop_insert_kind drop_end RustIR.Sskip
 .
 
 
@@ -262,6 +262,8 @@ Inductive match_dropcont : dropcont -> RustIR.statement -> Prop :=
   match_dropcont Dbreak RustIR.Sbreak
 | match_Dcontinue:
   match_dropcont Dcontinue RustIR.Scontinue
+| match_Dreturn: forall p,
+    match_dropcont (Dreturn p) (RustIR.Sreturn p)
 | match_Dendlet:
   (* may be we should generate sskip in the end of the let *)
   match_dropcont Dendlet RustIR.Sskip
@@ -275,8 +277,7 @@ Inductive match_cont (params: list (ident * type)) : cont -> RustIRown.cont -> P
     (* when executing Klet, Rustlight would enter Dropinsert state
     where drop_escape contains the out-of-scope variable which is
     related to (drop;storagedead id) *)
-    (* The additional Kseq is used to simulate the step in Dendlet *)
-    match_cont params (Klet id ty k) (RustIRown.Kseq drop (RustIRown.Kseq RustIR.Sskip tk))
+    match_cont params (Klet id ty k) (RustIRown.Kseq drop tk)
 (* The drops are inserted for the reassignment. The translated
 statement does not contain storagedead *)
 | match_Kdropinsert: forall k tk dk s1 s2 st
@@ -288,6 +289,13 @@ statement does not contain storagedead *)
     match_cont params (Kdropinsert st dk k)
       (* s1 should contain the storagedead of the first element of st *)
       (RustIRown.Kseq s1 (RustIRown.Kseq s2 tk))
+(* move dropcont related statement to front *)
+(* | match_Kdropinsert_end: forall k tk dk s1 *)
+(*     (MCONT: match_cont params k tk) *)
+(*     (MDCONT: match_dropcont dk s1), *)
+(*     (** TODO: before running st, we may need to execute the *)
+(*     storagedead in the target *) *)
+(*     match_cont params (Kdropinsert drop_end dk k) tk *)
 | match_Kstop:
     match_cont params Kstop RustIRown.Kstop
 | match_Kseq: forall k s tk ts
@@ -296,7 +304,7 @@ statement does not contain storagedead *)
     match_cont params (Kseq s k) (RustIRown.Kseq ts tk)
 | match_Kloop: forall k tk s ts
     (MCONT: match_cont params k tk)
-    (TRSTMT: transl_stmt ge params s (cont_vars k) = ts),
+    (TRSTMT: transl_stmt ge params s (cont_vars (Kloop s k)) = ts),
     match_cont params (Kloop s k) (RustIRown.Kloop ts tk)
 | match_Kcall: forall k tk p f tf le own
     (TRFUN: transl_function ge f = tf)
@@ -324,8 +332,15 @@ Inductive match_states: Rustlightown.state -> RustIRown.state -> Prop :=
     (TRFUN: transl_function ge f = tf)
     (STMT1: match_drop_insert_kind st ts1)
     (STMT2: match_dropcont dk ts2)
-    (MCONT: match_cont f.(fn_params) k tk),
+    (MCONT: match_cont f.(fn_params) k tk)
+    (WF: st <> drop_end),
     match_states (Dropinsert f st dk k le own m) (RustIRown.State tf ts1 (RustIRown.Kseq ts2 tk) le own m)
+(* move dropcont related statement to front *)
+| match_dropinsert_end: forall f tf dk k tk le own m ts2
+    (TRFUN: transl_function ge f = tf)
+    (STMT2: match_dropcont dk ts2)
+    (MCONT: match_cont f.(fn_params) k tk),
+    match_states (Dropinsert f drop_end dk k le own m) (RustIRown.State tf ts2 tk le own m)
 | match_dropplace: forall f tf k tk st drops le m own
     (TRFUN: transl_function ge f = tf)
     (MCONT: match_cont f.(fn_params) k tk),
@@ -344,6 +359,12 @@ Inductive match_states: Rustlightown.state -> RustIRown.state -> Prop :=
 
 Lemma gen_drops_for_escape_vars_nil:
     gen_drops_for_escape_vars ge nil = RustIR.Sskip.
+Proof.
+  auto.
+Qed.
+
+Lemma gen_drops_for_vars_nil:
+    gen_drops_for_vars ge nil = RustIR.Sskip.
 Proof.
   auto.
 Qed.
@@ -397,12 +418,27 @@ Qed.
 Ltac solve_eval :=
   try erewrite comp_env_preserved; eauto.
 
-
+Lemma match_cont_call_cont: forall k ck tk l,
+    call_cont k = Some ck ->
+    match_cont l k tk ->
+    exists tck,  RustIRown.call_cont tk = Some tck
+              /\ (forall l', match_cont l' ck tck).
+Proof.
+  induction k; try (intros until l; intros A1 A2; simpl in *; inv A1; inv A2; simpl; eauto).
+  - exists RustIRown.Kstop. split; auto.
+    intros. constructor.
+  - eexists.
+    split; eauto.
+    intros.
+    econstructor; auto.
+  - intros. simpl in *. inv H.
+Qed.
+        
 Lemma step_in_dropinsert_simulation:
   forall S1 t S2, step_dropinsert ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRown.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
-  induction 1; intros; inv MS.
+  induction 1; intros; inv MS; try congruence.
   (* step_dropinsert_to_dropplace_escape *)
   - inv STMT1. erewrite gen_drops_for_escape_vars_cons1; eauto.
     eexists. split.
@@ -438,17 +474,18 @@ Proof.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
+    congruence.
   (* step_dropinsert_skip_reassign *)
   - inv STMT1. unfold gen_drop. rewrite OWNTY. simpl.
     eexists. split.
     (* step *)
     econstructor.
     econstructor. eapply star_step.
-    econstructor; eauto. 
-    eapply star_refl. 1-2 : eauto.
+    econstructor; eauto.
+    eapply star_step. eapply RustIRown.step_skip_seq.
+    eapply star_refl. 1-3 : eauto.
     (* match_states *)
-    econstructor; auto.
-    econstructor; auto.
+    eapply match_dropinsert_end ; auto.
   (* step_dropinsert_to_dropplace_return *)
   - inv STMT1. erewrite gen_drops_for_vars_cons1; eauto.
     eexists. split.
@@ -473,6 +510,7 @@ Proof.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
+    congruence.
   (* step_dropinsert_escape_to_after *)
   - inv STMT1.
     eexists. split.
@@ -485,51 +523,115 @@ Proof.
     (* match_state *)
     econstructor; auto.
     constructor.
-  (* step_dropinsert_assign *)
-  - inv STMT1. inv STMT2.
+    congruence.
+  (* step_dropinsert_to_drop_end *)
+  - inv STMT1. rewrite gen_drops_for_escape_vars_nil.
     eexists. split.
-    econstructor. eapply RustIRown.step_skip_seq.    
-    eapply star_step. econstructor; solve_eval.
-    eapply star_refl. 1-2: eauto.
+    econstructor. eapply RustIRown.step_skip_seq.
+    eapply star_refl. auto.
+    econstructor; auto.    
+  (* step_dropinsert_assign *)
+  - inv STMT2.
+    eexists. split.
+    econstructor. 
+    econstructor; solve_eval.
+    eapply star_refl. eauto.
     (* match_states *)
     econstructor; eauto.
   (* step_dropinsert_assign_variant *)
-  - inv STMT1. inv STMT2.
+  - inv STMT2.
     eexists. split.
-    econstructor. eapply RustIRown.step_skip_seq.    
-    eapply star_step. econstructor; solve_eval.
-    eapply star_refl. 1-2: eauto.
+    econstructor. 
+    econstructor; solve_eval.
+    eapply star_refl. eauto.
     (* match_states *)
     econstructor; eauto.
   (* step_dropinsert_box *)
-  - inv STMT1. inv STMT2.
+  - inv STMT2.
     eexists. split.
-    econstructor. eapply RustIRown.step_skip_seq.    
-    eapply star_step. econstructor; solve_eval.
-    eapply star_refl. 1-2: eauto.
+    econstructor.  econstructor; solve_eval.
+    eapply star_refl.  eauto.
     (* match_states *)
     econstructor; eauto.
   (* step_dropinset_call *)
-  - inv STMT1. inv STMT2.
+  - inv STMT2.
     exploit find_funct_match_id; eauto.
     intros (tf & FIND & TRF).
     eexists. split.
-    econstructor. eapply RustIRown.step_skip_seq.    
-    eapply star_step. econstructor; solve_eval.
+    econstructor. econstructor; solve_eval.
     eapply function_not_drop_glue_preserved; eauto.
     erewrite type_of_fundef_preserved; eauto.
-    eapply star_refl. 1-2: eauto.
+    eapply star_refl. eauto.
     (* match_states *)
     econstructor; eauto.
     intros. econstructor; auto.
   (* step_dropinsert_break_seq *)
-  - inv STMT1. inv STMT2. inv MCONT.
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. econstructor.
+    eapply star_refl. eauto.
+    (* match_state *)
+    econstructor; auto.
+    constructor.
+  (* step_dropinsert_break_let *)
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. econstructor.
+    (* eapply star_step. econstructor. *)
+    eapply star_refl.  eauto.
+    (* match_state *)
+    econstructor; auto.
+    constructor.
+  (* step_dropinsert_break_loop *)
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRown.step_break_loop.
+    eapply star_refl. eauto.
+    (* match_state *)
+    econstructor; auto. 
+  (* step_dropinsert_continue_seq *)
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRown.step_continue_seq.
+    eapply star_refl. eauto.
+    (* match_state *)
+    econstructor; auto. 
+    constructor.
+  (* step_dropinsert_continue_let *)
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRown.step_continue_seq.
+    (* eapply star_step. econstructor. *)
+    eapply star_refl.  eauto.
+    (* match_state *)
+    econstructor; auto. 
+    constructor.
+  (* step_dropinsert_continue_loop *)
+  - inv STMT2. inv MCONT.
+    eexists. split.
+    econstructor. eapply RustIRown.step_skip_or_continue_loop. auto.
+    eapply star_refl. eauto.
+    (* match_state *)
+    econstructor; auto. simpl. 
+    constructor; auto.
+  (* step_dropinsert_return_after *)
+  - inv STMT2. inv STMT1.
+    exploit match_cont_call_cont; eauto.
+    intros (tck & CK & MK).
+    eexists. split. rewrite gen_drops_for_vars_nil.
+    econstructor. eapply RustIRown.step_skip_seq.
+    eapply star_step. econstructor; solve_eval.
+    eapply star_refl. 1-2: eauto.
+    econstructor. auto.
+  (* step_dropinsert_endlet *)
+  - inv STMT2. inv STMT1.
     rewrite gen_drops_for_escape_vars_nil.
     eexists. split.
     econstructor. eapply RustIRown.step_skip_seq.
-    eapply star_step. econstructor.
-    eapply star_refl. 1-2: eauto.
-    
+    eapply star_refl. auto.
+    econstructor; auto.
+Qed.
+
     
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->

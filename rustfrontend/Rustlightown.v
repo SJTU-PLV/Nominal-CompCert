@@ -787,13 +787,13 @@ Definition gen_drop_place_state (p: place) : drop_place_state :=
 and the other for those variables are about to be out-of-scope *)
 Inductive drop_insert_kind : Type :=
 | drop_reassign: place -> drop_insert_kind
-| drop_reassign_end: drop_insert_kind
 | drop_escape_before: list (ident * type) -> drop_insert_kind
 (* after exectuing the drop for id, we need to execute its storagedead
 statement. This after constructor is used to model it *)
 | drop_escape_after: ident -> list (ident * type) -> drop_insert_kind
 (* drop insertion for the parameters which do not require storagedead anaotations *)
-| drop_return: list (ident * type) -> drop_insert_kind.
+| drop_return: list (ident * type) -> drop_insert_kind
+| drop_end: drop_insert_kind.
 
 
 (* TODO: use some kbreak, kcontinue and kassign etc to record the stmt
@@ -813,7 +813,7 @@ assignment after this drop is recorded in this Dassign *)
 | Dbreak
 | Dcontinue
 (* Dreturn records the return value *)
-| Dreturn: val -> dropcont
+| Dreturn: place -> dropcont
 | Dendlet
 .
 
@@ -1532,7 +1532,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (SPLIT: split_drop_place ge universe p (typeof_place p) = OK drops),
     (* get the owned place to drop *)
     step_dropinsert (Dropinsert f (drop_reassign p) dk k le own m) E0
-      (Dropplace f None drops (Kdropinsert drop_reassign_end dk k) le own m)
+      (Dropplace f None drops (Kdropinsert drop_end dk k) le own m)
 | step_dropinsert_skip_escape: forall f id ty le own m k dk l
     (OWNTY: own_type ge ty = false),
     step_dropinsert (Dropinsert f (drop_escape_before ((id, ty) :: l)) dk k le own m) E0
@@ -1540,7 +1540,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_skip_reassign: forall f p le own m k dk
     (OWNTY: own_type ge (typeof_place p) = false),
     step_dropinsert (Dropinsert f (drop_reassign p) dk k le own m) E0
-      (Dropinsert f drop_reassign_end dk k le own m)
+      (Dropinsert f drop_end dk k le own m)
 (* drop the parameters *)
 | step_dropinsert_to_dropplace_return: forall f id ty le own m drops k universe dk l
     (UNI: PathsMap.get id own.(own_universe) = universe)
@@ -1557,7 +1557,9 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_escape_to_after: forall f id le own m k dk l,
     step_dropinsert (Dropinsert f (drop_escape_after id l) dk k le own m) E0
       (Dropinsert f (drop_escape_before l) dk k le own m)
-
+| step_dropinsert_to_drop_end: forall f le own m k dk,
+    step_dropinsert (Dropinsert f (drop_escape_before []) dk k le own m) E0
+      (Dropinsert f drop_end dk k le own m)
       
 | step_dropinsert_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
@@ -1572,7 +1574,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
     assign_loc ge (typeof_place p) m1 b ofs v1 m2 ->
-    step_dropinsert (Dropinsert f drop_reassign_end (Dassign p e) k le own1 m1) E0
+    step_dropinsert (Dropinsert f drop_end (Dassign p e) k le own1 m1) E0
                     (State f Sskip k le own3 m2)
 | step_dropinsert_assign_variant: forall f e p ty k le m1 m2 m3 b ofs b1 ofs1 v v1 tag co fid enum_id orgs own1 own2 own3 fofs
     (* check ownership *)
@@ -1598,7 +1600,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (PADDR2: eval_place ge le m2 p b1 ofs1)
     (* set the tag *)
     (STAG: Mem.storev Mint32 m2 (Vptr b1 ofs1) (Vint (Int.repr tag)) = Some m3),
-    step_dropinsert (Dropinsert f drop_reassign_end (Dassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
+    step_dropinsert (Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own1 m1) E0 (State f Sskip k le own3 m3)
 | step_dropinsert_box: forall f e p ty k le m1 m2 m3 m4 m5 b v v1 pb pofs own1 own2 own3
     (* check ownership *)
     (TFEXPR: move_place_option own1 (moved_place e) = own2)
@@ -1616,7 +1618,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (* assign the address to p *)
     eval_place ge le m4 p pb pofs ->
     assign_loc ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) m5 ->
-    step_dropinsert (Dropinsert f drop_reassign_end (Dbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
+    step_dropinsert (Dropinsert f drop_end (Dbox p e) k le own1 m1) E0 (State f Sskip k le own3 m5)
 | step_dropinset_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
     (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
@@ -1627,39 +1629,43 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (* Cannot call drop glue *)
     (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
     function_not_drop_glue fd ->
-    step_dropinsert (Dropinsert f drop_reassign_end (Dcall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
+    step_dropinsert (Dropinsert f drop_end (Dcall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 | step_dropinsert_break_seq: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Kseq s k) le own m) E0
-      (Dropinsert f (drop_escape_before []) Dbreak k le own m)
+    step_dropinsert (Dropinsert f drop_end Dbreak (Kseq s k) le own m) E0
+      (Dropinsert f (drop_end) Dbreak k le own m)
 | step_dropinsert_break_let: forall f k le own m id ty,
     (* this variable has been dropped when we meet the break statement *)
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Klet id ty k) le own m) E0
-      (Dropinsert f (drop_escape_before []) Dbreak k le own m)
+    step_dropinsert (Dropinsert f (drop_end) Dbreak (Klet id ty k) le own m) E0
+      (Dropinsert f (drop_end) Dbreak k le own m)
 | step_dropinsert_break_loop: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Kloop s k) le own m) E0
+    step_dropinsert (Dropinsert f (drop_end) Dbreak (Kloop s k) le own m) E0
       (State f Sskip k le own m)
 | step_dropinsert_continue_seq: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Kseq s k) le own m) E0
-      (Dropinsert f(drop_escape_before []) Dcontinue k le own m)
+    step_dropinsert (Dropinsert f (drop_end) Dcontinue (Kseq s k) le own m) E0
+      (Dropinsert f(drop_end) Dcontinue k le own m)
 | step_dropinsert_continue_let: forall f k le own m id ty,
     (* This variable declare in the scope that Scontinue should escape *)
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Klet id ty k) le own m) E0
-      (Dropinsert f (drop_escape_before []) Dcontinue k le own m)
+    step_dropinsert (Dropinsert f (drop_end) Dcontinue (Klet id ty k) le own m) E0
+      (Dropinsert f (drop_end) Dcontinue k le own m)
 | step_dropinsert_continue_loop: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Kloop s k) le own m) E0
+    step_dropinsert (Dropinsert f (drop_end) Dcontinue (Kloop s k) le own m) E0
       (State f s (Kloop s k) le own m)
 (* drop_escape before dropping the parameters *)
-| step_dropinsert_return_before: forall f v k le own m1,
-    step_dropinsert (Dropinsert f (drop_escape_before []) (Dreturn v) k le own m1) E0
-    (Dropinsert f (drop_return f.(fn_params)) (Dreturn v) k le own m1)
-| step_dropinsert_return_after: forall f v k ck le own m1 m2 lb
+(* | step_dropinsert_return_before: forall f p k le own m1, *)
+(*     step_dropinsert (Dropinsert f (drop_end) (Dreturn p) k le own m1) E0 *)
+(*     (Dropinsert f (drop_return f.(fn_params)) (Dreturn p) k le own m1) *)
+| step_dropinsert_return_after: forall f p v v1 k ck le own m1 m2 lb
+    (EXPR: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
+    (* sem_cast to the return type *)
+    (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1)
     (CONT: call_cont k = Some ck),
     (* free stack blocks *)
     blocks_of_env ge le = lb ->
     Mem.free_list m1 lb = Some m2 ->    
-    step_dropinsert (Dropinsert f (drop_return []) (Dreturn v) k le own m1) E0
-      (Returnstate v ck m2)
+    step_dropinsert (Dropinsert f (drop_return []) (Dreturn p) k le own m1) E0
+      (Returnstate v1 ck m2)
 | step_dropinsert_endlet: forall f k le own m,
+    (* adhoc: not use drop_end here is to make sure that target cound make a step *)
     step_dropinsert (Dropinsert f (drop_escape_before []) Dendlet k le own m) E0
       (State f Sskip k le own m)
 .
@@ -1711,17 +1717,8 @@ type, at least unit type. *)
 (*     (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k))) *)
 (*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
 (*     step (State f (Sreturn p) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
-| step_return_1: forall le p v v1 m f k own1 (* drops param_drops *)
-    (* (TFEXPR: move_place_option own1 (moved_place a) = own2) *)
-    (EXPR: eval_expr ge le m (Epure (Eplace p (typeof_place p))) v)
-    (* sem_cast to the return type *)
-    (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1),
-    (* (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k))) *)
-    (* (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
-    (* We do not need to update the own_env because
-    (drops++param_drops) cannot contain the return variable. This
-    property can be checked in the move checking *)
-    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_escape_before (concat (cont_vars k))) (Dreturn v1) k le own1 m)
+| step_return_1: forall le p m f k own1 (* drops param_drops *),
+    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_return (concat (cont_vars k))) (Dreturn p) k le own1 m)
 
 (** no return statement but reach the end of the function. How to
 support it in rust semantics? How to compile it to Clight? In Clight,
