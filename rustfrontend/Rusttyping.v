@@ -11,6 +11,8 @@ Require Archi.
 
 Local Open Scope error_monad_scope.
 
+(* This file is not used for now *)
+
 (* To move *)
 Definition type_unop (op: unary_operation) (ty: Rusttypes.type) : res type :=
   match op with

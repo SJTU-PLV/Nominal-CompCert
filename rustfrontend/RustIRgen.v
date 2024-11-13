@@ -14,7 +14,7 @@ Import ListNotations.
 Local Open Scope error_monad_scope.
 
 (** Translation from Rustlight to RustIR. The main step is to generate
-the drop operations and lifetime annotations in the end of a
+the drop operations and explicit scope annotations in the end of a
 variable. We also need to insert drops for those out-of-scope variable
 in [break], [continue] and [return] *)
 
@@ -43,17 +43,22 @@ Variable ce: composite_env.
 (*                       else acc) nil l in *)
 (*   makeseq drops. *)
 
-Definition gen_drops_for_params (params: list (ident * type)) : statement :=
+(* Generate sequence of drop statements for the list of variables with
+own_type *)
+Definition gen_drops_for_vars (params: list (ident * type)) : statement :=
   makeseq (map (fun p => Sdrop p) (vars_to_drops ce params)).
 
-(* It is different from gen_drops_for_params because we also need to
+(* It is different from gen_drops_for_vars because we also need to
 generate storagedead for those variables which are about to out of
 scope. *)
-Definition gen_drops_for_vars (vars: list (ident * type)) : statement :=
+Definition gen_drops_for_escape_vars (vars: list (ident * type)) : statement :=
   makeseq (map (fun '(id, ty) =>
                   if own_type ce ty then
                     Ssequence (Sdrop (Plocal id ty)) (Sstoragedead id)
                   else (Sstoragedead id)) vars).
+
+Definition gen_drop (p: place) : statement :=
+  makeseq (if own_type ce (typeof_place p) then [Sdrop p] else []).
 
 
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
@@ -65,35 +70,20 @@ Fixpoint transl_stmt (params: list (ident * type)) (* (retv: place) *) (stmt: Ru
   | Rustlight.Sskip => Sskip
   | Slet id ty stmt' =>
       let s := transl_stmt stmt' (list_list_cons (id,ty) vars) in
-      let drop := Sdrop (Plocal id ty) in
-      if own_type ce ty then
-        Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
-      else
-        Ssequence (Sstoragelive id) (Ssequence s (Sstoragedead id))
+      let drop := gen_drop (Plocal id ty) in
+      Ssequence (Sstoragelive id) (Ssequence drop (Sstoragedead id))
   | Rustlight.Sassign p e =>
-      let drop := Sdrop p in
-      if own_type ce (typeof_place p) then
-        Ssequence drop (Sassign p e)
-      else
-        Sassign p e
+      let drop := gen_drop p in
+      Ssequence drop (Sassign p e)
   | Rustlight.Sassign_variant p enum_id fid e =>
-      let drop := Sdrop p in
-      if own_type ce (typeof_place p) then
-        Ssequence drop (Sassign_variant p enum_id fid e)
-      else
-        Sassign_variant p enum_id fid e
+      let drop := gen_drop p in
+      Ssequence drop (Sassign_variant p enum_id fid e)      
   | Rustlight.Sbox p e =>
-      let drop := Sdrop p in
-      if own_type ce (typeof_place p) then
-        Ssequence drop (Sbox p e)
-      else
-        Sbox p e
+      let drop := gen_drop p in
+      Ssequence drop (Sbox p e)
   | Rustlight.Scall p e el =>
-      let drop := Sdrop p in
-      if own_type ce (typeof_place p) then
-        Ssequence drop (Scall p e el)
-      else
-        Scall p e el
+      let drop := gen_drop p in
+      Ssequence drop (Scall p e el)
   | Rustlight.Ssequence s1 s2 =>
       let s1' := transl_stmt s1 vars in
       let s2' := transl_stmt s2 vars in
@@ -106,13 +96,13 @@ Fixpoint transl_stmt (params: list (ident * type)) (* (retv: place) *) (stmt: Ru
       let s := transl_stmt s (nil :: vars) in
       Sloop s
   | Rustlight.Sbreak =>
-      let drops := gen_drops_for_vars (hd nil vars) in
+      let drops := gen_drops_for_escape_vars (hd nil vars) in
       Ssequence drops Sbreak
   | Rustlight.Scontinue =>
-      let drops := gen_drops_for_vars (hd nil vars) in
+      let drops := gen_drops_for_escape_vars (hd nil vars) in
       Ssequence drops Scontinue
   | Rustlight.Sreturn p =>
-      let drops := gen_drops_for_vars (concat vars) in
+      let drops := gen_drops_for_escape_vars (concat vars) in
       (** Unused comment: The fresh return variable is used to store
       the return value before the drops otherwise the moved place in
       return expression may be dropped (because its ownership is moved
@@ -124,7 +114,7 @@ Fixpoint transl_stmt (params: list (ident * type)) (* (retv: place) *) (stmt: Ru
       (* let rete := if own_type ce ty then Emoveplace retv ty else (Epure (Eplace retv ty)) in *)
       (* also insert drop statements for parameters after dropping
           variables *)
-      makeseq (drops :: (gen_drops_for_params params) :: (Sreturn p) :: nil)
+      makeseq (drops :: (gen_drops_for_vars params) :: (Sreturn p) :: nil)
       (* |  _ => *)
       (*     makeseq (drops :: (gen_drops_for_params params) :: (Sreturn None) :: nil) *)
       (* end *)

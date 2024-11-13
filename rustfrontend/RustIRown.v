@@ -84,6 +84,7 @@ Inductive state: Type :=
     (own: own_env)
     (m: mem) : state
 | Dropstate
+(* The reason why dropstate does not contain the function is to match the new stack frame in Clight. *)
     (* composite name *)
     (c: ident)
     (v: val)

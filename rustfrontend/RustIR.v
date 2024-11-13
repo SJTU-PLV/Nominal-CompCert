@@ -155,12 +155,6 @@ Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env; ge
   
 Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
-      
-(** ** Local environment  *)
-
-Definition env := PTree.t (block * type). (* map variable -> location & type *)
-
-Definition empty_env: env := (PTree.empty (block * type)).
 
 (** Allocate memory blocks for function parameters/variables and build
 the local environment *)
