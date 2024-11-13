@@ -591,8 +591,8 @@ Qed.
 
 Lemma good_fundef_preserved: forall fd tfd,
     transf_fundef ce fd = OK tfd ->
-    good_function fd ->
-    good_function tfd.
+    function_not_drop_glue fd ->
+    function_not_drop_glue tfd.
 Proof.
   intros. destruct fd; monadInv H; auto.
   monadInv EQ. destruct x2. destruct p.
@@ -3789,8 +3789,8 @@ Proof.
   (* step_call *)
   - inv MSTMT. simpl in TR.
     generalize IM as IM1. intros. inv IM.
-    rewrite <- H6 in TR. rewrite <- H7 in TR.
-    rename H6 into GETINIT. rename H7 into GETUNINIT.
+    rewrite <- H5 in TR. rewrite <- H6 in TR.
+    rename H5 into GETINIT. rename H6 into GETUNINIT.
     monadInv TR.
     (* evaluate drop flag list of arguments *)
     exploit eval_dropflag_list_match; eauto.
@@ -3815,12 +3815,12 @@ Proof.
       inv A5.
       eapply injp_acc_local_simple; eauto.
       eapply Mem.unchanged_on_implies; eauto.
-      intros. simpl. destruct H8. intros.
+      intros. simpl. destruct H7. intros.
       intro. subst.
       (* tb is not valid in m2 *)
       eapply me_trange. eapply me_envs; eauto.
       eauto. eapply SUP. eapply me_envs; eauto.
-      eapply H8. }
+      eapply H7. }
       
     (* match_cont injp_acc *)
     (* exploit match_cont_injp_acc. eauto. *)
@@ -3840,7 +3840,7 @@ Proof.
     (* eval function call *)
     econstructor; eauto.
     erewrite type_of_fundef_preserved; eauto.
-    (** good_function in RustIRown *)
+    (** function_not_drop_glue in RustIRown *)
     eapply good_fundef_preserved; eauto.
     eapply star_refl.
     1-5: eauto.

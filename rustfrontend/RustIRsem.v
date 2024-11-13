@@ -301,7 +301,7 @@ Inductive step : state -> trace -> state -> Prop :=
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    good_function fd ->
+    function_not_drop_glue fd ->
     step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall (Some p) f le k) m)
 
 | step_internal_function: forall vf f vargs k m e m'

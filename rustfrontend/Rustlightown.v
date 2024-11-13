@@ -788,7 +788,10 @@ and the other for those variables are about to be out-of-scope *)
 Inductive drop_insert_kind : Type :=
 | drop_reassign: place -> drop_insert_kind
 | drop_reassign_end: drop_insert_kind
-| drop_escape: list (ident * type) -> drop_insert_kind
+| drop_escape_before: list (ident * type) -> drop_insert_kind
+(* after exectuing the drop for id, we need to execute its storagedead
+statement. This after constructor is used to model it *)
+| drop_escape_after: ident -> list (ident * type) -> drop_insert_kind
 (* drop insertion for the parameters which do not require storagedead anaotations *)
 | drop_return: list (ident * type) -> drop_insert_kind.
 
@@ -1498,6 +1501,21 @@ Inductive step_dropplace_mem_error: state -> Prop :=
 .
 
 
+Definition function_not_drop_glue fd : Prop :=
+  match fd with
+  | Internal f =>
+    match fn_drop_glue f with
+    | None => True
+    | Some _ => False
+    end
+  | External _ _ EF _ _ _ =>
+    match EF with
+    | EF_malloc => False
+    | EF_free => False
+    | _ => True
+    end
+  end.
+
 (* small step in dropinsert *)
 Inductive step_dropinsert : state -> trace -> state -> Prop :=
 (* simulate step_to_dropplace in RustIRown *)
@@ -1506,8 +1524,8 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (OWNTY: own_type ge ty = true)
     (SPLIT: split_drop_place ge universe (Plocal id ty) ty = OK drops),
     (* get the owned place to drop *)
-    step_dropinsert (Dropinsert f (drop_escape ((id, ty) :: l)) dk k le own m) E0
-      (Dropplace f None drops (Kdropinsert (drop_escape l) dk k) le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before ((id, ty) :: l)) dk k le own m) E0
+      (Dropplace f None drops (Kdropinsert (drop_escape_after id l) dk k) le own m)
 | step_dropinsert_to_dropplace_reassign: forall f p le own m drops k universe dk
     (UNI: PathsMap.get (local_of_place p) own.(own_universe) = universe)
     (OWNTY: own_type ge (typeof_place p) = true)
@@ -1517,8 +1535,8 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
       (Dropplace f None drops (Kdropinsert drop_reassign_end dk k) le own m)
 | step_dropinsert_skip_escape: forall f id ty le own m k dk l
     (OWNTY: own_type ge ty = false),
-    step_dropinsert (Dropinsert f (drop_escape ((id, ty) :: l)) dk k le own m) E0
-      (Dropinsert f (drop_escape l) dk k le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before ((id, ty) :: l)) dk k le own m) E0
+      (Dropinsert f (drop_escape_after id l) dk k le own m)
 | step_dropinsert_skip_reassign: forall f p le own m k dk
     (OWNTY: own_type ge (typeof_place p) = false),
     step_dropinsert (Dropinsert f (drop_reassign p) dk k le own m) E0
@@ -1535,6 +1553,11 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (OWNTY: own_type ge ty = false),
     step_dropinsert (Dropinsert f (drop_return ((id, ty) :: l)) dk k le own m) E0
       (Dropinsert f (drop_return l) dk k le own m)
+(* simulate the storagedead *)
+| step_dropinsert_escape_to_after: forall f id le own m k dk l,
+    step_dropinsert (Dropinsert f (drop_escape_after id l) dk k le own m) E0
+      (Dropinsert f (drop_escape_before l) dk k le own m)
+
       
 | step_dropinsert_assign: forall f e p k le m1 m2 b ofs v v1 own1 own2 own3
     (* check ownership *)
@@ -1603,30 +1626,31 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     (* Cannot call drop glue *)
     (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
+    function_not_drop_glue fd ->
     step_dropinsert (Dropinsert f drop_reassign_end (Dcall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 | step_dropinsert_break_seq: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape []) Dbreak (Kseq s k) le own m) E0
-      (Dropinsert f (drop_escape []) Dbreak k le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Kseq s k) le own m) E0
+      (Dropinsert f (drop_escape_before []) Dbreak k le own m)
 | step_dropinsert_break_let: forall f k le own m id ty,
     (* this variable has been dropped when we meet the break statement *)
-    step_dropinsert (Dropinsert f (drop_escape []) Dbreak (Klet id ty k) le own m) E0
-      (Dropinsert f (drop_escape []) Dbreak k le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Klet id ty k) le own m) E0
+      (Dropinsert f (drop_escape_before []) Dbreak k le own m)
 | step_dropinsert_break_loop: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape []) Dbreak (Kloop s k) le own m) E0
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dbreak (Kloop s k) le own m) E0
       (State f Sskip k le own m)
 | step_dropinsert_continue_seq: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape []) Dcontinue (Kseq s k) le own m) E0
-      (Dropinsert f(drop_escape []) Dcontinue k le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Kseq s k) le own m) E0
+      (Dropinsert f(drop_escape_before []) Dcontinue k le own m)
 | step_dropinsert_continue_let: forall f k le own m id ty,
     (* This variable declare in the scope that Scontinue should escape *)
-    step_dropinsert (Dropinsert f (drop_escape []) Dcontinue (Klet id ty k) le own m) E0
-      (Dropinsert f (drop_escape []) Dcontinue k le own m)
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Klet id ty k) le own m) E0
+      (Dropinsert f (drop_escape_before []) Dcontinue k le own m)
 | step_dropinsert_continue_loop: forall f s k le own m,
-    step_dropinsert (Dropinsert f (drop_escape []) Dcontinue (Kloop s k) le own m) E0
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dcontinue (Kloop s k) le own m) E0
       (State f s (Kloop s k) le own m)
 (* drop_escape before dropping the parameters *)
 | step_dropinsert_return_before: forall f v k le own m1,
-    step_dropinsert (Dropinsert f (drop_escape []) (Dreturn v) k le own m1) E0
+    step_dropinsert (Dropinsert f (drop_escape_before []) (Dreturn v) k le own m1) E0
     (Dropinsert f (drop_return f.(fn_params)) (Dreturn v) k le own m1)
 | step_dropinsert_return_after: forall f v k ck le own m1 m2 lb
     (CONT: call_cont k = Some ck),
@@ -1636,7 +1660,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     step_dropinsert (Dropinsert f (drop_return []) (Dreturn v) k le own m1) E0
       (Returnstate v ck m2)
 | step_dropinsert_endlet: forall f k le own m,
-    step_dropinsert (Dropinsert f (drop_escape []) Dendlet k le own m) E0
+    step_dropinsert (Dropinsert f (drop_escape_before []) Dendlet k le own m) E0
       (State f Sskip k le own m)
 .
 
@@ -1652,7 +1676,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Slet id ty s) k le own m) E0 (State f s (Klet id ty k) le own m)
 (* End of a let statement, drop the place *)
 | step_end_let: forall f id ty k le m own,
-    step (State f Sskip (Klet id ty k) le own m) E0 (Dropinsert f (drop_escape [(id,ty)]) Dendlet k le own m)
+    step (State f Sskip (Klet id ty k) le own m) E0 (Dropinsert f (drop_escape_before [(id,ty)]) Dendlet k le own m)
 
 (** dynamic drop semantics: simulate the drop elaboration *)
 | step_in_dropinsert: forall f l dk k le own m E S
@@ -1697,7 +1721,7 @@ type, at least unit type. *)
     (* We do not need to update the own_env because
     (drops++param_drops) cannot contain the return variable. This
     property can be checked in the move checking *)
-    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_escape (concat (cont_vars k))) (Dreturn v1) k le own1 m)
+    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_escape_before (concat (cont_vars k))) (Dreturn v1) k le own1 m)
 
 (** no return statement but reach the end of the function. How to
 support it in rust semantics? How to compile it to Clight? In Clight,
@@ -1724,11 +1748,11 @@ return nothing is only valid in void function! *)
 | step_continue_insert_drops: forall f k e m own,
     (* get the places to insert drop *)
     step (State f Scontinue k e own m)
-      E0 (Dropinsert f (drop_escape (hd nil (cont_vars k))) Dcontinue k e own m)
+      E0 (Dropinsert f (drop_escape_before (hd nil (cont_vars k))) Dcontinue k e own m)
 | step_break_insert_drops: forall f k e m own,
     (* get the places to insert drop *)
     step (State f Sbreak k e own m)
-      E0 (Dropinsert f (drop_escape (hd nil (cont_vars k))) Dbreak k e own m)
+      E0 (Dropinsert f (drop_escape_before (hd nil (cont_vars k))) Dbreak k e own m)
 | step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1,
     (* there is no receiver for the moved place, so it must be None *)
     eval_expr ge e m a v1 ->

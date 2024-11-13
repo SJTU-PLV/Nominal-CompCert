@@ -43,22 +43,31 @@ Variable ce: composite_env.
 (*                       else acc) nil l in *)
 (*   makeseq drops. *)
 
-(* Generate sequence of drop statements for the list of variables with
-own_type *)
-Definition gen_drops_for_vars (params: list (ident * type)) : statement :=
-  makeseq (map (fun p => Sdrop p) (vars_to_drops ce params)).
 
 (* It is different from gen_drops_for_vars because we also need to
 generate storagedead for those variables which are about to out of
 scope. *)
 Definition gen_drops_for_escape_vars (vars: list (ident * type)) : statement :=
-  makeseq (map (fun '(id, ty) =>
-                  if own_type ce ty then
-                    Ssequence (Sdrop (Plocal id ty)) (Sstoragedead id)
-                  else (Sstoragedead id)) vars).
+  makeseq (concat (map (fun '(id, ty) =>
+                          if own_type ce ty then
+                            (* adhoc: to ensure that the storagedead
+                            is connected to the the next statement to
+                            make match_drop_insert_kind works *)
+                            [(Sdrop (Plocal id ty)); (Sstoragedead id)]
+                              (* The skip is used to avoid stuttering *)
+                          else [RustIR.Sskip; (Sstoragedead id)]) vars)).
 
 Definition gen_drop (p: place) : statement :=
-  makeseq (if own_type ce (typeof_place p) then [Sdrop p] else []).
+  (* Sskip is used to prevent stuttering *)
+  makeseq (if own_type ce (typeof_place p) then [Sdrop p] else [RustIR.Sskip]).
+
+(* Generate sequence of drop statements for the list of variables with
+own_type *)
+Definition gen_drops_for_vars (params: list (ident * type)) : statement :=
+  makeseq (map (fun '(id, ty) =>
+                  if own_type ce ty then
+                    (Sdrop (Plocal id ty))
+                  else RustIR.Sskip) params).
 
 
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
@@ -70,8 +79,11 @@ Fixpoint transl_stmt (params: list (ident * type)) (* (retv: place) *) (stmt: Ru
   | Rustlight.Sskip => Sskip
   | Slet id ty stmt' =>
       let s := transl_stmt stmt' (list_list_cons (id,ty) vars) in
-      let drop := gen_drop (Plocal id ty) in
-      Ssequence (Sstoragelive id) (Ssequence drop (Sstoragedead id))
+      (* drop would contain storagedead *)
+      let drop := gen_drops_for_escape_vars [(id,ty)] in
+      (* The additional skip is used to simulate the Dendlet in
+      Rustlightown *)
+      Ssequence (Sstoragelive id) (Ssequence (Ssequence s drop) Sskip)
   | Rustlight.Sassign p e =>
       let drop := gen_drop p in
       Ssequence drop (Sassign p e)

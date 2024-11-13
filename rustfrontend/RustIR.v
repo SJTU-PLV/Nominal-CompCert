@@ -88,7 +88,7 @@ Definition type_of_fundef (f: fundef) : type :=
 
 (* A good interal function must be not the drop glue function holder,
 a good external function must not be malloc/free *)
-Definition good_function fd : Prop :=
+Definition function_not_drop_glue fd : Prop :=
   match fd with
   | Internal f =>
     match fn_drop_glue f with

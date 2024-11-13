@@ -527,15 +527,12 @@ Inductive step : state -> trace -> state -> Prop :=
          
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
     (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2)
-    (GFUN: good_function fd),
+    (GFUN: function_not_drop_glue fd),
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    (* Cannot call drop glue *)
-    (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
-    
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 
 | step_internal_function: forall vf f vargs k m e m' init_own
