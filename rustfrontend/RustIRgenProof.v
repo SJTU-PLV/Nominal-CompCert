@@ -39,13 +39,48 @@ Record match_prog (p : Rustlight.program) (tp : RustIR.program) : Prop := {
     tp.(prog_types) = p.(prog_types);
     match_prog_defs:
     list_forall2 (fun g1 g2 => fst g1 = fst g2 /\ match_glob p.(prog_comp_env) (snd g1) (snd g2)) p.(prog_defs) tp.(prog_defs);
-    match_dropm:
-    generate_dropm p = RustIR.generate_dropm tp;
     match_prog_skel:
     erase_program tp = erase_program p;
   }.
 
+Lemma match_globdefs: forall (l: list (ident * globdef fundef type)) ce,
+    list_forall2
+      (fun (g1 : ident * globdef fundef type) (g2 : ident * globdef RustIR.fundef type) =>
+         fst g1 = fst g2 /\ match_glob ce (snd g1) (snd g2))
+      l
+      (map (transform_program_globdef (transl_fundef ce)) l).
+Proof.
+  induction l; intros; simpl.
+  - constructor.
+  - constructor.
+    + destruct a. simpl. destruct g; simpl; auto.
+      split; auto. destruct v. constructor. auto.
+    + auto.
+Qed.
+   
+Lemma match_erase_program: forall ce (l: list (ident * globdef fundef type)),
+    map (fun '(id, g) => (id, erase_globdef g))
+      (map (transform_program_globdef (transl_fundef ce)) l) =
+      map (fun '(id, g) => (id, erase_globdef g)) l.
+Proof.
+  induction l; intros; simpl.
+  auto.
+  f_equal. destruct a. simpl. destruct g; simpl; auto.
+  auto.
+Qed.
 
+Lemma match_transf_program: forall p tp,
+    transl_program p = tp ->
+    match_prog p tp.
+Proof.
+  intros p tp TR. unfold transl_program in TR. subst.
+  constructor; simpl; auto.
+  - eapply match_globdefs.    
+  - unfold erase_program; simpl.
+    f_equal.
+    eapply match_erase_program.
+Qed.
+    
 (* Prove match_genv for this specific match_prog *)
 
 Section MATCH_PROGRAMS.
@@ -194,13 +229,13 @@ Qed.
 Theorem is_internal_match_id :
   (forall f tf, transl_fundef ge f = tf ->
    fundef_is_internal tf = fundef_is_internal f) ->
-  forall v ,
-    v <> Vundef ->
+  forall v ,    
     Genv.is_internal tge v = Genv.is_internal ge v.
 Proof.
   intros. destruct v; auto.
   eapply is_internal_match; eauto using Genv.match_stbls_id.
-  apply val_inject_id; auto. 
+  apply val_inject_id; auto.
+  congruence.
 Qed.
 
 
@@ -236,8 +271,23 @@ Lemma dropm_preserved:
   RustIR.genv_dropm tge = genv_dropm ge.
 Proof.
   simpl. unfold RustIR.generate_dropm, generate_dropm.
-  Admitted.
-  
+  f_equal. exploit match_prog_defs; eauto.
+  simpl.
+  generalize (Rusttypes.prog_defs tprog).
+  generalize (Rusttypes.prog_defs prog).
+  induction l; intros.
+  - inv H. auto.
+  - inv H. destruct H2. simpl.
+    destruct a. destruct b1. simpl in *. subst.
+    destruct g.
+    + simpl in H0. destruct g0; try contradiction. subst.
+      destruct f; simpl; auto.
+      destruct (fn_drop_glue f) eqn: A; auto.
+      simpl.  rewrite A. f_equal. auto.
+    + destruct g0; simpl in *; try contradiction.
+      auto.
+Qed.
+
   
 Lemma type_to_drop_member_state_eq: forall id ty,
     RustIR.type_to_drop_member_state tge id ty = type_to_drop_member_state ge id ty.
@@ -272,8 +322,21 @@ Proof.
     destruct (list_eq_dec (pair_eq_dec ident_eq type_eq) l l0); subst.
     auto.
     right. congruence.
-Admitted.
-  
+  - destruct k2; try (right; congruence).
+    generalize ident_eq, type_eq. intros.
+    destruct (list_eq_dec (pair_eq_dec ident_eq type_eq) l l0); subst.
+    destruct (ident_eq i i0); subst; auto.
+    right. congruence.
+    right. congruence.
+  - destruct k2; try (right; congruence).
+    generalize ident_eq, type_eq. intros.
+    destruct (list_eq_dec (pair_eq_dec ident_eq type_eq) l l0); subst.
+    auto.
+    right. congruence.
+  - destruct k2; try (right; congruence).
+    auto.
+Qed.
+
   
 Inductive match_drop_insert_kind: drop_insert_kind -> RustIR.statement -> Prop :=
 | match_drop_reassign: forall p,
@@ -1123,17 +1186,61 @@ Proof.
       econstructor; eauto.
 Qed.
 
-(* Theorem transl_program_correct prog tprog:
-   match_prog prog tprog ->
-   forward_simulation (cc_rs injp) (cc_rs injp) (semantics prog) (RustIRown.semantics tprog).
+Lemma initial_states_simulation:
+  forall q S, initial_state ge q S ->
+  exists R, RustIRown.initial_state tge q R /\ match_states S R.
 Proof.
-  fsim eapply forward_simulation_plus. 
-  - inv MATCH. auto. 
-  - intros. inv MATCH. destruct Hse, H. simpl in *. admit. 
-  - admit. 
-  - admit.  
-  - simpl. admit. 
-  - admit. 
+  intros. inv H.
+  exploit find_funct_match_id; eauto.
+  intros (tf & A1 & A2). simpl in A2. subst.
+  eexists. split.
+  rewrite <- comp_env_preserved. 
+  econstructor; eauto.
+  econstructor; simpl; auto.
+  intros. constructor.
+Qed.
+
+Lemma external_states_simulation: forall S R q,
+    match_states S R -> at_external ge S q ->
+    RustIRown.at_external tge R q /\
+      forall r S', after_external S r S' ->
+              exists R', RustIRown.after_external R r R' /\ match_states S' R'.
+Proof.
+  intros S R q HSR Hq. destruct Hq. inv HSR.
+  exploit find_funct_match_id; eauto.
+  intros (tf & A1 & A2). simpl in A2. subst.
+  split.
+  (* at_external *)
+  rewrite <- comp_env_preserved. econstructor; eauto.
+  (* after_external *)
+  intros r S' AF. inv AF.
+  eexists. split.
+  econstructor.
+  econstructor. auto.
+Qed.
+
+Lemma final_states_simulation: forall S R r,
+  match_states S R -> final_state S r -> RustIRown.final_state R r.
+Proof.
+  intros. inv H0. inv H. generalize (MCONT nil).
+  intros. inv H. constructor.
+Qed.
+
+End PRESERVATION.
+
+Theorem transl_program_correct prog tprog:
+   match_prog prog tprog ->
+   forward_simulation cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
+Proof.
+  fsim eapply forward_simulation_plus; simpl in *. 
+  - symmetry. eapply match_prog_skel. auto.
+  - intros q _ [ ]. subst. eapply is_internal_match_id. eauto.
+    intros. destruct f; simpl in H. subst. auto. subst. auto.
+  - intros. subst. eapply initial_states_simulation; eauto.
+  - intros. exists r1. split. eapply final_states_simulation; eauto. auto.
+  - intros. subst. edestruct external_states_simulation; eauto. exists tt, q1. intuition subst; eauto.
+  - intros. eapply step_simulation; eauto. subst. auto.
+Qed.
 
     
  

@@ -1791,8 +1791,8 @@ Inductive initial_state: rust_query -> state -> Prop :=
       (Callstate vf vargs Kstop m).
     
 Inductive at_external: state -> rust_query -> Prop:=
-| at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
-    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->
+| at_external_intro: forall vf name args k m targs tres cconv orgs org_rels,
+    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name (signature_of_type targs tres cconv)) targs tres cconv) ->
     at_external (Callstate vf args k m) (rsq vf (mksignature orgs org_rels (type_list_of_typelist targs) tres cconv ge) args m).
 
 Inductive after_external: state -> rust_reply -> state -> Prop:=
