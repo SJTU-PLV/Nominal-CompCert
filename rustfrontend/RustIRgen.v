@@ -126,7 +126,7 @@ Fixpoint transl_stmt (params: list (ident * type)) (* (retv: place) *) (stmt: Ru
       (* let rete := if own_type ce ty then Emoveplace retv ty else (Epure (Eplace retv ty)) in *)
       (* also insert drop statements for parameters after dropping
           variables *)
-      makeseq (drops :: (gen_drops_for_vars params) :: (Sreturn p) :: nil)
+      Ssequence drops (Ssequence (gen_drops_for_vars params) (Sreturn p))
       (* |  _ => *)
       (*     makeseq (drops :: (gen_drops_for_params params) :: (Sreturn None) :: nil) *)
       (* end *)

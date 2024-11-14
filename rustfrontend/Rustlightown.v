@@ -1726,7 +1726,7 @@ type, at least unit type. *)
 (*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
 (*     step (State f (Sreturn p) k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
 | step_return_1: forall le p m f k own1 (* drops param_drops *),
-    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_return (concat (cont_vars k))) (Dreturn p) k le own1 m)
+    step (State f (Sreturn p) k le own1 m) E0 (Dropinsert f (drop_escape_before (concat (cont_vars k))) (Dreturn p) k le own1 m)
 
 (** no return statement but reach the end of the function. How to
 support it in rust semantics? How to compile it to Clight? In Clight,
@@ -1737,10 +1737,11 @@ return nothing is only valid in void function! *)
 (*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
 (*     step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
 
-| step_returnstate: forall p v b ofs ty m1 m2 e f k own1 own2
+| step_returnstate: forall p v b ofs m1 m2 e f k own1 own2
     (TFASSIGN: own_transfer_assign own1 p = own2),
     eval_place ge e m1 p b ofs ->
-    assign_loc ge ty m1 b ofs v m2 ->    
+    val_casted v (typeof_place p) ->
+    assign_loc ge (typeof_place p) m1 b ofs v m2 ->    
     step (Returnstate v (Kcall p f e own1 k) m1) E0 (State f Sskip k e own2 m2)
 
 (* Control flow statements *)
@@ -1768,8 +1769,9 @@ return nothing is only valid in void function! *)
 | step_loop: forall f s k e m own,
     step (State f (Sloop s) k e own m)
       E0 (State f s (Kloop s k) e own m)
-| step_skip_loop:  forall f s k e m own,
-    step (State f Sskip (Kloop s k) e own m)
+| step_skip_or_continue_loop: forall f x s k e m own,
+     x = Sskip \/ x = Scontinue ->
+    step (State f x (Kloop s k) e own m)
       E0 (State f s (Kloop s k) e own m)
 .
 

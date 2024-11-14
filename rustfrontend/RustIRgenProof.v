@@ -312,6 +312,29 @@ Inductive match_dropcont : dropcont -> RustIR.statement -> Prop :=
   match_dropcont Dendlet RustIR.Sskip
 .
 
+(* Sometimes the statement for dropcont depends on the
+drop_insert_kind (e.g., return statment because after we drop the
+escaped variables, we also need to drop the parameters *)
+Inductive match_drop_insert_kind_dropcont (params: list (ident * type)): drop_insert_kind -> dropcont -> RustIR.statement -> Prop :=
+| match_drop_insert_kind_dropcont_normal: forall st dk s2
+    (MDCONT: match_dropcont dk s2)
+    (NOTRET: forall p, dk <> Dreturn p),
+    match_drop_insert_kind_dropcont params st dk s2
+| match_drop_insert_kind_dropcont_return1: forall s2 p drop l
+    (* The parameters are not ready to be dropped *)
+    (MRET: match_dropcont (Dreturn p) s2)
+    (PARAMS: drop = gen_drops_for_vars ge params),
+    match_drop_insert_kind_dropcont params (drop_escape_before l) (Dreturn p) (RustIR.Ssequence drop s2)
+| match_drop_insert_kind_dropcont_return2: forall s2 p drop l id
+    (* The parameters are not ready to be dropped *)
+    (MRET: match_dropcont (Dreturn p) s2)
+    (PARAMS: drop = gen_drops_for_vars ge params),
+    match_drop_insert_kind_dropcont params (drop_escape_after id l) (Dreturn p) (RustIR.Ssequence drop s2)                                    
+| match_drop_insert_kind_dropcont_return3: forall s2 p l
+    (* The parameters are not ready to be dropped *)
+    (MRET: match_dropcont (Dreturn p) s2),
+    match_drop_insert_kind_dropcont params (drop_return l) (Dreturn p) s2.
+
 
 Inductive match_cont (params: list (ident * type)) : cont -> RustIRown.cont -> Prop :=
 | match_Klet: forall k tk drop id ty
@@ -326,8 +349,9 @@ Inductive match_cont (params: list (ident * type)) : cont -> RustIRown.cont -> P
 statement does not contain storagedead *)
 | match_Kdropinsert: forall k tk dk s1 s2 st
     (MCONT: match_cont params k tk)
-    (MDCONT: match_dropcont dk s2)
-    (MDINS: match_drop_insert_kind st s1),
+    (* (MDCONT: match_dropcont dk s2) *)
+    (MDINS: match_drop_insert_kind st s1)
+    (MST: match_drop_insert_kind_dropcont params st dk s2),
     (** TODO: before running st, we may need to execute the
     storagedead in the target *)
     match_cont params (Kdropinsert st dk k)
@@ -375,7 +399,8 @@ Inductive match_states: Rustlightown.state -> RustIRown.state -> Prop :=
 | match_dropinsert: forall f tf st dk k tk le own m ts1 ts2
     (TRFUN: transl_function ge f = tf)
     (STMT1: match_drop_insert_kind st ts1)
-    (STMT2: match_dropcont dk ts2)
+    (* (STMT2: match_dropcont dk ts2) *)
+    (MST: match_drop_insert_kind_dropcont f.(fn_params) st dk ts2)
     (MCONT: match_cont f.(fn_params) k tk)
     (WF: st <> drop_end),
     match_states (Dropinsert f st dk k le own m) (RustIRown.State tf ts1 (RustIRown.Kseq ts2 tk) le own m)
@@ -670,7 +695,7 @@ Proof.
     econstructor; auto.
   - inv MCONT.
     destruct (drop_insert_kind_eq l drop_end); subst.
-    + inv MDINS.
+    + inv MST. inv MDINS.
       eexists. split.
       econstructor. econstructor; eauto.
       econstructor.
@@ -693,31 +718,37 @@ Lemma step_in_dropinsert_simulation:
 Proof.
   induction 1; intros; inv MS; try congruence.
   (* step_dropinsert_to_dropplace_escape *)
-  - inv STMT1. erewrite gen_drops_for_escape_vars_cons1; eauto.
+  - inv STMT1.
+    erewrite gen_drops_for_escape_vars_cons1; eauto.
     eexists. split.
     (* step *)
     econstructor.
     econstructor. eapply star_step.
     econstructor; eauto. rewrite comp_env_preserved. eauto. 
     eapply star_refl. 1-2 : eauto.
-    (* match_states *)
+      (* match_states *)
     econstructor; auto.
     econstructor; auto.
-    econstructor.
+    econstructor; auto.
+    inv MST.
+    + econstructor; auto.
+    + eapply match_drop_insert_kind_dropcont_return2; auto.
   (* step_dropinsert_to_dropplace_reassign *)
-  - inv STMT1. unfold gen_drop. rewrite OWNTY. simpl.
+  - inv MST. inv STMT1. unfold gen_drop. rewrite OWNTY. simpl.
     eexists. split.
     (* step *)
     econstructor.
     econstructor. eapply star_step.
-    econstructor; eauto. rewrite comp_env_preserved. eauto. 
+    econstructor; eauto. rewrite comp_env_preserved. eauto.
     eapply star_refl. 1-2 : eauto.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
-    econstructor.
+    econstructor; auto.
+    constructor; auto.
   (* step_dropinsert_skip_escape *)
-  - inv STMT1. erewrite gen_drops_for_escape_vars_cons2; eauto.
+  - inv STMT1.
+    erewrite gen_drops_for_escape_vars_cons2; eauto.
     eexists. split.
     (* step *)
     econstructor.
@@ -727,9 +758,12 @@ Proof.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
+    inv MST.
+    econstructor; auto.
+    eapply match_drop_insert_kind_dropcont_return2; auto.
     congruence.
   (* step_dropinsert_skip_reassign *)
-  - inv STMT1. unfold gen_drop. rewrite OWNTY. simpl.
+  - inv MST. inv STMT1. unfold gen_drop. rewrite OWNTY. simpl.
     eexists. split.
     (* step *)
     econstructor.
@@ -746,12 +780,15 @@ Proof.
     econstructor.
     econstructor. eapply star_step.
     econstructor; eauto.
-    rewrite comp_env_preserved. eauto. 
+    rewrite comp_env_preserved. eauto.
     eapply star_refl. 1-2 : eauto.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
-    econstructor.
+    econstructor; auto.
+    inv MST.
+    econstructor; auto.
+    eapply match_drop_insert_kind_dropcont_return3; auto.
   (* step_dropinsert_skip_return *)
   - inv STMT1. erewrite gen_drops_for_vars_cons2; eauto.
     eexists. split.
@@ -763,6 +800,9 @@ Proof.
     (* match_states *)
     econstructor; auto.
     econstructor; auto.
+    inv MST.
+    econstructor; auto.
+    eapply match_drop_insert_kind_dropcont_return3; auto.
     congruence.
   (* step_dropinsert_escape_to_after *)
   - inv STMT1.
@@ -771,22 +811,27 @@ Proof.
     econstructor.
     econstructor. eapply star_step.
     econstructor. eapply star_step.
-    eapply RustIRown.step_skip_seq.    
+    eapply RustIRown.step_skip_seq.
     eapply star_refl. 1-3 : eauto.
     (* match_state *)
     econstructor; auto.
     constructor.
-    congruence.
+    inv MST.
+    econstructor; auto.
+    eapply match_drop_insert_kind_dropcont_return1; auto.
+    congruence.      
   (* step_dropinsert_to_drop_end *)
   - inv STMT1. rewrite gen_drops_for_escape_vars_nil.
     eexists. split.
     econstructor. eapply RustIRown.step_skip_seq.
     eapply star_refl. auto.
-    econstructor; auto.    
+    econstructor; auto.
+    inv MST; auto.
+    generalize (NOTRETURN p). intros (A & B). congruence.
   (* step_dropinsert_assign *)
   - inv STMT2.
     eexists. split.
-    econstructor. 
+    econstructor.
     econstructor; solve_eval.
     eapply star_refl. eauto.
     (* match_states *)
@@ -794,7 +839,7 @@ Proof.
   (* step_dropinsert_assign_variant *)
   - inv STMT2.
     eexists. split.
-    econstructor. 
+    econstructor.
     econstructor; solve_eval.
     eapply star_refl. eauto.
     (* match_states *)
@@ -835,21 +880,21 @@ Proof.
     eapply star_refl.  1-2: eauto.
     (* match_state *)
     eapply match_dropinsert_end ; auto.
-    constructor. 
+    constructor.
   (* step_dropinsert_break_loop *)
   - inv STMT2. inv MCONT.
     eexists. split.
     econstructor. eapply RustIRown.step_break_loop.
     eapply star_refl. eauto.
     (* match_state *)
-    econstructor; auto. 
+    econstructor; auto.
   (* step_dropinsert_continue_seq *)
   - inv STMT2. inv MCONT.
     eexists. split.
     econstructor. eapply RustIRown.step_continue_seq.
     eapply star_refl. eauto.
     (* match_state *)
-    econstructor; auto. 
+    econstructor; auto.
     constructor.
   (* step_dropinsert_continue_let *)
   - inv STMT2. inv MCONT.
@@ -858,7 +903,7 @@ Proof.
     eapply star_step. econstructor.
     eapply star_refl.  1-2: eauto.
     (* match_state *)
-    econstructor; auto. 
+    econstructor; auto.
     constructor.
   (* step_dropinsert_continue_loop *)
   - inv STMT2. inv MCONT.
@@ -866,16 +911,23 @@ Proof.
     econstructor. eapply RustIRown.step_skip_or_continue_loop. auto.
     eapply star_refl. eauto.
     (* match_state *)
-    econstructor; auto. simpl. 
+    econstructor; auto. simpl.
     constructor; auto.
   (* step_dropinsert_return_before (to drop the parameters) *)
-  - inv STMT1. inv STMT2.
-    eexists. split. rewrite gen_drops_for_escape_vars_nil.
-    econstructor. eapply RustIRown.step_skip_seq.
-    eapply star_refl. auto.
-    
+  - inv STMT1. inv MST.
+    + generalize (NOTRET p). congruence.
+    + eexists. split. rewrite gen_drops_for_escape_vars_nil.
+      econstructor. eapply RustIRown.step_skip_seq.
+      eapply star_step. econstructor.
+      eapply star_refl. 1-2: auto.
+      econstructor; eauto.
+      econstructor.
+      eapply match_drop_insert_kind_dropcont_return3. auto.
+      congruence.
   (* step_dropinsert_return_after *)
-  - inv STMT2. inv STMT1.
+  - inv STMT1. inv MST.
+    generalize (NOTRET p). congruence.
+    inv MRET.
     exploit match_cont_call_cont; eauto.
     intros (tck & CK & MK).
     eexists. split. rewrite gen_drops_for_vars_nil.
@@ -884,15 +936,16 @@ Proof.
     eapply star_refl. 1-2: eauto.
     econstructor. auto.
   (* step_dropinsert_endlet *)
-  - inv STMT2. inv STMT1.
+  - inv STMT1. 
     rewrite gen_drops_for_escape_vars_nil.
     eexists. split.
     econstructor. eapply RustIRown.step_skip_seq.
     eapply star_refl. auto.
+    inv MST. inv MDCONT.
     econstructor; auto.
 Qed.
 
-    
+   
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus RustIRown.step tge S1' t S2' /\ match_states S2 S2'.
@@ -906,7 +959,8 @@ Proof.
     eapply star_refl. auto.
     econstructor; auto.
     econstructor. econstructor.
-    congruence.
+    econstructor. 
+    congruence. congruence.
   (* step_assign_variant *)
   - simpl.
     eexists. split.
@@ -915,7 +969,8 @@ Proof.
     eapply star_refl. auto.
     econstructor; auto.
     econstructor. econstructor.
-    congruence.
+    econstructor. 
+    congruence. congruence.
   (* step_box *)
   - simpl.
     eexists. split.
@@ -923,8 +978,8 @@ Proof.
     econstructor. econstructor.
     eapply star_refl. auto.
     econstructor; auto.
-    econstructor. econstructor.
-    congruence.
+    econstructor. econstructor. econstructor.
+    congruence. congruence.
   (* step_let *)
   - simpl.
     eexists. split.
@@ -936,15 +991,15 @@ Proof.
     eapply star_step. econstructor.
     eapply star_refl. 1-5: eauto.
     econstructor; auto.
-    econstructor; auto.    
+    econstructor; auto.
   (* step_end_let *)
   - simpl. inv MCONT.
     eexists. split.
     econstructor. eapply RustIRown.step_skip_seq.
     eapply star_refl. auto.
     econstructor; auto.
-    constructor. constructor.
-    congruence.
+    constructor. constructor. constructor.
+    congruence. congruence.
   (* step_in_dropinsert (not drop_end) *)
   - eapply step_in_dropinsert_simulation; eauto.
     econstructor; eauto.
@@ -965,6 +1020,7 @@ Proof.
     eapply star_refl. auto.
     econstructor; auto.
     econstructor. econstructor.
+    constructor. congruence.
     congruence.    
   (* step_internal_function *)
   - exploit find_funct_match_id; eauto.
@@ -994,25 +1050,78 @@ Proof.
     econstructor. simpl.
     econstructor. eapply star_refl. auto.
     econstructor; auto.
-    
-    
+    econstructor.
+    eapply match_drop_insert_kind_dropcont_return1.
+    econstructor. econstructor.
+    congruence.    
   (* step_returnstate *)
-  - admit.
+  - generalize (MCONT nil). intros MCONT1. inv MCONT1.
+    eexists. split.
+    econstructor.
+    econstructor; solve_eval.
+    eapply star_refl. auto.
+    econstructor; eauto.    
   (* step_seq *)
-  - admit.
+  - eexists. split.
+    econstructor. simpl. econstructor.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor; eauto.
   (* step_skip_seq *)
-  - admit.
+  - inv MCONT.
+    eexists. split.
+    econstructor. simpl. eapply RustIRown.step_skip_seq.
+    eapply star_refl. auto.
+    econstructor; eauto.
   (* step_continue_insert_drops *)    
-  - admit.
+  - eexists. split.
+    econstructor. simpl. econstructor.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor. econstructor. congruence.
+    congruence.
   (* step_break_insert_drops *)    
-  - admit.
+  - eexists. split.
+    econstructor. simpl. econstructor.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor. econstructor. congruence.
+    congruence.    
   (* step_ifthenelse *)
-  - admit.
+  - eexists. split.
+    econstructor. simpl. econstructor; solve_eval.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    destruct b;
+    econstructor; eauto.
   (* step_loop *)
-  - admit.
-  (* steP_skip_loop *)
-  - admit.
-  Admitted. 
+  - eexists. split.
+    econstructor. simpl. econstructor.
+    eapply star_refl. auto.
+    econstructor; eauto.
+    econstructor; eauto.
+  (* step_skip_loop *)
+  - inv MCONT.
+    destruct H; subst.
+    + eexists. split.
+      econstructor. simpl.    
+      eapply RustIRown.step_skip_or_continue_loop. auto.
+      eapply star_refl. auto.
+      econstructor; eauto.
+      econstructor; eauto.
+    + eexists. split.
+      econstructor. simpl.
+      setoid_rewrite gen_drops_for_escape_vars_nil.
+      econstructor. eapply star_step.
+      eapply RustIRown.step_skip_seq.
+      eapply star_step.
+      eapply RustIRown.step_skip_or_continue_loop. auto.
+      eapply star_refl. 1-3: eauto.
+      econstructor; eauto.
+      econstructor; eauto.
+Qed.
 
 (* Theorem transl_program_correct prog tprog:
    match_prog prog tprog ->
@@ -1027,4 +1136,4 @@ Proof.
   - admit. 
 
     
-
+ 
