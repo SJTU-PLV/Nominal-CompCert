@@ -156,33 +156,6 @@ Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env; ge
 Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
 
-(** Allocate memory blocks for function parameters/variables and build
-the local environment *)
-Inductive alloc_variables (ce: composite_env) : env -> mem ->
-                                                list (ident * type) ->
-                                                env -> mem -> Prop :=
-| alloc_variables_nil:
-  forall e m,
-    alloc_variables ce e m nil e m
-| alloc_variables_cons:
-  forall e m id ty vars m1 b1 m2 e2,
-    Mem.alloc m 0 (sizeof ce ty) = (m1, b1) ->
-    alloc_variables ce (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
-    alloc_variables ce e m ((id, ty) :: vars) e2 m2.
-
-(** Assign the values to the memory blocks of the function parameters  *)
-Inductive bind_parameters (ce: composite_env) (e: env):
-                           mem -> list (ident * type) -> list val ->
-                           mem -> Prop :=
-  | bind_parameters_nil:
-      forall m,
-      bind_parameters ce e m nil nil m
-  | bind_paranmeters_cons:
-      forall m id ty params v1 vl b m1 m2,
-      PTree.get id e = Some(b, ty) ->
-      assign_loc ce ty m b Ptrofs.zero v1 m1 ->
-      bind_parameters ce e m1 params vl m2 ->
-      bind_parameters ce e m ((id, ty) :: params) (v1 :: vl) m2.
 
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
 | function_entry_intro: forall m1,

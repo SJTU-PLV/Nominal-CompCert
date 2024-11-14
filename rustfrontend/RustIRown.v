@@ -113,8 +113,7 @@ Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res o
   let uninit := add_place_list whole vl empty_pathmap in
   (** Is it reasonable? Translation validation: check (whole = init ∪
   uninit) and (∅ = init ∩ uninit) *)
-  match PathsMap.beq whole (PathsMap.lub init uninit) &&
-          PathsMap.beq empty_pathmap (PathsMap.combine inter_opt init uninit) with
+  match check_own_env_consistency empty_pathmap init uninit whole with
   | true =>
       OK {| own_init := init;
            own_uninit := uninit;

@@ -1142,16 +1142,18 @@ Proof.
   unfold init_own_env.  
   Errors.monadInv AN.
   rewrite EQ. simpl.
+  set (empty_pathmap := (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)) in *.
   set (initParams := (add_place_list x
               (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x))) in *.
+              empty_pathmap)) in *.
   set (uninitVars := (add_place_list x
                   (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f))
-                  (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x))) in *.
+                  empty_pathmap)) in *.
   (* generalize the beq  as Clightgenproof does *)
-  set (flag := PathsMap.beq x (PathsMap.lub initParams uninitVars) &&
-    PathsMap.beq (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)
-      (PathsMap.combine inter_opt initParams uninitVars)).
+  (* set (flag := PathsMap.beq x (PathsMap.lub initParams uninitVars) && *)
+  (*   PathsMap.beq (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x) *)
+  (*     (PathsMap.combine inter_opt initParams uninitVars)). *)
+  set (flag := check_own_env_consistency empty_pathmap initParams uninitVars x).
   generalize (eq_refl flag).
   generalize flag at 1 3.
   intros flag0 E. destruct flag0; try congruence.

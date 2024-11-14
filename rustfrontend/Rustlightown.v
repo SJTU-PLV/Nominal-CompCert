@@ -1003,6 +1003,8 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
       collect_stmt s1 (collect_stmt s2 (collect_expr ce e m))
   | Sloop s =>
       collect_stmt s m
+  | Slet _ _ s =>
+      collect_stmt s m
   | _ => m
   end.
 
@@ -1083,7 +1085,12 @@ Proof.
       eapply Paths.union_1 in IN.
       destruct IN; auto.
 Qed.
-  
+
+
+Definition check_own_env_consistency empty_pathmap init uninit whole : bool :=
+  PathsMap.beq whole (PathsMap.lub init uninit) &&
+    PathsMap.beq empty_pathmap (PathsMap.combine inter_opt init uninit).
+
 (* copy from init analysis *)
 Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
   (* collect the whole set in order to simplify the gen and kill operation *)
@@ -1099,8 +1106,7 @@ Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res o
   let uninit := add_place_list whole vl empty_pathmap in
   (** Is it reasonable? Translation validation: check (whole = init ∪
   uninit) and (∅ = init ∩ uninit) *)
-  match PathsMap.beq whole (PathsMap.lub init uninit) &&
-          PathsMap.beq empty_pathmap (PathsMap.combine inter_opt init uninit) with
+  match check_own_env_consistency empty_pathmap init uninit whole with
   | true =>
       OK {| own_init := init;
            own_uninit := uninit;
@@ -1186,15 +1192,13 @@ Defined.
 
 (* Use extract_vars to extract the local variables *)
 
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) (own: own_env) : Prop :=
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) : Prop :=
 | function_entry_intro: forall m1
     (* (VARS: vars = extract_vars f.(fn_body)) *)
     (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
     (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
-    (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2)
-    (* initialize own_env *)
-    (INITOWN: init_own_env ge f = OK own),
-    function_entry ge f vargs m e m2 own.
+    (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2),
+    function_entry ge f vargs m e m2.
 
 
 Section DROPMEMBER.
@@ -1557,7 +1561,8 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinsert_escape_to_after: forall f id le own m k dk l,
     step_dropinsert (Dropinsert f (drop_escape_after id l) dk k le own m) E0
       (Dropinsert f (drop_escape_before l) dk k le own m)
-| step_dropinsert_to_drop_end: forall f le own m k dk,
+| step_dropinsert_to_drop_end: forall f le own m k dk
+    (NOTRETURN: forall p, dk <> Dreturn p /\ dk <> Dendlet),
     step_dropinsert (Dropinsert f (drop_escape_before []) dk k le own m) E0
       (Dropinsert f drop_end dk k le own m)
       
@@ -1651,9 +1656,10 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     step_dropinsert (Dropinsert f (drop_end) Dcontinue (Kloop s k) le own m) E0
       (State f s (Kloop s k) le own m)
 (* drop_escape before dropping the parameters *)
-(* | step_dropinsert_return_before: forall f p k le own m1, *)
-(*     step_dropinsert (Dropinsert f (drop_end) (Dreturn p) k le own m1) E0 *)
-(*     (Dropinsert f (drop_return f.(fn_params)) (Dreturn p) k le own m1) *)
+| step_dropinsert_return_before: forall f p k le own m1,
+    (* use this step  *)
+    step_dropinsert (Dropinsert f (drop_escape_before []) (Dreturn p) k le own m1) E0
+    (Dropinsert f (drop_return f.(fn_params)) (Dreturn p) k le own m1)
 | step_dropinsert_return_after: forall f p v v1 k ck le own m1 m2 lb
     (EXPR: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
@@ -1701,7 +1707,9 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_internal_function: forall vf f vargs k m e m' init_own
     (FIND: Genv.find_funct ge vf = Some (Internal f))
     (NORMAL: f.(fn_drop_glue) = None)
-    (ENTRY: function_entry ge f vargs m e m' init_own),
+    (ENTRY: function_entry ge f vargs m e m')
+    (* initialize own_env *)
+    (INITOWN: init_own_env ge f = OK init_own),
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e init_own m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
