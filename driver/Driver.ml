@@ -487,7 +487,8 @@ let debug_ElaborateDrop rustir_prog =
 
 let debug_borrow_check = true
 
-let debug_BorrowCheck (prog: RustIR.program) =
+(* Unsupported now *)
+(* let debug_BorrowCheck (prog: RustIR.program) =
   match ReplaceOrigins.transl_program prog with
   | Errors.OK rustir_after_replace_origins ->
     Format.fprintf stdout_format "@.After Replacing Origins: @.";
@@ -497,7 +498,7 @@ let debug_BorrowCheck (prog: RustIR.program) =
       PrintBorrowCheck.print_cfg_program_borrow_check stdout_format rustir_after_replace_origins);
     rustir_after_replace_origins
   | Errors.Error msg ->
-    fatal_error no_loc "%a"  print_error msg
+    fatal_error no_loc "%a"  print_error msg *)
 
 let debug_ClightComposite prog =
   match Clightgen.transl_composites prog.Rusttypes.prog_types with
@@ -542,7 +543,7 @@ let _ =
                         |> debug_RustCFG
                         |> debug_InitAnalysis
                         |> debug_ElaborateDrop
-                        |> debug_BorrowCheck
+                        (* |> debug_BorrowCheck *)
                         |> debug_ClightComposite
                         |> debug_Clightgen in
        clight_prog

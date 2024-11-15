@@ -106,6 +106,7 @@ Require ElaborateDrop.
 Require Clightgen.
 
 (** Proof of Rust frontend  *)
+Require RustIRgenProof.
 Require Clightgenproof.
 Require ElaborateDropProof.
 
@@ -216,6 +217,7 @@ Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
   @@@ time "Rustsyntax to Rustlight" Rustlightgen.transl_program
   !@@ time "Rustlight to RustIR" RustIRgen.transl_program
   @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
+  (** The move checking and borrow checking are not verified yet *)
   (* @@@ time "Replace origins in RustIR" ReplaceOrigins.transl_program *)
   (* @@@ time "Borrow check" (fun p => match BorrowCheckPolonius.borrow_check_program p with *)
   (*                                | OK _ => OK p *)
@@ -225,11 +227,11 @@ Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
   @@@ transf_clight_program.
 
 (* For ownership language, we just consider Rustlight as the source
-language and remove the borrow checking passes *)
+language and remove the borrow checking passes. This compilation is
+verified. *)
 Definition transf_rustlight_program (p: Rustlight.program) : res Asm.program :=
   OK p
   !@@ time "Rustlight to RustIR" RustIRgen.transl_program
-  (** TODO: insert a move checking pass here ! *)
   @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
   @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
   @@@ transf_clight_program.
@@ -315,6 +317,11 @@ Definition CompCertO's_passes :=
   ::: mkpass Asmgenproof.match_prog
   ::: pass_nil _.
 
+Definition CompCertO's_passes_rust :=
+  mkpass RustIRgenProof.match_prog
+    ::: mkpass ElaborateDropProof.match_prog
+    ::: mkpass Clightgenproof.match_prog
+    ::: CompCertO's_passes.
 
 (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
@@ -322,6 +329,9 @@ Definition CompCertO's_passes :=
 
 Definition match_prog: Clight.program -> Asm.program -> Prop :=
   pass_match (compose_passes CompCertO's_passes).
+
+Definition match_prog_rust: Rustlight.program -> Asm.program -> Prop :=
+  pass_match (compose_passes CompCertO's_passes_rust).
 
 (** For CompCertO we are mostly interested in using Clight as a source
   language, however we can still prove a correctness theorem for CompCert C. *)
@@ -401,6 +411,25 @@ Proof.
   apply transf_clight_program_match; auto.
 Qed.
 
+(* Rust compilation chain *)
+
+Theorem transf_rustlight_program_match: forall p tp,
+    transf_rustlight_program p = OK tp ->
+    match_prog_rust p tp.
+Proof.
+  intros p tp T.
+  unfold transf_rustlight_program, time in T. simpl in T.
+  set (p1 := (RustIRgen.transl_program p)) in *.
+  destruct (ElaborateDrop.transl_program p1) as [p2|e] eqn: P2; simpl in T; try discriminate.
+  destruct (Clightgen.transl_program p2) as [p3|e] eqn: P3; simpl in T; try discriminate.
+  unfold match_prog_rust. cbn -[CompCertO's_passes_rust].
+  exists p1; split. apply RustIRgenProof.match_transf_program; auto.
+  exists p2; split. apply ElaborateDropProof.match_transf_program; auto.
+  exists p3; split. apply Clightgenproof.match_transf_program; auto.
+  apply transf_clight_program_match; eauto.
+Qed.
+
+  
 (** * Semantic preservation *)
 
 (** We now prove that the whole CompCert compiler (as characterized by the
@@ -817,8 +846,7 @@ Definition ro_rs : invariant li_rs :=
     reply_inv '(row ge m) := sound_rust_reply m;
   |}.
 
-(* TODO: semantics invariant of borrow and move check. For now, we
-just copy wt_c. *)
+(* we just copy wt_c. *)
 Definition wt_rs : invariant li_rs :=
   {|
     symtbl_inv :=
@@ -868,13 +896,14 @@ Next Obligation.
   split; auto.
 Defined.
 
-Instance commut_rust_c_wt:
-  Commutes cc_rust_c wt_rs wt_c.
+(* Lemma commut_rust_c_wt: *)
+(*   cceqv (wt_rs @ cc_rust_c) (cc_rust_c @ wt_c). *)
+(* Admitted. *)
+
+Lemma commut_rust_c_wt_lessdef:
+  cceqv ((wt_rs @ lessdef_rs) @ cc_rust_c) (cc_rust_c @ (wt_c @ lessdef_c)).
 Admitted.
 
-Instance commut_rust_c_lessdef:
-  Commutes cc_rust_c lessdef_rs lessdef_c.
-Admitted.
 
 Theorem wt_rs_R_refinement R:
   ccref (cc_rs R @ (wt_rs @ lessdef_rs)) ((wt_rs @ lessdef_rs) @ cc_rs R).
@@ -895,20 +924,18 @@ Lemma lessdef_rs_cklr R:
   cceqv (lessdef_rs @ cc_rs R) (cc_rs R).
 Proof.
 Admitted.
-  
+
 Lemma cc_rust_collapse:
   ccref
     (ro_rs @                    (* Self simulation of Rustlight *)
-       cc_rs injp @             (* RustIRgen *)
        cc_rs injp @             (* Elaborate drop *)
-       (cc_rs inj @ cc_rust_c) @  (* Clightgen *)       
+       (cc_rs inj @ cc_rust_c) @  (* Clightgen: may be changed to injp *)
        cc_compcert)             (* CompCertO *)
     cc_rust_compcert.
 Proof.
   unfold cc_compcert, cc_rust_compcert.
   rewrite cc_compose_assoc.
   (* merge top-level injp and inj *)
-  rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_injp_eq.
   rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_inj.
   (* move ro to the top *)
   rewrite cc_cainjp__injp_ca.
@@ -921,9 +948,9 @@ Proof.
   rewrite trans_injp_rors_outgoing.
   rewrite cc_compose_assoc.
   (* move wt_c to the top *)
-  rewrite cc_compose_assoc.
-  rewrite !(commute_around cc_rust_c).
-  rewrite <- (cc_compose_assoc wt_rs), <- (cc_compose_assoc (cc_rs injp)).
+  rewrite <- (cc_compose_assoc cc_rust_c).
+  rewrite <- commut_rust_c_wt_lessdef.
+  do 2 rewrite <- (cc_compose_assoc (cc_rs injp)).
   rewrite wt_rs_R_refinement.
   rewrite !cc_compose_assoc, <- (cc_compose_assoc lessdef_rs).
   rewrite lessdef_rs_cklr.
@@ -933,13 +960,31 @@ Proof.
   reflexivity.
 Qed.
 
+(* imitate the proof in CallConv.v *)
+Lemma trans_rs_injp_inv_incoming (I: invariant li_rs) :
+  ccref (I @ cc_rs injp) ((I @ cc_rs injp) @ (I @ cc_rs injp)).
+Proof.
+Admitted.
+
+(* Intuition: the compilation in Rust side can be implementd in C side
+because the compilation does not utilize the rust types, so this
+refinement should be correct *)
+Lemma injp_rs__rc_injp:
+  ccref (cc_rs injp @ cc_rust_c) (cc_rust_c @ injp).
+Admitted.
+
+(* ro_rs is defined by copying ro in C side, so it should not utilize
+any properties of Rust types to perform optimizations *)
+Lemma ro_rs__rc_ro:
+  ccref (ro_rs @ cc_rust_c) (cc_rust_c @ ro).
+Admitted.
+
 Lemma cc_rust_expand:
   ccref
     cc_rust_compcert
     (ro_rs @                    (* Self simulation of Rustlight *)
-       cc_rs injp @             (* RustIRgen *)
        cc_rs injp @             (* Elaborate drop *)
-       (cc_rs inj @ cc_rust_c) @  (* Clightgen *)
+       (cc_rs injp @ cc_rust_c) @  (* Clightgen: outgoing should be injp *)
        (** may be we should not use cc_compcert because it contains
        some self-simulation invariant which is not belong to the
        compiler *)
@@ -948,24 +993,52 @@ Lemma cc_rust_expand:
 Proof.
   unfold cc_rust_compcert, cc_compcert.
   rewrite !cc_compose_assoc.
-  (* move inj to top *)
-  rewrite injp__injp_inj_injp at 1.
-
-  (* (* construct cainjp *) *)
-  (* rewrite cc_rainjp_injpra. rewrite injp_injp at 1. *)
-  (* rewrite cc_rs_compose. *)
-  (* rewrite !cc_compose_assoc. *)
-  (* rewrite cc_ra_rcca, cc_compose_assoc. *)
-  
-  (* commut_rust_c *)
-  (* (* push down wt_rs *) *)
-  (* rewrite <- lessdef_rs_cklr at 1. *)
-  (* rewrite <- !(cc_compose_assoc wt_rs). *)
-  (* assert (A: ccref ((wt_rs @ lessdef_rs) @ cc_rs injp) (cc_rs injp @ (wt_rs @ lessdef_rs))). *)
-  (* apply commut_wt_rs. rewrite A. *)
-  
-  (* rewrite cc_ra_rcca, cc_compose_assoc. *)
-Admitted.  
+  (* 1. expand RAinjp *)
+  rewrite cc_rainjp_injpra.
+  rewrite !cc_compose_assoc.
+  rewrite cc_ra_rcca, cc_compose_assoc.
+  (* 2. put down an injp *)
+  rewrite injp_injp at 1. rewrite cc_rs_compose, cc_compose_assoc.
+  (* swap injp⋅rc *)
+  rewrite <- (cc_compose_assoc (cc_rs injp) cc_rust_c).
+  rewrite injp_rs__rc_injp.
+  rewrite cc_compose_assoc.    
+  (* 3. put down wt_rs from rust to c *)
+  rewrite <- (cc_compose_assoc wt_rs).
+  rewrite <- lessdef_rs_cklr at 1.
+  rewrite ! cc_compose_assoc, <- (cc_compose_assoc wt_rs).
+  rewrite (commute_around (wt_rs @ lessdef_rs)).
+  (* 3.1 swap (wt_rs @ lessdef_rs) and cc_rust_c *)
+  rewrite <- (cc_compose_assoc (wt_rs @ lessdef_rs)).
+  rewrite commut_rust_c_wt_lessdef.
+  (* 3.2 absorb lessdef_c into injp *)
+  rewrite !cc_compose_assoc. 
+  rewrite <- (cc_compose_assoc lessdef_c).
+  rewrite lessdef_c_cklr.  
+  (* 4. put down (ro⋅injp) from rust to c *)
+  rewrite <- (cc_compose_assoc ro_rs).
+  rewrite trans_rs_injp_inv_incoming.
+  rewrite !cc_compose_assoc.
+  (* 4.1 swap injp⋅rc *)
+  rewrite <- (cc_compose_assoc (cc_rs injp) cc_rust_c).
+  rewrite injp_rs__rc_injp.
+  rewrite cc_compose_assoc.    
+  (* 4.2 swap ro⋅rc *)
+  rewrite <- (cc_compose_assoc ro_rs cc_rust_c).
+  rewrite ro_rs__rc_ro.
+  rewrite cc_compose_assoc.
+  (* 4.3 swap injp and wt_c at c level *)
+  rewrite <- (cc_compose_assoc wt_c injp).
+  rewrite <- (cc_compose_assoc injp (wt_c @ injp)).
+  rewrite wt_R__R_wt.
+  (* 4.4 combine two injps in c level *)
+  rewrite <- cc_c_compose. rewrite injp_injp2, cc_compose_assoc.
+  (* 5. combine injp and ca *)
+  rewrite <- (cc_compose_assoc injp). rewrite cc_injpca_cainjp.
+  rewrite injp_injp at 1. rewrite cc_rs_compose.
+  rewrite cc_compose_assoc.
+  reflexivity.
+Qed.
   
 (** ** Composition of passes *)
 

@@ -9,6 +9,7 @@ open RustIRcfg
 open PrintRustsyntax
 open PrintRustlight
 open Maps
+open InitDomain
 open InitAnalysis
 
 let rec print_stmt p (s: RustIR.statement) =
@@ -149,28 +150,33 @@ let print_paths_map pp (name, (pathmap: InitDomain.PathsMap.t)) =
 
 let print_instruction_debug pp prog (pc, (i, (mayinit, mayuninit))) =
   fprintf pp "%5d:\t" pc;
-  begin match i with
-  | Inop s ->
-    let s = P.to_int s in
-    if s = pc - 1
-    then fprintf pp "nop@ "
-    else fprintf pp "goto %d@ " s
-  | Isel(sel, s) ->
-    (match select_stmt prog sel with
-    | Some stmt ->
-      fprintf pp "%a@ " print_stmt stmt
-    | None ->
-      fprintf pp "Error: cannot find statement@ ")
-  | Icond(e, s1, s2) ->
-    fprintf pp "if (%a) goto %d else goto %d@ "
-        PrintRustlight.print_expr e
-        (P.to_int s1) (P.to_int s2)
-  | Iend ->
-    fprintf pp "return@ "
-  end;
-  fprintf pp "%a@ %a@."
-    print_paths_map ("MayInit", mayinit)
-    print_paths_map ("MayUninit", mayuninit)
+  match mayinit, mayuninit with
+  | IM.State(mayinit), IM.State(mayuninit) ->
+    (* meaningful analysis result *)
+    begin match i with
+    | Inop s ->
+      let s = P.to_int s in
+      if s = pc - 1
+      then fprintf pp "nop@ "
+      else fprintf pp "goto %d@ " s
+    | Isel(sel, s) ->
+      (match select_stmt prog sel with
+      | Some stmt ->
+        fprintf pp "%a@ " print_stmt stmt
+      | None ->
+        fprintf pp "Error: cannot find statement@ ")
+    | Icond(e, s1, s2) ->
+      fprintf pp "if (%a) goto %d else goto %d@ "
+          PrintRustlight.print_expr e
+          (P.to_int s1) (P.to_int s2)
+    | Iend ->
+      fprintf pp "return@ "
+    end;
+    fprintf pp "%a@ %a@."
+      print_paths_map ("MayInit", mayinit)
+      print_paths_map ("MayUninit", mayuninit)
+  | _, _ ->
+    fprintf pp "unreachable@."
 
 let combine x y =
   match x,y with
