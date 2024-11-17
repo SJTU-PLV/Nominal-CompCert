@@ -78,7 +78,7 @@ Record function : Type := mkfunction {
   fn_generic_origins : list origin;
   fn_origins_relation: list (origin * origin);
   fn_drop_glue: option ident;   (* It indicates that this function is the drop glue for composite id *)
-  (* For now, every function must have *)
+  (* For now, every function must have a specific return variable *)
   fn_return: (ident * type);
   fn_callconv: calling_convention;  
   fn_params: list (ident * type); 

@@ -836,14 +836,14 @@ Lemma cc_rust_collapse:
   ccref
     (ro_rs @                    (* Self simulation of Rustlight *)
        cc_rs injp @             (* Elaborate drop *)
-       (cc_rs inj @ cc_rust_c) @  (* Clightgen: may be changed to injp *)
+       (cc_rs injp @ cc_rust_c) @  (* Clightgen: may be changed to injp *)
        cc_compcert)             (* CompCertO *)
     cc_rust_compcert.
 Proof.
   unfold cc_compcert, cc_rust_compcert.
   rewrite cc_compose_assoc.
-  (* merge top-level injp and inj *)
-  rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_inj.
+  (* merge top-level injp *)
+  rewrite <- (cc_compose_assoc (cc_rs injp)), <- cc_rs_compose. rewrite injp_injp2.
   (* move ro to the top *)
   rewrite cc_cainjp__injp_ca.
   rewrite cc_compose_assoc.
@@ -1075,8 +1075,9 @@ Proof.
   cbn -[CompCertO's_passes] in M.
   repeat DestructM.
   assert (F: forward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp)).
-  { rewrite cc_rust_expand at 2. rewrite <- cc_rust_collapse at 1.
+  { rewrite cc_rust_expand at 2. 
     do 2 rewrite <- (cc_compose_assoc _ _ cc_compcert).
+    rewrite <- cc_rust_collapse at 1.
     rewrite <- (cc_compose_assoc (cc_rs injp) _ cc_compcert).
     rewrite <- (cc_compose_assoc ro_rs _ cc_compcert).
     eapply compose_forward_simulations.
@@ -1089,13 +1090,13 @@ Proof.
     eapply RustIRgenProof.transl_program_correct; eauto.
     eapply compose_forward_simulations. (* ElaborateDrop *)
     eapply ElaborateDropProof.transl_program_correct; eauto.
-    admit.                      (** TODO: Clightgenproof *)
+    eapply Clightgenproof.transl_program_correct; eauto.
   }
   split. auto.
   apply forward_to_backward_simulation. auto.  
   apply Rustlightown.semantics_receptive.
   apply Asm.semantics_determinate.
-Admitted.    
+Qed.
     
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]

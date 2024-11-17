@@ -444,13 +444,22 @@ Qed.
 Lemma ro_acc_free_sem: forall ge args v m1 m2 t,
     extcall_free_sem ge args m1 t v m2 ->
     ro_acc m1 m2.
-Admitted.
+Proof.
+  intros. inv H.
+  - eapply ro_acc_free. eauto.
+  - eapply ro_acc_refl.
+Qed.
 
-Lemma ro_acc_drop_box_rec: forall ge b ofs m1 m2 tyl,
+Lemma ro_acc_drop_box_rec: forall tyl ge b ofs m1 m2,
     drop_box_rec ge b ofs m1 tyl m2 ->
     ro_acc m1 m2.
-Admitted.
-
+Proof.
+  induction tyl; intros.
+  inv H. eapply ro_acc_refl.
+  inv H. eapply ro_acc_trans.
+  inv H4. eapply ro_acc_free. eauto.
+  eauto.
+Qed.
 
 (* Rustlightown ro sound_state *)
 Inductive sound_state se0 m0 : state -> Prop :=
