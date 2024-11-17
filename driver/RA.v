@@ -5,13 +5,13 @@ Require Import Conventions Mach Asm.
 Require Import CKLR.
 Require Import Locations CallConv.
 Require Import Inject InjectFootprint.
-Require Import CA Rusttypes.
+Require Import CA CallConvRust Rusttypes.
 
 (** Structual convention between Rust and assembly (RA) *)
 
 Record cc_ra_world :=
   raw{
-      raw_sg : signature;
+      raw_sg : rust_signature;
       raw_rs : regset;
       raw_m : mem
     }.
@@ -28,13 +28,14 @@ Inductive cc_rust_asm_mq : cc_ra_world -> rust_query -> query li_asm -> Prop:=
     valid_blockv (Mem.support tm) sp ->
     vf <> Vundef -> ra <> Vundef ->
     cc_rust_asm_mq
-      (raw sg rs tm)
+      (raw rsg rs tm)
       (rsq vf rsg args m)
       (rs,tm).
 
 Inductive cc_rust_asm_mr : cc_ra_world -> rust_reply -> reply li_asm -> Prop :=
-  cc_rust_asm_mr_intro sg res tm m' tm' (rs rs' :regset) :
-     let sp := rs#SP in
+  cc_rust_asm_mr_intro rsg res tm m' tm' (rs rs' :regset) :
+    let sp := rs#SP in
+    let sg := signature_of_rust_signature rsg in
      res = rs_getpair (map_rpair preg_of (loc_result sg)) rs' ->
      (forall r, is_callee_save r = true -> rs' (preg_of r) = rs (preg_of r)) ->
      Mem.unchanged_on (not_init_args (size_arguments sg) sp) m' tm' ->
@@ -44,7 +45,7 @@ Inductive cc_rust_asm_mr : cc_ra_world -> rust_reply -> reply li_asm -> Prop :=
                        ~ Mem.perm m' b ofs k p) ->
      rs'#SP = rs#SP -> rs'#PC = rs#RA ->
      cc_rust_asm_mr
-       (raw sg rs tm)
+       (raw rsg rs tm)
        (rsr res m')
        (rs', tm').
 
@@ -60,12 +61,34 @@ Defined.
 
 Lemma cc_ra_rcca:
   ccref cc_rust_asm (cc_rust_c @ cc_c_asm).
-Admitted.
+Proof.
+  red. intros [sg rs m] se1 se2 q1 q2 Hse. destruct Hse.
+  intros Hq. inv Hq.
+  exists (se1, tt, caw sg0 rs m). repeat apply conj.
+  - econstructor. constructor.
+    econstructor.
+  - econstructor. split.
+    econstructor.
+    econstructor; eauto.
+  - intros r1 r2 Hr. inv Hr. destruct H.
+    inv H. inv H0.
+    econstructor; eauto.
+Qed.
 
 
 Lemma cc_rcca_ra:
   ccref (cc_rust_c @ cc_c_asm) cc_rust_asm.
-Admitted.
+Proof.
+  red. intros ((se1' & ?)& [sg rs m]) se1 se2 q1 q2 Hse. destruct Hse. 
+  inv H. inv H0. intros Hq. inv Hq.
+  destruct H. inv H. inv H0.
+  exists (raw sg0 rs m). repeat apply conj.
+  - econstructor.
+  - econstructor; eauto.
+  - intros r1 r2 Hr. inv Hr.
+    econstructor. split.
+    econstructor. econstructor; eauto.
+Qed.
 
 Lemma cc_ra_rcca_equiv:
   cceqv cc_rust_asm (cc_rust_c @ cc_c_asm).
@@ -79,7 +102,7 @@ related by some injection function. *)
 Record cc_rainjp_world :=
   rajw {
       rajw_injp: world injp;
-      rajw_sg : signature;
+      rajw_sg : rust_signature;
       rajw_rs : regset;
     }.
 
@@ -100,14 +123,15 @@ Inductive cc_rust_asm_injp_mq : cc_rainjp_world -> rust_query -> query li_asm ->
     args_removed sg tsp tm tm0 -> (* The Outgoing arguments are readable and freeable in tm *)
     vf <> Vundef -> tra <> Vundef ->
     cc_rust_asm_injp_mq
-      (rajw (injpw j m tm Hm) sg rs)
+      (rajw (injpw j m tm Hm) rsg rs)
       (rsq vf rsg args m)
       (rs,tm).
 
 Inductive cc_rust_asm_injp_mr : cc_rainjp_world -> rust_reply -> reply li_asm -> Prop :=
-  cc_rust_asm_injp_mr_intro sg res j m tm Hm j' m' tm' Hm' (rs rs' :regset) :
-     let tsp := rs#SP in
-     let tres := rs_getpair (map_rpair preg_of (loc_result sg)) rs' in
+  cc_rust_asm_injp_mr_intro rsg res j m tm Hm j' m' tm' Hm' (rs rs' :regset) :
+    let tsp := rs#SP in
+    let sg := signature_of_rust_signature rsg in
+    let tres := rs_getpair (map_rpair preg_of (loc_result sg)) rs' in     
      Val.inject j' res tres ->
      injp_acc (injpw j m tm Hm) (injpw j' m' tm' Hm') ->
      (forall r, is_callee_save r = true -> rs' (preg_of r) = rs (preg_of r)) ->
@@ -115,7 +139,7 @@ Inductive cc_rust_asm_injp_mr : cc_rainjp_world -> rust_reply -> reply li_asm ->
               loc_out_of_reach j m b ofs) ->
      rs'#SP = rs#SP -> rs'#PC = rs#RA ->
      cc_rust_asm_injp_mr
-       (rajw (injpw j m tm Hm) sg rs)
+       (rajw (injpw j m tm Hm) rsg rs)
        (rsr res m')
        (rs', tm').
 
@@ -136,18 +160,70 @@ Next Obligation.
   apply H1. auto.
 Qed.
 
+(** The following two lemmas help us resue the proof of
+cc_injpca_cainjp and cc_cainjp__injp_ca in CA instead of writing them
+again *)
 
+Lemma cainjp__rc_cainjp:
+  ccref cc_rust_asm_injp (cc_rust_c @ cc_c_asm_injp).
+Proof.
+  red. intros [w sg rs] se1 se2 q1 q2 Hse Hq.
+  destruct w as [j m tm1 Hm]. inv Hse. inv Hq. 
+  exists (se1, tt, cajw (injpw j m tm1 Hm) sg0 rs).
+  repeat apply conj.
+  - econstructor. econstructor.
+    econstructor; eauto.
+  - econstructor. split.
+    econstructor.
+    econstructor; eauto.
+  - intros r1 r2 Hr. inv Hr. destruct H.
+    inv H. inv H0. inv H21.
+    econstructor; eauto.
+    instantiate (1 := Hm'2).
+    econstructor; eauto.
+Qed.    
+  
+Lemma rc_cainjp__ca_injp:
+  ccref (cc_rust_c @ cc_c_asm_injp) cc_rust_asm_injp.
+Proof.
+  red. intros ((se1' & ?) & [w sg rs]) se1 se2 q1 q2 Hse Hq.
+  destruct w as [j m tm1 Hm]. inv Hse. inv H. inv Hq. 
+  destruct H. inv H. inv H1. inv H0.
+  exists (rajw (injpw j m0 tm1 Hm) sg0 rs).
+  repeat apply conj.
+  - econstructor; eauto.
+  - econstructor; eauto.
+  - intros r1 r2 Hr. inv Hr.
+    econstructor. split.
+    econstructor.
+    econstructor; eauto.
+    inv H8.
+    instantiate (1 := Hm').
+    econstructor; eauto.
+Qed.
+
+    
 (** cc_rust_asm_injp ≡ cc_rs injp @ cc_rust_asm *)
 
 Lemma cc_rainjp_injpra :
   ccref (cc_rust_asm_injp) (cc_rs injp @ cc_rust_asm).
 Proof.
-Admitted.
+  rewrite cainjp__rc_cainjp.
+  rewrite cc_cainjp__injp_ca.
+  rewrite (commute_around cc_rust_c).
+  eapply cc_compose_ref. reflexivity.
+  eapply cc_rcca_ra.
+Qed.
 
 Lemma cc_injpra_rainjp :
   ccref (cc_rs injp @ cc_rust_asm) (cc_rust_asm_injp).
 Proof.
-Admitted.
+  rewrite cc_ra_rcca.
+  rewrite <- cc_compose_assoc.
+  rewrite injp_rs__rc_injp. rewrite cc_compose_assoc.
+  rewrite cc_injpca_cainjp.
+  eapply rc_cainjp__ca_injp.
+Qed.  
 
 Theorem rainjp_injpra_equiv :
   cceqv (cc_rust_asm_injp) (cc_rs injp @ cc_rust_asm).
