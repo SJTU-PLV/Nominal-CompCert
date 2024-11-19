@@ -222,6 +222,8 @@ expr:
   | p = path_expr { let (x1, x2) = p in Ecall ((Eaccess (x1, x2)), [Eunit]) }
   | x1 = ID; COLON2; x2 = ID; LPAREN; e = expr; RPAREN
     { Ecall ((Eaccess (x1, x2)), [e]) }
+    (* support Estruct *)
+  | x = ID; LBRACE; flds = struct_fields; RBRACE { Estruct (x, fst flds, snd flds) }
   | SUBS; e = expr { Eunop (Cop.Oneg, e) }
   | NOT; e = expr { Eunop (Cop.Onotbool, e) }
   | e1 = expr; ADD; e2 = expr { Ebinop (Cop.Oadd, e1, e2) }
@@ -299,14 +301,14 @@ match_arms:
 stmt_item:
   | { Sskip }
   | e = expr { Sdo e }
-  | e1 = expr; ASSIGN; x = ID; LBRACE; flds = struct_fields; RBRACE
-    { Sdo (Eassign (e1, Estruct (x, fst flds, snd flds))) }
+  // | e1 = expr; ASSIGN; x = ID; LBRACE; flds = struct_fields; RBRACE
+  //   { Sdo (Eassign (e1, Estruct (x, fst flds, snd flds))) }
   | LET; x = ID; COLON; t = ty;
     { Slet (x, t, Option.None) }
   | LET; x = ID; COLON; t = ty; ASSIGN; e = expr
     { Slet (x, t, Option.Some e)}
-  | LET; x = ID; COLON; t = ty; ASSIGN; xs = ID; LBRACE; flds = struct_fields; RBRACE
-    { Slet (x, t, Option.Some (Estruct (xs, fst flds, snd flds))) }
+  // | LET; x = ID; COLON; t = ty; ASSIGN; xs = ID; LBRACE; flds = struct_fields; RBRACE
+  //   { Slet (x, t, Option.Some (Estruct (xs, fst flds, snd flds))) }
   | BREAK { Sbreak }
   | CONTINUE { Scontinue }
   | RETURN; { Sreturn None }

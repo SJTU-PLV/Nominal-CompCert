@@ -139,7 +139,8 @@ Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
   if place_owns_loc p then
     (** FIXME: WHY? If there are some children of [p] in [l], do
       nothing. Because [p] may have been split into sub-fields and we
-      have collected p (see Pderef and Pfield cases). *)
+      have collected p (s
+      ee Pderef and Pfield cases). *)
     if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) l) then
       match p with
       | Plocal _ _ =>
@@ -147,16 +148,28 @@ Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
       | Pfield p' _ _ =>
           (* difficult case: assume p = [**(a.f).g], p' = [**(a.f)], l = ∅ *)
           let l' := collect p' l in (* l' = {**(a.f), *(a.f), a.f, a.h} *)
-          let siblings := siblings p in (* sib = {**(a.f).k, **(a.f).l} *)
-          (* l'\{p'} ∪ siblings ∪ {p} *)
-          (* ret = {*(a.f), a.f, a.h, **(a.f).k, **(a.f).l, **(a.f).f} *)
-          (* we can see that each element occupies a memory location *)
-          Paths.union (Paths.remove p' l') (Paths.add p siblings)
+          (** Adhoc: if p' is not in l, which means that p' may be a
+          Pdowncast, we do not collect its subfields *)
+          if Paths.mem p' l' then
+            let siblings := siblings p in (* sib = {**(a.f).k, **(a.f).l} *)
+            (* l'\{p'} ∪ siblings ∪ {p} *)
+            (* ret = {*(a.f), a.f, a.h, **(a.f).k, **(a.f).l, **(a.f).f} *)
+            (* we can see that each element occupies a memory location *)
+            Paths.union (Paths.remove p' l') (Paths.add p siblings)
+          else
+            l            
       | Pderef p' ty =>
           (* If type of [p] is [Tbox^n<T>] then add its n children to [l] *)
           (* let children := own_path_box p ty in *)
           (* let l' := Paths.union l children in *)
-          Paths.add p (collect p' l)
+          let l' := collect p' l in
+          (** Adhoc: if p' is not in l, which means that p' may be a
+          Pdowncast (note that p' must have Tbox type), we do not
+          collect its children *)
+          if Paths.mem p' l' then
+            Paths.add p l'
+          else
+            l
       (** FIXME: we treat enum as a whole location  *)
       | Pdowncast p' _ _ => collect p' l
       end

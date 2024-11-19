@@ -1,5 +1,5 @@
-struct list_node;
 enum list;
+struct list_node;
 
 struct list_node {
     value : i32,

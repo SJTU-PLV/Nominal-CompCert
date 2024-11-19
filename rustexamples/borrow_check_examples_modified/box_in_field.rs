@@ -12,13 +12,13 @@ struct A{
 
 fn main(){
     let a : A = A {
-        f: Box(Box(B{ 
-            l:Box(1), 
-            m: Box(2), 
-            n: 3})), 
+        f: Box(Box(
+            B{ l: Box(1), 
+               m: Box(2), 
+               n: 3})), 
         g: Box(4), 
         h: 5
     };
     let b : Box<i32> = (**(a.f)).l;
-\
+
 }
