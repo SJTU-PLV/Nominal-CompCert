@@ -190,6 +190,7 @@ Fixpoint collect_pexpr (pe: pexpr) (m: PathsMap.t) : PathsMap.t :=
       collect_pexpr pe m
   | Ebinop _ pe1 pe2 _ =>
       collect_pexpr pe2 (collect_pexpr pe1 m)
+  (* note that we do not collect global variable *)
   | _ => m
 end.          
 

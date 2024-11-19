@@ -311,6 +311,9 @@ module To_syntax = struct
     | S.Evar (i, _) ->
       let x = IdentMap.find i symmap in
       pp_print_string pp x
+    | S.Eglobal (i, _) ->
+        let x = IdentMap.find i symmap in
+        pp_print_string pp x
     | S.Ebox (e, _) ->
       fprintf pp "Box(%a)" (pp_print_expr symmap) e
     | S.Eref (org, T.Mutable, l, _) ->
@@ -1288,7 +1291,7 @@ module To_syntax = struct
       in
       let str_lit = name_for_string_literal s in
       add_gvar str_lit global_var >>= fun i ->
-      return (Rustsyntax.Evar (i, var_ty))
+      return (Rustsyntax.Eglobal (i, var_ty))
 
 
 

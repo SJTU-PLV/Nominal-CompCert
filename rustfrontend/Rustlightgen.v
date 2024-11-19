@@ -144,6 +144,8 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       ret (nil, Econst_long n ty)
   | Rustsyntax.Eval _ ty =>
       error (msg "Rustlightgen.transl_expr: Eval")
+  | Rustsyntax.Eglobal id ty =>
+      ret (nil, Eglobal id ty)
   | Rustsyntax.Estruct id fids args ty =>
       (* let temp : ty in
          temp.fid1 := arg1;
@@ -398,6 +400,7 @@ Definition value_or_place (e: Rustsyntax.expr) : bool :=
   | Rustsyntax.Ebinop _ _ _ _ => true
   | Rustsyntax.Eassign _ _ _ => true
   | Rustsyntax.Ecall _ _ _ => true
+  | Rustsyntax.Eglobal _ _ => true
   end.
            
 Fixpoint generate_lets (l: list (ident * type)) (body: statement) : statement :=

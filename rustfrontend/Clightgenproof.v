@@ -706,6 +706,7 @@ Proof.
     simpl.  auto. 
   - intros. inv H. monadInv H1. simpl. auto.
   - intros. inv H. monadInv H1. simpl. auto.
+  - simpl. intros. monadInv H. auto.        
 Qed. 
 
 
@@ -1016,7 +1017,8 @@ Proof.
       intros Htpx. rewrite <- Htpx.
       exploit pexpr_to_cexpr_types. eapply EQ1. 
       intros Htpx0. rewrite <- Htpx0. eapply sem_binary_op_trans. eauto. 
-      eauto. 
+      eauto.
+    + inv EVAL. inv H0.
 Qed. 
 
 Lemma alignof_blockcopy_1248: forall ty ofs,

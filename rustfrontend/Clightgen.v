@@ -472,6 +472,8 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
   | Econst_float f ty => OK (Clight.Econst_float f (to_ctype ty))
   | Econst_single f ty => OK (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => OK (Clight.Econst_long l (to_ctype ty))
+  (* just for compliation, we do not have semantics for it *)
+  | Eglobal id ty => OK (Clight.Evar id (to_ctype ty))
   | Eplace p ty =>
       if type_eq_except_origins ty (typeof_place p) then        
         (place_to_cexpr p)

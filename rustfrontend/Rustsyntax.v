@@ -33,6 +33,7 @@ Inductive expr : Type :=
                                            (**r binary arithmetic operation *)
 | Eassign (l: expr) (r: expr) (ty: type)          (**r assignment [l = r] *)
 | Ecall (r1: expr) (rargs: exprlist) (ty: type)
+| Eglobal (id: ident) (ty: type) (**r constant global variable  *)
 
 with exprlist : Type :=
   | Enil
@@ -53,6 +54,7 @@ Definition typeof (e: expr) : type :=
   | Eunop _ _ ty
   | Ebinop _ _ _ ty
   | Ecall _ _ ty => ty
+  | Eglobal _ ty => ty
 end.
 
 Inductive statement : Type :=

@@ -52,7 +52,8 @@ Inductive pexpr : Type :=
 | Ecktag: place -> ident -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)]. We cannot check a downcast *)
 | Eref:  origin -> mutkind -> place -> type -> pexpr     (**r &[mut] p  *)
 | Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
-| Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
+| Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr (**r binary operation *)
+| Eglobal: ident -> type -> pexpr.                          (**r constant global variable, we do not give it semantics for now *)
 
 (* The evaluaiton of expr may produce a moved-out place *)
 Inductive expr : Type :=
@@ -72,6 +73,7 @@ Definition typeof_pexpr (pe: pexpr) : type :=
   | Eref _ _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
+  | Eglobal _ ty => ty
   end.
 
 Definition typeof (e: expr) : type :=

@@ -33,6 +33,7 @@ let precedence' = function
   | Econst_float _ -> (16, NA)
   | Econst_single _ -> (16, NA)
   | Econst_long _ -> (16, NA)
+  | Eglobal(_,_) -> (16, NA)
   | Eunop _ -> (15, RtoL)
   | Ebinop((Omul|Odiv|Omod), _, _, _) -> (13, LtoR)
   | Ebinop((Oadd|Osub), _, _, _) -> (12, LtoR)
@@ -77,6 +78,8 @@ let rec pexpr p (prec, e) =
     fprintf p "%LuLLU" (camlint64_of_coqint n)
   | Econst_long(n, _) ->
     fprintf p "%LdLL" (camlint64_of_coqint n)
+  | Eglobal(id, _) ->
+    fprintf p "glob %s" (extern_atom id)
   | Eunop(Oabsfloat, a1, _) ->
     fprintf p "__builtin_fabs(%a)" pexpr (2, a1)
   | Eunop(op, a1, _) ->
