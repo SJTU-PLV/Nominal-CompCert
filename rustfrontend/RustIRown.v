@@ -364,6 +364,7 @@ Inductive step_drop_mem_error : state -> Prop :=
       (Dropstate id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k m)
 .
 
+(* The procedure of dropping a place: we first check its intiialization status (is_init): 1. if false, skip this place; 2. if true, we then check if it is scalar type. 2.1. if true, update the own_env and then skip this place; 2.2 if false, start to drop this place *)
 
 Inductive step_dropplace : state -> trace -> state -> Prop :=
 | step_dropplace_init1: forall f p ps k le own m full
@@ -375,10 +376,17 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_init own p = true)
+    (NOTSCALAR: scalar_type (typeof_place p) = false)
     (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     (* move p to match drop p *)
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)
+| step_dropplace_scalar: forall f p ps k le own m full
+    (OWN: is_init own p = true)
+    (SCALAR: scalar_type (typeof_place p) = true),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f None ps k le (move_place own p) m)    
+
 | step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)

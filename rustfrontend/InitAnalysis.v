@@ -83,6 +83,7 @@ Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node
   let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry (IM.State maybeInit) in
   let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry (IM.State maybeUninit) in
   match initMap, uninitMap with
+  
   (* we only want the PTree because [None] represent the unreachable node *)
   | Some initMap, Some uninitMap =>
       (** check consistence  *)
@@ -497,7 +498,8 @@ Proof.
   - auto.
 Qed.
 
-(* all the children has been moved out. It is used to prove move_split_places_uncheck_sound *)
+(* all the children has been moved out (PRES). It is used to prove
+move_split_places_uncheck_sound *)
 Inductive move_ordered_split_places_spec : own_env -> list place -> Prop :=
 | ordered_in_own_nil: forall own,
     move_ordered_split_places_spec own nil
@@ -505,7 +507,6 @@ Inductive move_ordered_split_places_spec : own_env -> list place -> Prop :=
     (PRES: forall p', is_prefix_strict p p' = true -> is_init own p' = false)
     (MORD: move_ordered_split_places_spec (if is_init own p then move_place own p else own) l),
     move_ordered_split_places_spec own (p :: l).
-
 
 Lemma ordered_and_complete_split_places_meet_spec: forall drops own
     (COMPLETE: forall p a, In p drops -> is_prefix p a = true -> Paths.In a (PathsMap.get (local_of_place a) own.(own_universe)) -> In a drops \/ is_init own a = false)
@@ -1289,254 +1290,6 @@ Proof.
   econstructor; eauto.
 Qed.  
 
-
-(* Key point: match the small step ownership transfer and the big step
-analysis in transfer function of Sdrop *)
-Lemma sound_step_dropplace: forall s t s',
-    step_dropplace ge s t s' ->
-    sound_state s ->
-    sound_state s'.
-Proof.
-  intros s t s' STEP SOUND.
-  inv STEP; inv SOUND.
-  - econstructor; eauto.
-    simpl in OWN.
-    rewrite NOTOWN in OWN. auto.
-  - simpl in OWN0.
-    econstructor; eauto.
-    rewrite OWN in OWN0. auto.
-  - econstructor; eauto.
-  - econstructor; eauto.
-    econstructor; eauto.
-  - econstructor; eauto.
-    econstructor; eauto.
-  - econstructor; eauto.
-  - econstructor; eauto.
-    econstructor. 
-Qed.
-
-Lemma sound_step_dropstate: forall s t s',
-    step_drop ge s t s' ->
-    sound_state s ->
-    sound_state s'.
-Proof.
-  intros s t s' STEP SOUND.
-  inv STEP; inv SOUND.
-  - econstructor; eauto.
-  - econstructor; eauto.
-    econstructor; eauto.
-  - econstructor; eauto.
-    econstructor; eauto.
-  - econstructor; eauto.
-  - inv CONT.
-    econstructor; eauto.
-  - econstructor; eauto.
-    inv CONT. auto.
-Qed.
-
-(** TODO: where to put it *)
-(* We can generate cfg for all analyzed functions. This property is
-guaranteed by the compilation pass which actually uses the analyze
-function *)
-Hypothesis function_analyzed: forall (v : val) (f: function),
-    Genv.find_funct ge v = Some (Internal f) ->
-    exists entry cfg nret initMap uninitMap universe,
-      tr_fun f nret entry cfg /\
-      analyze ce f cfg entry = OK (initMap, uninitMap, universe).
-
-
-(* Theorem sound_step: forall s t s', *)
-(*     step ge s t s' -> *)
-(*     sound_state s -> *)
-(*     sound_state s'. *)
-(* Proof. *)
-(*   intros s t s' STEP SOUND. *)
-(*   inv STEP; inv SOUND. *)
-(*   (* step_assign *) *)
-(*   - inv TRSTMT. inv TRFUN. *)
-(*     eapply sound_state_succ with (pc1:= pc); eauto. *)
-(*     simpl. eauto. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(*     (* prove sound_own *) *)
-(*     inv OWN. *)
-(*     unfold transfer. inv IM. *)
-(*     rewrite SEL. rewrite STMT. eauto. *)
-(*     unfold transfer. inv IM. *)
-(*     rewrite SEL. rewrite STMT. eauto. *)
-(*     (* maybe easy *) *)
-(*     admit.     *)
-    
-    
-(*   (* step_assign_variant *) *)
-(*   - inv TRSTMT. inv TRFUN. *)
-(*     eapply sound_state_succ with (pc1:= pc); eauto. *)
-(*     simpl. auto. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(*     (* prove sound_own *) *)
-(*     inv OWN. *)
-(*     unfold transfer. rewrite SEL. rewrite STMT. *)
-(*     admit. *)
-(*   (* step_box *) *)
-(*   - inv TRSTMT. inv TRFUN. *)
-(*     eapply sound_state_succ with (pc1:= pc); eauto. *)
-(*     simpl. auto. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(*     (* prove sound_own *) *)
-(*     inv OWN. *)
-(*     unfold transfer. rewrite SEL. rewrite STMT. *)
-(*     admit. *)
-(*   (* step_to_dropplace *) *)
-(*   - eapply sound_dropplace; eauto. *)
-(*   (** Difficult part: prove split_drop_place small-step simulates the *)
-(*   analysis *) *)
-(*     admit. *)
-(*   (* step_in_dropplace *) *)
-(*   - eapply sound_step_dropplace; eauto. *)
-(*     econstructor; eauto. *)
-(*   (* step_dropstate *) *)
-(*   - eapply sound_step_dropstate; eauto. *)
-(*     econstructor; eauto. *)
-(*   (* step_storagelive *) *)
-(*   - inv TRSTMT. inv TRFUN. *)
-(*     eapply sound_state_succ with (pc1:= pc); eauto. *)
-(*     simpl. auto. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(*     (* prove sound_own *) *)
-(*     unfold transfer. rewrite SEL. rewrite STMT. *)
-(*     move_place_sound *)
-    
-(*     Lemma  *)
-    
-(* admit.     *)
-(*     auto. *)
-(*   (* step_storagedead *) *)
-(*   - inv TRSTMT. inv TRFUN. *)
-(*     eapply sound_state_succ with (pc1:= pc); eauto. *)
-(*     simpl. auto. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(*     (* prove sound_own *) *)
-(*     unfold transfer. rewrite SEL. rewrite STMT. *)
-(*     auto. *)
-(*   (* step_call *) *)
-(*   - inv TRSTMT. econstructor. *)
-(*     inv TRFUN. *)
-(*     econstructor; eauto. *)
-(*     exploit analyze_succ. 1-3: eauto. eapply SEL. *)
-(*     instantiate (1 :=next). simpl. auto. eauto. eauto. *)
-(*     (* prove sound_own *) *)
-(*     instantiate (1 := (init_place (move_place_list own1 (moved_place_list al)) p)). admit. *)
-(*     intros (mayinit3 & mayuninit3 & A & B & C). subst. auto. *)
-(*     econstructor; eauto. *)
-(*   (* step_internal_function *) *)
-(*   - exploit function_analyzed; eauto. *)
-(*     intros (entry & cfg & nret & initMap & uninitMap & universe & TRFUN & AN). *)
-(*     inv TRFUN. *)
-(*     inv ENTRY. *)
-(*     exploit sound_function_entry; eauto. *)
-(*     intros SOUND_INIT. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     (* intros (nret & TRFUN). *) *)
-(*     (* tr_cont *) *)
-(*     inv TRSTK. *)
-(*     econstructor. auto. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*   (* step_external_function *)     *)
-(*   - econstructor; eauto. *)
-(*   (* step_return_0 *) *)
-(*   - econstructor. *)
-(*     apply sound_call_cont; auto. *)
-(*     eapply tr_stacks_call_cont; eauto. *)
-(*   (* step_return_1 *) *)
-(*   - econstructor. *)
-(*     apply sound_call_cont; auto. *)
-(*     eapply tr_stacks_call_cont; eauto. *)
-(*   (* step_skip_call *) *)
-(*   - econstructor. *)
-(*     apply sound_call_cont; auto. *)
-(*     eapply tr_stacks_call_cont; eauto. *)
-(*   (* step_returnstate *) *)
-(*   - (** TODO: problem between the nodes in tr_stacks and sound_cont *) *)
-(*     (* inv TRSTK. inv CONT. *) *)
-(*     (* inv TRFUN. *) *)
-(*     (* rewrite CFG in CFG0. inv CFG0. *) *)
-(*     (* clear TRCONT. *) *)
-(*     (* econstructor; eauto. *) *)
-(*     (* econstructor; eauto. *) *)
-(*     (* econstructor. *) *)
-(*     (* prove sound_own *) *)
-(*     admit. *)
-(*   (* step_seq *) *)
-(*   - inv TRSTMT. simpl in TRCONT. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*   (* step_skip_seq *) *)
-(*   - inv TRSTMT. inv TRCONT. *)
-(*     econstructor; eauto. *)
-(*     inv CONT. auto. *)
-(*   (* step_continue_seq *) *)
-(*   - inv TRSTMT. inv TRCONT. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     inv CONT. auto. *)
-(*   (* step_break_seq *) *)
-(*   - inv TRSTMT. inv TRCONT. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     inv CONT. auto. *)
-(*   (* step_ifthenelse *) *)
-(*   - inv TRSTMT. *)
-(*     econstructor; eauto. *)
-(*     destruct b; auto. *)
-(*     (** TODO: ifthenelse must use pure expression *) *)
-(*     admit. admit. *)
-(*   (* step_loop *) *)
-(*   - inv TRSTMT. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     econstructor; eauto. *)
-(*     inv TRFUN. *)
-(*     exploit analyze_succ. 1-3: eauto. eapply SEL. *)
-(*     simpl. eauto. *)
-(*     unfold transfer. rewrite SEL. eauto. *)
-(*     unfold transfer. rewrite SEL. eauto. *)
-(*     eauto. *)
-(*     intros (mayinit3 & mayuninit3 & A & B & C). *)
-(*     subst. auto. *)
-(*   (* step_skip_or_continue_loop *) *)
-(*   - inv TRCONT. *)
-(*     econstructor; eauto.     *)
-(*     econstructor; eauto. *)
-(*     inv TRFUN. *)
-(*     destruct H; inv H. *)
-(*     + inv TRSTMT. *)
-(*       exploit analyze_succ. 1-3: eauto. eapply SEL. *)
-(*       simpl. eauto. *)
-(*       unfold transfer. rewrite SEL. eauto. *)
-(*       unfold transfer. rewrite SEL. eauto. *)
-(*       eauto. *)
-(*       intros (mayinit3 & mayuninit3 & A & B & C). *)
-(*       subst. auto. *)
-(*     + inv TRSTMT. *)
-(*       exploit analyze_succ. 1-3: eauto. eapply SEL. *)
-(*       simpl. eauto. *)
-(*       unfold transfer. rewrite SEL. eauto. *)
-(*       unfold transfer. rewrite SEL. eauto. *)
-(*       eauto. *)
-(*       intros (mayinit3 & mayuninit3 & A & B & C). *)
-(*       subst. auto. *)
-(*   (* step_break_loop *) *)
-(*   - inv TRSTMT. inv TRCONT. inv CONT. *)
-(*     econstructor; eauto. *)
-(*     econstructor. *)
-(* Admitted. *)
 
 End SOUNDNESS.
 

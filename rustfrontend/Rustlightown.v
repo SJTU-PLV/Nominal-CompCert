@@ -1434,9 +1434,18 @@ Inductive step_dropplace : state -> trace -> state -> Prop :=
       (Dropplace f None ps k le own m)
 | step_dropplace_init2: forall f p ps k le own m st (full: bool)
     (OWN: is_init own p = true)
+    (NOTSCALAR: scalar_type (typeof_place p) = false)
     (DPLACE: st = (if full then gen_drop_place_state p else drop_fully_owned_box [p])),
     step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
       (Dropplace f (Some st) ps k le (move_place own p) m)
+(* split_drop_place may generate some places which have scalar type,
+in the semantics, we skip this drop placs and in the compilation, we
+generate Sskip for them *)
+| step_dropplace_scalar: forall f p ps k le own m full
+    (OWN: is_init own p = true)
+    (SCALAR: scalar_type (typeof_place p) = true),
+    step_dropplace (Dropplace f None ((p, full) :: ps) k le own m) E0
+      (Dropplace f None ps k le (move_place own p) m)    
 | step_dropplace_box: forall le m m' k ty b' ofs' f b ofs p own ps l
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)

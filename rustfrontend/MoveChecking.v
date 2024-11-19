@@ -89,20 +89,6 @@ Definition must_movable_fix ce := Fix (@well_founded_removeR composite) must_mov
 
 Definition must_movable ce init uninit universe p := must_movable_fix ce init uninit universe p (typeof_place p).
 
-
-Definition scalar_type (ty: type) : bool :=
-  match ty with
-  | Tunit
-  | Tint _ _
-  | Tlong _
-  | Tfloat _
-  | Tfunction _ _ _ _ _
-  | Tarray _ _
-  | Treference _ _ _ => true
-  | _ => false
-  end.
-
-
 Section INIT.
 
 Variable ce: composite_env.

@@ -18,8 +18,8 @@ Local Open Scope error_monad_scope.
 statements. After this pass, the ownership semantics is removed. The
 memory deallocation would be explicit and deterministic *)
 
-(** The drop elaboration has three steps: 1. Iterate the CFG to
-collect drop flags for each drops; 2. Update the drops statement (from
+(** The drop elaboration has three steps: 1. Analyze the initialized place at each point of the CFG; 2. Iterate the CFG to
+collect drop flags for each drops; 3. Update the drops statement (from
 conditonally drop to deterministic drop) in RustIR (AST) and insert
 the update of the drop flag before the occurence of ownership transfer
 *)
@@ -35,16 +35,20 @@ Fixpoint generate_drop_flags_for_splits (mayinit mayuninit universe: PathsMap.t)
   | nil => nil
   | p :: l' =>
       let flags := generate_drop_flags_for_splits mayinit mayuninit universe l' in
-      if must_init mayinit mayuninit universe p then
-        (* this place must be init, no need for drop flag *)
+      if scalar_type (typeof_place p) then
+        (* we do not need to generate drop flag for scalar typed place *)
         flags
-      else if may_init mayinit mayuninit universe p then
-        (* need drop flag *)
-        let drop_flag := fresh_atom tt in
-        (p, drop_flag) :: flags
       else
-        (* this place must be uninit, no need to drop *)
-        flags
+        if must_init mayinit mayuninit universe p then
+          (* this place must be init, no need for drop flag *)
+          flags
+        else if may_init mayinit mayuninit universe p then
+               (* need drop flag *)
+               let drop_flag := fresh_atom tt in
+               (p, drop_flag) :: flags
+             else
+               (* this place must be uninit, no need to drop *)
+               flags
   end.
 
 Definition generate_drop_flags_for (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (p: place) : list (place * ident) :=
@@ -158,18 +162,22 @@ Fixpoint elaborate_drop_for_splits (mayinit mayuninit universe: PathsMap.t) (fla
   | nil => Sskip
   | (p, full) :: l' =>
       let stmt := elaborate_drop_for_splits mayinit mayuninit universe flagm l' in
-      (* use flagm to decide whether insert drop flag or not *)
-      match get_dropflag_temp flagm p with
-      | Some id =>
-          (* need drop flag *)
-          (Ssequence (generate_drop p full (Some id)) stmt)
-      | None =>
-          if must_init mayinit mayuninit universe p then
-            (Ssequence (generate_drop p full None) stmt)
-          else
-            (* this place must be uninit, no need to drop *)
-            (Ssequence Sskip stmt)
-      end
+      if scalar_type (typeof_place p) then
+        (* no need to generate drop for scalar typed places *)
+        (Ssequence Sskip stmt)
+      else
+        (* use flagm to decide whether insert drop flag or not *)
+        match get_dropflag_temp flagm p with
+        | Some id =>
+            (* need drop flag *)
+            (Ssequence (generate_drop p full (Some id)) stmt)
+        | None =>
+            if must_init mayinit mayuninit universe p then
+              (Ssequence (generate_drop p full None) stmt)
+            else
+              (* this place must be uninit, no need to drop *)
+              (Ssequence Sskip stmt)
+        end
   end.
 
 Definition elaborate_drop_for (mayinit mayuninit universemap: PathsMap.t) (ce: composite_env) (flagm: PTree.t (list (place * ident))) (p: place) : Errors.res statement :=

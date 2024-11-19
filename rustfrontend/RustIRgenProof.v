@@ -737,6 +737,11 @@ Proof.
     econstructor. econstructor. eapply RustIRown.step_dropplace_init2; eauto.
     eapply star_refl. auto.
     econstructor; auto.
+  (* step_dropplace_scalar *)
+  - eexists. split.
+    econstructor. econstructor. eapply RustIRown.step_dropplace_scalar; eauto.
+    eapply star_refl. auto.
+    econstructor; auto.
   - eexists. split.
     econstructor. econstructor. econstructor; solve_eval.
     eapply star_refl. auto.

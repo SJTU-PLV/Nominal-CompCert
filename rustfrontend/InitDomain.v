@@ -38,14 +38,15 @@ Section COMP_ENV.
 
 Variable ce : composite_env.
 
-(* get { p.1, p.2 ...} which are own types *)
+(* get { p.1, p.2 ...}. We need to track the initialized information
+of all the locations no matter they are own_type or not *)
 Definition places_of_members (p: place) (mems: members) :=
   fold_left (fun acc elt =>
                match elt with
                | Member_plain fid ty =>
-                   if own_type ce ty then
+                   (* if own_type ce ty then *)
                      Paths.add (Pfield p fid ty) acc
-                   else acc
+                   (* else acc *)
                end) mems Paths.empty.
 
 (* siblings of p *)
@@ -354,8 +355,22 @@ Module IM <: SEMILATTICE.
 
 End IM.
 
-(* split places for drop statement based on the places appear in the
-universe *)
+
+(** Comment for [split_drop_places]: When executing a Sdrop(p)
+statement, we cannot directly evaluate the address of p and
+recursively free its data, because p may be partial owned. So we need
+to split p into list of places that are owned. It is not trivial
+because we have to ensure the order (specifically, topological order)
+of this list of places so that we can free a place by assuming that
+all its children are freed. Moreover, some of the generated split
+places may have scalar type (which has no effect in the semantics, see
+step_dropplace_scalar in RustIRown and Rustlightown) because we need
+to generate all the places in the universe which are children of the
+[p]. It is necessary to ensure the soundness of the init-analysis
+because we need to establish the relation between dynamic ownership
+update in step_dropplace and static ownership update in init-analysis
+respectively. *)
+
 Section SPLIT.
 Variable universe: Paths.t.
   
@@ -407,8 +422,11 @@ Fixpoint split_drop_place' (p: place) (ty: type) : res (list (place * bool)) :=
           OK [(p, true)]
       else
         Error ([MSG "place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: split_drop_place"])
-  (* Is it correct? Error or Ignore? Consider that we always reach here *)
-  | _ => OK []
+  (* p has scalar type. In the semantics, we should skip its drop
+  statement and in the compilation, Sdrop p would be translated to
+  Sskip in ElaborateDrop. Note that scalar place must be fully
+  owned *)
+  | _ => OK [(p, true)]
    (* Error [MSG ": Normal types do not need drop: split_drop_place"] *)
   end.
 
@@ -495,7 +513,7 @@ Record split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place 
     split_complete: forall p, Paths.In p universe -> is_prefix r p = true -> In p (map fst drops);
     split_norepet: list_norepet (map fst drops);
     split_ordered: split_places_ordered (map fst drops);
-    (** TODO: current implementation does not guarantee this
+    (** Adhoc: current implementation does not guarantee this
     property. This property is an invariant of the universe *)
     split_correct_full: forall p full,
       In (p,full) drops ->
@@ -520,22 +538,30 @@ Definition check_split_correct_full (universe: Paths.t) (drops: list (place * bo
   (* check that full flag is correct w.r.t is_full_internal *)
   forallb (fun '(p, full) => eqb (is_full_internal universe p) full) drops.
 
-Definition check_split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : bool :=
-  check_split_drops_sound universe r (map fst drops)
-  && check_split_drops_complete universe r (map fst drops)
-  && list_norepet_dec place_eq (map fst drops)
-  && split_places_ordered_dec (map fst drops)
-  && check_split_correct_full universe drops.
+Definition check_split_drop_place_spec (universe: Paths.t) (r: place) (drops: list (place * bool)) : res unit :=
+  if check_split_drops_sound universe r (map fst drops) then
+    if check_split_drops_complete universe r (map fst drops) then
+      if list_norepet_dec place_eq (map fst drops) then
+        if split_places_ordered_dec (map fst drops) then
+          if check_split_correct_full universe drops then OK tt
+          else Error (msg "Error in check_split_drop_place_spec: check_split_correct_full error")
+        else Error (msg "Error in check_split_drop_place_spec: split_places_ordered_dec error")
+      else Error (msg "Error in check_split_drop_place_spec: list_norepet_dec error in check_split_drop_place_spec")
+    else Error (msg "Error in check_split_drop_place_spec: check_split_drops_complete")
+  else Error (msg "Error in check_split_drop_place_spec: check_split_drops_sound error").
                                       
 
+(** TODO: implement it in Ocaml  *)
 Definition split_drop_place (ce: composite_env) (universe: Paths.t) (p: place) (ty: type) : res (list (place * bool)) :=
-  do drops <- Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce p ty;
+  do drops <- if place_owns_loc p then
+               Fixm (@PTree_Properties.cardinal composite) (split_drop_place' universe) ce p ty
+                    (* We should consider if p is something like *b where b has reference type), we should not split *b *)
+             else OK nil;
   (* It checks split_complete property, because the iteration cannot
   ensure that all the childre of p in the universe would be
   collected. *)
-  if check_split_drop_place_spec universe p drops then
-    OK drops
-  else Error (msg "The generated split drop places do not satisfy the specification (split_drop_place) ").
+  do _ <- check_split_drop_place_spec universe p drops;
+  OK drops.
 
 Lemma split_drop_place_meet_spec: forall ce universe p drops,
     split_drop_place ce universe p (typeof_place p) = OK drops ->
@@ -543,12 +569,13 @@ Lemma split_drop_place_meet_spec: forall ce universe p drops,
 Proof.
   intros. unfold split_drop_place in H.
   monadInv H.
-  destruct (check_split_drop_place_spec universe p x) eqn: A; try congruence.
-  inv EQ0.
-  unfold check_split_drop_place_spec in A.
-  rewrite !andb_true_iff in A.
-  rewrite !and_assoc in A.
-  destruct A as (C1 & C2 & C3 & C4 & C5).
+  unfold check_split_drop_place_spec in EQ1.
+  destruct (check_split_drops_sound universe p (map fst drops)) eqn: C1; try congruence.
+  destruct (check_split_drops_complete universe p (map fst drops)) eqn: C2; try congruence.
+  destruct (list_norepet_dec place_eq (map fst drops)) eqn: C3; try congruence.
+  destruct (split_places_ordered_dec (map fst drops)) eqn: C4; try congruence.
+  destruct (check_split_correct_full universe drops) eqn: C5; try congruence.
+  inv EQ1.
   constructor.
   (* sound *)
   - intros. unfold check_split_drops_sound in C1.
@@ -564,8 +591,8 @@ Proof.
     red. solve_proper.
     intros. eapply proj_sumbool_true in H1. auto.
     red. solve_proper.
-  - eapply proj_sumbool_true. eauto.
-  - eapply proj_sumbool_true. eauto.
+  - auto.
+  - auto.
   - unfold check_split_correct_full in C5.
     intros.
     eapply forallb_forall in C5. 2: eauto.
@@ -738,7 +765,9 @@ Proof.
   intros.
   unfold split_drop_place.
   erewrite split_drop_place_fixm_eq_universe; eauto.
+  destruct (place_owns_loc p); simpl; auto.
   destruct (Fixm (PTree_Properties.cardinal (V:=composite)) (split_drop_place' u2) ce p ty); eauto.
   simpl.
+  erewrite check_split_drop_place_spec_eq_universe; eauto.
   erewrite check_split_drop_place_spec_eq_universe; eauto.
 Qed.  

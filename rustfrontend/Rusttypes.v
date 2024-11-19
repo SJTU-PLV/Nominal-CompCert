@@ -170,6 +170,19 @@ Definition access_mode (ty: type) : mode :=
   | Tvariant _ _ => By_copy
 end.
 
+(* Used to indicate which places need to be dropped *)
+Definition scalar_type (ty: type) : bool :=
+  match ty with
+  | Tunit
+  | Tint _ _
+  | Tlong _
+  | Tfloat _
+  | Tfunction _ _ _ _ _
+  | Tarray _ _
+  | Treference _ _ _ => true
+  | _ => false
+  end.
+
 
 (** To C types *)
 
