@@ -574,7 +574,8 @@ Proof.
   induction l; intros.
   - inv H. constructor.
   - inv H. econstructor. eauto.
-    inv H4. econstructor; eauto.
+    eauto.
+    inv H5. econstructor; eauto.
     eauto.
 Qed.
 

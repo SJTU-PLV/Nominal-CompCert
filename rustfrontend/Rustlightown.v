@@ -1265,10 +1265,17 @@ Inductive deref_loc_rec_mem_error (m: mem) (b: block) (ofs: ptrofs) : list type 
 Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Prop :=
 | drop_box_rec_nil: forall m,
     drop_box_rec b ofs m nil m
-| drop_box_rec_cons: forall m m1 m2 b1 ofs1 ty tys,
-    (* (b1, ofs1) is the address of [ty] *)
+| drop_box_rec_cons: forall m m1 m2 b1 ofs1 ty tys b2 ofs2,
+    (* (b1, ofs1) is the address of [ty], we want to free the memory
+    location stored in (b1,ofs1) *)
     deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    extcall_free_sem ge [Vptr b1 ofs1] m E0 Vundef m1 ->
+    (* if the result of deref_loc is not a pointer, it must be memory
+    error!!! It is because in Compcert memory model, freeing a nullptr
+    is not considerd U.B. Or we can just prove that drop_box_rec is
+    total (has no any UB) ? *)
+    deref_loc ty m b1 ofs1 (Vptr b2 ofs2) ->
+    (* if v is nullptr, can we treat it as memory error? *)
+    extcall_free_sem ge [(Vptr b2 ofs2)] m E0 Vundef m1 ->
     drop_box_rec b ofs m1 tys m2 ->
     drop_box_rec b ofs m (ty :: tys) m2
 .
@@ -1450,6 +1457,7 @@ generate Sskip for them *)
     (* simulate step_drop_box in RustIRsem *)
     (PADDR: eval_place ge le m p b ofs)
     (PTY: typeof_place p = Tbox ty)
+    (* If the result of deref_loc is not a pointer, it is also a case of memory error!!! *)
     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
     (* Simulate free semantics *)
     (FREE: extcall_free_sem ge [Vptr b' ofs'] m E0 Vundef m'),

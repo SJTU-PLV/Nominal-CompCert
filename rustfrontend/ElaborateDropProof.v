@@ -1793,11 +1793,13 @@ Proof.
     intros. inv DROP.
     exploit deref_loc_rec_inject; eauto.
     intros (tv & A & B).
+    inv B.
+    exploit deref_loc_inject; eauto.
+    intros (tv & B1 & B2). inv B2.
     exploit extcall_free_injp. eauto. instantiate (2:=j). eauto.
     intros (tm' & Hm' & C & D).
     exploit IHtyl; eauto.
     intros (tj' & tm2' & tHm' & E & F).
-    inv B. 
     exists tj'. exists tm2'. exists tHm'. split; eauto. econstructor; eauto.
     transitivity  (injpw j m0 tm' Hm'); eauto. 
 Qed.

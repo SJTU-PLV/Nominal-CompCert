@@ -390,7 +390,7 @@ Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_vari
       (MSTMT: makeseq (drop_glue_for_box_rec field_param tys) = ts)
       (CHILDTY: drop_glue_children_types fty = co_ty :: tys)
       (CALLARG: call_arg = (deref_arg_rec co_ty field_param tys)),
-    match_dropmemb_stmt co_id arg Struct (Some (drop_member_comp fid fty co_ty tys))
+      match_dropmemb_stmt co_id arg Struct (Some (drop_member_comp fid fty co_ty tys))
       (Clight.Ssequence (call_composite_drop_glue call_arg (Clight.typeof call_arg) drop_id) ts)
 | match_drop_in_enum_comp: forall id fid fty tys drop_id ts uid ufid call_arg orgs co_ty,
     let field_param := Efield (Efield arg ufid (Tunion uid noattr)) fid (to_ctype fty) in
@@ -404,13 +404,16 @@ Inductive match_dropmemb_stmt (co_id: ident) (arg: Clight.expr) : struct_or_vari
     (Clight.Ssequence (call_composite_drop_glue call_arg (Clight.typeof call_arg) drop_id) ts)
 | match_drop_box_struct: forall fid fty tys,
     let field_param := Efield arg fid (to_ctype fty) in
-    forall (FTYLAST: fty = last tys fty),
+    forall (FTYLAST: fty = last tys fty)
+      (* some well-formed spec for the generated tys *)
+      (WFTYS: forall ty, In ty tys -> exists ty', ty = Tbox ty'),
     match_dropmemb_stmt co_id arg Struct (Some (drop_member_box fid fty tys))
       (makeseq (drop_glue_for_box_rec field_param tys))
 | match_drop_box_enum: forall fid fty tys uid ufid,
     let field_param := Efield (Efield arg ufid (Tunion uid noattr)) fid (to_ctype fty) in
     forall (ECONSIST: enum_consistent co_id fid uid ufid)
-    (FTYLAST: fty = last tys fty),
+      (FTYLAST: fty = last tys fty)
+      (WFTYS: forall ty, In ty tys -> exists ty', ty = Tbox ty'),
     match_dropmemb_stmt co_id arg TaggedUnion (Some (drop_member_box fid fty tys))
     (makeseq (drop_glue_for_box_rec field_param tys))
 | match_drop_none: forall sv,
@@ -1579,6 +1582,46 @@ Proof.
 Qed.
 
 
+Lemma app_not_nil {A: Type}:  forall (l1 l2: list A) (a b: A),
+    l1 ++ (a :: nil) = b :: l2 ->
+    (a = b /\ l1 = nil /\ l2 = nil)
+    \/ (exists l1', l1 = b :: l1' /\ l2 = l1' ++ (a::nil)).
+Proof.
+  induction l1; simpl; intros.
+  - destruct l2; inv H. auto.
+  - inv H. destruct l1.
+    + exploit (IHl1 nil a0 a0). auto.
+      intros [(A1 & A2 & A3)|(A3 & A4 & A5)]; subst.
+      * right. eauto.
+      * inv A4.
+    + exploit (IHl1 (l1 ++ [b]) b a). auto.
+      intros [(A1 & A2 & A3)|(A3 & A4 & A5)]; subst.
+      inv A2. inv A4.
+      right. exists (a::A3). auto.
+Qed.
+
+(* The first element must be struct/variant/box, the rest of the list must be box *)
+Lemma drop_glue_children_types_wf: forall ty tys hty,
+    drop_glue_children_types ty = hty :: tys ->
+    ((exists orgs id, hty = Tstruct orgs id) \/
+       (exists orgs id, hty = Tvariant orgs id) \/
+       (exists ty', hty = Tbox ty'))
+    /\ (forall t, In t tys -> exists ty', t = Tbox ty').
+Proof.
+  induction ty; simpl; intros; try congruence.
+  - eapply app_not_nil in H.
+    destruct H as [(A1 & A2 & A3)| (A1 & A2 & A3)]; subst.
+    + split. eauto. intros. inv H.
+    + exploit IHty. eauto. intros (B1 & B2).
+      split. auto.
+      intros. eapply in_app in H. destruct H; eauto.
+      inv H; eauto. inv H0.
+  - inv H. split; eauto.
+    intros. inv H.
+  - inv H. split; eauto.
+    intros. inv H.
+Qed.
+    
 Lemma match_dropmemb_stmt_struct_member: forall id arg fid fty,
     match_dropmemb_stmt id arg Struct (type_to_drop_member_state ge fid fty) (drop_glue_for_member ce dropm arg (Member_plain fid fty)).
 Proof.
@@ -1589,17 +1632,20 @@ Proof.
   unfold drop_glue_for_type.
   destruct (drop_glue_children_types fty) eqn: CHILDTYS.
   econstructor.
-  destruct t; try econstructor; eauto.
-  1-8 :
-    erewrite last_default_unrelate; simpl;
-    eapply drop_glue_children_types_last in CHILDTYS; subst;
-    destruct l; simpl; eauto.
-  unfold dropm. simpl.
-  destruct ((generate_dropm prog) ! i) eqn: DM.
-  econstructor; eauto. econstructor.
-  unfold dropm. simpl.
-  destruct ((generate_dropm prog) ! i) eqn: DM.
-  econstructor; eauto. econstructor.
+  exploit drop_glue_children_types_wf; eauto. intros (A1 & A2).
+  destruct A1 as [ (orgs & i & ?)|[(orgs & i & ?) | (ty' & ?)] ]; subst.
+  - unfold dropm. simpl.
+    destruct ((generate_dropm prog) ! i) eqn: DM.
+    econstructor; eauto. econstructor.
+  - unfold dropm. simpl.
+    destruct ((generate_dropm prog) ! i) eqn: DM.
+    econstructor; eauto. econstructor.
+  - econstructor.
+    simpl. 
+    eapply drop_glue_children_types_last in CHILDTYS; subst.        
+    destruct l. simpl; eauto.
+    erewrite last_default_unrelate at 1. eauto.
+    intros. inv H. eauto. eauto.
 Qed.
 
 Lemma match_dropmemb_stmt_enum_member:
@@ -1615,17 +1661,20 @@ Proof.
   unfold drop_glue_for_type.
   destruct (drop_glue_children_types fty) eqn: CHILDTYS.
   econstructor.
-destruct t; try econstructor; eauto.
-  1-8 :
-    erewrite last_default_unrelate; simpl;
-    eapply drop_glue_children_types_last in CHILDTYS; subst;
-  destruct l; simpl; eauto.
-  unfold dropm. simpl.
-  destruct ((generate_dropm prog) ! i) eqn: DM.
-  econstructor; eauto. econstructor.
-  unfold dropm. simpl.
-  destruct ((generate_dropm prog) ! i) eqn: DM.
-  econstructor; eauto. econstructor.
+  exploit drop_glue_children_types_wf; eauto. intros (A1 & A2).
+  destruct A1 as [ (orgs & i & ?)|[(orgs & i & ?) | (ty' & ?)] ]; subst.
+  - unfold dropm. simpl.
+    destruct ((generate_dropm prog) ! i) eqn: DM.
+    econstructor; eauto. econstructor.
+  - unfold dropm. simpl.
+    destruct ((generate_dropm prog) ! i) eqn: DM.
+    econstructor; eauto. econstructor.
+  - econstructor. auto.
+    simpl. 
+    eapply drop_glue_children_types_last in CHILDTYS; subst.        
+    destruct l. simpl; eauto.
+    erewrite last_default_unrelate at 1. eauto.
+    intros. inv H0. eauto. eauto.
 Qed.
 
 
@@ -1836,6 +1885,8 @@ Lemma drop_box_rec_injp_acc: forall tys m m' tm j Hm te le b ofs tb tofs arg tk 
     (DROPBOX: drop_box_rec ge b ofs m tys m')
     (EVALARG: eval_lvalue tge te le tm arg tb tofs Full)
     (HTY: Clight.typeof arg = to_ctype (last tys hty))
+    (* all types in tys are Box type *)
+    (WFTYS: forall ty, In ty tys -> exists ty', ty = Tbox ty')
     (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs))
     (UNREACH: forall tm1, Mem.unchanged_on (loc_out_of_reach j m) tm tm1 ->
                      eval_lvalue tge te le tm1 arg tb tofs Full),
@@ -1859,26 +1910,30 @@ Proof.
   rewrite HTY. f_equal. destruct tys; auto.
   eapply last_default_unrelate.
   intros (tb1 & tofs1 & EVALARG1 & VINJ1).
+  (* deref_loc *)
+  exploit deref_loc_inject; eauto.
+  intros (tv & DEREF & VINJ2).  
   (* extcall_free *)  
   exploit extcall_free_injp; eauto.
   instantiate (1 := Hm). instantiate (1 := tge).
   intros (tm1 & Hm1 & FREE1 & INJP1).
   (* use I.H. *)
-  exploit IHtys. eauto. eapply H5.
-  eapply UNREACH. inv INJP1. eapply H13.
+  exploit IHtys. eauto. eapply H6.
+  eapply UNREACH. inv INJP1. eapply H14.
   instantiate (1 := a).
   rewrite HTY. f_equal. destruct tys; auto.
   eapply last_default_unrelate.
+  eauto.
   eauto.
   intros. eapply UNREACH.  
   eapply Mem.unchanged_on_trans. inv INJP1. eauto.
   (* prove loc_out_of_reach j m1 implies loc_out_of_reach j m *)
   eapply Mem.unchanged_on_implies. eauto.
   intros. red. intros.
-  generalize (H0 b2 delta H4).
-  intros BPERM. inv H3.
+  generalize (H0 _ delta H5).
+  intros BPERM. inv H4.
   intro. eapply BPERM.
-  eapply Mem.perm_free_3. eauto. auto.
+  eapply Mem.perm_free_3. eauto. auto. auto.
 
   instantiate (1:= Hm1). instantiate (1 := tk).
   instantiate (1 := tf).
@@ -1902,11 +1957,14 @@ Proof.
     econstructor. eauto. eauto.
     erewrite Ptrofs.add_zero_l in TFINDFUN. unfold tge.
     inv TRFREE. eauto. intuition. }
-    
+
+  
   do 3 eexists. split.
   (* step *)
   + econstructor.
-     econstructor. eapply star_step.     
+    econstructor. eapply star_step.
+    assert (TYEQ: (Clight.typeof (deref_arg_rec a arg tys)) = to_ctype a).
+    { destruct tys; simpl. auto. auto. }
     (* step to call drop *)
     { econstructor. simpl. eauto.
       econstructor. eapply eval_Evar_global.
@@ -1914,28 +1972,33 @@ Proof.
       auto.
       eauto. simpl. eapply Clight.deref_loc_reference. auto.
       econstructor. econstructor. eauto.
+      (* deref_loc *)
+      rewrite TYEQ. eauto.
       (* sem_cast *)
-      simpl. instantiate (1:= (Vptr tb1 tofs1)).
-      unfold Cop.sem_cast. simpl. auto.
+      instantiate (1 := tv).
+      rewrite TYEQ.
+      (* show that a must be Tbox *)
+      exploit WFTYS. left. eauto. intros (ty' & A). subst.
+      simpl.
+      unfold Cop.sem_cast. simpl. inv VINJ2. auto.
       (* eval_exprlist *)
       econstructor.
       eauto. simpl.
-      auto.
-      (* } *)
-(*     (* step to external call *) *)
-(*     eapply star_step. *)
-(*     { eapply Clight.step_external_function. eauto. *)
-(*       eauto. } *)
-(*     eapply star_step.     *)
-(*     econstructor. *)
-(*     eapply star_step.     *)
-(*     econstructor. *)
-(*     eapply plus_star. eauto. *)
-(*     1-5: eauto. *)
-(*   + etransitivity. eauto. *)
-(*     eauto. *)
-(* Qed. *)
-Admitted.
+      auto. }
+    (* step to external call *)
+    eapply star_step.
+    { eapply Clight.step_external_function. eauto.
+      eauto. }
+    eapply star_step.
+    econstructor.
+    eapply star_step.
+    econstructor.
+    eapply plus_star. eauto.
+    1-5: eauto.
+  + etransitivity. eauto.
+    eauto.
+Qed.
+
     
 Lemma type_of_params_trans: forall l,
 Ctypes.type_of_params (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) l) =
@@ -2074,7 +2137,8 @@ Proof.
         (* prove fty = last tys fty to preserve this invariant to step_drop_box_rec *)
         exploit  drop_glue_children_types_last; eauto.
         intros. subst. destruct tys; auto.
-        eapply last_default_unrelate.        
+        eapply last_default_unrelate.
+        eapply drop_glue_children_types_wf. eauto.
         eexists. split.
         reflexivity. f_equal. }
 
@@ -2203,7 +2267,8 @@ Proof.
         econstructor. eauto.
         exploit  drop_glue_children_types_last; eauto.
         intros. subst. destruct tys; auto.
-        eapply last_default_unrelate.        
+        eapply last_default_unrelate.
+        eapply drop_glue_children_types_wf. eauto.
         eexists. split.
         reflexivity. f_equal. }
 
@@ -2351,7 +2416,8 @@ Proof.
         econstructor.
         exploit  drop_glue_children_types_last; eauto.
         intros. subst. destruct tys; auto.
-        eapply last_default_unrelate.        
+        eapply last_default_unrelate.
+        eapply drop_glue_children_types_wf. eauto.
         eexists. split.
         reflexivity. f_equal. }
       (* match_dropmemb_stmt idmatch_dropmemb_stmt id *)
@@ -2517,7 +2583,8 @@ Proof.
         econstructor. eauto.
         exploit  drop_glue_children_types_last; eauto.
         intros. subst. destruct tys; auto.
-        eapply last_default_unrelate.        
+        eapply last_default_unrelate.
+        eapply drop_glue_children_types_wf. eauto.
         eexists. split.
         reflexivity. f_equal. }
       (* match_dropmemb_stmt idmatch_dropmemb_stmt id *)     
@@ -2558,7 +2625,7 @@ Proof.
       simpl. unfold co_ty. auto.
       eauto. auto.
     }
-
+    
     exploit drop_box_rec_injp_acc; eauto.
     assert (param_id <> free_id).
     { exploit (generate_drops_inv). eapply match_prog_comp_env. eauto.

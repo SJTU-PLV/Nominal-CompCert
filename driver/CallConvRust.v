@@ -457,7 +457,7 @@ Proof.
   induction tyl; intros.
   inv H. eapply ro_acc_refl.
   inv H. eapply ro_acc_trans.
-  inv H4. eapply ro_acc_free. eauto.
+  inv H5. eapply ro_acc_free. eauto.
   eauto.
 Qed.
 
