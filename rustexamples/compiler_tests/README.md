@@ -8,7 +8,8 @@ This directory stores the test cases used to test the compiler.
 
 `fib.rs`: it calculates the fibonacci number
 
-`list1.rs`: it implements a list. The main function calls add_one to plus one for each list node and then calculates the sum of the list.
+`list1.rs`, `list2.rs`, `list3.rs` and `list4.rs`: they implement the list data structure in different ways.
 
+`elaborate_drop.rs`: a test case comes from the Rust RFC-0320 (https://rust-lang.github.io/rfcs/0320-nonzeroing-dynamic-drop.html)
 
-
+`nested_box.rs`: a test case used to test partial move and its effect on drop elaboration

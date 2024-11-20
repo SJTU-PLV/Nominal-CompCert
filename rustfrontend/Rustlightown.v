@@ -1267,7 +1267,7 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m nil m
 | drop_box_rec_cons: forall m m1 m2 b1 ofs1 ty tys b2 ofs2,
     (* (b1, ofs1) is the address of [ty], we want to free the memory
-    location stored in (b1,ofs1) *)
+    location stored in (b1,ofs1). TODO: To prevent the complexity of deref_loc, we can use deref_loc_rec (ty::tys) instead of just tys, but we also need to change drop_glue_for_box_rec in Clightgen *)
     deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
     (* if the result of deref_loc is not a pointer, it must be memory
     error!!! It is because in Compcert memory model, freeing a nullptr

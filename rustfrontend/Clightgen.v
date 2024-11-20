@@ -164,7 +164,7 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
   match tys with
   | nil => nil
   | ty :: tys1 =>
-      (* the value of ty *)
+      (* the value of ty. If we change tys1 to (ty::tys1) and use free(&arg), it is difficult to know the type ty points to. We just do not want to know the type of the block to be freed, we just need to know the type (here is ty) of the pointer points to this block *)
       let arg1 := deref_arg_rec ty arg tys1 in
       (* free(&arg1): because arg1 is the lvalue of the memory
       location to be freed, so we should pass the address of arg1 to

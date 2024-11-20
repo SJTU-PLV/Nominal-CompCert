@@ -36,11 +36,11 @@ let object_filename sourcename =
   else
     tmp_file ".o"
 
-(* From Clight to asm *)
+(* From Clight to asm. It is used in Rust Compiler *)
 
 let compile_clight prog name =
   (* Print all the intermediate programs *)
-  option_dprepro := true;
+  (* option_dprepro := true;
   option_dparse := true;
   option_dcmedium := true;
   option_dclight := true;
@@ -49,7 +49,7 @@ let compile_clight prog name =
   option_dltl := true;
   option_dalloctrace := true;
   option_dmach := true;
-  option_dasm := true;
+  option_dasm := true; *)
   let set_dest dst opt ext =
     dst := if !opt then Some (output_filename name ~suffix:ext)
       else None in
@@ -449,7 +449,9 @@ let cmdline_actions =
 
 (* Debug the Rust compiler *)
 
-let stdout_format = Format.formatter_of_out_channel stdout
+let compile_log_file = "rust_compile.log"
+
+let stdout_format = Format.formatter_of_out_channel (open_out compile_log_file)
 
 let debug_Rustlightgen (syntax: Rustsyntax.program) =
   match Rustlightgen.transl_program syntax with
@@ -532,7 +534,7 @@ let _ =
     let items = RustsurfaceDriver.parse test_case in
     let module R = Rustsurface in
     Format.fprintf stdout_format "Rustsurface to Rustsyntax@.";
-    let m_syntax = items |> R.prog_of_items |> R.To_syntax.transl_prog in
+    let m_syntax = items |> R.prog_of_items |> R.To_syntax.transl_prog stdout_format in
     let (syntax_result, symmap) = R.To_syntax.(run_monad m_syntax skeleton_st) in
     (match syntax_result with
      | Result.Ok syntax ->
@@ -563,10 +565,10 @@ let _ =
       Ctypes.prog_comp_env = clight_prog.Ctypes.prog_comp_env;
     } in
   (* The following code compiles the generated Clight program  *)
-  let name = "test_rust" in
-  let objfile = compile_clight clight_prog' name in
+  let output_name = output_filename test_case ~suffix: "" in
+  let objfile = compile_clight clight_prog' test_case in
   (* invoke the linker *)
-  linker (name) [objfile];
+  linker (output_name) [objfile];
   check_errors ()
   
 else

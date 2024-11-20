@@ -222,7 +222,7 @@ expr:
   | p = path_expr { let (x1, x2) = p in Ecall ((Eaccess (x1, x2)), [Eunit]) }
   | x1 = ID; COLON2; x2 = ID; LPAREN; e = expr; RPAREN
     { Ecall ((Eaccess (x1, x2)), [e]) }
-    (* support Estruct *)
+    (* support Estruct. *)
   | x = ID; LBRACE; flds = struct_fields; RBRACE { Estruct (x, fst flds, snd flds) }
   | SUBS; e = expr { Eunop (Cop.Oneg, e) }
   | NOT; e = expr { Eunop (Cop.Onotbool, e) }
@@ -240,6 +240,44 @@ expr:
   | e1 = expr; AND; e2 = expr { Ebinop (Cop.Oand, e1, e2) }
   | callee = expr ; LPAREN; args = args_expr; RPAREN { Ecall (callee, args) }
   | lit = STR_LITERAL { Estr lit }
+
+// Adhoc: copy the expr to make a expr except sturct expr. I have no idea how to refactor this code...
+expr_except_struct:
+  | LPAREN; e = expr_except_struct; RPAREN { e }
+  | LPAREN; RPAREN { Eunit }
+  | i = INT
+    { Eval (Values.Vint (Camlcoq.Z.of_sint i),
+            Tint (Ctypes.I32, Ctypes.Signed)) }
+  | TRUE { Eval (Values.Vint (Camlcoq.Z.one), bool_ty) }
+  | FALSE { Eval (Values.Vint (Camlcoq.Z.zero), bool_ty) }
+  | x = ID { Evar x }
+  | BOX; LPAREN; e = expr_except_struct; RPAREN { Ebox e }
+  | REF; MUT; e = expr_except_struct { Eref (e,Rusttypes.Mutable)} %prec REF
+  | REF; e = expr_except_struct { Eref (e,Rusttypes.Immutable)}
+  | e = expr_except_struct; DOT; x = ID { Efield (e, x) }
+  | ASTERISK; e = expr_except_struct { Ederef e }
+  | e1 = expr_except_struct; ASSIGN; e2 = expr_except_struct { Eassign (e1, e2) }
+  (* Adhoc: support zero-ary constructor*)
+  | p = path_expr { let (x1, x2) = p in Ecall ((Eaccess (x1, x2)), [Eunit]) }
+  | x1 = ID; COLON2; x2 = ID; LPAREN; e = expr_except_struct; RPAREN
+    { Ecall ((Eaccess (x1, x2)), [e]) }
+  | SUBS; e = expr_except_struct { Eunop (Cop.Oneg, e) }
+  | NOT; e = expr_except_struct { Eunop (Cop.Onotbool, e) }
+  | e1 = expr_except_struct; ADD; e2 = expr_except_struct { Ebinop (Cop.Oadd, e1, e2) }
+  | e1 = expr_except_struct; SUBS; e2 = expr_except_struct { Ebinop (Cop.Osub, e1, e2) }
+  | e1 = expr_except_struct; ASTERISK; e2 = expr_except_struct { Ebinop (Cop.Omul, e1, e2) }
+  | e1 = expr_except_struct; DIV; e2 = expr_except_struct { Ebinop (Cop.Odiv, e1, e2) }
+  | e1 = expr_except_struct; LE; e2 = expr_except_struct { Ebinop (Cop.Ole, e1, e2) }
+  | e1 = expr_except_struct; GE; e2 = expr_except_struct { Ebinop (Cop.Oge, e1, e2) }
+  | e1 = expr_except_struct; RANGLE; e2 = expr_except_struct { Ebinop (Cop.Ogt, e1, e2) }
+  | e1 = expr_except_struct; LANGLE; e2 = expr_except_struct { Ebinop (Cop.Olt, e1, e2) }
+  | e1 = expr_except_struct; EQ; e2 = expr_except_struct { Ebinop (Cop.Oeq, e1, e2) }
+  | e1 = expr_except_struct; NE; e2 = expr_except_struct { Ebinop (Cop.One, e1, e2) }
+  | e1 = expr_except_struct; OR; e2 = expr_except_struct { Ebinop (Cop.Oor, e1, e2) }
+  | e1 = expr_except_struct; AND; e2 = expr_except_struct { Ebinop (Cop.Oand, e1, e2) }
+  | callee = expr_except_struct ; LPAREN; args = args_expr; RPAREN { Ecall (callee, args) }
+  | lit = STR_LITERAL { Estr lit }
+
 
 args_pattern:
   | { [] }
@@ -313,7 +351,8 @@ stmt_item:
   | CONTINUE { Scontinue }
   | RETURN; { Sreturn None }
   | RETURN; e = expr { Sreturn (Some e) }
-  | MATCH; e = expr; LBRACE; arms = match_arms; RBRACE { Smatch (e, arms) }
+  (* In rust document, this expr must not be struct expr *)
+  | MATCH; e = expr_except_struct; LBRACE; arms = match_arms; RBRACE { Smatch (e, arms) }
 
 stmt:
   | s = stmt_item { s }

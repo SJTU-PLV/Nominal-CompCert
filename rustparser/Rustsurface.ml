@@ -1444,7 +1444,7 @@ module To_syntax = struct
     return (comp_defs, drops)
       
 
-  let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
+  let transl_prog log (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     (* convert composite declarations to support mutual recursive ADT *)
     map_m p.composite_decls
       (fun (x, s_or_e, orgs, rels) -> add_composite_decl x s_or_e orgs rels) >>= fun _ ->
@@ -1473,17 +1473,17 @@ module To_syntax = struct
     let empty_malloc = (Dropglue.malloc_id, AST.Gfun(Rusttypes.External([], [], AST.EF_malloc, Rusttypes.Tnil, Rusttypes.Tunit, AST.cc_default))) in
     let empty_free = (Dropglue.free_id, AST.Gfun(Rusttypes.External([], [], AST.EF_free, Rusttypes.Tnil, Rusttypes.Tunit, AST.cc_default))) in
     (* Print RustAST *)
-    Format.fprintf Format.std_formatter "RustAST: @.";
-    Format.fprintf Format.std_formatter "@[<v 0>";
-    List.iter (pp_print_composite st.rev_symmap Format.std_formatter) comp_defs;
+    Format.fprintf log "RustAST: @.";
+    Format.fprintf log "@[<v 0>";
+    List.iter (pp_print_composite st.rev_symmap log) comp_defs;
     List.iter
       (fun (i, g) -> match g with
          | AST.Gfun (Rusttypes.Internal f) ->
-           pp_print_function st.rev_symmap Format.std_formatter i f;
-           Format.fprintf Format.std_formatter "\n"
+           pp_print_function st.rev_symmap log i f;
+           Format.fprintf log "\n"
          | _ -> failwith "unreachable (transl_fn)")
       fun_defs;
-    Format.fprintf Format.std_formatter "@]@.";
+    Format.fprintf log "@]@.";
     (* generate prog_comp_env *)
     match Rusttypes.build_composite_env comp_defs with
     | Errors.OK comp_env ->
