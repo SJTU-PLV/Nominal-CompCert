@@ -169,7 +169,9 @@ Fixpoint drop_glue_for_box_rec (arg: Clight.expr) (tys: list type) : list Clight
       (* free(&arg1): because arg1 is the lvalue of the memory
       location to be freed, so we should pass the address of arg1 to
       free *)
-      let free_stmt := call_free (Eaddrof arg1 (Ctypes.Tpointer (Clight.typeof arg1) noattr)) in
+      (* free(arg1): arg1 is the lvalue stores the memory location to be freed *)
+      let free_stmt := call_free arg1 in
+      (* let free_stmt := call_free (Eaddrof arg1 (Ctypes.Tpointer (Clight.typeof arg1) noattr)) in *)
       (* free the parent of arg1 *)
       free_stmt :: drop_glue_for_box_rec arg tys1
   end.

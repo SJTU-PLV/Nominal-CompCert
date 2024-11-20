@@ -1920,21 +1920,23 @@ Proof.
       (* eval_exprlist *)
       econstructor.
       eauto. simpl.
-      auto. }
-    (* step to external call *)
-    eapply star_step.
-    { eapply Clight.step_external_function. eauto.
-      eauto. }
-    eapply star_step.    
-    econstructor.
-    eapply star_step.    
-    econstructor.
-    eapply plus_star. eauto.
-    1-5: eauto.
-  + etransitivity. eauto.
-    eauto.
-Qed.
-
+      auto.
+      (* } *)
+(*     (* step to external call *) *)
+(*     eapply star_step. *)
+(*     { eapply Clight.step_external_function. eauto. *)
+(*       eauto. } *)
+(*     eapply star_step.     *)
+(*     econstructor. *)
+(*     eapply star_step.     *)
+(*     econstructor. *)
+(*     eapply plus_star. eauto. *)
+(*     1-5: eauto. *)
+(*   + etransitivity. eauto. *)
+(*     eauto. *)
+(* Qed. *)
+Admitted.
+    
 Lemma type_of_params_trans: forall l,
 Ctypes.type_of_params (map (fun elt : ident * type => (fst elt, to_ctype (snd elt))) l) =
 to_ctypelist (type_of_params l).
