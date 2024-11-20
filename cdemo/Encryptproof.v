@@ -106,6 +106,138 @@ Proof.
   constructor. constructor; eauto.
 Qed.
 
+
+
+Lemma undef_regs_pc :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs PC = rs PC.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq PC r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rdi :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RDI = rs RDI.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RDI r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rsi :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RSI = rs RSI.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RSI r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rsp :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RSP = rs RSP.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RSP r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rax :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RAX = rs RAX.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RAX r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rbx :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RBX = rs RBX.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RBX r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_callee_save :
+  forall (rs:regset) r,
+    is_callee_save r = true ->
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs (preg_of r) = rs (preg_of r).
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  destruct r; cbn in *; try congruence;
+    intros; destruct H0 as [A|[B|[C|[D|[E|F]]]]]; subst; try congruence.
+Qed.
+
+Lemma undef_regs_nil :
+  forall rs,
+    undef_regs nil rs = rs.
+Proof.
+  intros. reflexivity. Qed.
+
+Ltac Pgso := rewrite Pregmap.gso; try congruence.
+Ltac Pgss := rewrite Pregmap.gss.
+
+Lemma undef_regs_spec: forall l rs r,
+    (undef_regs l rs) r = if (In_dec preg_eq r l) then Vundef else rs r.
+Proof.
+  induction l; intros.
+  - simpl. reflexivity.
+  - simpl. destr. destr_in o. rewrite IHl. destr. Pgss. reflexivity.
+    rewrite IHl. destr.
+    rewrite IHl. destr. Pgso. intro.
+    apply n. left. auto.
+Qed.
+
+(** This lemmas (and functional extensionality of register sets) are not necessary but can be used to simplify the proof *)
+Lemma undef_regs_extension_1:
+  forall l rs v r,
+    (forall r' : preg, In r' l -> r <> r') ->
+      (undef_regs l rs) # r <- v = undef_regs l (rs # r <- v).
+Proof.
+  intros.
+  apply Axioms.functional_extensionality.
+  intros. 
+  destruct (preg_eq x r).
+  - subst. Pgss. rewrite undef_regs_other; auto. Pgss. reflexivity.
+  - Pgso. rewrite !undef_regs_spec. destr. Pgso.
+Qed.
+
+Lemma undef_regs_extension_2:
+  forall l rs, (undef_regs l (undef_regs l rs)) = undef_regs l rs.
+Proof.
+  intros. apply Axioms.functional_extensionality.
+  intros. rewrite !undef_regs_spec. destr.
+Qed.
+
+Lemma enter_func_exec:
+  forall m (rs0: regset),
+      (rs0 RSP) <> Vundef -> Val.has_type (rs0 RSP) Tptr ->
+      (rs0 RA) <> Vundef -> Val.has_type (rs0 RA) Tptr ->
+      exists m1 m2 m3 tsp,
+    Mem.alloc m 0 16 = (m1,tsp)
+    /\ Mem.store Mptr m1 tsp (Ptrofs.unsigned Ptrofs.zero) (rs0 RSP) = Some m2
+    /\ Mem.store Mptr m2 tsp (Ptrofs.unsigned (Ptrofs.repr 8)) (rs0 RA) = Some m3
+    /\ Mem.load Mptr m3 tsp (Ptrofs.unsigned (Ptrofs.repr 8)) = Some (rs0 RA)
+    /\ Mem.load Mptr m3 tsp (Ptrofs.unsigned (Ptrofs.zero)) = Some (rs0 RSP)
+    /\ Mem.unchanged_on (fun _ _ => True) m m3.
+Admitted.
+  
 Lemma CAinjp_simulation_encrypt : forward_simulation (cc_c_asm_injp_new) L_E (Asm.semantics b1).
 Proof.
   constructor.
@@ -122,18 +254,19 @@ Proof.
   - (* initial *)
     intros. inv H. inv H0.
     exists (Mem.support m2, State rs0 m2 true).
-    split.
-    + constructor; eauto.
-      econstructor; eauto.
-      generalize  match_program_id. intro TRAN.
-      eapply Genv.find_funct_transf in TRAN; eauto.
+    generalize  match_program_id. intro TRAN.
+    eapply Genv.find_funct_transf in TRAN; eauto.
+    split; auto. split; auto.
+    + econstructor; eauto.
       inv H14. subst tsp0. congruence.
     + constructor; eauto.
       subst targs. rewrite loc_arguments_int_ptr in H9.
       simpl in H9. inv H9. inv H7. inv H9. inv H4.
+      unfold Genv.find_funct in TRAN. subst tvf.
+      destruct (rs0 PC) eqn:HPC; try congruence. destruct Ptrofs.eq_dec; try congruence.
       econstructor; simpl; eauto.
       inv H14. subst tsp0. congruence.
-      inv H3. reflexivity.
+      inv H3. reflexivity. subst i0. eauto.
   - (* final *)
     intros. inv H0. inv H. inv H0.
     cbn in *.
@@ -148,16 +281,88 @@ Proof.
     Ltac find_instr := cbn; try rewrite Ptrofs.unsigned_repr; try rlia; cbn; reflexivity.
     intros. inv H. inv H0. inv H.
     cbn in *. inv H7. rename m3 into m2. rename m into m1.
+     eapply Genv.find_symbol_match in FINDKEY as FINDK'; eauto.
+     destruct FINDK' as [b_mem' [VINJM FINDK']].
+    rename H18 into Hpc. rename H17 into Hrsi. rename H13 into Hrdi.
     assert (exists s2': Asm.state,
                plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b1) (State rs0 m2 true) E0 s2'
                /\ ms (injpw j m1 m2 Hm )(Final m') (Mem.support m2, s2')).
     {
+      exploit enter_func_exec; eauto.
+      intros (m2'1 & m2'2 & m2'3 & tsp & ALLOC & STORE1 & STORE2 & LOAD2 & LOAD1 & UNC).
+      apply Mem.fresh_block_alloc in ALLOC as FRESH.
+      exploit Mem.alloc_right_inject; eauto. intro INJ11.
+      exploit Mem.store_outside_inject; eauto. intros. eapply FRESH. eapply Mem.valid_block_inject_2; eauto. intro INJ12.
+      exploit Mem.store_outside_inject; eauto. intros. eapply FRESH. eapply Mem.valid_block_inject_2; eauto. intro INJ13.
+      exploit Mem.store_mapped_inject; eauto.
+      intros (m2'4 & STORE3 & INJ14).
       eexists. split.
       - (* steps *)
         econstructor.
+        (* Pallocframe *)
         econstructor; eauto.
-        find_instr.
-          
+        find_instr. simpl. rewrite ALLOC. rewrite Ptrofs.add_zero. rewrite STORE1.
+        rewrite Ptrofs.add_zero_l. rewrite STORE2. unfold nextinstr.
+        repeat try Pgso. rewrite Hpc. cbn.
+        rewrite Ptrofs.add_zero_l. reflexivity.
+        (*read key*)
+        eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
+        unfold exec_load. unfold Mem.loadv. unfold eval_addrmode. Ap64. cbn.
+        unfold Genv.symbol_address in *. rewrite FINDK'. Ap64.
+        rewrite Ptrofs.add_zero_l.
+        unfold Ptrofs.of_int64. rewrite Int64.unsigned_zero.
+        exploit Mem.load_inject. apply INJ13. apply LOAD. eauto.
+        intros [v2' [LOADK' INJV2]]. inv INJV2. rewrite Z.add_0_r in LOADK'.
+        fold Ptrofs.zero. rewrite LOADK'.
+        unfold nextinstr_nf, nextinstr. rewrite undef_regs_pc. Pgso. Pgss.
+        cbn.
+        rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_one. simpl.
+        reflexivity.
+        (*xor*)
+        eapply star_step; eauto. econstructor; eauto. Simplif.
+        find_instr. simpl. Ap64. do 2 Pgso. rewrite undef_regs_rdi.
+        rewrite undef_regs_rax. do 4 Pgso. Pgss.
+        unfold nextinstr_nf, nextinstr. cbn.
+        rewrite undef_regs_pc. Pgso. Pgss. cbn.
+        compute_pc.
+        rewrite !undef_regs_extension_1.
+        rewrite undef_regs_extension_2.
+        rewrite <- undef_regs_extension_1.
+        reflexivity. admit. admit. admit. admit. admit.
+        (*store output*) 
+        eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. cbn.
+        Ap64. unfold exec_store. cbn. unfold eval_addrmode. Ap64. simpl. cbn.
+        rewrite undef_regs_rsi. repeat Pgso.
+        rewrite undef_regs_rdi. rewrite Hrsi. Pgss. cbn. Ap64.
+        rewrite Int64.add_zero_l.
+        unfold Ptrofs.of_int64. rewrite Int64.unsigned_repr.
+        2: { unfold Int64.max_unsigned. cbn. lia. }
+        rewrite Ptrofs.add_zero.
+        unfold Mem.storev. 
+        erewrite Mem.address_inject; eauto with mem.
+        rewrite Hrdi. cbn. rewrite STORE3.
+        unfold nextinstr_nf, nextinstr. cbn.
+        rewrite undef_regs_nil.
+        rewrite !undef_regs_pc. Pgss. cbn.
+        compute_pc.
+        rewrite !undef_regs_extension_1.
+        rewrite undef_regs_extension_2.
+        rewrite <- undef_regs_extension_1.
+        reflexivity. admit. admit. admit. admit.
+        (*free *)
+        assert ({m2'5| Mem.free m2'4 tsp 0 16 = Some m2'5}). admit.
+        destruct X as [m2'5 FREE].
+        eapply star_step. eauto. econstructor; eauto. Simplif. find_instr. cbn.
+        unfold Mem.loadv. rewrite !undef_regs_rsp. simpl. rewrite !Ptrofs.add_zero_l.
+        erewrite Mem.load_store_other; eauto. rewrite LOAD2.
+        erewrite Mem.load_store_other; eauto. rewrite LOAD1.
+        rewrite Ptrofs.unsigned_zero.
+        unfold free'. simpl.
+        rewrite FREE. unfold nextinstr. cbn.
+        compute_pc. reflexivity.
+        admit. admit.
+        admit. traceEq. traceEq.
+      - admit.
     }
     destruct H as [s2' [STEP MS]].  cbn.
     exists (Mem.support m2, s2'). intuition eauto.
@@ -167,4 +372,4 @@ Proof.
     * eapply plus_trans; eauto.
       apply plus_one. auto.
   - auto using well_founded_ltof.
-Qed.
+Admitted.
