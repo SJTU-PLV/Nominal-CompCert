@@ -794,7 +794,7 @@ tr_composite relation *)
 | tr_drop: forall p set_stmt drop_stmt temp pe,
     set_stmt = Clight.Sset temp (Eaddrof pe (Tpointer (to_ctype (typeof_place p)) noattr)) ->
     place_to_cexpr ce tce p = OK pe ->
-    expand_drop ce dropm temp (typeof_place p) = Some drop_stmt ->
+    expand_drop dropm temp (typeof_place p) = Some drop_stmt ->
     tr_stmt (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
 | tr_seq: forall s1 s2 s1' s2',
     tr_stmt s1 s1' ->

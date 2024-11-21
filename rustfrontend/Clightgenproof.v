@@ -3508,8 +3508,8 @@ Proof.
       etransitivity. eauto. eauto.
   (* step_drop_struct *)
   - inv MSTMT. simpl in H. contradiction. 
-    unfold expand_drop in H2. rewrite PTY in H2.
-    destruct (own_type ce (Tstruct orgs id)) eqn: OWNTY; try congruence.
+    unfold expand_drop in H2. rewrite PTY in H2.    
+    simpl in H2.
     destruct (dropm!id) as [glue_id|]eqn: DROPM; try congruence.
     inv H2.
     (* eval_place inject *)
@@ -3593,7 +3593,7 @@ Proof.
   - (** The following code is mostly the same as that in step_drop_struct *)
     inv MSTMT. simpl in H. contradiction. 
     unfold expand_drop in H2. rewrite PTY in H2.
-    destruct (own_type ce (Tvariant orgs id)) eqn: OWNTY; try congruence.
+    simpl in H2.
     destruct (dropm!id) as [glue_id|]eqn: DROPM; try congruence.
     inv H2.
     (* eval_place inject *)

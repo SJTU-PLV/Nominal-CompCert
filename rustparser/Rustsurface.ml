@@ -136,6 +136,8 @@ module To_syntax = struct
                ; local_types: Rusttypes.coq_type IdentMap.t
                ; next_ident: ident
                ; funcs: fn IdentMap.t
+               (* Adhoc: used to record the information (type here) of the identities *)
+               ; fun_decls: Rusttypes.coq_type IdentMap.t
                ; enums: comp_enum' IdentMap.t
                ; composites: Rusttypes.composite_definition IdentMap.t
                ; gvars: (ident * (Rusttypes.coq_type AST.globvar)) list 
@@ -525,6 +527,7 @@ module To_syntax = struct
                             ; local_types = IdentMap.empty
                             ; next_ident = !Camlcoq.next_atom
                             ; funcs = IdentMap.empty
+                            ; fun_decls = IdentMap.empty
                             ; enums = IdentMap.empty
                             ; composites = IdentMap.empty
                             ; gvars = [] 
@@ -622,6 +625,13 @@ module To_syntax = struct
       | Option.None -> (Result.Error (Ename_not_found x), st)
       | Option.Some f -> (Result.Ok (i, f), st)
 
+  let get_fn_decl_type (x: id) : (ident * (Rusttypes.coq_type option)) monad =
+    get_or_new_ident x >>= fun i ->
+    fun st -> match IdentMap.find_opt i st.fun_decls with
+      | Option.None -> (Result.Ok(i, None), st)
+      | Option.Some tyf -> (Result.Ok(i, Some(tyf)), st)
+ 
+
   let reg_local_type (x: id) (t: Rusttypes.coq_type): ident monad =
     get_or_new_ident x >>= fun i ->
     fun st -> (
@@ -690,7 +700,7 @@ module To_syntax = struct
       get_or_new_ident org_id >>= fun org ->
       return (T.Treference (org, m, t'))
 
-  (* Add a function declaration *)
+  (* Add a function declaration to  *)
   let add_fn_decl (x: id) (f: fn_decl) : unit monad =
     get_or_new_ident x >>= fun i ->
     get_st >>= fun st ->
@@ -703,7 +713,11 @@ module To_syntax = struct
     let arg_tys' = typelist_of arg_tys in
     let sg = Rusttypes.signature_of_type arg_tys' ret_ty AST.cc_default in
     let fun_decl = (i, AST.Gfun (Rusttypes.External([], [], AST.EF_external(name, sg), arg_tys', ret_ty, AST.cc_default))) in
-    set_st { st with external_funs = fun_decl :: st.external_funs}
+    let tyf = Rusttypes.Tfunction ([], [], arg_tys', ret_ty, AST.cc_default) in
+    set_st { st with 
+      (* Record the i for this fun_decl *)
+      fun_decls = IdentMap.add i tyf st.fun_decls;
+      external_funs = fun_decl :: st.external_funs}
 
 
   let composite_of_decl i s_or_e a orgs rels =
@@ -1178,15 +1192,22 @@ module To_syntax = struct
       | Option.Some tx -> get_or_new_ident x >>= fun ix ->
         return (Rustsyntax.Evar (ix, tx))
       | Option.None ->
-        get_fn x >>= fun (ix, f) ->
-        transl_ty f.return >>= fun tr' ->
-        let targs = List.map snd f.params in
-        map_m targs transl_ty >>= fun targs' ->
-        let targs'' = typelist_of targs' in
-        convert_origins f.generic_origins >>= fun orgs ->
-        convert_origin_relations f.origin_relations >>= fun rels ->
-        let tf' = Rusttypes.Tfunction (orgs, rels, targs'', tr', AST.cc_default) in
-        return (Rustsyntax.Evar (ix, tf'))
+        (* What if x is an external function? *)
+        get_fn_decl_type x >>= fun (ix, fty) ->
+        match fty with
+        | Some(fty) ->
+          return (Rustsyntax.Evar(ix, fty))
+        | None ->
+          (* It is not an external function. It must be internal function *)
+          get_fn x >>= fun (ix, f) ->
+          transl_ty f.return >>= fun tr' ->
+          let targs = List.map snd f.params in
+          map_m targs transl_ty >>= fun targs' ->
+          let targs'' = typelist_of targs' in
+          convert_origins f.generic_origins >>= fun orgs ->
+          convert_origin_relations f.origin_relations >>= fun rels ->
+          let tf' = Rusttypes.Tfunction (orgs, rels, targs'', tr', AST.cc_default) in
+          return (Rustsyntax.Evar (ix, tf'))
       )
     | Ebox e ->
       transl_expr e >>= fun e ->
@@ -1480,20 +1501,19 @@ module To_syntax = struct
       ) >>= fun drops ->
     return (comp_defs, drops)
       
-
   let transl_prog log (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     (* convert composite declarations to support mutual recursive ADT *)
     map_m p.composite_decls
       (fun (x, s_or_e, orgs, rels) -> add_composite_decl x s_or_e orgs rels) >>= fun _ ->
-    (* Add the declarations of externl function *)
-    map_m p.fun_decls
-      (fun (x, f) -> add_fn_decl x f) >>= fun _ ->
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
     map_m p.strucs
       (fun (x, c, orgs, rels) -> add_composite_struc x c orgs rels) >>= fun _ ->
     map_m p.enums
       (fun (x, c, orgs, rels) -> add_composite_enum x c orgs rels) >>= fun _ ->
+    (* Add the declarations of externl function *)
+    map_m p.fun_decls
+      (fun (x, f) -> add_fn_decl x f) >>= fun _ ->
     map_m p.funcs
       (fun (x, f) ->
          transl_fn f >>= fun f' ->

@@ -215,7 +215,8 @@ drop_in_place_xxx(&Struct{a,b,c} param) {
 (* we assume deref_param is the dereference of the parameter *)
 Definition drop_glue_for_member (m: PTree.t ident) (p: Clight.expr) (memb: member) : Clight.statement :=
   match memb with
-  | Member_plain fid ty =>      
+  | Member_plain fid ty =>
+      (* Use own_type here because type_to_drop_member_state uses own_type *)      
       if own_type ce ty then
         let cty := (to_ctype ty) in
         let arg := Efield p fid cty in
@@ -553,7 +554,10 @@ Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.ty
 is in the caller side. We need to use the reference to build the call
 statement *)
 Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
-  if own_type ce ty then
+  (* Use scalar type to simulate step_drop_scalar *)
+  if scalar_type ty then
+  None
+  else
   match ty with
   (* drop a box only drop the memory it points to, we do not care
   about the point-to type *)
@@ -576,9 +580,8 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
           Some call_stmt
       end 
   | _ => None
-  end
-  (* expand_drop must expand own_type *)
-  else None.
+  end.
+
 
 Definition transl_assign_variant (p: place) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
   (* lhs.1 = tag;
