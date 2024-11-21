@@ -71,6 +71,7 @@ rule read =
  | "struct" { STRUCT }
  | "enum" { ENUM }
 
+ | "extern" { EXTERN }
  | "fn" { FN }
  | "where" { WHERE }
  | "in" { IN }

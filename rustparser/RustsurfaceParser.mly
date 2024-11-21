@@ -36,6 +36,7 @@ open Rustsurface
 
 %token STRUCT
 %token ENUM
+%token EXTERN
 %token FN
 %token WHERE
 %token LET
@@ -121,11 +122,13 @@ prog:
   | c = enum { let (x, flds, orgs, rels) = c in [Penum (x, flds, orgs, rels)] }
   | c = struct_ { let (x, flds, orgs, rels) = c in [Pstruc (x, flds, orgs, rels)] }
   | f = fn { [Pfn (fst f, snd f)] }
+  | f = fn_decl { [Pfn_decl (fst f, snd f)]}
   | d = enum_decl; p = prog { let (x, orgs, rels) = d in (Pcomp_decl (x, Enum, orgs, rels)) :: p }
   | d = struct_decl; p = prog { let (x, orgs, rels) = d in (Pcomp_decl (x, Struct, orgs, rels)) :: p }
   | c = enum; p = prog { let (x, flds, orgs, rels) = c in (Penum (x, flds, orgs, rels))::p }
   | c = struct_; p = prog { let (x, flds, orgs, rels) = c in (Pstruc (x, flds, orgs, rels))::p }
   | f = fn; p = prog { let (id, f) = f in (Pfn (id, f))::p }
+  | f = fn_decl; p = prog { let (id, f) = f in (Pfn_decl (id, f))::p }
 
 (* optional origin *)
 origin_opt:
@@ -188,9 +191,18 @@ struct_decl:
 fn:
   | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; rels = origin_relations; LBRACE; s = stmt; RBRACE
     { (x, { generic_origins = orgs; origin_relations = rels; return = Tunit; params = p; body = s }) }
+  (* function with return type *)
   | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; rels = origin_relations; LBRACE;
     s = stmt; RBRACE
     { (x, { generic_origins = orgs; origin_relations = rels; return = tr; params = p; body = s }) }
+
+(* For now, all the function declaration must be external function *)
+fn_decl:
+  | EXTERN; FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; rels = origin_relations
+    { (x, { generic_origins = orgs; origin_relations = rels; return = Tunit; params = p}) }
+  (* function with return type *)
+  | EXTERN; FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; rels = origin_relations
+    { (x, { generic_origins = orgs; origin_relations = rels; return = tr; params = p}) }
 
 args_expr:
   | { [] }

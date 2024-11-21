@@ -70,6 +70,12 @@ type fn = { generic_origins: id list
           ; params: (id * ty) list
           ; body: stmt }
 
+(* function declarations *)
+type fn_decl = { generic_origins: id list
+              ; origin_relations: (id * id) list
+              ; return: ty
+              ; params: (id * ty) list }
+
 type comp_struc = (id * ty) list
 
 type comp_enum = (id * (ty list)) list
@@ -91,6 +97,7 @@ module IdentMap = Map.Make (struct
 end)
 
 type prog_item = Pfn of id * fn
+               | Pfn_decl of id * fn_decl
                | Pstruc of id * comp_struc * id list * (id * id) list
                | Penum of id * comp_enum * id list * (id * id) list
                | Pcomp_decl of id * struct_or_enum * id list * (id * id) list
@@ -99,7 +106,7 @@ type prog = { funcs: (id * fn) list
             ; strucs: (id * comp_struc * id list * (id * id) list) list
             ; enums: (id * comp_enum * id list * (id * id) list) list 
             ; composite_decls: (id * struct_or_enum * id list * (id * id) list) list
-            (* TODO: support function declaration *)
+            ; fun_decls: (id * fn_decl) list
             }
 
 let rec prog_of_items (pis: prog_item list): prog = match pis with
@@ -113,9 +120,12 @@ let rec prog_of_items (pis: prog_item list): prog = match pis with
     let p = prog_of_items pis in
     { p with enums = (x, c, orgs, rels) :: p.enums }
   | (Pcomp_decl(x, s_or_e, orgs, rels)) :: pis ->
-    let p = prog_of_items pis in
+    let p = prog_of_items pis in    
     { p with composite_decls = (x, s_or_e, orgs, rels) :: p.composite_decls}
-  | nil -> { funcs = []; strucs = []; enums = []; composite_decls = [] }
+  | Pfn_decl (x, f) :: pis ->
+    let p = prog_of_items pis in
+    { p with fun_decls = (x, f) :: p.fun_decls}
+  | nil -> { funcs = []; strucs = []; enums = []; composite_decls = []; fun_decls = [] }
 
 module To_syntax = struct
 
@@ -411,6 +421,22 @@ module To_syntax = struct
       print_args f.fn_params (pp_print_rust_type symmap) (snd f.fn_return)
       (pp_print_origin_relations symmap) f.fn_origins_relation (pp_print_stmt symmap) f.fn_body
 
+  (* Print external function *)
+  let pp_print_fun_decl (symmap: id IdentMap.t) pp i orgs rels argtys retty =
+  let rec print_args pp args =
+    match args with
+    | t :: args' ->
+      let x = IdentMap.find i symmap in
+      Format.fprintf pp "%s: %a@ %a" x (pp_print_rust_type symmap) t
+        print_args args'
+    | [] -> ()
+  in
+  let x = IdentMap.find i symmap in
+  Format.fprintf pp "@[extern fn %s%a(%a) -> %a %a@.@]" x
+    (pp_print_origins symmap) orgs
+    print_args argtys (pp_print_rust_type symmap) retty
+    (pp_print_origin_relations symmap) rels
+
 
   let pp_print_error pp err (symmap: id IdentMap.t)=
     let open Format in
@@ -569,6 +595,7 @@ module To_syntax = struct
                              ;next_ident = Camlcoq.P.succ i
                              ; gvars = (i, v) :: st.gvars })
 
+(* Adhoc: it is just used to add malloc/free function declarations *)
   let add_external_fun (name: string) (sg: AST.signature) targs tres: ident monad =
     fun st ->
       match IdMap.find_opt name st.symmap with
@@ -579,6 +606,7 @@ module To_syntax = struct
         { st with symmap = IdMap.add name i st.symmap
         ; rev_symmap = IdentMap.add i name st.rev_symmap
         ; next_ident = Camlcoq.P.succ i
+        (* Unsuppored generic origins in external functions *)
         ; external_funs = (i, AST.Gfun (Rusttypes.External([],[], AST.EF_external(i'',sg), targs, tres, sg.AST.sig_cc))) :: st.external_funs })
       | Option.Some i -> (Result.Ok i, st)
 
@@ -621,6 +649,13 @@ module To_syntax = struct
       get_ident id2 >>= fun org2 ->
       return (org1, org2))
 
+  let rec exprlist_of xs = match xs with
+        |(x::xs) -> Rustsyntax.Econs (x, exprlist_of xs)
+        | [] -> Rustsyntax.Enil
+
+  let rec typelist_of xs = match xs with
+    | (x::xs) -> Rusttypes.Tcons (x, typelist_of xs)
+    | [] -> Rusttypes.Tnil
 
   let rec transl_ty (t: ty): Rusttypes.coq_type monad =
     let module T = Rusttypes in
@@ -630,11 +665,6 @@ module To_syntax = struct
     | Tlong (size) -> return (T.Tlong (size))
     | Tfloat (size) -> return (T.Tfloat (size))
     | Tfunction (params, ret, orgs, rels) ->
-      let rec typelist_of ts =
-        match ts with
-        | t::ts -> T.Tcons (t, typelist_of ts)
-        | nil -> T.Tnil
-      in
       map_m params transl_ty  >>= fun args' ->
       transl_ty ret >>= fun ret' ->
       convert_origins orgs >>= fun orgs ->
@@ -659,6 +689,22 @@ module To_syntax = struct
       transl_ty t >>= fun t' ->
       get_or_new_ident org_id >>= fun org ->
       return (T.Treference (org, m, t'))
+
+  (* Add a function declaration *)
+  let add_fn_decl (x: id) (f: fn_decl) : unit monad =
+    get_or_new_ident x >>= fun i ->
+    get_st >>= fun st ->
+    map_m f.params
+      (fun (x, t) ->
+          transl_ty t >>= fun t' -> return t') >>= fun arg_tys ->    
+    transl_ty f.return >>= fun ret_ty ->
+    (* get the char list of the function name *)
+    let name = Camlcoq.coqstring_of_camlstring x in
+    let arg_tys' = typelist_of arg_tys in
+    let sg = Rusttypes.signature_of_type arg_tys' ret_ty AST.cc_default in
+    let fun_decl = (i, AST.Gfun (Rusttypes.External([], [], AST.EF_external(name, sg), arg_tys', ret_ty, AST.cc_default))) in
+    set_st { st with external_funs = fun_decl :: st.external_funs}
+
 
   let composite_of_decl i s_or_e a orgs rels =
     match s_or_e with
@@ -759,15 +805,6 @@ module To_syntax = struct
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos'
                    ; enums = IdentMap.add i ce' st.enums }
-
-  let rec exprlist_of xs = match xs with
-        |(x::xs) -> Rustsyntax.Econs (x, exprlist_of xs)
-        | [] -> Rustsyntax.Enil
-
-  let rec typelist_of xs = match xs with
-    | (x::xs) -> Rusttypes.Tcons (x, typelist_of xs)
-    | [] -> Rusttypes.Tnil
-
 
   let rty_bool = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned)
 
@@ -1448,6 +1485,9 @@ module To_syntax = struct
     (* convert composite declarations to support mutual recursive ADT *)
     map_m p.composite_decls
       (fun (x, s_or_e, orgs, rels) -> add_composite_decl x s_or_e orgs rels) >>= fun _ ->
+    (* Add the declarations of externl function *)
+    map_m p.fun_decls
+      (fun (x, f) -> add_fn_decl x f) >>= fun _ ->
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
     map_m p.strucs
@@ -1476,6 +1516,13 @@ module To_syntax = struct
     Format.fprintf log "RustAST: @.";
     Format.fprintf log "@[<v 0>";
     List.iter (pp_print_composite st.rev_symmap log) comp_defs;
+    (* Print external functions *)
+    List.iter
+      (fun (i, g) ->  match g with
+        | AST.Gfun (Rusttypes.External(orgs, rels, ef, typs, typ, _)) ->
+          pp_print_fun_decl st.rev_symmap log i orgs rels (typelist_to_list typs) typ
+        | _ -> failwith "unreachable (add_fn_decl)") 
+        st.external_funs;
     List.iter
       (fun (i, g) -> match g with
          | AST.Gfun (Rusttypes.Internal f) ->
