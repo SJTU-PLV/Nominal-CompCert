@@ -96,19 +96,6 @@ let debug_ElaborateDrop rustir_prog =
 
 let debug_borrow_check = true
 
-(* Unsupported now *)
-(* let debug_BorrowCheck (prog: RustIR.program) =
-  match ReplaceOrigins.transl_program prog with
-  | Errors.OK rustir_after_replace_origins ->
-    Format.fprintf logout "@.After Replacing Origins: @.";
-    PrintRustIR.print_cfg_program logout rustir_after_replace_origins;
-    (if debug_borrow_check then
-      Format.fprintf logout "@.Borrow Check: @.";
-      PrintBorrowCheck.print_cfg_program_borrow_check logout rustir_after_replace_origins);
-    rustir_after_replace_origins
-  | Errors.Error msg ->
-    fatal_error no_loc "%a"  print_error msg *)
-
 let debug_ClightComposite prog =
   match Clightgen.transl_composites prog.Rusttypes.prog_types with
   | Some clight_composites -> 
