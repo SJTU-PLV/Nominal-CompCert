@@ -56,4 +56,5 @@ fn main(){
     // result is 4 2 1 0  
     printf("The elements of list is: ");
     print_list(l1);
+    printf("\n");
 }

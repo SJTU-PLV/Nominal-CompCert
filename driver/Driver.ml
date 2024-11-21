@@ -36,55 +36,6 @@ let object_filename sourcename =
   else
     tmp_file ".o"
 
-(* From Clight to asm. It is used in Rust Compiler *)
-
-let compile_clight prog name =
-  (* Print all the intermediate programs *)
-  (* option_dprepro := true;
-  option_dparse := true;
-  option_dcmedium := true;
-  option_dclight := true;
-  option_dcminor := true;
-  option_drtl := true;
-  option_dltl := true;
-  option_dalloctrace := true;
-  option_dmach := true;
-  option_dasm := true; *)
-  let set_dest dst opt ext =
-    dst := if !opt then Some (output_filename name ~suffix:ext)
-      else None in
-  set_dest Cprint.destination option_dparse ".parsed.c";
-  set_dest PrintCsyntax.destination option_dcmedium ".compcert.c";
-  set_dest PrintClight.destination option_dclight ".light.c";
-  set_dest PrintCminor.destination option_dcminor ".cm";
-  set_dest PrintRTL.destination option_drtl ".rtl";
-  set_dest Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
-  set_dest PrintLTL.destination option_dltl ".ltl";
-  set_dest PrintMach.destination option_dmach ".mach";
-  set_dest AsmToJSON.destination option_sdump !sdump_suffix;
-  (* Compile the Clight program *)
-  let asm =
-    match Compiler.apply_partial
-               (Compiler.transf_clight_program prog)
-               Asmexpand.expand_program with
-    | Errors.OK asm ->
-        asm
-    | Errors.Error msg ->
-      let loc = file_loc name in
-        fatal_error loc "%a"  print_error msg in
-  (* Dump Asm in binary and JSON format *)
-  AsmToJSON.print_if asm name;
-  (* Print Asm in text form *)
-  let ofile = output_filename name ~suffix:".s" in
-  let oc = open_out ofile in
-  PrintAsm.print_program oc asm;
-  close_out oc;
-  (* invoke assembler *)
-  let objname = object_filename name in
-  assemble ofile objname;
-  objname
-
-
 (* From CompCert C AST to asm *)
 
 let compile_c_file sourcename ifile ofile =
@@ -425,6 +376,8 @@ let cmdline_actions =
   Prefix "-", Self (fun s ->
       fatal_error no_loc "Unknown option `%s'" s);
 (* File arguments *)
+  Suffix ".rs", Self (fun s ->
+      push_action DriverRust.process_rust_file s; incr num_source_files; incr num_input_files);
   Suffix ".c", Self (fun s ->
       push_action process_c_file s; incr num_source_files; incr num_input_files);
   Suffix ".i", Self (fun s ->
@@ -447,131 +400,7 @@ let cmdline_actions =
       push_action process_h_file s; incr num_source_files; incr num_input_files);
   ]
 
-(* Debug the Rust compiler *)
-
-let compile_log_file = "rust_compile.log"
-
-let stdout_format = Format.formatter_of_out_channel (open_out compile_log_file)
-
-let debug_Rustlightgen (syntax: Rustsyntax.program) =
-  match Rustlightgen.transl_program syntax with
-  | Errors.OK rustlight_prog ->
-    Format.fprintf stdout_format "Rustlight: @.";
-    PrintRustlight.print_program stdout_format rustlight_prog;
-    rustlight_prog
-  | Errors.Error msg ->
-    fatal_error no_loc "%a"  print_error msg
-
-let debug_RustIRgen (rustlight_prog: Rustlight.program) =
-  Format.fprintf stdout_format "@.RustIR: @.";
-  let rustir_prog = RustIRgen.transl_program rustlight_prog in
-  PrintRustIR.print_program stdout_format rustir_prog;
-  rustir_prog
-
-let debug_RustCFG rustir_prog =
-  Format.fprintf stdout_format "@.Rust CFG: @.";
-  PrintRustIR.print_cfg_program stdout_format rustir_prog;
-  rustir_prog
-
-let debug_InitAnalysis rustir_prog =
-  Format.fprintf stdout_format "@.Initialized Analysis: @.";
-  PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
-  rustir_prog
-
-let debug_ElaborateDrop rustir_prog =
-  match ElaborateDrop.transl_program rustir_prog with
-  | Errors.OK rustir_prog_drop ->
-   Format.fprintf stdout_format "@.Elaborate Drop: @.";
-   PrintRustIR.print_program stdout_format rustir_prog_drop;
-   rustir_prog_drop
-  | Errors.Error msg ->
-    fatal_error no_loc "%a"  print_error msg
-
-let debug_borrow_check = true
-
-(* Unsupported now *)
-(* let debug_BorrowCheck (prog: RustIR.program) =
-  match ReplaceOrigins.transl_program prog with
-  | Errors.OK rustir_after_replace_origins ->
-    Format.fprintf stdout_format "@.After Replacing Origins: @.";
-    PrintRustIR.print_cfg_program stdout_format rustir_after_replace_origins;
-    (if debug_borrow_check then
-      Format.fprintf stdout_format "@.Borrow Check: @.";
-      PrintBorrowCheck.print_cfg_program_borrow_check stdout_format rustir_after_replace_origins);
-    rustir_after_replace_origins
-  | Errors.Error msg ->
-    fatal_error no_loc "%a"  print_error msg *)
-
-let debug_ClightComposite prog =
-  match Clightgen.transl_composites prog.Rusttypes.prog_types with
-  | Some clight_composites -> 
-    Format.fprintf stdout_format "@.Clightgen Composites: @.";
-    Format.fprintf stdout_format "@[<v 0>"; 
-    List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
-    Format.fprintf stdout_format "@]@.";
-    prog
-  |  None -> fatal_error no_loc "@.Translate composites error @."
-
-let debug_Clightgen prog =
-  match Clightgen.transl_program prog with
-  | Errors.OK clight_prog ->
-    Format.fprintf stdout_format "@.Clightgen: @.";
-    PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
-    clight_prog
-  | Errors.Error msg -> fatal_error no_loc "%a" print_error msg
-
-let debug_rust = true
-
-(* let test_case = "rustexamples/test/example_test/control_flow/05match_test.rs" *)
-
-
-
 let _ =
-  if debug_rust then
-  let test_case = argv.(1) in
-  Format.fprintf stdout_format "Compile file %s@." test_case;
-  let clight_prog =
-    let items = RustsurfaceDriver.parse test_case in
-    let module R = Rustsurface in
-    Format.fprintf stdout_format "Rustsurface to Rustsyntax@.";
-    let m_syntax = items |> R.prog_of_items |> R.To_syntax.transl_prog stdout_format in
-    let (syntax_result, symmap) = R.To_syntax.(run_monad m_syntax skeleton_st) in
-    (match syntax_result with
-     | Result.Ok syntax ->
-       (* Print Rustlight *)
-       let clight_prog = syntax
-                        |> debug_Rustlightgen
-                        |> debug_RustIRgen
-                        |> debug_RustCFG
-                        |> debug_InitAnalysis
-                        |> debug_ElaborateDrop
-                        (* |> debug_BorrowCheck *)
-                        |> debug_ClightComposite
-                        |> debug_Clightgen in
-       clight_prog
-    | Result.Error e ->
-      Rustsurface.To_syntax.pp_print_error Format.err_formatter e symmap;
-      raise Abort)
-  in
-  (* Set config *)
-  Machine.config := Machine.x86_64;
-  (* add helper functions which is required by Selection pass *)
-  let gl = C2C.add_helper_functions clight_prog.Ctypes.prog_defs in
-  let clight_prog' =
-    { Ctypes.prog_defs = gl;
-      Ctypes.prog_public = C2C.public_globals gl;
-      Ctypes.prog_main = clight_prog.Ctypes.prog_main;
-      Ctypes.prog_types = clight_prog.Ctypes.prog_types;
-      Ctypes.prog_comp_env = clight_prog.Ctypes.prog_comp_env;
-    } in
-  (* The following code compiles the generated Clight program  *)
-  let output_name = output_filename test_case ~suffix: "" in
-  let objfile = compile_clight clight_prog' test_case in
-  (* invoke the linker *)
-  linker (output_name) [objfile];
-  check_errors ()
-  
-else
   try
     Gc.set { (Gc.get()) with
                 Gc.minor_heap_size = 524288; (* 512k *)
