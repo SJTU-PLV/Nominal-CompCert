@@ -99,7 +99,7 @@ COMMON=Errors.v AST.v Linking.v \
   Values.v Smallstep.v Switch.v Unityping.v \
   Separation.v Builtins0.v Builtins1.v Builtins.v \
   LanguageInterface.v \
-  SmallstepLinking.v SmallstepLinkingSafe.v\
+  SmallstepLinking.v\
   Invariant.v \
   CallconvAlgebra.v \
 
@@ -170,11 +170,8 @@ RUSTFRONTEND=Rusttypes.v Rustsyntax.v Rustlight.v RustIR.v\
   Rustlightgen.v\
   RustIRgen.v RustIRgenProof.v RustIRcfg.v\
   InitDomain.v InitAnalysis.v ElaborateDrop.v ElaborateDropProof.v\
-  MoveChecking.v\
   Clightgen.v Clightgenspec.v Clightgenproof.v\
   RustOp.v \
-  # BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v
-  # BorrowCheckSafe.v
 
 # Parser
 

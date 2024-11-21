@@ -1276,27 +1276,6 @@ Definition variant_field_offset (env: composite_env) (id: ident) (ms: members) :
     OK (align 32 (alignof_composite' env ms * 8) / 8)
   else Error (MSG "Unknown field " :: CTX id :: nil).
 
-(* variant_field_offset in range *)
-
-Corollary variant_field_offset_in_range:
-  forall env ms id ofs ty,
-  variant_field_offset env id ms = OK ofs -> field_type id ms = OK ty ->
-  0 <= ofs /\ ofs + sizeof env ty <= sizeof_variant env ms.
-Proof.
-Admitted.
-
-(** Properties used for subplace  *)
-
-Lemma alignof_composite_max_aux: forall ce co fid fty,
-    field_type fid (co_members co) = OK fty ->
-    alignof ce fty <= alignof_composite' ce (co_members co).
-Admitted.
-
-Lemma alignof_composite_max: forall ce co fid fty,
-    field_type fid (co_members co) = OK fty ->
-    alignof ce fty <= alignof_composite ce (co_sv co) (co_members co).
-Admitted.
-
 
 (** Stability properties for alignments, sizes, and ranks.  If the type is
   complete in a composite environment [env], its size, alignment, and rank
