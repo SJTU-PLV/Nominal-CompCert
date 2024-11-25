@@ -87,7 +87,7 @@ Definition result_def :=
 Definition mask_def :=
   {|
     gvar_info := tint;
-    gvar_init := nil;
+    gvar_init := Init_int32 (Int.zero) :: nil;
     gvar_readonly := false;
     gvar_volatile := false
   |}.
@@ -121,8 +121,10 @@ Qed.
 Definition Arg_def : composite_definition :=
   Composite Arg_id Struct (input_mem :: result_mem :: size_mem :: nil) noattr.
 
+Definition Arg_type : type := Tstruct Arg_id noattr.
+
 Definition arg_def := mkglobvar
-                        (Tstruct Arg_id noattr)
+                        Arg_type
                         (Init_addrof input_id Ptrofs.zero :: Init_addrof result_id Ptrofs.zero :: Init_int32 (Int.repr 5) :: nil)
                         false false.
 
@@ -138,7 +140,72 @@ Definition func_server_external : fundef :=
     (tptr Tvoid)
     cc_default).
 
-Definition func_main_code : statement := Sskip. (** TODO *)
+Definition start_routine_type : type :=
+  Tpointer (Tfunction (Tcons (tptr Tvoid) Tnil) (tptr Tvoid) cc_default) noattr.
+
+Definition func_pthread_create_external : fundef :=
+  (External (EF_external "pthread_create" pthread_create_sig)
+     (Tcons (tptr tint) (Tcons start_routine_type (Tcons (tptr Tvoid) Tnil)))
+     tint
+     cc_default
+  ).
+
+(*
+Definition func_pthread_join_external : fundef :=
+  (External (EF_external "pthread_create" pthread_create_sig)
+     (Tcons (tptr tint) (Tcons start_routine_type (Tcons (tptr Tvoid) Tnil)))
+     tint
+     cc_default
+  ).
+ *)
+
+(*
+# define N 5
+3 typedef struct {
+4 int * input , * result , size ; } Arg ;
+5 void * server ( void * a ) ;
+6
+7 int main () {
+8 pthread_t a ;
+9 int input [ N ]={1 ,2 ,3 ,4 ,5} , result [ N ];
+10 int mask = 0;
+11 Arg arg = { input , result , N };
+12
+13 pthread_create (& a ,0 , server ,& arg ) ;
+14 for ( int i = 0; i < N ; i ++)
+15 { mask += input [ i ]; yield () ; }
+16 pthread_join (a , NULL ) ;
+17
+18 for ( int i = 0; i < N ; i ++) {
+19 result [ i ] = result [ i ] & mask ;
+20 printf ( " % d ; " , result [ i ]) ; }
+21 }
+ *)
+
+(** TODO: add [pthread_create], [pthread_join] and [yield] as external functions *)
+(* pthread_create_sig *)
+Definition func_main_code : statement := (** TODO *)
+  Ssequence
+     (*pthread_create*)
+    (Scall (Some pthread_create_id)
+       (* function name and sig*)
+       (Evar pthread_create_id
+          (Tfunction (Tcons (tptr tint) (Tcons (tptr (Tfunction (Tcons (tptr Tvoid) Tnil) (tptr Tvoid) cc_default)) (Tcons (tptr Tvoid) Tnil)))
+             tint cc_default))
+    (* arguments *)
+       (  Eaddrof (Evar a_id tint) tint (*&a*)
+          :: Evar server_id (Tfunction  (Tcons (tptr Tvoid) Tnil)
+                                (tptr Tvoid) cc_default)        (*server*)
+          :: Eaddrof (Evar arg_id Arg_type) Arg_type           (*&arg*)
+          :: nil
+        )
+    )
+    (Ssequence
+       (Sskip) (*for_loop1*)
+       (Ssequence
+          (Sskip) (* call pthread_join*)
+          (Sskip) (* for_loop2*))
+    ).
 
 Definition func_main :=
   {|
