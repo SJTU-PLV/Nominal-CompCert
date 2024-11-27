@@ -72,7 +72,7 @@ Definition func_encrypt_external : fundef :=
      int size = (( Arg * ) a ) -> size ;
      
      for ( int j = 0; j < size ; j ++) {
-     encrypt ( input [ j ] , result + j ) ;
+     encrypt ( i[j] , r + j ) ;
      yield () ; }
      return NULL ;
      }           *)
@@ -80,13 +80,49 @@ Definition func_encrypt_external : fundef :=
 Definition arg_expr : expr := (Evar (a_id) (Tpointer Arg_type noattr)).
 
 Definition set_i_code : statement :=
-  Sset i_id (Efield (Ederef arg_expr Arg_type) input_mem_id (tptr tint)).
+  Sassign (Evar i_id (tptr tint)) (Efield (Ederef arg_expr Arg_type) input_mem_id (tptr tint)).
+
+Definition set_r_code : statement :=
+  Sassign (Evar r_id (tptr tint)) (Efield (Ederef arg_expr Arg_type) result_mem_id (tptr tint)).
+
+Definition set_size_code : statement :=
+  Sassign (Evar size_id tint) (Efield (Ederef arg_expr Arg_type) size_mem_id tint).
+
+
+Definition input_index_j :=
+  Ebinop Oadd (Evar i_id (tptr tint))
+            (Evar j_id tint)
+            (tptr tint).
+
+Definition result_index_j :=
+  Ebinop Oadd (Evar i_id (tptr tint))
+            (Evar j_id tint)
+            (tptr tint).
+
+(** for ( int j = 0; j < size ; j ++) {
+     encrypt ( i[ j ] , r + j ) ;
+     yield () ; } *)
+
+
+Definition code_call_encrypt :=
+  Scall (Some encrypt_id)
+    (Evar encrypt_id (Tfunction (Tcons tint (Tcons (tptr tint) Tnil)) (tint) cc_default))
+    (Ederef input_index_j tint :: result_index_j :: nil).
+
+Definition code_forloop :=
+  Sfor (Sassign (Evar j_id tint) (Econst_int Int.zero tint)) (** j = 0 *)
+    (Ebinop Olt (Evar j_id tint) (Econst_int (Int.repr 5) tint) tint) (** j < N*)
+    ( Ssequence
+        code_call_encrypt
+        (Scall (Some yield_id) (Evar yield_id (Tfunction Tnil Tvoid cc_default)) nil)
+    ) (** encrypt (i[j], r+j); yield () ;*)
+    (Sassign (Evar j_id tint) (Ebinop Oadd (Evar j_id tint) (Econst_int Int.one tint) tint)). (** j++*)
 
 Definition func_server_code : statement :=
   Ssequence set_i_code (** Set i*)
-    (Ssequence Sskip (** Set r*)
-       (Ssequence Sskip (** Set size *)
-          (Ssequence Sskip (** For loop *)
+    (Ssequence set_r_code (** Set r*)
+       (Ssequence set_size_code (** Set size *)
+          (Ssequence code_forloop (** For loop *)
              (Sreturn (Some (Econst_long Int64.zero (tptr (tptr Tvoid))))) (** Return NULL*)
     ))).
 
@@ -95,8 +131,8 @@ Definition func_server :=
     fn_return := Tvoid;
     fn_callconv := cc_default;
     fn_params := (a_id, tptr Tvoid) :: nil;
-    fn_vars := nil;
-    fn_temps := (i_id, tptr tint) :: (r_id, tptr tint) :: (size_id, tint) :: (j_id, tint) :: nil;
+    fn_vars := (i_id, tptr tint) :: (r_id, tptr tint) :: (size_id, tint) :: (j_id, tint) :: nil;
+    fn_temps := nil;
     fn_body := func_server_code
   |}.
 

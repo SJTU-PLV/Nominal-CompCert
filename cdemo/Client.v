@@ -209,20 +209,20 @@ Definition code_pthread_create := Scall (Some pthread_create_id)
 (** The expression input[i] as a pointer *)
 Definition input_index :=
   Ebinop Oadd (Evar input_id (tarray tint 5))
-            (Etempvar i_id tint)
+            (Evar i_id tint)
             (tptr tint).
 
 
 (** for ( int i = 0; i < N ; i ++)
     { mask += input [ i ]; yield () ; } *)
 Definition code_forloop1 :=
-  Sfor (Sset i_id (Econst_int Int.zero tint)) (** i = 0 *)
-    (Ebinop Olt (Etempvar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N*)
+  Sfor (Sassign (Evar i_id tint) (Econst_int Int.zero tint)) (** i = 0 *)
+    (Ebinop Olt (Evar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N*)
     ( Ssequence
-        (Sset mask_id (Ebinop Oadd (Etempvar mask_id tint) (Ederef input_index tint) tint))
+        (Sassign (Evar mask_id tint) (Ebinop Oadd (Evar mask_id tint) (Ederef input_index tint) tint))
         (Scall (Some yield_id) (Evar yield_id (Tfunction Tnil Tvoid cc_default)) nil)
     ) (** mask += input [ i ]; yield () ;*)
-    (Sset i_id (Ebinop Oadd (Etempvar i_id tint) (Econst_int Int.one tint) tint)). (** i++*)
+    (Sassign (Evar i_id tint) (Ebinop Oadd (Evar i_id tint) (Econst_int Int.one tint) tint)). (** i++*)
 
 (** pthread_join (a , NULL ) ; *) 
 Definition code_pthread_join :=
@@ -239,18 +239,18 @@ Definition code_pthread_join :=
 (** result[i] *)
 Definition result_index :=
   Ebinop Oadd (Evar input_id (tarray tint 5))
-            (Etempvar i_id tint)
+            (Evar i_id tint)
             (tptr tint).
 
 (** result [i] = result [i] & mask *)
 Definition mask_result :=
-  Sassign result_index (Ebinop Oxor (Ederef result_index tint) (Etempvar mask_id tint) tint).
+  Sassign result_index (Ebinop Oxor (Ederef result_index tint) (Evar mask_id tint) tint).
           
 Definition code_forloop2 :=
-   Sfor (Sset i_id (Econst_int Int.zero tint)) (** i = 0 *)
-     (Ebinop Olt (Etempvar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N *)
+   Sfor (Sassign (Evar i_id tint) (Econst_int Int.zero tint)) (** i = 0 *)
+     (Ebinop Olt (Evar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N *)
      mask_result
-    (Sset i_id (Ebinop Oadd (Etempvar i_id tint) (Econst_int Int.one tint) tint)). (** i++ *)
+    (Sassign (Evar i_id tint) (Ebinop Oadd (Evar i_id tint) (Econst_int Int.one tint) tint)). (** i++ *)
 
 
 Definition func_main_code : statement := (** TODO *)
@@ -264,8 +264,10 @@ Definition func_main :=
     fn_return := tint;
     fn_callconv := cc_default;
     fn_params := nil;
-    fn_vars := (input_id, tarray tint 5) :: (result_id, tarray tint 5) :: (arg_id, Tstruct Arg_id noattr) :: nil;
-    fn_temps := (a_id, tint) :: (mask_id, tint) :: (i_id, tint) :: nil;
+    fn_vars := (input_id, tarray tint 5) :: (result_id, tarray tint 5) ::
+                 (arg_id, Tstruct Arg_id noattr) :: (a_id, tint) :: (mask_id, tint) :: (i_id, tint)
+                  :: nil;
+    fn_temps := nil;
     fn_body := func_main_code
   |}.
 
