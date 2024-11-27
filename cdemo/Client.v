@@ -143,6 +143,7 @@ Definition func_server_external : fundef :=
 Definition start_routine_type : type :=
   Tpointer (Tfunction (Tcons (tptr Tvoid) Tnil) (tptr Tvoid) cc_default) noattr.
 
+(** int pthread_create (int * thread, void * (*start_routine) (void*), void* arg) *)
 Definition func_pthread_create_external : fundef :=
   (External (EF_external "pthread_create" pthread_create_sig)
      (Tcons (tptr tint) (Tcons start_routine_type (Tcons (tptr Tvoid) Tnil)))
@@ -150,14 +151,20 @@ Definition func_pthread_create_external : fundef :=
      cc_default
   ).
 
-(*
+(** int pthread_join (int * thread, void ** value_ptr) *)
 Definition func_pthread_join_external : fundef :=
-  (External (EF_external "pthread_create" pthread_create_sig)
-     (Tcons (tptr tint) (Tcons start_routine_type (Tcons (tptr Tvoid) Tnil)))
+  (External (EF_external "pthread_join" pthread_join_sig)
+     (Tcons (tptr tint) (Tcons (tptr (tptr Tvoid)) Tnil))
      tint
      cc_default
   ).
- *)
+
+Definition func_yield_external : fundef :=
+  (External (EF_external "yield" yield_sig)
+     Tnil
+     Tvoid
+     cc_default
+  ).
 
 (*
 # define N 5
@@ -182,12 +189,10 @@ Definition func_pthread_join_external : fundef :=
 21 }
  *)
 
-(** TODO: add [pthread_create], [pthread_join] and [yield] as external functions *)
-(* pthread_create_sig *)
-Definition func_main_code : statement := (** TODO *)
-  Ssequence
-     (*pthread_create*)
-    (Scall (Some pthread_create_id)
+(** * Definition of code in Clight *)
+
+(**  pthread_create (& a ,0 , server ,& arg ) ; *)
+Definition code_pthread_create := Scall (Some pthread_create_id)
        (* function name and sig*)
        (Evar pthread_create_id
           (Tfunction (Tcons (tptr tint) (Tcons (tptr (Tfunction (Tcons (tptr Tvoid) Tnil) (tptr Tvoid) cc_default)) (Tcons (tptr Tvoid) Tnil)))
@@ -198,14 +203,61 @@ Definition func_main_code : statement := (** TODO *)
                                 (tptr Tvoid) cc_default)        (*server*)
           :: Eaddrof (Evar arg_id Arg_type) Arg_type           (*&arg*)
           :: nil
-        )
-    )
-    (Ssequence
-       (Sskip) (*for_loop1*)
-       (Ssequence
-          (Sskip) (* call pthread_join*)
-          (Sskip) (* for_loop2*))
-    ).
+        ).
+
+
+(** The expression input[i] as a pointer *)
+Definition input_index :=
+  Ebinop Oadd (Evar input_id (tarray tint 5))
+            (Etempvar i_id tint)
+            (tptr tint).
+
+
+(** for ( int i = 0; i < N ; i ++)
+    { mask += input [ i ]; yield () ; } *)
+Definition code_forloop1 :=
+  Sfor (Sset i_id (Econst_int Int.zero tint)) (** i = 0 *)
+    (Ebinop Olt (Etempvar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N*)
+    ( Ssequence
+        (Sset mask_id (Ebinop Oadd (Etempvar mask_id tint) (Ederef input_index tint) tint))
+        (Scall (Some yield_id) (Evar yield_id (Tfunction Tnil Tvoid cc_default)) nil)
+    ) (** mask += input [ i ]; yield () ;*)
+    (Sset i_id (Ebinop Oadd (Etempvar i_id tint) (Econst_int Int.one tint) tint)). (** i++*)
+
+(** pthread_join (a , NULL ) ; *) 
+Definition code_pthread_join :=
+  Scall (Some pthread_join_id)
+    (Evar pthread_join_id (Tfunction (Tcons (tptr tint) (Tcons (tptr (tptr Tvoid)) Tnil)) tint cc_default))
+    (Evar a_id tint :: Econst_long (Int64.zero) (tptr (tptr Tvoid)) :: nil).
+
+(** for ( int i = 0; i < N ; i ++) {
+ result [ i ] = result [ i ] & mask ;
+ printf ( " % d ; " , result [ i ]) ; }
+ }
+ *)
+
+(** result[i] *)
+Definition result_index :=
+  Ebinop Oadd (Evar input_id (tarray tint 5))
+            (Etempvar i_id tint)
+            (tptr tint).
+
+(** result [i] = result [i] & mask *)
+Definition mask_result :=
+  Sassign result_index (Ebinop Oxor (Ederef result_index tint) (Etempvar mask_id tint) tint).
+          
+Definition code_forloop2 :=
+   Sfor (Sset i_id (Econst_int Int.zero tint)) (** i = 0 *)
+     (Ebinop Olt (Etempvar i_id tint) (Econst_int (Int.repr 5) tint) tint) (** i < N *)
+     mask_result
+    (Sset i_id (Ebinop Oadd (Etempvar i_id tint) (Econst_int Int.one tint) tint)). (** i++ *)
+
+
+Definition func_main_code : statement := (** TODO *)
+  Ssequence code_pthread_create
+    (Ssequence code_forloop1
+       (Ssequence code_pthread_join
+          code_forloop2)).
 
 Definition func_main :=
   {|
@@ -225,8 +277,12 @@ Definition global_defs_client : list (ident * globdef fundef type) :=
   (arg_id, Gvar arg_def) ::
   (main_id, Gfun (Internal func_main)) ::
   (server_id, Gfun func_server_external) ::
+  (yield_id, Gfun func_yield_external) ::
+  (pthread_create_id, Gfun func_pthread_create_external) ::
+  (pthread_join_id, Gfun func_pthread_join_external) ::
   nil.
 
+(** we need ids of primitives here? *)
 Definition public_defs_client : list ident :=
   input_id :: result_id :: arg_id :: main_id :: server_id :: nil.
 
