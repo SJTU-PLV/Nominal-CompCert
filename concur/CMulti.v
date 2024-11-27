@@ -230,6 +230,7 @@ Section MultiThread.
       (SET_C: update_cur_thread s (Final res) = s'),
       switch_out s s' target gmem'.
 
+  (** TODO: add a switch_in_join_NULL to deal with a join without MEM_RES *)
   Inductive switch_in : state -> state -> nat -> mem -> Prop :=
   |switch_in_yield : forall s' s'' target gmem' ls1 ls1'
      (GET_T: get_thread s' target = Some (Returny ls1))
