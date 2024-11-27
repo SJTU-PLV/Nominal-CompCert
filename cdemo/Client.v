@@ -94,9 +94,9 @@ Definition mask_def :=
 
 (* Definition of  struct [Arg] and variable [arg] *)
 
-Definition input_mem_id := 11%positive.
-Definition result_mem_id := 12%positive.
-Definition size_mem_id := 13%positive.
+Definition input_mem_id := 51%positive.
+Definition result_mem_id := 52%positive.
+Definition size_mem_id := 53%positive.
 
 Definition input_mem := Member_plain input_mem_id (tptr tint).
 Definition result_mem := Member_plain result_mem_id (tptr tint).
