@@ -11,11 +11,13 @@ Require Import LanguageInterface.
 Require Import Integers.
 Require Import Values Memory.
 
-Require Import CallconvBig InjectFootprint Injp.
+
+Require Import CallconvBig VCompBig InjectFootprint Injp Ext.
 Require Import CAnew.
 Require Import Asm Asmrel.
 Require Import Asmgenproof0 Asmgenproof1.
 Require Import Encrypt EncryptSpec.
+Require Import Composition.
 
 Import GS.
 
@@ -579,9 +581,18 @@ Proof.
   eapply preserves_fsim. eapply L_E_wt; eauto.
 Qed.
 
-Require Import Ext AsmLinking.
+Require Import Asmselfsim.
 
-Theorem self_simulation_asmext :
-  forward_simulation asm_ext (Asm.semantics b1) (Asm.semantics b1).
+Theorem correctness_L_E :
+  forward_simulation cc_compcert L_E (Asm.semantics b1).
 Proof.
+  unfold cc_compcert.
+  eapply st_fsim_vcomp. eapply self_simulation_ro.
+  eapply st_fsim_vcomp. eapply self_simulation_wt.
+  eapply st_fsim_vcomp. eapply CAinjp_simulation_encrypt.
+  eapply Asm_ext_selfsim; eauto.
+Qed.
+
+  
+  
   

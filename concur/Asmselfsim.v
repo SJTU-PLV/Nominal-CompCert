@@ -1,7 +1,7 @@
 Require Import Coqlib Mapsrel.
 Require Import AST Integers Valuesrel Eventsrel CKLR LanguageInterface Smallstep.
 Require Import Op Registersrel.
-Require Export Asm.
+Require Export Asm Asmrel.
 
 Require Import CallConv CallconvBig Injp.
 Require Import CallconvBig InjectFootprint Injp Extends Ext.
@@ -179,20 +179,6 @@ Admitted.
 
 
 
-
-
-
-
-(** For external calls *)
-Lemma extcall_arguments_ext: forall rs1 m1 ef args1 rs2 m2,
-    extcall_arguments rs1 m1 (ef_sig ef) args1 ->
-    Mem.extends m1 m2 ->
-    regset_lessdef rs1 rs2 ->
-    exists args2,
-      extcall_arguments rs2 m2 (ef_sig ef) args2 /\
-      Val.lessdef_list args1 args2.
-Admitted.
-
 Lemma step_correct:
   forall s1 t s2, step init_sup ge s1 t s2 ->
   forall wp s1' (MS : match_states wp s1 s1'),
@@ -200,18 +186,21 @@ Lemma step_correct:
 Proof.
   induction 1; intros; inv MS.
   - (* internal steps *)
-    Ltac solve_exec_instr :=
+    admit.
+    (*
+    (* only for trivial instrs *)
+    Ltac solve_exec_instr1 :=
+      eexists; split;
+      [econstructor; eauto using regset_lessdef_ptr;
+       econstructor; eauto |
+        econstructor; eauto; rs_lessdefs ].
+    (* general pattern after state existention*)
+     Ltac solve_exec_instr :=
       eexists; split;
       [econstructor; eauto using regset_lessdef_ptr;
        try econstructor; eauto |
         econstructor; eauto; try rs_lessdefs ].
-    admit.
-    (*
-    destruct i; inv EXEC.   (* eexists. solve_exec_instr. *)
-    + solve_exec_instr.
-    + solve_exec_instr.
-    + solve_exec_instr.
-    + solve_exec_instr.
+    destruct i; inv EXEC; try solve_exec_instr1.
     + (*exec_load*)
       unfold exec_load in *. destr_in H1. inv H1.
       exploit eval_addrmode_lessdef. eauto. intro.
@@ -225,8 +214,32 @@ Proof.
       solve_exec_instr. simpl. unfold exec_load. rewrite Hl. reflexivity.
       rs_lessdefs.
     + (*exec_store*)
-      admit.
+      unfold exec_store in *. destr_in H1. inv H1.
+      exploit eval_addrmode_lessdef. eauto. intro.
+      exploit Mem.storev_extends; eauto. intros [m'1 [Hs He]].
+      exploit ext_acci_storev. apply Heqo. apply Hs. eauto. intro ACI1.
+      solve_exec_instr. simpl. unfold exec_store. rewrite Hs. reflexivity.
+      rs_lessdefs. instantiate (1:= He). etransitivity; eauto. etransitivity; eauto.
+    + (*exec_store*)
+      unfold exec_store in *. destr_in H1. inv H1.
+      exploit eval_addrmode_lessdef. eauto. intro.
+      exploit Mem.storev_extends; eauto. intros [m'1 [Hs He]].
+      exploit ext_acci_storev. apply Heqo. apply Hs. eauto. intro ACI1.
+      solve_exec_instr. simpl. unfold exec_store. rewrite Hs. reflexivity.
+      rs_lessdefs. instantiate (1:= He). etransitivity; eauto. etransitivity; eauto.
+    + unfold exec_load in *. destr_in H1. inv H1.
+      exploit eval_addrmode_lessdef. eauto. intro.
+      exploit Mem.loadv_extends; eauto. intros [v' [Hl Hv]].
+      solve_exec_instr. simpl. unfold exec_load. rewrite Hl. reflexivity.
+      rs_lessdefs.
+    + unfold exec_store in *. destr_in H1. inv H1.
+      exploit eval_addrmode_lessdef. eauto. intro.
+      exploit Mem.storev_extends; eauto. intros [m'1 [Hs He]].
+      exploit ext_acci_storev. apply Heqo. apply Hs. eauto. intro ACI1.
+      solve_exec_instr. simpl. unfold exec_store. rewrite Hs. reflexivity.
+      rs_lessdefs. instantiate (1:= He). etransitivity; eauto. etransitivity; eauto.
     + admit.
+    + 
     + solve_exec_instr.
     + solve_exec_instr.
     + (*exec_load*)
@@ -275,8 +288,11 @@ Proof.
     eexists. split. eapply exec_step_builtin; eauto using regset_lessdef_ptr.
     econstructor; eauto. rs_lessdefs.
     etransitivity; eauto. etransitivity; eauto.
-  - exploit extcall_arguments_ext; eauto.
+  - exploit (extcall_arguments_inject ext (extw m m'0 Hm)); simpl.
+    red. red. intros.  simpl.
+    eapply val_inject_id. apply RLD. constructor. eauto.
     intros [args' [ARGS' Hll]].
+    apply val_inject_list_lessdef in Hll.
     exploit external_call_mem_extends; eauto.
     intros (res' & m'1 & CALL' & A & B & C & D).
     assert (ACCI: ext_acci (extw m m'0 Hm) (extw m' m'1 B)).
@@ -355,7 +371,7 @@ Qed.
 
 End EXT.
 
-Theorem RTL_ext_selfsim prog :
+Theorem Asm_ext_selfsim prog :
   GS.forward_simulation (asm_ext) (Asm.semantics prog) (Asm.semantics prog).
 Proof.
   constructor.
