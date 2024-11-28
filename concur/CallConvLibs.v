@@ -1032,7 +1032,9 @@ Proof.
       econstructor; simpl; eauto.
       intros. unfold rs2.
       destruct (preg_classify_cases r); eauto.
-      rewrite <- H2. eauto. constructor.
+      rewrite <- H2. eauto. split.
+      unfold rs2. simpl. eauto.
+      constructor.
     + intros. destruct wp1 as [a wp1]. simpl in a, wp1.
       destruct wp2 as [wp2 b]. simpl in b, wp2. simpl in H3. subst wp2.
       destruct wp1' as [a' wp1']. simpl in H4.
@@ -1053,7 +1055,7 @@ Proof.
   - red. intros [? ?] [? ?] [se [[rs sup] wp]]. simpl in w,w0,w1,w2.
     intros se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]] A1 A2. inv Hse1. inv Hse2. simpl in A2.
     inv A2. destruct A1. simpl in H, H0.
-    inv Hq1. destruct q2. inv Hq2. inv H6. simpl in H5.
+    inv Hq1. destruct q2. inv Hq2. destruct H6 as [Hpc H6]. inv H6. simpl in H5.
     (* Compute (ccworld (c_injp @ cc_c_locset)). *)
     exists (se2,((extw m m0 Hm),(r, Mem.support m0))). repeat apply conj; eauto.
     + constructor; eauto. constructor; eauto. constructor; eauto.
@@ -1095,7 +1097,7 @@ Lemma MA_trans_ext2 : cctrans (mach_ext @ cc_mach_asm) (cc_mach_asm @ asm_ext).
 Proof.
     constructor.  econstructor.  instantiate (1:= fun w1 w2 => fst w1 = snd w2).
   - red. intros [se' [[rs sup] wp]] se1 se2 q1 q2 [Hse1 Hse2] [q1' [Hq1 Hq2]].
-    inv Hse2. inv Hse1. inv Hq1. destruct q2. inv Hq2. inv H4. clear Hm1.
+    inv Hse2. inv Hse1. inv Hq1. destruct q2. inv Hq2. destruct H4 as [Hpc H4]. inv H4. clear Hm1.
     cbn in H3.
     rename m0 into m2. rename m into m1. rename r into rs3.
 (*     set (rs2 r :=
@@ -1172,7 +1174,7 @@ Proof.
       econstructor; simpl; eauto.
       intros. unfold rs2.
       destruct (preg_classify_cases r); eauto.
-      rewrite <- H20. eauto. constructor.
+      rewrite <- H20. eauto. split. unfold rs2. simpl. eauto. constructor.
     + intros r1 r2 [a b] AC1 Hr. simpl in AC1. destruct AC1.
       simpl in H9. clear H8.
       destruct Hr as [r1' [Hr1 Hr2]].

@@ -284,15 +284,15 @@ Lemma initial_correct:
   forall q1 q2 st1, GS.match_query asm_ext w q1 q2 -> initial_state ge q1 st1 ->
                exists st2, initial_state ge q2 st2 /\ match_states (get w) st1 st2.
 Proof.
-  intros. destruct H0. destruct q2. inv H. inv H4. clear Hm1.
-  rewrite <- H in *. simpl in H3.
+  intros. destruct H0. destruct q2. inv H. inv H4. inv H5. clear Hm1.
+  rewrite <- H4 in *. simpl in H3.
   eexists. split. econstructor; eauto. eapply find_funct_lessdef; eauto.
   eapply val_inject_id; eauto.
-  generalize (H3 RSP). intro. inv H4; congruence.
-  generalize (H3 RA). intro. inv H4; congruence.
+  generalize (H3 RSP). intro. inv H5; congruence.
+  generalize (H3 RA). intro. inv H5; congruence.
   econstructor; eauto. red. intros. eapply val_inject_id; eauto.
   instantiate (1:= Hm).
-  constructor; eauto; red; intros; eauto. rewrite <- H. reflexivity.
+  constructor; eauto; red; intros; eauto. rewrite <- H4. reflexivity.
 Qed.
 
 Lemma final_correct:
@@ -318,7 +318,7 @@ Proof.
   exists (extw m m' Hm). eexists. intuition idtac.
   - econstructor; eauto. eapply find_funct_lessdef; eauto.
   - constructor; CKLR.uncklr; auto. simpl. intros.
-    eapply val_inject_id; eauto.
+    eapply val_inject_id; eauto. split. intro. rewrite H0 in H. inv H.
     constructor.
   - inv H2. destruct r2. inv H1. simpl in H2. simpl in H0, H3. inv H3.
     eexists. split. econstructor; eauto. inv H0. eauto.
@@ -337,13 +337,18 @@ Proof.
   eapply GS.Forward_simulation.
   + reflexivity.
   + intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
-  eapply GS.forward_simulation_step; subst.
-  - intros. CKLR.uncklr. destruct q1, q2. inv H. simpl.
+    set (ms := fun wp (s1 s2: sup * state) =>
+          fst s1 = fst s2 /\ match_states w wp (snd s1) (snd s2)).
+  eapply GS.forward_simulation_step with (match_states := ms); subst.
+  - intros. CKLR.uncklr. destruct q1, q2. inv H. simpl. destruct H1.
     simpl in H0. generalize (H0 PC). intro.
-    apply val_inject_id in H. inv H. reflexivity. 
-  - eapply initial_correct; eauto.
-  - eapply final_correct; eauto.
-  - eapply external_correct; eauto.
-  - intros. eapply step_correct; eauto.
+    apply val_inject_id in H2. inv H2. reflexivity. congruence.
+  - intros. simpl in H0. destruct s1. destruct H0. exploit initial_correct; eauto.
+    intros (s2 & A & B). exists (s, s2). split. constructor; eauto. admit.
+    simpl.
+    instantiate (1:= ms).
+  - admit.
+  - admit.
+  - simpl. eapply step_correct; eauto.
   + auto using well_founded_ltof.
 Qed.
