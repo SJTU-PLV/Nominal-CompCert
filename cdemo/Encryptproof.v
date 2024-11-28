@@ -500,3 +500,88 @@ Proof.
       apply plus_one. auto.
   - auto using well_founded_ltof.
 Qed.
+
+(** Self simulations *)
+
+
+Require Import ValueAnalysis InvariantC.
+
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_Initial : forall i r m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Initial i r m)
+| sound_Final : forall m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Final m).
+
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma L_E_ro : preserves L_E ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + unfold Mem.storev in *.
+      assert (ro_acc m m').
+      eapply ro_acc_store; eauto.
+      constructor. eapply ro_acc_trans; eauto.
+      eapply ro_acc_sound; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+(** L_E ⫹_ro L_E *)
+Theorem self_simulation_ro :
+  forward_simulation ro L_E L_E.
+Proof.
+  eapply preserves_fsim. eapply L_E_ro; eauto.
+Qed.
+
+Section WT.
+
+Variable sig : signature.
+
+Inductive wt_state : state -> Prop :=
+| wt_Initial : forall i r m,
+    sig = int_ptr__void_sg ->
+    wt_state (Initial i r m)
+| wt_Final : forall m,
+    wt_state (Final m).
+
+End WT.
+
+Definition wt_inv (w: Genv.symtbl * signature) := wt_state (snd w).
+
+Lemma L_E_wt : preserves L_E wt_c wt_c wt_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    constructor.
+  - intros. inv H0. inv H. constructor; eauto.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+(** L_E ⫹_wt L_E *)
+Theorem self_simulation_wt :
+  forward_simulation wt_c L_E L_E.
+Proof.
+  eapply preserves_fsim. eapply L_E_wt; eauto.
+Qed.
+
+Require Import Ext AsmLinking.
+
+Theorem self_simulation_asmext :
+  forward_simulation asm_ext (Asm.semantics b1) (Asm.semantics b1).
+Proof.
+  
