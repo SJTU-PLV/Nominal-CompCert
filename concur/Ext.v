@@ -177,6 +177,6 @@ Program Definition asm_ext : callconv li_asm li_asm :=
     ccworld := ext_world;
     ccworld_world := ext_world_id;
     match_senv w := eq;
-    match_query := cc_asm_match ext;
+    match_query := cc_asm_match' ext;
     match_reply := cc_asm_match ext;    
   |}.
