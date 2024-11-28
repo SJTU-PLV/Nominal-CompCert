@@ -15,6 +15,7 @@ Variable se: Genv.symtbl.
 Let m10 := match w with extw m1 _ _ => m1 end.
 Let init_sup := Mem.support m10.
 Let ge := Genv.globalenv se prog.
+Let sem := Asm.semantics prog.
 
 Definition regset_lessdef (rs1 rs2: regset) := forall r, Val.lessdef (rs1 r) (rs2 r).
 
@@ -25,7 +26,16 @@ Inductive match_states : ext_world -> state -> state -> Prop :=
     (ACI: ext_acci wp (extw m m' Hm))
     (ACE: ext_acce w (extw m m' Hm)),
   match_states wp (State rs m flag)
-               (State rs' m' flag).
+    (State rs' m' flag).
+
+Inductive match_states' : ext_world -> (sup * state) -> (sup * state ) -> Prop  :=
+|match_states'_intro:
+  forall wp sup1 sup2 s1 s2
+    (SUP1: sup1 = init_sup)
+    (SUP2: sup2 = init_sup)
+    (MS: match_states wp s1 s2),
+    match_states' wp (sup1, s1) (sup2,s2).
+  
 (*
 Lemma ros_address_lessdef:
   forall ros rs rs',
@@ -183,7 +193,7 @@ Lemma extcall_arguments_ext: forall rs1 m1 ef args1 rs2 m2,
       Val.lessdef_list args1 args2.
 Admitted.
 
-Lemma step_correct :
+Lemma step_correct:
   forall s1 t s2, step init_sup ge s1 t s2 ->
   forall wp s1' (MS : match_states wp s1 s1'),
   exists s2', step init_sup ge s1' t s2' /\ match_states wp s2 s2'. 
@@ -279,7 +289,7 @@ Proof.
     econstructor; eauto. rs_lessdefs.
     etransitivity; eauto. etransitivity; eauto.
 Admitted. 
-      
+
 Lemma initial_correct:
   forall q1 q2 st1, GS.match_query asm_ext w q1 q2 -> initial_state ge q1 st1 ->
                exists st2, initial_state ge q2 st2 /\ match_states (get w) st1 st2.
@@ -293,6 +303,21 @@ Proof.
   econstructor; eauto. red. intros. eapply val_inject_id; eauto.
   instantiate (1:= Hm).
   constructor; eauto; red; intros; eauto. rewrite <- H4. reflexivity.
+Qed.
+
+Lemma initial_correct':
+  forall q1 q2 st1, GS.match_query asm_ext w q1 q2 -> Smallstep.initial_state (sem se)  q1 st1 ->
+               exists st2, Smallstep.initial_state (sem se) q2 st2 /\ match_states' (get w) st1 st2.
+Proof.
+  intros. simpl in H0. destruct st1. destruct H0. unfold m10 in init_sup.
+  (* simpl in H. destruct q1, q2. inv H. simpl in *. *)
+  exploit initial_correct; eauto.
+  intros (st2 & A & B). exists (s, st2). split.
+  constructor. eauto.
+  destruct q1,q2. inv H. simpl. destruct H3. inv H1. inv Hm1. eauto.
+  constructor; eauto.
+  destruct q1,q2. inv H. simpl. destruct H3. inv H1. unfold init_sup, m10. rewrite <- H3. reflexivity.
+  destruct q1,q2. inv H. simpl. destruct H3. inv H1. unfold init_sup, m10. rewrite <- H3. reflexivity.
 Qed.
 
 Lemma final_correct:
@@ -337,18 +362,26 @@ Proof.
   eapply GS.Forward_simulation.
   + reflexivity.
   + intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
-    set (ms := fun wp (s1 s2: sup * state) =>
-          fst s1 = fst s2 /\ match_states w wp (snd s1) (snd s2)).
-  eapply GS.forward_simulation_step with (match_states := ms); subst.
+    (* set (ms := fun wp (s1 s2: sup * state) =>
+          fst s1 = fst s2 /\ match_states w wp (snd s1) (snd s2)). *)
+  eapply GS.forward_simulation_step; subst.
   - intros. CKLR.uncklr. destruct q1, q2. inv H. simpl. destruct H1.
     simpl in H0. generalize (H0 PC). intro.
     apply val_inject_id in H2. inv H2. reflexivity. congruence.
-  - intros. simpl in H0. destruct s1. destruct H0. exploit initial_correct; eauto.
-    intros (s2 & A & B). exists (s, s2). split. constructor; eauto. admit.
-    simpl.
-    instantiate (1:= ms).
-  - admit.
-  - admit.
-  - simpl. eapply step_correct; eauto.
+  - apply initial_correct'.
+  - intros. destruct s1 as [sup1 s1]. destruct H0. inv H. 
+    exploit final_correct; eauto. constructor.
+  - intros. destruct w. inv H. simpl in H0. exploit external_correct; eauto.
+    intros (wA & q2 & A & B & C & D & E).
+    exists wA, q2. split. eauto. split. eauto. split. eauto. split. eauto.
+    intros. destruct s1'. destruct H2. exploit E; eauto.
+    intros (st2' & F & G). exists (s, st2'). split. econstructor. eauto. eauto.
+    econstructor; eauto.
+  - simpl. intros. destruct s1 as [sup1 s1]. destruct s1' as [sup1' s1'].
+    inv H. destruct s2 as [sup2 s2]. inv H0. destruct w.
+    exploit step_correct; simpl; eauto. simpl. eauto. simpl.
+    intros (s2' & A & B). exists (Mem.support m1, s2').
+    repeat apply conj; eauto. constructor; eauto.
   + auto using well_founded_ltof.
 Qed.
+
