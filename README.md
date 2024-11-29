@@ -86,7 +86,7 @@ The structure of the test cases is explained in [here](./rustexamples/compiler_t
 
 **Simulation Convention:**
 
-The calling conventions adapted in the Rust interface: [RA.v](./driver/RA.v) and [CallConv.v](./driver/CallConvRust.v)
+The calling conventions adapted in the Rust interface: [RA.v](./driver/RA.v) and [CallConvRust.v](./driver/CallConvRust.v)
 
 To see the statistics of the LOC of our development, use the following command:
 ```

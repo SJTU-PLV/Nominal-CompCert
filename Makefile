@@ -423,7 +423,7 @@ CoqProject:
 
 DIFFFLAGS= -U10
 
-compcerto: FORCE
+rcompcerto: FORCE
 	rm -rf $@.n $@
 	mkdir $@.n
 	git archive HEAD | tar -C $@.n -x
@@ -435,7 +435,7 @@ compcerto: FORCE
 	tar -cjf $@.n $<
 	mv $@.n $@
 
-artifact: compcerto.tar.bz2
+artifact: rcompcerto.tar.bz2
 
 -include .depend
 
