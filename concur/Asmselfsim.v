@@ -172,9 +172,27 @@ Lemma regset_lessdef_compare_longs : forall rs1 rs2 m1 m2 v1 v2 v11 v22,
     regset_lessdef rs1 rs2 ->
     regset_lessdef (compare_longs v1 v11 rs1 m1) (compare_longs v2 v22 rs2 m2).
 Proof.
-   intros. unfold compare_ints. destruct v1; destruct v2; inv H0;
-    destruct v11; destruct v22; inv H1; try repeat eapply regset_lessdef_set; eauto.
-Admitted.
+   intros. unfold compare_longs. destruct v1; destruct v2; inv H0;
+     destruct v11; destruct v22; inv H1; try repeat eapply regset_lessdef_set; eauto.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto. constructor. constructor. apply val_inject_id. constructor.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto. constructor. constructor. apply val_inject_id. constructor.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto. constructor. constructor. apply val_inject_id. constructor.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto. constructor. constructor. apply val_inject_id. constructor.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto; try constructor; try apply val_inject_id; eauto. constructor.
+   - apply val_inject_id. rstep.
+     exploit (val_cmplu_inject ext (extw m1 m2 H)). 4: eauto.
+     all: simpl; eauto; try constructor; try apply val_inject_id; eauto. constructor.
+Qed.
 
 Lemma regset_lessdef_undef_regs1 : forall l rs1 rs2,
     regset_lessdef rs1 rs2 ->
