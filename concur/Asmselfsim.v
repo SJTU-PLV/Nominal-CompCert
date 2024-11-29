@@ -161,7 +161,9 @@ Lemma regset_lessdef_compare_ints : forall rs1 rs2 m1 m2 v1 v2 v11 v22,
     regset_lessdef rs1 rs2 ->
     regset_lessdef (compare_ints v1 v11 rs1 m1) (compare_ints v2 v22 rs2 m2).
 Proof.
-Admitted.
+  intros. unfold compare_ints. destruct v1; destruct v2; inv H0;
+    destruct v11; destruct v22; inv H1; try repeat eapply regset_lessdef_set; eauto.
+Qed.
 
 Lemma regset_lessdef_compare_longs : forall rs1 rs2 m1 m2 v1 v2 v11 v22,
     Mem.extends m1 m2 ->
@@ -170,15 +172,64 @@ Lemma regset_lessdef_compare_longs : forall rs1 rs2 m1 m2 v1 v2 v11 v22,
     regset_lessdef rs1 rs2 ->
     regset_lessdef (compare_longs v1 v11 rs1 m1) (compare_longs v2 v22 rs2 m2).
 Proof.
+   intros. unfold compare_ints. destruct v1; destruct v2; inv H0;
+    destruct v11; destruct v22; inv H1; try repeat eapply regset_lessdef_set; eauto.
 Admitted.
+
+Lemma regset_lessdef_undef_regs1 : forall l rs1 rs2,
+    regset_lessdef rs1 rs2 ->
+    regset_lessdef (undef_regs l rs1) rs2.
+Proof.
+  induction l; intros; eauto.
+  eapply IHl.
+  simpl. red. intros. destruct (Pregmap.elt_eq r a).
+  subst. rewrite Pregmap.gss. constructor.
+  rewrite Pregmap.gso; eauto.
+Qed.
+
+Lemma undef_regs_undef : forall l rs r,
+    rs r = Vundef ->
+    undef_regs l rs r = Vundef.
+Proof.
+  induction l; intros; simpl; eauto.
+  - destruct (Pregmap.elt_eq a r). subst.
+    rewrite IHl. reflexivity. rewrite Pregmap.gss. reflexivity.
+    apply IHl. rewrite Pregmap.gso. eauto. eauto.
+Qed.
+
+Lemma regset_lessdef_undef_regs2 : forall l rs1 rs2 r v,
+      regset_lessdef (undef_regs l rs1) rs2 ->
+      In r l ->
+      regset_lessdef (undef_regs l rs1) (rs2 # r <- v).
+Proof.
+  induction l; intros.
+  - inv H0.
+  - inv H0. simpl in H. red. intros.
+    simpl. destruct (Pregmap.elt_eq r r0).
+    subst. rewrite !Pregmap.gss.
+    erewrite undef_regs_undef; eauto. rewrite Pregmap.gss. eauto.
+    rewrite Pregmap.gso. eauto. eauto.
+    eapply IHl; eauto.
+Qed.
 
 Lemma regset_lessdef_compare_floats : forall rs1 rs2 v1 v2 v11 v22,
     regset_lessdef rs1 rs2 ->
-       Val.lessdef v1 v2 ->
+    Val.lessdef v1 v2 ->
     Val.lessdef v11 v22 ->
     regset_lessdef (compare_floats v1 v11 rs1) (compare_floats v2 v22 rs2).
 Proof.
-Admitted.
+  intros. unfold compare_floats.
+  destruct v1; destruct v2; inv H0;
+    destruct v11; destruct v22; inv H1;
+    try eapply regset_lessdef_undef_regs; eauto.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_set; eauto.
+Qed.
 
 Lemma regset_lessdef_compare_floats32 : forall rs1 rs2 v1 v2 v11 v22,
     regset_lessdef rs1 rs2 ->
@@ -186,7 +237,18 @@ Lemma regset_lessdef_compare_floats32 : forall rs1 rs2 v1 v2 v11 v22,
     Val.lessdef v11 v22 ->
     regset_lessdef (compare_floats32 v1 v11 rs1) (compare_floats32 v2 v22 rs2).
 Proof.
-Admitted.
+  intros. unfold compare_floats32.
+  destruct v1; destruct v2; inv H0;
+    destruct v11; destruct v22; inv H1;
+    try eapply regset_lessdef_undef_regs; eauto.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_undef_regs2; eauto.
+    eapply regset_lessdef_undef_regs1; eauto. all: firstorder.
+  - repeat eapply regset_lessdef_set; eauto.
+Qed.
 
 Local Hint Resolve Val.zero_ext_lessdef Val.sign_ext_lessdef Val.loword_lessdef
   Val.singleoffloat_lessdef
