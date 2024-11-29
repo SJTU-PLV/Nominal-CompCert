@@ -419,7 +419,7 @@ print-includes:
 CoqProject:
 	@echo $(COQINCLUDES) > _CoqProject
 
-# Building the CompCertO artifact
+# Building the Rust-CompCertO artifact
 
 DIFFFLAGS= -U10
 
@@ -428,7 +428,6 @@ rcompcerto: FORCE
 	mkdir $@.n
 	git archive HEAD | tar -C $@.n -x
 	(cd coqrel && git archive HEAD --prefix=coqrel/) | tar -C $@.n -x
-	git diff $(DIFFFLAGS) v3.6 > $@.n/compcerto.diff
 	mv $@.n $@
 
 %.zip: %
