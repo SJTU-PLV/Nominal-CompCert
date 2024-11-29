@@ -82,7 +82,7 @@ The structure of the test cases is explained in [here](./rustexamples/compiler_t
 * Clight Generation:
   + Implementation: [Clightgen.v](./rustfrontend/Clightgen.v)
   + Verification: [Clightgenspec.v](./rustfrontend/Clightgenspec.v) and [Clightgenproof.v](./rustfrontend/Clightgenproof.v)
-* CompCertO backend: we utilize the CompCertO C compiler as the backend of our Rust compiler. The structure of the CompCertO is similar to the structure of CompCert. The version of CompCertO we use is based on the work of [Direct Refinement](https://github.com/SJTU-PLV/direct-refinement-popl24-artifac).
+* CompCertO backend: we utilize the CompCertO C compiler as the backend of our Rust compiler. The structure of the CompCertO is similar to the structure of CompCert. The version of CompCertO we use is based on the work of [Direct Refinement](https://github.com/SJTU-PLV/direct-refinement-popl24-artifact).
 
 **Simulation Convention:**
 
