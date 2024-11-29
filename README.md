@@ -32,7 +32,7 @@ In addition, our modifications rely on the Coqrel library (repo in [here](https:
 Finally, you can then build the compiler as follows:
 
     % ./configure x86_64-linux
-	% make depend
+	  % make depend
     % make all
     # or make all -jn (where n is the number of cores)
 

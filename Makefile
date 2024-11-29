@@ -431,11 +431,11 @@ rcompcerto: FORCE
 	git diff $(DIFFFLAGS) v3.6 > $@.n/compcerto.diff
 	mv $@.n $@
 
-%.tar.bz2: %
-	tar -cjf $@.n $<
+%.zip: %
+	tar -czf $@.n $<
 	mv $@.n $@
 
-artifact: rcompcerto.tar.bz2
+artifact: rcompcerto.zip
 
 -include .depend
 
