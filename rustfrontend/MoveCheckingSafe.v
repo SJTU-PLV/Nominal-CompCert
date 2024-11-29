@@ -3693,7 +3693,7 @@ Admitted.
 Lemma initial_state_sound: forall q s,
     query_inv wt_rs (se, w) q ->
     Smallstep.initial_state L q s ->
-    sound_state s.
+    sound_state s /\ wt_state ce s.
 Admitted.
 
 (* Lemma step_drop_sound: forall s1 t s2, *)
@@ -4132,134 +4132,134 @@ Proof.
     (* wt_state *)
     admit.
   (* step_dropplace_box *)
-  - inv SOUND. inv SDP. inv SPLIT.
-    (* To prove the (b,ofs) is equal to (b2,ofs2) so that (b', ofs')
-    is equal to (b1, 0). But we first need to show that eval_place r
-    is (b0, ofs0). It is possible because eval_place p has been
-    successful *)
-    exploit sound_split_fully_own_place_eval_place; eauto.
-    intros (b3 & ofs3 & EVALR & A).
-    (* the locations of get_loc_footprint_map and eval_place are the
-    same. Do we need to prove that all the dominators of r is init to utilize mmatch? *)
-    exploit eval_place_get_loc_footprint_map_equal; eauto.
-    intros (B1 & B2 & B3). subst.
-    exploit A. auto. intros A2. inv A2.
-    (* prove (b',ofs') = (b1,0) *)
-    inv PVAL; simpl in *; try congruence. inv H.
-    rewrite LOAD in H0. inv H0.
-    (* use sound_split_fully_own_place_unchanged,  m -> m' only changes b' *)
-    inv FREE.
-    exploit sound_split_fully_own_place_unchanged. 2: eapply SOUND.
-    auto. eapply Mem.free_unchanged_on. eauto.
-    intros. intro. destruct H0. apply H3. simpl. auto.
-    intros SOUND1.
-    (* sound_split_fully_own still holds after removing the final footprint of rfp *)
-    exploit sound_split_fully_own_place_set; eauto.
-    instantiate (1 := fp_emp). intros (rfp1 & G1 & G2 & G3).
-    (* b' is not in (fpm ++ fpf). It is used to prove sound_cont and mmatch *)
-    generalize NOREP as NOREP1. intros.
-    erewrite app_assoc in NOREP.        
-    eapply list_norepet_append_commut2 in NOREP.
-    erewrite app_assoc in NOREP.
-    eapply list_norepet_app in NOREP.
-    destruct NOREP as (N1 & N2 & N3).    
-    assert (NOTIN: ~ In b' (flat_fp_map fpm ++ flat_fp_frame fpf)).
-    { intro. eapply in_app in H. destruct H.
-      eapply N3. eapply in_app. left. eapply in_app. eauto.
-      eapply get_footprint_incl; eauto. simpl. eauto. auto.
-      eapply N3. eapply in_app. right. eauto.
-      eapply get_footprint_incl; eauto. simpl. eauto. auto. }
-    (* norepet of rfp1 *)
-    assert (NOREP2: list_norepet (footprint_flat rfp1)).
-    { eapply set_footprint_norepet; eauto.
-      simpl. econstructor.
-      simpl. red. intros. inv H0. }
-    split.
-    (* prove sound_dropplace *)
-    eapply sound_dropplace with (rfp := rfp1); eauto.
-    (* sound_cont *)
-    eapply sound_cont_unchanged; eauto.
-    eapply Mem.free_unchanged_on; eauto. intros.
-    intro. eapply NOTIN. eapply in_app_iff. right. auto.
-    (* mmatch *)
-    eapply mmatch_unchanged; eauto.
-    eapply Mem.free_unchanged_on; eauto. intros.
-    intro. eapply NOTIN. eapply in_app_iff. left. auto.
-    (* norepet *)
-    simpl. 
-    erewrite app_assoc.
-    eapply list_norepet_append_commut2.
-    erewrite app_assoc.
-    eapply list_norepet_app. repeat apply conj; eauto.
-    red. intros. eapply N3. auto.
-    exploit set_footprint_incl; eauto. intros [?|?]; auto. simpl in H3.
-    contradiction.    
-    (* rsw_acc *)
-    eapply rsw_acc_trans. eauto.
-    econstructor. eapply Mem.free_unchanged_on; eauto. intros.
-    intro. eapply H0. eapply in_app_iff. right.
-    eapply in_app_iff. right. eapply in_app_iff. left.
-    eapply get_footprint_incl; eauto. simpl. eauto.
-    (* flat_footprint_separated *)
-    red. intros. intro. apply H. simpl in H0.
-    erewrite !in_app. erewrite !in_app in H0.
-    repeat destruct H0; auto.
-    right. right. left.
-    eapply set_footprint_incl in H0; eauto. destruct H0; auto.
-    simpl in H0. contradiction.
-    (* sound_drop_place_state *)
-    econstructor; eauto.
-    (* wt_state *)
-    admit.
-  (* step_dropplace_struct *)
-  - inv SOUND.
-    inv DP.
-    (* easy: movable is owned *)
-    assert (POWN: is_owned own p = true) by admit.
-    (* show that (b,ofs) is sem_wt of Tstruct and prove the soundness *)
-(*     of members *)
-    exploit eval_place_sound. 1-3: eauto.
-    (** TODO: how to show p is syntactic well typed?  *)
-    admit.
-    eapply wf_own_dominator. auto.
-    auto.
-    intros (pfp & PFP).
-    exploit movable_place_sem_wt; eauto.
-    rewrite PTY. intros WT.
-    (* prove sound_state *)
-    econstructor; eauto.
-    econstructor.
-    (** TODO: use sem_wt_loc to prove member_footprint *)
-    admit.
-    (* sound_cont *)
-    instantiate (1 := fpf_func le fpm fpf).
-    econstructor.
-    (** TODO: shrinking the own_env preserves mmatch *)
-    admit.
-    auto.
-    (** TODO: sound_drop_place *)
-    inv SOUND.
-    econstructor. auto.
-    (* show that move out p does not change the ownership of l *)
-    admit.
-    (* use SEP to prove this goal *)
-    admit.
-    inv SEP. auto.
-    (* property of wf_own_env *)
-    admit.
-    (* norepet *)
-    admit.
-    (* accessibility *)
-    admit.
-  (* step_dropplace_struct *)
-  - admit.
-  (* step_dropplace_next *)
-  - inv SOUND. inv DP.
-    econstructor; eauto.
-    econstructor. auto.
-  (* step_dropplace_return *)
-  - inv SOUND.
-    econstructor; eauto.
+  - inv SOUND. inv SDP. (* inv SPLIT. *)
+(*     (* To prove the (b,ofs) is equal to (b2,ofs2) so that (b', ofs') *)
+(*     is equal to (b1, 0). But we first need to show that eval_place r *)
+(*     is (b0, ofs0). It is possible because eval_place p has been *)
+(*     successful *) *)
+(*     exploit sound_split_fully_own_place_eval_place; eauto. *)
+(*     intros (b3 & ofs3 & EVALR & A). *)
+(*     (* the locations of get_loc_footprint_map and eval_place are the *)
+(*     same. Do we need to prove that all the dominators of r is init to utilize mmatch? *) *)
+(*     exploit eval_place_get_loc_footprint_map_equal; eauto. *)
+(*     intros (B1 & B2 & B3). subst. *)
+(*     exploit A. auto. intros A2. inv A2. *)
+(*     (* prove (b',ofs') = (b1,0) *) *)
+(*     inv PVAL; simpl in *; try congruence. inv H. *)
+(*     rewrite LOAD in H0. inv H0. *)
+(*     (* use sound_split_fully_own_place_unchanged,  m -> m' only changes b' *) *)
+(*     inv FREE. *)
+(*     exploit sound_split_fully_own_place_unchanged. 2: eapply SOUND. *)
+(*     auto. eapply Mem.free_unchanged_on. eauto. *)
+(*     intros. intro. destruct H0. apply H3. simpl. auto. *)
+(*     intros SOUND1. *)
+(*     (* sound_split_fully_own still holds after removing the final footprint of rfp *) *)
+(*     exploit sound_split_fully_own_place_set; eauto. *)
+(*     instantiate (1 := fp_emp). intros (rfp1 & G1 & G2 & G3). *)
+(*     (* b' is not in (fpm ++ fpf). It is used to prove sound_cont and mmatch *) *)
+(*     generalize NOREP as NOREP1. intros. *)
+(*     erewrite app_assoc in NOREP.         *)
+(*     eapply list_norepet_append_commut2 in NOREP. *)
+(*     erewrite app_assoc in NOREP. *)
+(*     eapply list_norepet_app in NOREP. *)
+(*     destruct NOREP as (N1 & N2 & N3).     *)
+(*     assert (NOTIN: ~ In b' (flat_fp_map fpm ++ flat_fp_frame fpf)). *)
+(*     { intro. eapply in_app in H. destruct H. *)
+(*       eapply N3. eapply in_app. left. eapply in_app. eauto. *)
+(*       eapply get_footprint_incl; eauto. simpl. eauto. auto. *)
+(*       eapply N3. eapply in_app. right. eauto. *)
+(*       eapply get_footprint_incl; eauto. simpl. eauto. auto. } *)
+(*     (* norepet of rfp1 *) *)
+(*     assert (NOREP2: list_norepet (footprint_flat rfp1)). *)
+(*     { eapply set_footprint_norepet; eauto. *)
+(*       simpl. econstructor. *)
+(*       simpl. red. intros. inv H0. } *)
+(*     split. *)
+(*     (* prove sound_dropplace *) *)
+(*     eapply sound_dropplace with (rfp := rfp1); eauto. *)
+(*     (* sound_cont *) *)
+(*     eapply sound_cont_unchanged; eauto. *)
+(*     eapply Mem.free_unchanged_on; eauto. intros. *)
+(*     intro. eapply NOTIN. eapply in_app_iff. right. auto. *)
+(*     (* mmatch *) *)
+(*     eapply mmatch_unchanged; eauto. *)
+(*     eapply Mem.free_unchanged_on; eauto. intros. *)
+(*     intro. eapply NOTIN. eapply in_app_iff. left. auto. *)
+(*     (* norepet *) *)
+(*     simpl.  *)
+(*     erewrite app_assoc. *)
+(*     eapply list_norepet_append_commut2. *)
+(*     erewrite app_assoc. *)
+(*     eapply list_norepet_app. repeat apply conj; eauto. *)
+(*     red. intros. eapply N3. auto. *)
+(*     exploit set_footprint_incl; eauto. intros [?|?]; auto. simpl in H3. *)
+(*     contradiction.     *)
+(*     (* rsw_acc *) *)
+(*     eapply rsw_acc_trans. eauto. *)
+(*     econstructor. eapply Mem.free_unchanged_on; eauto. intros. *)
+(*     intro. eapply H0. eapply in_app_iff. right. *)
+(*     eapply in_app_iff. right. eapply in_app_iff. left. *)
+(*     eapply get_footprint_incl; eauto. simpl. eauto. *)
+(*     (* flat_footprint_separated *) *)
+(*     red. intros. intro. apply H. simpl in H0. *)
+(*     erewrite !in_app. erewrite !in_app in H0. *)
+(*     repeat destruct H0; auto. *)
+(*     right. right. left. *)
+(*     eapply set_footprint_incl in H0; eauto. destruct H0; auto. *)
+(*     simpl in H0. contradiction. *)
+(*     (* sound_drop_place_state *) *)
+(*     econstructor; eauto. *)
+(*     (* wt_state *) *)
+(*     admit. *)
+(*   (* step_dropplace_struct *) *)
+(*   - inv SOUND. *)
+(*     inv DP. *)
+(*     (* easy: movable is owned *) *)
+(*     assert (POWN: is_owned own p = true) by admit. *)
+(*     (* show that (b,ofs) is sem_wt of Tstruct and prove the soundness *) *)
+(* (*     of members *) *)
+(*     exploit eval_place_sound. 1-3: eauto. *)
+(*     (** TODO: how to show p is syntactic well typed?  *) *)
+(*     admit. *)
+(*     eapply wf_own_dominator. auto. *)
+(*     auto. *)
+(*     intros (pfp & PFP). *)
+(*     exploit movable_place_sem_wt; eauto. *)
+(*     rewrite PTY. intros WT. *)
+(*     (* prove sound_state *) *)
+(*     econstructor; eauto. *)
+(*     econstructor. *)
+(*     (** TODO: use sem_wt_loc to prove member_footprint *) *)
+(*     admit. *)
+(*     (* sound_cont *) *)
+(*     instantiate (1 := fpf_func le fpm fpf). *)
+(*     econstructor. *)
+(*     (** TODO: shrinking the own_env preserves mmatch *) *)
+(*     admit. *)
+(*     auto. *)
+(*     (** TODO: sound_drop_place *) *)
+(*     inv SOUND. *)
+(*     econstructor. auto. *)
+(*     (* show that move out p does not change the ownership of l *) *)
+(*     admit. *)
+(*     (* use SEP to prove this goal *) *)
+(*     admit. *)
+(*     inv SEP. auto. *)
+(*     (* property of wf_own_env *) *)
+(*     admit. *)
+(*     (* norepet *) *)
+(*     admit. *)
+(*     (* accessibility *) *)
+(*     admit. *)
+(*   (* step_dropplace_struct *) *)
+(*   - admit. *)
+(*   (* step_dropplace_next *) *)
+(*   - inv SOUND. inv DP. *)
+(*     econstructor; eauto. *)
+(*     econstructor. auto. *)
+(*   (* step_dropplace_return *) *)
+(*   - inv SOUND. *)
+(*     econstructor; eauto. *)
 Admitted.
 
 Lemma norepet_fpf_func_internal1: forall le fpm fpf,
@@ -4341,59 +4341,60 @@ Proof.
 
     (* wt_state preservation (write it in another lemma) *)
     admit.
-    
-  (* assign_variant sound *)
-  - admit.
-  (* step_box sound *)
-  - admit.
-  (** NOTEASY: step_to_dropplace sound *)
-  - inv SOUND. inv STMT.
+Admitted.
+
+  (* (* assign_variant sound *) *)
+  (* - admit. *)
+  (* (* step_box sound *) *)
+  (* - admit. *)
+  (* (** NOTEASY: step_to_dropplace sound *) *)
+  (* - inv SOUND. inv STMT. *)
 
 
     
-    exploit split_drop_place_sound; eauto.
-    intros SOUNDSPLIT.
-    econstructor; eauto.
-    econstructor. auto.
-  (* step_in_dropplace sound *)
-  - eapply step_dropplace_sound; eauto.
-  (* step_dropstate sound *)
-  - eapply step_drop_sound; eauto.
-  (* step_storagelive sound *)
-  - admit.
-  (* step_storagedead sound *)
-  - admit.
-  (* step_call sound *)
-  - inv SOUND.
-    exploit eval_exprlist_sem_wt; eauto.
-    intros (fpl & fpm2 & WT & MM2).
-    econstructor. 1-3: eauto.
-    (* sound_cont *)
-    instantiate (1 := fpf_func le fpm2 fpf).
-    econstructor. eauto. auto.
-    (* wf_own_env *)
-    admit.
-    eauto.
-    (* norepeat *)
-    admit.
-    (* accessibility *)
-    instantiate (1 := sg).
-    admit.
-  (* step_internal_function sound *)
-  - inv SOUND.
-    exploit function_entry_sound; eauto.
-    intros (fpm & MM & WFOWN).
-    econstructor; eauto.
-    (* prove sound_cont *)
-    instantiate (1 := fpf).
-    eapply sound_cont_unchanged; eauto.
-    (* prove unchanged_on of function_entry *)
-    admit.
-    (* new allocated blocks are disjoint with the frames *)
-    admit.
-    instantiate (1 := sg).
-    (* accessibility *)
-    admit.
+  (*   exploit split_drop_place_sound; eauto. *)
+  (*   intros SOUNDSPLIT. *)
+  (*   econstructor; eauto. *)
+  (*   econstructor. auto. *)
+  (* (* step_in_dropplace sound *) *)
+  (* - eapply step_dropplace_sound; eauto. *)
+  (* (* step_dropstate sound *) *)
+  (* - eapply step_drop_sound; eauto. *)
+  (* (* step_storagelive sound *) *)
+  (* - admit. *)
+  (* (* step_storagedead sound *) *)
+  (* - admit. *)
+  (* (* step_call sound *) *)
+  (* - inv SOUND. *)
+  (*   exploit eval_exprlist_sem_wt; eauto. *)
+  (*   intros (fpl & fpm2 & WT & MM2). *)
+  (*   econstructor. 1-3: eauto. *)
+  (*   (* sound_cont *) *)
+  (*   instantiate (1 := fpf_func le fpm2 fpf). *)
+  (*   econstructor. eauto. auto. *)
+  (*   (* wf_own_env *) *)
+  (*   admit. *)
+  (*   eauto. *)
+  (*   (* norepeat *) *)
+  (*   admit. *)
+  (*   (* accessibility *) *)
+  (*   instantiate (1 := sg). *)
+  (*   admit. *)
+  (* (* step_internal_function sound *) *)
+  (* - inv SOUND. *)
+  (*   exploit function_entry_sound; eauto. *)
+  (*   intros (fpm & MM & WFOWN). *)
+  (*   econstructor; eauto. *)
+  (*   (* prove sound_cont *) *)
+  (*   instantiate (1 := fpf). *)
+  (*   eapply sound_cont_unchanged; eauto. *)
+  (*   (* prove unchanged_on of function_entry *) *)
+  (*   admit. *)
+  (*   (* new allocated blocks are disjoint with the frames *) *)
+  (*   admit. *)
+  (*   instantiate (1 := sg). *)
+  (*   (* accessibility *) *)
+  (*   admit. *)
     
 (* (* Admitted. *) *)
 
@@ -4402,115 +4403,163 @@ Proof.
 (*     reachable L s -> sound_state s. *)
 (* Admitted. *)
 
-Lemma external_sound_progress: forall s q,
+Lemma external_sound: forall s q,
     sound_state s ->
+    wt_state ge s ->
     at_external ge s q ->
     exists wA, symtbl_inv wt_rs wA se /\ query_inv wt_rs wA q /\
             forall r, reply_inv wt_rs wA r ->
-                 (exists s', after_external s r s').
+                 (exists s', after_external s r s' (* do we really need
+                 this exists s'? It is repeated in partial safe *)
+                        /\ forall s', after_external s r s' -> sound_state s' /\ wt_state ge s').
 Admitted.
 
-Lemma external_sound_preserve: forall s s' q r wA,
+Lemma final_sound: forall s r,
     sound_state s ->
-    at_external ge s q ->
-    query_inv wt_rs wA q ->
-    reply_inv wt_rs wA r ->
-    after_external s r s' ->
-    sound_state s'.
-Admitted.
-
-Lemma final_sound_progress: forall s r,
-    sound_state s ->
+    wt_state ge s ->
     final_state s r ->
-    reply_inv wt_rs w r.
+    reply_inv wt_rs (se, w) r.
 Admitted.
 
-End BORCHK.
+End MOVE_CHECK.
 
 (** Specific definition of partial safe *)
-Definition partial_safe ge (L: lts li_rs li_rs state) (s: state) : Prop :=
-  not_stuck L s \/ step_mem_error ge s.
+(* Definition partial_safe ge (L: lts li_rs li_rs state) (s: state) : Prop := *)
+(*   not_stuck L s \/ step_mem_error ge s. *)
+
+Definition mem_error prog se (L: lts li_rs li_rs state) (s: state) : Prop :=
+  step_mem_error (globalenv se prog) s.
 
 (* I is the generic partial safe invariant *)
-Lemma move_check_module_safe (I: invariant li_rs) se p:
-  Genv.valid_for (erase_program (program_of_program p)) se -> 
+Lemma move_check_module_safe (I: invariant li_rs) p:
+  module_type_safe (semantics p) I I (mem_error p) ->  
+  (* Genv.valid_for (erase_program (program_of_program p)) se ->  *)
   move_check_program p = OK p ->
-  module_safe_se (semantics p) I I (partial_safe (globalenv se p)) se ->
-  module_safe_se (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) not_stuck se.
-Proof.  
-  intros VSE MVCHK PSAFE.
-  (* prove by progress and preservation *)
-  eapply module_safe_se_components_sound.
-  assert (CE_CON: composite_env_consistent (globalenv se p)).
-  { eapply build_composite_env_consistent.
-    instantiate (1 := (prog_types p)). destruct p; simpl; eauto. }
-  set (IS := fun '(w1, w2) s =>
-               reachable I I (semantics p se) w1 s
-               /\ partial_safe (globalenv se p) (semantics p se) s
-               /\ sound_state p w2 se s).
-  eapply (Module_safe_se_components _ _ (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) se IS).
-  (* preservation *)
-  - intros (w1 & w2) (SINV1 & SINV2). 
-    exploit PSAFE; eauto. intros PLSAFE.
-    constructor.
-    (* preserve step *)
-    + intros s t s' (REACH & PS & SOUND) STEP.
-      red. repeat apply conj.
-      * eapply step_reachable; eauto.
-      * eapply reachable_safe; eauto.
-        eapply step_reachable; eauto.
-      (* step sound_state *)
-      * eapply step_sound; eauto.        
-    (* initial *)
-    + intros q s VQ (QINV1 & QINV2) INIT.
-      red. repeat apply conj.
-      * eapply initial_reach; eauto.
-        eapply star_refl.
-      * eapply reachable_safe; eauto.
-        eapply initial_reach; eauto.
-        eapply star_refl.
-      (* initial sound state *)
-      * eapply initial_state_sound; eauto.
-    (* external preserve *)
-    + intros s s' q r (w1' & w2') (REACH & PS & SOUND) ATEXT (QINV1 & QINV2) (RINV1 & RINV2) AFEXT.
-      red. repeat apply conj.
-      * eapply external_reach; eauto.
-        eapply star_refl.
-      * eapply reachable_safe; eauto.
-        eapply external_reach; eauto.
-        eapply star_refl.
-      (** external sound state: may be very difficult!!! *)
-      * eapply external_sound_preserve; eauto.
-  (* progress *)
-  - intros (w1 & w2) (SINV1 & SINV2). 
-    exploit PSAFE; eauto. intros PLSAFE.
-    constructor.
-    (* sound_state progress *)
-    + intros s (REACH & PS & SOUND).
-      unfold partial_safe in PS. destruct PS; auto.
-      (** proof of no memory error in sound state *)
-      admit.
-    (* initial_progress *)
-    + intros q VQ (QINV1 & QINV2).
-      eapply initial_progress; eauto.
-    (* external_progress *)
-    + intros s q (REACH & PS & SOUND) ATEXT.
-      exploit (@external_progress li_rs); eauto.
-      intros (w1' & SINV1' & QINV1' & RINV1).
-      (** To construct wA: prove sound_state external progress *)
-      exploit external_sound_progress; eauto.
-      intros (w2' & SINV2' & QINV2' & RINV2').
-      exists (w1',w2'). repeat apply conj; eauto.
-      intros r (RINV1'' & RINV2'').
-      eapply RINV2'. auto.            
-    (* final_progress *)
-    + intros s r (REACH & PS & SOUND) FINAL.
-      exploit (@final_progress li_rs); eauto.
-      intros RINV1.
-      (** final_progress of sound_state  *)
-      exploit final_sound_progress; eauto.
-      intros RINV2. constructor; auto.      
+  module_type_safe (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF.
+  (* module_safe_se (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) not_stuck se. *)
+Proof.
+  intros [SAFE] MVCHK. destruct SAFE as (SINV & PRE).
+  (* w1 is the world in partial safe *)
+  set (IS := fun se1 '(w1, (se2, w2)) s =>
+               SINV se1 w1 s
+               /\ sound_state p w2 se2 s
+               /\ wt_state p.(prog_comp_env) s
+               /\ se1 = se2).
+  red. constructor.
+  eapply (Module_ksafe_components li_rs li_rs (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF IS).
+  intros se (w1 & (se' & w2)) (SYMINV1 & SYMINV2) VSE. simpl in SYMINV2. subst.
+  simpl in VSE.
+  generalize (PRE se w1 SYMINV1 VSE). intros PRE1.
+  econstructor.
+  (* internal_step_preserves *)
+  - intros s t s' (SINV1 & SOUND & WTST & SE) STEP.
+    simpl. repeat apply conj; auto.
+    + eapply internal_step_preserves; eauto.
+    + eapply step_sound; eauto.
+    + eapply step_sound; eauto.
+  (* internal_state_progress *)
+  - intros s (SINV1 & SOUND & WTST & SE).
+    exploit @internal_state_progress; eauto. intros [A|B].
+    auto.
+    (* memory error is impossible in sound_state*)
+    admit.
+  (* initial_preserves_progress *)
+  - intros q VQ (QINV1 & QINV2).
+    (** partial safe also allow initial_state???? *)
+    exploit @initial_preserves_progress; eauto.
+    intros (s & INIT & SINV1).
+    exists s. split; auto.
+    intros s' INIT'.
+    red. exploit initial_state_sound; eauto.
+    intros (SOUND & WT).
+    repeat apply conj; auto.
+  (* external_preserves_progress *)
+  - intros s q (SINV1 & SOUND & WTST & SE) ATEXT.
+    exploit @external_preserves_progress; eauto.
+    intros (wI & SYM1 & QINV1 & AFEXT1).    
+    exploit external_sound; eauto.
+    intros ((wrs & se') & SYM2 & QINV2 & AFEXT2).
+    exists (wI, (wrs, se')). repeat apply conj; auto.
+    (* after external *)
+    intros r (RINV1 & RINV2).
+    exploit AFEXT1; eauto.
+    intros (s' & AFST & AF).
+    exists s'. split; auto.
+    intros s'' AFST'.
+    exploit AFEXT2; eauto. intros (s''' & AFST'' & AF').
+    red.  simpl in AF'. repeat apply conj; auto.
+    eapply AF'. eauto. eapply AF'. eauto.
+  (* final_state_preserves *)
+  - intros s r (SINV1 & SOUND & WTST & SE) FINAL.
+    exploit @final_state_preserves; eauto.
+    intros RINV1.
+    exploit @final_sound; eauto. intros RINV2.
+    econstructor; eauto.
 Admitted.
+
+    
+(*   (* preservation *) *)
+(*   - intros (w1 & w2) (SINV1 & SINV2).  *)
+(*     exploit PSAFE; eauto. intros PLSAFE. *)
+(*     constructor. *)
+(*     (* preserve step *) *)
+(*     + intros s t s' (REACH & PS & SOUND) STEP. *)
+(*       red. repeat apply conj. *)
+(*       * eapply step_reachable; eauto. *)
+(*       * eapply reachable_safe; eauto. *)
+(*         eapply step_reachable; eauto. *)
+(*       (* step sound_state *) *)
+(*       * eapply step_sound; eauto.         *)
+(*     (* initial *) *)
+(*     + intros q s VQ (QINV1 & QINV2) INIT. *)
+(*       red. repeat apply conj. *)
+(*       * eapply initial_reach; eauto. *)
+(*         eapply star_refl. *)
+(*       * eapply reachable_safe; eauto. *)
+(*         eapply initial_reach; eauto. *)
+(*         eapply star_refl. *)
+(*       (* initial sound state *) *)
+(*       * eapply initial_state_sound; eauto. *)
+(*     (* external preserve *) *)
+(*     + intros s s' q r (w1' & w2') (REACH & PS & SOUND) ATEXT (QINV1 & QINV2) (RINV1 & RINV2) AFEXT. *)
+(*       red. repeat apply conj. *)
+(*       * eapply external_reach; eauto. *)
+(*         eapply star_refl. *)
+(*       * eapply reachable_safe; eauto. *)
+(*         eapply external_reach; eauto. *)
+(*         eapply star_refl. *)
+(*       (** external sound state: may be very difficult!!! *) *)
+(*       * eapply external_sound_preserve; eauto. *)
+(*   (* progress *) *)
+(*   - intros (w1 & w2) (SINV1 & SINV2).  *)
+(*     exploit PSAFE; eauto. intros PLSAFE. *)
+(*     constructor. *)
+(*     (* sound_state progress *) *)
+(*     + intros s (REACH & PS & SOUND). *)
+(*       unfold partial_safe in PS. destruct PS; auto. *)
+(*       (** proof of no memory error in sound state *) *)
+(*       admit. *)
+(*     (* initial_progress *) *)
+(*     + intros q VQ (QINV1 & QINV2). *)
+(*       eapply initial_progress; eauto. *)
+(*     (* external_progress *) *)
+(*     + intros s q (REACH & PS & SOUND) ATEXT. *)
+(*       exploit (@external_progress li_rs); eauto. *)
+(*       intros (w1' & SINV1' & QINV1' & RINV1). *)
+(*       (** To construct wA: prove sound_state external progress *) *)
+(*       exploit external_sound_progress; eauto. *)
+(*       intros (w2' & SINV2' & QINV2' & RINV2'). *)
+(*       exists (w1',w2'). repeat apply conj; eauto. *)
+(*       intros r (RINV1'' & RINV2''). *)
+(*       eapply RINV2'. auto.             *)
+(*     (* final_progress *) *)
+(*     + intros s r (REACH & PS & SOUND) FINAL. *)
+(*       exploit (@final_progress li_rs); eauto. *)
+(*       intros RINV1. *)
+(*       (** final_progress of sound_state  *) *)
+(*       exploit final_sound_progress; eauto. *)
+(*       intros RINV2. constructor; auto.       *)
+(* Admitted. *)
 
 Definition wt_rs_inv p '(se, w) := sound_state p (se, w) se.
 
