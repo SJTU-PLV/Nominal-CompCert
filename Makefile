@@ -431,7 +431,7 @@ rcompcerto: FORCE
 	mv $@.n $@
 
 %.zip: %
-	tar -czf $@.n $<
+	zip -r $@.n $<
 	mv $@.n $@
 
 artifact: rcompcerto.zip
