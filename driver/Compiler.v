@@ -1064,7 +1064,6 @@ Qed.
 
 (** * Correctness of the Rust compiler *)
 
-  
 Theorem rustlight_semantic_preservation:
   forall p tp,
   match_prog_rust p tp ->
@@ -1097,7 +1096,17 @@ Proof.
   apply Rustlightown.semantics_receptive.
   apply Asm.semantics_determinate.
 Qed.
-    
+
+(* The final theorem says that if the compilation correct, the
+semantics is preserved *)
+Theorem transf_rustlight_program_correct:
+  forall p tp,
+  transf_rustlight_program p = OK tp ->
+  backward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp).
+Proof.
+  intros. apply rustlight_semantic_preservation. apply transf_rustlight_program_match; auto.
+Qed.
+
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every

@@ -32,7 +32,7 @@ In addition, our modifications rely on the Coqrel library (repo in [here](https:
 Finally, you can then build the compiler as follows:
 
     % ./configure x86_64-linux
-	  % make depend
+	% make depend
     % make all
     # or make all -jn (where n is the number of cores)
 
@@ -84,9 +84,12 @@ The structure of the test cases is explained in [here](./rustexamples/compiler_t
   + Verification: [Clightgenspec.v](./rustfrontend/Clightgenspec.v) and [Clightgenproof.v](./rustfrontend/Clightgenproof.v)
 * CompCertO backend: we utilize the CompCertO C compiler as the backend of our Rust compiler. The structure of the CompCertO is similar to the structure of CompCert. The version of CompCertO we use is based on the work of [Direct Refinement](https://github.com/SJTU-PLV/direct-refinement-popl24-artifact).
 
-**Simulation Convention:**
+**Simulation convention:**
 
 The calling conventions adapted in the Rust interface: [RA.v](./driver/RA.v) and [CallConvRust.v](./driver/CallConvRust.v)
+
+**Theorem of compiler correctness:**
+[transf_rustlight_program_correct](./driver/Compiler.v#L1102) in [driver/Compiler.v](./driver/Compiler.v)
 
 To see the statistics of the LOC of our development, use the following command:
 ```
