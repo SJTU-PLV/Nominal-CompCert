@@ -1097,8 +1097,11 @@ Proof.
   apply Asm.semantics_determinate.
 Qed.
 
-(* The final theorem says that if the compilation correct, the
-semantics is preserved *)
+(* If the rust compiler compiles [p] and produces [tp], 
+  [tp] preserves the semantics of [p], in the sense that there
+  exists a backward simulation of the dynamic semantics of [p]
+  by the dynamic semantics of [tp]. *)
+
 Theorem transf_rustlight_program_correct:
   forall p tp,
   transf_rustlight_program p = OK tp ->
