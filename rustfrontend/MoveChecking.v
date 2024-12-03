@@ -41,9 +41,12 @@ Section REC.
     match ty with
     | Tbox ty1 =>
         if must_init init uninit universe p then
-          (** TODO: we need to consider that p may be is_full so that
+          (** we need to consider that p may be is_full so that
           we do not need to check deref p *)
-          must_movable' init uninit universe (Pderef p ty1) ty1
+          if is_full universe p then
+            true
+          else
+            must_movable' init uninit universe (Pderef p ty1) ty1
         else false
     | Tstruct _ id =>
         match get_composite ce id with
@@ -121,12 +124,12 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
   | _ => true
   end.
 
-Definition move_check_expr (e : expr) :=
+Definition move_check_expr' (e : expr) : bool :=
   match e with
   | Emoveplace p _ =>      
       if place_eq p (valid_owner p) then
         (* p is not downcast ... *)                
-        dominators_must_init init uninit universe p && must_movable ce init uninit universe p
+        dominators_must_init init uninit universe p && must_movable ce init uninit universe p 
       else
         (* p is downcast, we just check its valid_owner is init *)
         dominators_must_init init uninit universe p &&
@@ -134,13 +137,35 @@ Definition move_check_expr (e : expr) :=
   | Epure pe => move_check_pexpr pe
   end.
 
-Definition move_check_exprlist (l : list expr) :=
-  forallb move_check_expr l.
-          
+(* This function returns the (init, uninit) pair after moving the
+place in the expression, which is used to check the lhs of the
+statement *)
+Definition move_check_expr (e: expr) : option (PathsMap.t * PathsMap.t) :=
+  if move_check_expr' e then
+    let p := moved_place e in
+    match p with
+    | Some p =>
+        Some (remove_place p init, add_place universe p uninit)
+    | None => Some (init, uninit)
+    end
+  else None.
+         
 Definition move_check_assign (p : place) :=
   dominators_must_init init uninit universe p.
 
 End INIT.
+
+Fixpoint move_check_exprlist ce init uninit universe (l : list expr) : option (PathsMap.t * PathsMap.t) :=
+  match l with
+  | nil => Some (init, uninit)
+  | e :: l' =>
+      match move_check_expr ce init uninit universe e with
+      | Some (init', uninit') =>
+          move_check_exprlist ce init' uninit' universe l'
+      | None =>
+          None
+      end
+  end.
 
 
 Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement) : Errors.res statement :=
@@ -151,21 +176,25 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
       | Sassign p0 e
       | Sassign_variant p0 _ _ e
       | Sbox p0 e =>
-          if move_check_expr ce mayinit mayuninit universe e
-          then
-            if move_check_assign mayinit mayuninit universe p0
-            then OK stmt
-            else Error (msg "move_check_assign error")
-          else Error (msg "move_check_expr error")
+          match move_check_expr ce mayinit mayuninit universe e with
+          | Some (mayinit', mayuninit') =>
+              (** We should check p0 after moving the place in e instead
+                  of the analysis before moving the place of e ! *)
+              if move_check_assign mayinit' mayuninit' universe p0
+              then OK stmt
+              else Error (msg "move_check_assign error")
+          | None => Error (msg "move_check_expr error")
+          end
       | Scall p0 _ el =>
-          if move_check_exprlist ce mayinit mayuninit universe el
-          then
-            if move_check_assign mayinit mayuninit universe p0
-            then OK stmt
-            else Error (msg "move_check_assign error in Scall")
-          else Error (msg "move_check_exprlist error in Scall")
+          match move_check_exprlist ce mayinit mayuninit universe el with
+          | Some (mayinit', mayuninit') =>
+              if move_check_assign mayinit mayuninit universe p0
+              then OK stmt
+              else Error (msg "move_check_assign error in Scall")
+          | None => Error (msg "move_check_exprlist error in Scall")
+          end
       | Sreturn p =>
-          if move_check_expr ce mayinit mayuninit universe (Epure (Eplace p (typeof_place p))) then
+          if move_check_expr' ce mayinit mayuninit universe (Epure (Eplace p (typeof_place p))) then
             OK stmt
           else
             Error (msg "move_check_expr error in Sreturn")
@@ -179,10 +208,12 @@ Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res 
   let '(mayInit, mayUninit, universe) := an in
   match mayInit, mayUninit with
   | IM.State mayinit, IM.State mayuninit =>      
-      if move_check_expr ce mayinit mayuninit universe e then
-        OK tt
-      else
-        Error (msg "move_check_expr error")
+      match move_check_expr ce mayinit mayuninit universe e with
+      | Some _ =>
+          OK tt
+      | None =>
+          Error (msg "move_check_expr error")
+      end
   | _, _ => OK tt
   end.
 
