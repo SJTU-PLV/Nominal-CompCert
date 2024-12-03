@@ -445,7 +445,7 @@ Definition member_footprint_rel (wtfp: type -> footprint -> Prop) (co: composite
 
 
 (* Definition of wt_footprint (well-typed footprint). Intuitively, it
-says that the footprint has is an abstract form of the syntactic type
+says that the footprint is an abstract form of the syntactic type
 ty. We need an intermediate composite_env to act as the recursive
 guard to simulate the move checking because we do not allow unbounded
 appearence of shallow struct.*)
@@ -1160,12 +1160,13 @@ Record wf_own_env (own: own_env) : Prop := {
       in_universe own p = true ->
       ~ In (ph_downcast ty fid) (snd (path_of_place p));
 
-    (* all place in the universe is not scalar type and if it is not
-    full, it must be box type. Remember that if a struct is in the universe, it must be full. *)
+    (* if a place is not full, it must be box type. Remember that if a
+    struct/or some other scalar place is in the universe, it must be
+    full. *)
     wf_own_type: forall p,
       in_universe own p = true ->
-      scalar_type (typeof_place p) = false
-      /\ (is_full (own_universe own) p = false -> exists ty, typeof_place p = Tbox ty)
+      is_full (own_universe own) p = false ->
+      exists ty, typeof_place p = Tbox ty;
   }.
 
 
@@ -1630,9 +1631,16 @@ Admitted.
 
 End COMP_ENV.
 
+
+(* if a place passes must_movable checking, then the location of this
+place is sem_wt_loc. wt_footprint here is used to make sure that the
+footprint of this place (obtained by get_loc_footprint_map) has the
+same structure as its type, which is used to prevent dynamic footprint
+splitting! *)
 Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit universe
     (MM: mmatch fpm m e own)    
-    (* p owns the ownership chain *)    
+    (* p owns the ownership chain. To finish this proof, we need to
+    first fix some error in must_movable *)    
     (POWN: must_movable ce1 init uninit universe p = true)
     (SOUND: sound_own own init uninit universe)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
@@ -2012,6 +2020,9 @@ Inductive not_shallow_prefix_paths: list path -> Prop :=
     not_shallow_prefix_paths phs ->
     not_shallow_prefix_paths (ph :: phs).
 
+(* Set [vfp] to the path [phl] of [fp1], if [phl] is not shallow paths
+which means that if contains dereference, then [fp2] is still
+bmatch *)
 Lemma bmatch_set_not_shallow_paths: forall phl m b ofs fp1 fp2 vfp,
     bmatch m b ofs fp1 ->
     set_footprint phl vfp fp1 = Some fp2 ->
@@ -2020,7 +2031,9 @@ Lemma bmatch_set_not_shallow_paths: forall phl m b ofs fp1 fp2 vfp,
 Admitted.
 
 
-(** IMPORTANT TODO  *)
+(** IMPORTANT TODO: if (own_env, fpm (or abstract memory), mem)
+satisfies mmatch, then moving out the valid_owner of a place [p]
+preserves mmatch properties. *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 m le own)
     (* This property ensure that the place to be moved out has shallow
@@ -2074,10 +2087,10 @@ Proof.
       (** TODO: p0 must be not a shallow prefix of p1 because there is
       some shallow children of p1 in the universe which is guaranteed
       by the must_movable of p1 and some well-formedenss of universe
-      (i.e., if p is in the universe, so p's shallow prefix is in the
-      universe) . So the extra paths [phl] must contain some ph_deref
-      and updating fp3 to fp4 does not affect the bmatch in (b2, ofs2)
-      because the update takes place in other block *)
+      (i.e., if p is in the universe, so p's shallow prefix is not in
+      the universe) . So the extra paths [phl] must contain some
+      ph_deref and updating fp3 to fp4 does not affect the bmatch in
+      (b2, ofs2) because the update takes place in other block *)
       assert (NOT_SHALLOW: is_shallow_prefix p0 p1 = false) by admit.
       assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl) by admit.
       exploit bmatch_set_not_shallow_paths; eauto. intros BM1. split.
@@ -2165,12 +2178,15 @@ Lemma eval_pexpr_sem_wt: forall fpm m le own pe v init uninit universe
     sem_wt_val m (fp_scalar (typeof_pexpr pe)) v.
 Admitted.
 
+(* used to prove the premise of [mmatch_move_place_sound] *)
 Lemma must_movable_exists_shallow_prefix: forall ce init uninit universe p,
     must_movable ce init uninit universe p = true ->
     Paths.Exists (fun p1 : Paths.elt => is_shallow_prefix (valid_owner p) p1 = true) (PathsMap.get (local_of_place p) universe).
 Admitted.
 
-
+(* The value produced by eval_expr is semantics well-typed. We need to
+update the abstract memory (split the footprint of the value from
+fpm1) *)
 Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (MM: mmatch fpm1 m le own1)
     (WF: list_norepet (flat_fp_map fpm1))
@@ -2419,7 +2435,9 @@ Proof.
     the bytes of the tag *)
 Admitted.
 
-    
+(* Assigning a semantics well typed value to a location makes this
+location semantics well-typed. The difficult part is the align and
+composite. *)
 Lemma assign_loc_sem_wt: forall fp ty m1 b ofs v m2
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val m1 fp v)
@@ -4034,7 +4052,7 @@ Proof.
     instantiate (1 := p). inv WTST. inv WT1. auto.
     (* dominators_is_init *)
     eapply wf_own_dominators; eauto.
-    (*place p does not contain downcast *)
+    (* place p does not contain downcast *)
     intros. eapply wf_own_no_downcast. eauto.
     eapply is_init_in_universe. eauto.    
     intros (b & ofs & fp & ce' & GFP & WTFP & EXT).
@@ -4106,8 +4124,8 @@ Proof.
       intros F.
       (* p's type must be Box type *)
       exploit wf_own_type. eauto.
-      eapply is_init_in_universe. eauto.
-      intros (A1 & A2). exploit A2. eauto. intros (ty & A3).
+      eapply is_init_in_universe. eauto. auto.
+      intros (ty & A3).
       (* how do we know the type of p? How can we ensure that the *)
       (*         footprint of p is fp_emp? *)
       erewrite A3 in *.  inv WTFP;  try congruence.
@@ -4131,6 +4149,80 @@ Proof.
     eapply wf_own_env_move_place. auto.
     (* wt_state *)
     admit.
+  (* step_dropplace_scalar: mostly the same as step_dropplace_init2
+  because p is init and the type of p does not affect the proof of
+  sound_state *)
+  - inv SOUND. inv SDP. simpl in *. rewrite OWN in *.
+    (* compute the new footprint map: it require some well-formed
+    properties of own_env *)
+    exploit get_loc_footprint_map_progress. eauto. eauto.
+    (* wt_place *)
+    instantiate (1 := p). inv WTST. inv WT1. auto.
+    (* dominators_is_init *)
+    eapply wf_own_dominators; eauto.
+    (* place p does not contain downcast *)
+    intros. eapply wf_own_no_downcast. eauto.
+    eapply is_init_in_universe. eauto.    
+    intros (b & ofs & fp & ce' & GFP & WTFP & EXT).
+    (* remove fp from fpm *)
+    destruct (path_of_place p) eqn: POP.
+    exploit get_set_footprint_map_exists. eauto.
+    instantiate (1 := clear_footprint_rec fp). intros (fpm1 & CLR & GFP1).
+    (* p has no downcast *)
+    assert (forall ty fid, ~ In (ph_downcast ty fid) (snd (path_of_place p))).
+    { intros. eapply wf_own_no_downcast. eauto. eapply is_init_in_universe. auto. }
+    split. 
+    eapply sound_dropplace with (fpm:=fpm1) (rfp:=fp); eauto.
+    (* mmatch: use mmatch_move_place_sound *)
+    erewrite <- (valid_owner_same p).
+    eapply mmatch_move_place_sound. eauto.
+    all: try erewrite valid_owner_same; eauto.
+    exists p. split.
+    eapply Paths.mem_2. eapply is_init_in_universe. auto.
+    apply is_shallow_prefix_refl.
+    unfold clear_footprint_map. rewrite POP. rewrite GFP. auto.
+    (* norepet of the footprint frame *)
+    simpl.
+    erewrite (app_assoc (flat_fp_map fpm1)).
+    eapply list_norepet_append_commut2.
+    simpl in NOREP.
+    eapply list_norepet_append_commut2 in NOREP.
+    rewrite app_assoc in *.
+    eapply list_norepet_app in NOREP. destruct NOREP as (A1 & A2 & A3).
+    eapply list_norepet_app. repeat apply conj; auto.
+    eapply list_norepet_app. repeat apply conj.
+    eapply set_disjoint_footprint_norepet. eauto. eauto.
+    erewrite empty_footprint_flat. red. intros. inv H1.
+    eapply get_loc_footprint_map_norepet; eauto.
+    eapply get_set_disjoint_footprint_map; eauto.
+    erewrite empty_footprint_flat. red. intros. inv H1.
+    red. intros. eapply A3; auto.
+    eapply in_app in H1. destruct H1.
+    exploit set_footprint_map_incl; eauto. intros [A|B]; auto.
+    erewrite empty_footprint_flat in B. inv B.
+    eapply get_loc_footprint_map_incl; eauto.        
+    (* rsw_acc *)
+    eapply rsw_acc_trans. eauto.
+    econstructor. eapply Mem.unchanged_on_refl.
+    simpl. red. intros. intro. eapply H0.
+    rewrite !in_app_iff.
+    rewrite !in_app_iff in H1. repeat destruct H1; auto.
+    right. left.
+    exploit set_footprint_map_incl; eauto. intros [A|B]; auto.
+    rewrite empty_footprint_flat in B. inv B.
+    right. left.
+    eapply get_loc_footprint_map_incl; eauto.
+    (* sound_drop_place_state: we need to show that fp is fp_scalar *)
+    exploit MM. erewrite POP. eauto. auto.
+    intros (BM & FULL).
+    inv WTFP. inv BM.
+    (* modify sound_drop_place_state  *)
+    admit.
+    rewrite <- H2 in *. simpl in *; try congruence.
+    rewrite <- H2 in *. simpl in *; try congruence.
+    rewrite <- H2 in *. simpl in *; try congruence.
+    
+    
   (* step_dropplace_box *)
   - inv SOUND. inv SDP. (* inv SPLIT. *)
 (*     (* To prove the (b,ofs) is equal to (b2,ofs2) so that (b', ofs') *)

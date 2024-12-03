@@ -41,6 +41,8 @@ Section REC.
     match ty with
     | Tbox ty1 =>
         if must_init init uninit universe p then
+          (** TODO: we need to consider that p may be is_full so that
+          we do not need to check deref p *)
           must_movable' init uninit universe (Pderef p ty1) ty1
         else false
     | Tstruct _ id =>
