@@ -467,6 +467,41 @@ Proof.
   destruct (place_eq p p); simpl; auto.
 Qed.
 
+Lemma in_shallow_parent_paths_trans: forall p3 p2 p1,
+    In p1 (shallow_parent_paths p2) ->
+    In p2 (shallow_parent_paths p3) ->
+    In p1 (shallow_parent_paths p3).
+Proof.
+  induction p3; simpl in *; intros; try contradiction.
+  - destruct H0.
+    + subst. destruct (place_eq p2 p1); auto.
+    + right. eapply IHp3. eauto. auto.
+  - destruct H0.
+    + subst. destruct (place_eq p2 p1); auto.
+    + right. eapply IHp3. eauto. auto.
+Qed.
+
+Lemma is_shallow_prefix_trans: forall p1 p2 p3,
+    is_shallow_prefix p1 p2 = true ->
+    is_shallow_prefix p2 p3 = true ->
+    is_shallow_prefix p1 p3 = true.
+Proof.
+  intros. unfold is_shallow_prefix in *.
+  destruct (place_eq p1 p2); destruct (place_eq p2 p3); destruct (place_eq p1 p3); subst; try congruence; auto.
+  simpl in *.
+  repeat destruct in_dec; simpl in *; try congruence.
+  exfalso. eapply n2.
+  eapply in_shallow_parent_paths_trans; eauto.
+Qed.
+
+Lemma is_shallow_prefix_same_local: forall p1 p2,
+    is_shallow_prefix p1 p2 = true ->
+    local_of_place p1 = local_of_place p2.
+Proof.
+  intros. apply is_shallow_prefix_is_prefix in H.
+  eapply is_prefix_same_local; eauto.
+Qed.
+
 Lemma valid_owner_same_local: forall p,
     local_of_place (valid_owner p) = local_of_place p.
 Proof.

@@ -122,6 +122,21 @@ Definition in_universe (own: own_env) (p: place) : bool :=
   let universe := PathsMap.get id own.(own_universe) in
   Paths.mem p universe.
 
+Lemma in_universe_eq: forall own1 own2 p,
+    PathsMap.eq (own_universe own1) (own_universe own2) ->
+    in_universe own1 p = in_universe own2 p.
+Proof.
+  intros. unfold in_universe.
+  generalize (H (local_of_place p)). intros EQ.
+  destruct (Paths.mem p (PathsMap.get (local_of_place p) (own_universe own1))) eqn: A;
+    destruct (Paths.mem p (PathsMap.get (local_of_place p) (own_universe own2))) eqn: B;
+    auto.
+  eapply Paths.mem_2 in A. rewrite <- B. symmetry.
+  eapply Paths.mem_1. rewrite <- EQ. auto.
+  eapply Paths.mem_2 in B. rewrite <- A. 
+  eapply Paths.mem_1. rewrite EQ. auto.
+Qed.
+
 (* is_owned means that the location of p is initialized (assuming that
 the location of p is valid) *)
 (* Definition is_owned (own: own_env) (p: place): bool := *)

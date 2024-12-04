@@ -1150,10 +1150,11 @@ Record wf_own_env (own: own_env) : Prop := {
       is_init own p = true ->
       dominators_is_init own p = true;
 
+    (* validation property *)
     wf_own_universe_shallow: forall p1 p2,
-      in_universe own p1 = true ->
-      is_shallow_prefix p1 p2 = true ->
-      in_universe own p2 = false;
+      in_universe own p1 = true ->      
+      in_universe own p2 = true ->
+      is_shallow_prefix p1 p2 = false;
 
     (* all place in the universe has no downcast *)
     wf_own_no_downcast: forall p fid ty,
@@ -2030,12 +2031,15 @@ Proof.
   - admit.
 Admitted.      
 
-Inductive not_shallow_prefix_paths: list path -> Prop :=
-| not_shallow_prefix_paths1: forall phs,
-    not_shallow_prefix_paths (ph_deref :: phs)
-| not_shallow_prefix_paths2: forall phs ph,
-    not_shallow_prefix_paths phs ->
-    not_shallow_prefix_paths (ph :: phs).
+(* Inductive not_shallow_prefix_paths: list path -> Prop := *)
+(* | not_shallow_prefix_paths1: forall phs, *)
+(*     not_shallow_prefix_paths (ph_deref :: phs) *)
+(* | not_shallow_prefix_paths2: forall phs ph, *)
+(*     not_shallow_prefix_paths phs -> *)
+(*     not_shallow_prefix_paths (ph :: phs). *)
+
+Definition not_shallow_prefix_paths (phl: list path) : Prop :=
+  In ph_deref phl.
 
 (* Set [vfp] to the path [phl] of [fp1], if [phl] is not shallow paths
 which means that if contains dereference, then [fp2] is still
@@ -2047,12 +2051,102 @@ Lemma bmatch_set_not_shallow_paths: forall phl m b ofs fp1 fp2 vfp,
     bmatch m b ofs fp2.
 Admitted.
 
+Lemma in_parent_paths_not_empty_sufix: forall p1 p2 id l1,
+    In p1 (parent_paths p2) ->
+    path_of_place p1 = (id, l1) ->
+    exists l2, path_of_place p2 = (id, l1 ++ l2) /\
+            l2 <> nil.
+Admitted.
+
+Lemma not_nil_app_end {A: Type} : forall (l: list A),
+    l <> nil ->
+    exists a l', l = l' ++ [a].
+Proof.
+  induction l. congruence.
+  intros. destruct l.
+  exists a, nil. eauto.
+  exploit IHl; eauto. congruence.
+  intros (a1 & l' & A1). exists a1, (a::l'). rewrite A1. auto.
+Qed.
+
+Lemma path_of_not_shallow_prefix_aux: forall p2 p1 l1 l2 id
+    (NEQ: p1 <> p2)
+    (NSHA: ~ In p1 (shallow_parent_paths p2))
+    (* is_prefix here is used to avoid syntatic well-typedness *)
+    (PRE: In p1 (parent_paths p2))
+    (POP1: path_of_place p1 = (id, l1))
+    (POP2: path_of_place p2 = (id, l1 ++ l2))
+    (NOTEMP: l2 <> nil),
+    not_shallow_prefix_paths l2.
+Proof.
+  induction p2; simpl; intros.
+  - inv POP2. symmetry in H1. eapply app_eq_nil in H1. destruct H1.
+    subst. destruct p1; simpl in POP1; inv POP1; try contradiction.
+  - eapply Decidable.not_or in NSHA.
+    destruct NSHA as (A1 & A2); destruct PRE as [B1|B2]; subst; try congruence.
+    destruct (path_of_place p2) eqn: POP3. inv POP2.
+    eapply not_nil_app_end in NOTEMP.
+    destruct NOTEMP as (a & l2' & C1). subst.
+    erewrite app_assoc in H1. eapply app_inj_tail in H1.
+    destruct H1. subst.
+    (* show that l2' is also not empty *)
+    exploit in_parent_paths_not_empty_sufix; eauto.
+    intros (l2'' & C2 & C3). rewrite POP3 in C2. inv C2.
+    eapply app_inv_head in H0. subst.
+    exploit IHp2. 1-6: eauto. intros.
+    red. eapply in_app. eauto.
+  - destruct (path_of_place p2) eqn: POP3. inv POP2.
+    destruct PRE as [B1|B2]; subst; try congruence.
+    + eapply not_nil_app_end in NOTEMP.
+      destruct NOTEMP as (a & l2' & C1). subst.
+      erewrite app_assoc in H1. eapply app_inj_tail in H1.
+      destruct H1. subst. eapply in_app; auto. right. econstructor; auto.
+    + eapply not_nil_app_end in NOTEMP.
+      destruct NOTEMP as (a & l2' & C1). subst.
+      erewrite app_assoc in H1. eapply app_inj_tail in H1.
+      destruct H1. subst.
+      eapply in_app; auto. right. econstructor; auto.
+  - eapply Decidable.not_or in NSHA.
+    destruct NSHA as (A1 & A2); destruct PRE as [B1|B2]; subst; try congruence.
+    destruct (path_of_place p2) eqn: POP3. inv POP2.
+    eapply not_nil_app_end in NOTEMP.
+    destruct NOTEMP as (a & l2' & C1). subst.
+    erewrite app_assoc in H1. eapply app_inj_tail in H1.
+    destruct H1. subst.
+    (* show that l2' is also not empty *)
+    exploit in_parent_paths_not_empty_sufix; eauto.
+    intros (l2'' & C2 & C3). rewrite POP3 in C2. inv C2.
+    eapply app_inv_head in H0. subst.
+    exploit IHp2. 1-6: eauto. intros.
+    red. eapply in_app. eauto.
+Qed.
+
+Lemma path_of_not_shallow_prefix: forall p1 p2 l1 l2 id
+    (NSHA: is_shallow_prefix p1 p2 = false)
+    (* is_prefix here is used to avoid syntatic well-typedness *)
+    (PRE: is_prefix p1 p2 = true)
+    (POP1: path_of_place p1 = (id, l1))
+    (POP2: path_of_place p2 = (id, l1 ++ l2)),
+    not_shallow_prefix_paths l2.
+Proof.
+  intros.
+  unfold is_shallow_prefix in NSHA.
+  unfold is_prefix in PRE.
+  destruct place_eq; simpl in *; try congruence.
+  destruct in_dec in *; simpl in *; try congruence.
+  destruct in_dec in *; simpl in *; try congruence.
+  exploit in_parent_paths_not_empty_sufix; eauto.
+  intros (l3 & A1 & A2). rewrite POP2 in A1. inv A1.
+  eapply app_inv_head in H0. subst.
+  eapply path_of_not_shallow_prefix_aux; eauto.
+Qed.
 
 (** IMPORTANT TODO: if (own_env, fpm (or abstract memory), mem)
 satisfies mmatch, then moving out the valid_owner of a place [p]
 preserves mmatch properties. *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 m le own)
+    (WF: wf_own_env own)
     (* This property ensure that the place to be moved out has shallow
     prefix (its location) in the universe. This property is ensured by
     must_movable *)
@@ -2108,8 +2202,22 @@ Proof.
       the universe) . So the extra paths [phl] must contain some
       ph_deref and updating fp3 to fp4 does not affect the bmatch in
       (b2, ofs2) because the update takes place in other block *)
-      assert (NOT_SHALLOW: is_shallow_prefix p0 p1 = false) by admit.
-      assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl) by admit.
+      assert (NOT_SHALLOW: is_shallow_prefix p0 p1 = false).
+      { destruct EX as (p2 & A1 & A2).
+        destruct (is_shallow_prefix p0 p1) eqn: SHA; auto.
+        exploit is_shallow_prefix_trans. eapply SHA. eauto.
+        intros B1. rewrite <- B1.
+        eapply wf_own_universe_shallow. eauto.
+        erewrite in_universe_eq.
+        eapply is_init_in_universe. eauto.
+        eapply move_place_eq_universe. 
+        unfold in_universe. eapply Paths.mem_1; auto.
+        erewrite <- is_shallow_prefix_same_local. 2: eapply B1.
+        erewrite <- valid_owner_same_local in A1.
+        erewrite is_shallow_prefix_same_local. eauto.
+        eauto. }
+      assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl).
+      { eapply path_of_not_shallow_prefix; eauto. }
       exploit bmatch_set_not_shallow_paths; eauto. intros BM1. split.
       auto.
       (** is_full is not possible because p2 is in the universe (add
@@ -2166,8 +2274,7 @@ Proof.
        exploit MM. eauto.
        eapply move_place_init_is_init. eauto.
        intros (BM & WTLOC). auto.
-Admitted.
-       
+Qed.       
     
 (** dereferce a semantically well typed location produces well typed value *)
 Lemma deref_sem_wt_loc_sound: forall m fp b ofs ty v
@@ -2225,7 +2332,10 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (* footprint disjointness *)
     /\ list_disjoint (footprint_flat fp) (flat_fp_map fpm2)
     /\ list_norepet (flat_fp_map fpm2)
-    (* we need to ensure that fp ∪ fpm2 = fpm1 to prove separation *)
+    (* we need to ensure that fp ∪ fpm2 = fpm1 to prove
+    separation. Because we do not know how fpm2 is constructed (which
+    is differnet in move place or pure expression), we use this
+    list_equiv to relate fpm1 and fpm2 *)
     /\ list_equiv (footprint_flat fp ++ flat_fp_map fpm2) (flat_fp_map fpm1).
 Proof.
   intros. destruct e.
@@ -4421,18 +4531,49 @@ Qed.
 (*     rsw_acc (rsw sg fp1'' m1) (rsw sg fp2'' m2). *)
 (* Admitted. *)
 
-
+(* Some frame update of rsw_acc *)
 Lemma rsw_acc_app: forall l l1 l2 m1 m2 sg,
     rsw_acc (rsw sg l1 m1) (rsw sg l2 m2) ->
     rsw_acc (rsw sg (l1 ++ l) m1) (rsw sg (l2 ++ l) m2).
-Admitted.
+Proof.
+  intros. inv H. econstructor.
+  eapply Mem.unchanged_on_implies; eauto.
+  intros. simpl. intro. eapply H. eapply in_app; eauto.
+  red. intros. intro. eapply SEP; eauto.
+  intro. eapply H. eapply in_app; eauto.
+  eapply in_app in H0. destruct H0; auto.
+  exfalso. eapply H. eapply in_app; auto.
+Qed.
 
+  
 (* More generally, rsw_acc is preserved under permuation of the
       footprint *)
 Lemma rsw_acc_commut: forall l1 l2 l sg m1 m2,
     rsw_acc (rsw sg (l1 ++ l) m1) (rsw sg (l2 ++ l) m2) ->
     rsw_acc (rsw sg (l ++ l1) m1) (rsw sg (l ++ l2) m2).
 Admitted.
+
+
+Lemma in_footprint_of_env: forall b ty id le,
+    le ! id = Some (b, ty) ->
+    In b (footprint_of_env le).
+Admitted.
+
+Lemma in_flat_fp_map: forall b fp fpm id,
+    fpm ! id = Some fp ->
+    In b (footprint_flat fp) ->
+    In b (flat_fp_map fpm).
+Admitted.
+
+(* If the footprint shrinks, the flat_footprint_separated is
+    satisfied trivially *)
+Lemma flat_footprint_separated_shrink: forall l1 l2 m,
+    incl l2 l1 ->
+    flat_footprint_separated l1 l2 m. 
+Proof.
+  intros. red. intros. intro. eapply H0. auto.
+Qed.
+
 
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
@@ -4487,16 +4628,7 @@ Proof.
     (* end of construct *)
     split.
     (* sound_state *)
-    econstructor; eauto.
-    econstructor.
-    (* sound_cont: show the unchanged m1 m2 *)
-    instantiate (1 := fpf).
-    eapply sound_cont_unchanged; eauto.
-    (* to prove sound_cont: unchanged on the footprint of the frames
-    of the function *)
-    exploit assign_loc_unchanged_on; eauto.
-    intros UNC1. eapply Mem.unchanged_on_implies. eauto.
-    simpl. intros. intro. destruct H5. subst.
+    (* The changed block is in the stack or the footprint map *)
     assert (RAN: In b (footprint_of_env le ++ flat_fp_map fpm2)).
     {     
     destruct (path_of_place p) eqn: POP. simpl in GFP.
@@ -4508,18 +4640,25 @@ Proof.
     eapply wt_footprint_extend_ce. eauto. auto. auto.
     intros [(B1 & B2 & B3) | (B1 & B2)]; subst.
     (* case1: b is in the stack (i.e., in the le) *)
-    eapply in_app. left. admit.
+    eapply in_app. left. eapply in_footprint_of_env; eauto.    
     (* case2: b is in abstract value (i.e., in the heap) *)
-    eapply in_app. right. admit. }
-    
-    
-    exploit flat_fp_frame_func1; eauto. intros (C1 & C2). apply C2. auto.
-    (* case2: b is in abstract value (i.e., in the heap) *)
-    assert (NOREP1': list_norepet (flat_fp_frame (fpf_func le fpm2 fpf))).
-    { eapply fp_frame_norepet_internal. eauto. red.
-      intros. eapply EQUIV1. apply in_app. auto. auto. }
-    exploit flat_fp_frame_func2; eauto. intros (C1 & C2).
-    eapply C2; eauto.
+    eapply in_app. right. eapply in_flat_fp_map; eauto. }
+    assert (RAN1: In b (footprint_of_env le ++ flat_fp_map fpm)).
+    { eapply in_app in RAN. apply in_app. destruct RAN; auto.
+      right. eapply EQUIV1. eapply in_app; eauto. }    
+    econstructor; eauto.
+    econstructor.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    (* to prove sound_cont: unchanged on the footprint of the frames
+    of the function *)
+    exploit assign_loc_unchanged_on; eauto.
+    intros UNC1. eapply Mem.unchanged_on_implies. eauto.
+    simpl. intros. intro. destruct H5. subst.    
+    simpl in NOREP.
+    rewrite app_assoc in NOREP. eapply list_norepet_app in NOREP as (N1 & N2 & N3).
+    eapply N3. eauto. eauto. auto. 
     (* end of the proof of sound_cont *)
     (* norepet *)
     eapply fp_frame_norepet_internal. eauto.
@@ -4537,9 +4676,14 @@ Proof.
     intros UNC1. eapply Mem.unchanged_on_implies. eauto.
     simpl. intros. intro. destruct H5. subst.
     apply H3. 
-    destruct (path_of_place p) eqn: POP. simpl in GFP.
-    
-        
+    destruct (path_of_place p) eqn: POP. simpl in GFP. auto.
+    (* flat_footprint_separate: easy because support is unchanged *)
+    eapply flat_footprint_separated_shrink.
+    red. intros. apply in_app in H3; apply in_app; destruct H3; auto.
+    right. apply EQUIV1.
+    destruct (path_of_place p) eqn: POP.
+    eapply set_footprint_map_incl in H3; eauto. apply in_app. destruct H3; auto.
+    (* end of rsw_acc *)
     (* wf_own_env preservation (write it in another lemma) *)
     admit.
     (* wt_state *)
