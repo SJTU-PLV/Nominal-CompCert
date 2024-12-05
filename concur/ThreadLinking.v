@@ -259,6 +259,9 @@ Section ConcurSim.
        I'm 95% sure it's correct. Maybe we can somehow reuse the initialization
        proofs in ValueAnalysis for this. Or slightly change the definition of
        ro_sound_memory using existential [bc] if this approach is more ligheweight. *)
+
+   (** This lemma should also be part of the DR with closed simulation and behavior
+       refinement. We should refer the loading process proposed in CompCertOE *)      
    Lemma initial_romatch : forall skel m0,
        Genv.init_mem skel = Some m0 ->
        Genv.symboltbl skel = se ->
@@ -324,24 +327,20 @@ Section ConcurSim.
      Theorem sound_ro : sound_memory_ro se m0.
      Proof.
        constructor.
-       - unfold CMulti.initial_se in se.
-
-         constructor. ValueDomain.romem
-         
+       - eapply initial_romatch; eauto.
        - apply Genv.init_mem_genv_sup in INITM as SUP.
          rewrite <- SUP. unfold se.
          apply Mem.sup_include_refl.
-                 
-       Admitted. (*TODO: It is supposed to be correct.*)
-
+     Qed.
+     
    End Initial.
 
 
-    Definition empty_worlds {T:Type}: NatMap.t (option T) := NatMap.init None.
-    Definition empty_gworlds {T:Type}: NatMap.t (option T) := NatMap.init None.
-    Definition initial_worlds {T: Type} (w: T) := NatMap.set 1%nat (Some w) empty_worlds.
-    Definition initial_gworlds {T:Type} (w: T) := NatMap.set 1%nat (Some w) empty_gworlds.
-    Definition initial_indexs (i: fsim_index) := i :: nil.
+   Definition empty_worlds {T:Type}: NatMap.t (option T) := NatMap.init None.
+   Definition empty_gworlds {T:Type}: NatMap.t (option T) := NatMap.init None.
+   Definition initial_worlds {T: Type} (w: T) := NatMap.set 1%nat (Some w) empty_worlds.
+   Definition initial_gworlds {T:Type} (w: T) := NatMap.set 1%nat (Some w) empty_gworlds.
+   Definition initial_indexs (i: fsim_index) := i :: nil.
     
     (** * We shall add more and more invariants about global states here *)
 
@@ -728,6 +727,25 @@ Qed.
       - inv mi_inj.
         constructor; eauto.
     Qed.
+    Locate mksup.
+    (** To be moved to Memory.v *)
+    Lemma mksup_ext:
+      forall stack1 stack2 tid1 tid2 a1 a2,
+        stack1 = stack2 -> tid1 = tid2 ->
+        Mem.mksup stack1 tid1 a1 = Mem.mksup stack2 tid2 a2.
+    Proof.
+      intros. subst. f_equal; apply Axioms.proof_irr.
+    Qed.
+    
+    Lemma yield_extends : forall m tm n p tp,
+        Mem.extends m tm ->
+        Mem.extends (Mem.yield m n p) (Mem.yield tm n tp).
+    Proof.
+      intros. unfold Mem.yield. inv H.
+      constructor; simpl; eauto.
+      - unfold Mem.sup_yield. apply mksup_ext; congruence.
+      - inv mext_inj. constructor; eauto.
+    Qed.
 
    Inductive injp_acc_thc : injp_world -> injp_world -> Prop :=
      injp_thread_create: forall j m1 m2 Hm m1' m2' Hm' id1 id2
@@ -760,7 +778,6 @@ Qed.
      apply H.
    Qed.
 
-   
    Lemma trans_pthread_create__start_routine: forall q_ptc r_ptc q_str qa_ptc wA,
         query_is_pthread_create OpenC q_ptc r_ptc q_str ->
         GS.match_query cc_compcert wA q_ptc qa_ptc ->
@@ -776,15 +793,20 @@ Qed.
                            GS.match_senv cc_compcert wA' se tse /\
                            worlds_ptc_str (cainjp_w_compcert wA) (cainjp_w_compcert wA').
    Proof.
-     Admitted. (** we de not know whether this spec is strong enough yet *)
-(*     intros until wA. intros H H0 MSE.
-     inv H. inv H0.
-     subst tvf targs. rewrite pthread_create_locs in H4. simpl in H4.
-     inv H4. inv H10. inv H12. inv H9.
+     intros until wA. intros H H0 MSE.
+     inv H. destruct wA as (se0 & [se0' m0'] & se1 & [se1' sig'] & se2 & w_cap & w_e).
+     destruct H0 as [q1' [Hqr [q1'' [Hqw [qa' [Hqca Hqe]]]]]].
+     inv Hqr. inv Hqw. simpl in H. destruct H0. simpl in H0. inv H0. simpl in H1.
+     inv Hqca. destruct qa_ptc as [trs ttm]. inv Hqe. destruct H2 as [PCN Hme].
+     inv Hme. clear Hm4. rename Hm3 into Hme.
+     subst tvf targs. rewrite pthread_create_locs in H5. simpl in H5.
+     inv H5. inv H17. inv H18. inv H19.
+     destruct MSE as [EQ1 [EQ2 [MSE EQ3]]].
+     inv EQ1. inv EQ2. inv EQ3. inv H2. inv H3.
      (** prepare arguments *)
      assert (INJPTC: j b_ptc = Some (b_ptc, 0)).
      {
-       inv MSE. inv H12.
+       inv MSE. inv H17.
        exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDPTC.
        intros (b3 & INJ).
        exploit mge_symb; eauto.
@@ -793,10 +815,10 @@ Qed.
        inv FINDPTC'. eauto.
      }
      assert (PCVAL: rs PC = Vptr b_ptc Ptrofs.zero).
-     inv H5. rewrite H12 in INJPTC. inv INJPTC. reflexivity.
+     inv H6. rewrite H17 in INJPTC. inv INJPTC. reflexivity.
      assert (INJSTR: j b_start = Some (b_start, 0)).
      {
-       inv MSE. inv H12.
+       inv MSE. inv H17.
        exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDSTR. eauto.
        intros (b3 & INJ).
        exploit mge_symb; eauto.
@@ -805,15 +827,17 @@ Qed.
        inv FINDSTR'. eauto.
      }
      assert (RSIVAL: rs RSI = Vptr b_start Ptrofs.zero).
-     inv H3. rewrite H12 in INJSTR. inv INJSTR. reflexivity.
+     inv H5. rewrite H17 in INJSTR. inv INJSTR. reflexivity.
      case (Mem.thread_create tm) as [tm' id] eqn:MEM_CREATE'.
      exploit thread_create_inject; eauto. intros [Hm1' eqid]. subst id.
      assert (exists b_t' ofs_t', rs RDI = Vptr b_t' ofs_t').
-     inv H2. eauto. destruct H1 as [b_t' [ofs_t' RDIVAL]].
+     inv H11. eauto. destruct H2 as [b_t' [ofs_t' RDIVAL]].
      assert (exists b_arg' ofs_arg', rs RDX = Vptr b_arg' ofs_arg').
-     inv H4. eauto. destruct H1 as [b_arg' [ofs_arg' RDXVAL]].
+     inv H13. eauto. destruct H2 as [b_arg' [ofs_arg' RDXVAL]].
 
-     (** prepare memories*)
+     (** prepare memories *)
+     (** Here we allocate a dummy block on new thread for target memory.
+         It's address is used as the initial value of RSP on this new procedure *)
      assert (TP1: Mem.range_prop tid (Mem.support tm')).
      {
        inv P1. constructor. auto. erewrite <- inject_next_tid; eauto.
@@ -845,14 +869,47 @@ Qed.
          simpl. eapply inject_tid; eauto.
        + inv mi_inj. constructor; eauto.
      }
+          
+
+     (** similarly we need Mem.extends tm'4 ttm'4*)
+     case (Mem.thread_create ttm) as [ttm' id] eqn:MEM_CREATE'2.
+     assert (Hme1: Mem.extends tm' ttm').
+     {
+       clear - Hme MEM_CREATE' MEM_CREATE'2.
+       unfold Mem.thread_create in *. inv MEM_CREATE'.
+       inv MEM_CREATE'2. inv Hme.
+       constructor; simpl; eauto. congruence.
+       inv mext_inj. constructor; eauto.
+     }
+     assert (TTP1: Mem.range_prop tid (Mem.support ttm')).
+     {
+       erewrite <- Mem.mext_sup; eauto.
+     }
+     set (ttm'2 := Mem.yield ttm' tid TTP1).
+     assert (Hme2: Mem.extends tm'2 ttm'2).
+     apply yield_extends; eauto.
+     exploit Mem.alloc_extends. apply Hme2. eauto. reflexivity. reflexivity.
+     intros (ttm'3 & DUMMY2 & Hmqe).
+     assert (TTP2: Mem.range_prop (Mem.tid (Mem.support tm)) (Mem.support ttm'3)).
+     {
+       erewrite <- (Mem.mext_sup tm'3 ttm'3); eauto.
+     }
+     set (ttm'4 := Mem.yield ttm'3 (Mem.tid (Mem.support tm)) TTP2).
+     assert (Hmre: Mem.extends tm'4 ttm'4).
+     apply yield_extends; eauto.
      
      set (rs_q := rs # PC <- (rs RSI) # RDI <- (rs RDX) # RSP <- (Vptr sp0 Ptrofs.zero)).
      set (rs_r := rs # PC <- (rs RA) # RAX <- (Vint Int.one)).
-     exists (injpw j m1 tm'4 Hmr).
-     exists (cajw (injpw j m1' tm'3 Hmq) start_routine_sig rs_q).
-     exists (rs_r, tm'4). exists (rs_q, tm'3).
+     set (trs_q := trs # PC <- (trs RSI) # RDI <- (trs RDX) # RSP <- (Vptr sp0 Ptrofs.zero)).
+     set (trs_r := trs # PC <- (trs RA) # RAX <- (Vint Int.one)).
+     exists (tt, (tt, (injpw j m1 tm'4 Hmr, extw tm'4 ttm'4 Hmre))).
+     Compute GS.ccworld cc_compcert.
+     exists (se, ((row se m1), (se, (se, start_routine_sig, (tse,((cajw (injpw j m1' tm'3 Hmq) start_routine_sig rs_q) , extw tm'3 ttm'3 Hmqe))) ))).
+     exists (trs_r, ttm'4). exists (trs_q, ttm'3).
      assert (UNC23: Mem.unchanged_on (fun _ _ => True) tm'2 tm'3). eapply Mem.alloc_unchanged_on. eauto.
-     apply Mem.support_alloc in DUMMY as HSUP'.
+     assert (UNC23': Mem.unchanged_on (fun _ _ => True) ttm'2 ttm'3). eapply Mem.alloc_unchanged_on. eauto.
+     apply Mem.support_alloc in DUMMY as HSUP.
+     apply Mem.support_alloc in DUMMY2 as HSUP2.
      repeat apply conj.
      - fold se in FINDPTC. rewrite SE_eq in FINDPTC.
        fold se in FINDSTR. rewrite SE_eq in FINDSTR.
