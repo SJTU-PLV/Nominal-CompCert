@@ -254,7 +254,24 @@ Section ConcurSim.
    Proof.
      red. intros. eapply well_founed_go'; eauto.
    Qed.
-   
+
+   (** This lemma should be moved to and proved in ValueAnalysis.v.
+       I'm 95% sure it's correct. Maybe we can somehow reuse the initialization
+       proofs in ValueAnalysis for this. Or slightly change the definition of
+       ro_sound_memory using existential [bc] if this approach is more ligheweight. *)
+   Lemma initial_romatch : forall skel m0,
+       Genv.init_mem skel = Some m0 ->
+       Genv.symboltbl skel = se ->
+       ValueDomain.romatch (bc_of_symtbl se) m0 (romem_for_symtbl se).
+   Proof.
+     intros. constructor.
+     - unfold romem_for_symtbl in H2.
+       induction (Mem.sup_list (Genv.genv_sup se)); simpl in H2.
+       rewrite Maps.PTree.gempty in H2. congruence.
+       admit. (*ok*)
+     - admit. (*ok *)
+   Admitted.
+
    Section Initial.
      
      Variable m0 : mem.
@@ -302,8 +319,19 @@ Section ConcurSim.
           
      Definition init_w : GS.ccworld cc_compcert :=
        (se,(row se m0,(se,(se,main_sig,(tse,(init_w_cainjp,init_w_ext)))))).
-       
+
+
      Theorem sound_ro : sound_memory_ro se m0.
+     Proof.
+       constructor.
+       - unfold CMulti.initial_se in se.
+
+         constructor. ValueDomain.romem
+         
+       - apply Genv.init_mem_genv_sup in INITM as SUP.
+         rewrite <- SUP. unfold se.
+         apply Mem.sup_include_refl.
+                 
        Admitted. (*TODO: It is supposed to be correct.*)
 
    End Initial.
