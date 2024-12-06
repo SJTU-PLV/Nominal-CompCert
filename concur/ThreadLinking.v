@@ -377,7 +377,7 @@ Section ConcurSim.
       fst (snd (snd (w))).
 
     Inductive wt_w_compcert : GS.ccworld cc_compcert -> Prop :=
-      wt_gw_intro : forall se j m1 m2 m3 (tse: Genv.symtbl) sig Hmj Hme rs,
+      wt_w_intro : forall se j m1 m2 m3 (tse: Genv.symtbl) sig Hmj Hme rs,
           wt_w_compcert
             (se, (row se m1, (se,(se,sig,(tse,(cajw (injpw j m1 m2 Hmj) sig rs, extw m2 m3 Hme)))))).
 
@@ -438,10 +438,12 @@ Section ConcurSim.
     Definition gw_nexttid gw : nat := injp_nexttid (injp_gw_compcert gw).
 
     Inductive gw_accg : GS.gworld cc_compcert -> GS.gworld cc_compcert -> Prop :=
-      gw_accg_intro : forall wj1 wj2 we1 we2,
-          injp_accg wj1 wj2 ->
-          ext_accg we1 we2 ->
-          gw_accg (tt,(tt,(wj1,we1))) (tt,(tt,(wj2,we2))).
+      gw_accg_intro : forall j m1 m2 j' m1' m2' Hmj Hmj' m3 Hme m3' Hme',
+         injp_accg (injpw j m1 m2 Hmj) (injpw j' m1' m2' Hmj') ->
+         ext_accg (extw m2 m3 Hme) (extw m2' m3' Hme') ->
+         gw_accg (tt,(tt,(injpw j m1 m2 Hmj, extw m2 m3 Hme)))
+           (tt,(tt,(injpw j' m1' m2' Hmj', extw m2' m3' Hme'))).
+
 
     (* "(Genv.symtbl *
    (ro_world * (Genv.symtbl * (Genv.symtbl * signature * (Genv.symtbl * (cc_cainjp_world * ext_world))))))%type" *)
@@ -1004,14 +1006,14 @@ Qed.
        unfold injp_gw_compcert.
        simpl. inv H17.
        assert (ROACC: ro_acc m2 tm'4). eapply ro_acc_trans. 2: eauto.
-       destruct H24 as [_ [A _]]. constructor; eauto.
+       destruct H28 as [_ [A _]]. constructor; eauto.
        econstructor; eauto.
        + inv ROACC. eauto.
        + inv ROACC. eauto.
-       + destruct H23 as [[A B] C]. constructor; simpl. split. unfold Mem.next_tid, Mem.sup_create in *. simpl. rewrite app_length. simpl. lia.
+       + destruct H27 as [[A B] C]. constructor; simpl. split. unfold Mem.next_tid, Mem.sup_create in *. simpl. rewrite app_length. simpl. lia.
          lia. inv C. constructor; simpl. eapply Mem.sup_include_trans. eauto. red. intros. rewrite <- Mem.sup_create_in. auto.
          intros. etransitivity. eauto. reflexivity. intros. etransitivity. reflexivity. eauto.
-       + destruct H24 as [[A B] C]. constructor; simpl. split. etransitivity. eauto.
+       + destruct H28 as [[A B] C]. constructor; simpl. split. etransitivity. eauto.
          unfold Mem.next_tid, Mem.sup_yield. simpl.
          rewrite HSUP. simpl. rewrite Mem.update_list_length. rewrite app_length. simpl. lia. lia.
          inv C. constructor; simpl. eapply Mem.sup_include_trans. eauto. red. intros. rewrite <- Mem.sup_yield_in.
@@ -1195,17 +1197,30 @@ Qed.
       * eapply inject_incr_local_noglobal; eauto.
     Qed.
 
+    Lemma ext_accg_acci_accg : forall w1 w2 w3,
+        ext_accg w1 w2 -> ext_acci w2 w3 -> ext_accg w1 w3.
+    Proof.
+      intros. inv H. inv H0. constructor; eauto.
+      lia. lia. eapply max_perm_decrease_trans; eauto.
+      eapply max_perm_decrease_trans; eauto.
+    Qed.
+    
+    Inductive wt_gw : GS.gworld cc_compcert -> Prop :=
+      wt_wt_intro : forall j m1 m2 m3 Hmj Hme,
+          wt_gw (tt,(tt,(injpw j m1 m2 Hmj, extw m2 m3 Hme))).
+
     Lemma gw_accg_acci_accg : forall w1 w2 w3,
-        gw_accg w1 w2 -> w2 *-> w3 -> gw_accg w1 w3.
+        gw_accg w1 w2 -> w2 *-> w3 -> wt_gw w3 -> gw_accg w1 w3.
     Proof.
       intros. 
       destruct w1 as [p1 [q1 [wp1 we1]]].
       destruct w2 as [p2 [q2 [wp2 we2]]].
       destruct w3 as [p3 [q3 [wp3 we3]]].
-      unfold gw_accg in H. unfold gw_accg.
-      unfold injp_gw_compcert in *. simpl in H. simpl.
-      destruct H0 as [_ [_ [A B]]]. simpl in A.
+      inv H. destruct H0 as [ _ [ _ [X Y]]].
+      simpl in p3,q3,X,Y. destruct p3,q3. inv H1.
+      econstructor.
       eapply injp_accg_acci_accg; eauto.
+      eapply ext_accg_acci_accg; eauto.
     Qed.
       
     Lemma injp_acc_yield_accg : forall w1 w2,
@@ -1249,7 +1264,14 @@ Qed.
                           (tp : Mem.range_prop n (Mem.support m2)) (m1' m2' : Mem.mem') Hm Hm',
                        m1' = Mem.yield m1 n p ->
                        m2' = Mem.yield m2 n tp -> ext_acc_yield (extw m1 m2 Hm) (extw m1' m2' Hm').
-    
+
+    Inductive gw_acc_yield : GS.gworld cc_compcert -> GS.gworld cc_compcert -> Prop :=
+     gw_acc_yield_intro : forall j m1 m2 m3 m1' m2' m3' Hmj Hme Hmj' Hme',
+         injp_acc_yield (injpw j m1 m2 Hmj) (injpw j m1' m2' Hmj') ->
+         ext_acc_yield (extw m2 m3 Hme) (extw m2' m3' Hme') ->
+         gw_acc_yield (tt,(tt,(injpw j m1 m2 Hmj, extw m2 m3 Hme))) (tt,(tt,(injpw j m1' m2' Hmj', extw m2' m3' Hme'))).
+   
+
 
     Lemma ext_acc_yield_acce : forall w1 w2,
         ext_acc_yield w1 w2 ->
@@ -1461,6 +1483,29 @@ Qed.
          eapply unchanged_on_contents; eauto. split; auto.
    Qed.
 
+    Lemma ext_accg_yield_accg : forall w1 w2 w3,
+       ext_accg w1 w2 -> ext_acc_yield w2 w3 ->
+       ext_tid w3 <> ext_tid w1 ->
+       ext_accg w1 w3.
+    Proof.
+      intros. inv H. inv H0. constructor; eauto.
+      simpl in *.  inv Hm. rewrite mext_sup. lia.
+    Qed.
+      
+   Lemma gw_accg_yield_accg : forall w1 w2 w3,
+       gw_accg w1 w2 -> gw_acc_yield w2 w3 ->
+       gw_tid w3 <> gw_tid w1 ->
+       gw_accg w1 w3.
+   Proof.
+     intros. inv H. inv H0. constructor.
+     eapply injp_accg_yield_accg; eauto. inv H9. econstructor; eauto.
+     eapply ext_accg_yield_accg; eauto. inv H10. econstructor; eauto.
+     unfold gw_tid in H1. simpl in H1.
+     simpl. erewrite <- Mem.mext_sup; eauto. erewrite <- inject_tid; eauto.
+     intro. apply H1. rewrite H.
+     erewrite <- Mem.mext_sup. 2: eauto. erewrite <- inject_tid; eauto.
+   Qed.
+   
    Lemma injp_accg_yield_acce : forall w1 w2 w3,
        injp_accg w1 w2 -> injp_acc_yield w2 w3 ->
        injp_tid w3 = injp_tid w1 ->
@@ -1571,12 +1616,6 @@ Qed.
      intros. destruct w as (a & b & c & d & e & f & g). reflexivity.
    Qed.
 
-   Inductive gw_acc_yield : GS.gworld cc_compcert -> GS.gworld cc_compcert -> Prop :=
-     gw_acc_yield_intro : forall j m1 m2 m3 m1' m2' m3' Hmj Hme Hmj' Hme',
-         injp_acc_yield (injpw j m1 m2 Hmj) (injpw j m1' m2' Hmj') ->
-         ext_acc_yield (extw m2 m3 Hme) (extw m2' m3' Hme') ->
-         gw_acc_yield (tt,(tt,(injpw j m1 m2 Hmj, extw m2 m3 Hme))) (tt,(tt,(injpw j m1' m2' Hmj', extw m2' m3' Hme'))).
-   
    Lemma substep_switch_out : forall i s1 s2 s1' target m',
        match_states i s1 s2 ->
        CMulti.switch_out OpenC s1 s1' target m' ->
@@ -1688,7 +1727,7 @@ Qed.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                simpl. intros. specialize (J H13).
-               eapply gw_accg_acci_accg; eauto.
+               eapply gw_accg_acci_accg; eauto. constructor.
        + intros. simpl. unfold CMulti.get_cur_thread, CMulti.update_cur_thread. simpl.
          unfold CMulti.get_thread, CMulti.update_thread. simpl. rewrite NatMap.gss. congruence.
        + rewrite NatMap.gss. eauto.
@@ -1789,7 +1828,7 @@ Qed.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                simpl. intros. specialize (J H1).
-               eapply gw_accg_acci_accg; eauto.
+               eapply gw_accg_acci_accg; eauto. constructor.
        +  intros. simpl. unfold CMulti.get_cur_thread, CMulti.update_cur_thread. simpl.
          unfold CMulti.get_thread, CMulti.update_thread. simpl. rewrite NatMap.gss. congruence.
        + econstructor; eauto; econstructor; eauto; reflexivity.
@@ -1890,6 +1929,7 @@ Qed.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                intros. specialize (J H13). eapply gw_accg_acci_accg; eauto.
+               unfold gw'. destruct w_cap. simpl in H. inv H. constructor.
        + intros. simpl. unfold CMulti.get_cur_thread, CMulti.update_cur_thread. simpl.
          unfold CMulti.get_thread, CMulti.update_thread. simpl. rewrite NatMap.gss. congruence.
        + unfold gw'. destruct w_cap. simpl in H. inv H. constructor; eauto; econstructor; eauto; reflexivity.
@@ -1979,6 +2019,7 @@ Qed.
          destruct wA as (se0 & [se0' m0'] & se1 & [se1' sig'] & se2 & wAca & wAe).
          simpl in GETwpc, ACCY, ACC, GETWp, HwaTid, RSLD.
          inv ACCY.
+         (** TODO: replace proofs here with gw_acc_yield_acce *)
          assert (ACCEJ: injp_acce (get_injp wAca) (injpw f m' tm' Hmj')).
          { eapply injp_acc_yield_acce. eauto. rewrite <- H. inv H3.
            econstructor; eauto. eauto. }
@@ -2056,10 +2097,12 @@ Qed.
                exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; try rewrite NatMap.gso; eauto.
                rewrite <- OTHERi; eauto. lia.
                intros n1. specialize (J n1). subst wp'.
-               eapply injp_accg_yield_accg; eauto. simpl. unfold injp_gw_compcert.
-               simpl. rewrite <- H. unfold wpj'. inv H3. econstructor; eauto.
+               eapply gw_accg_yield_accg; eauto. simpl.
+               rewrite <- H.
+               econstructor; eauto. inv H3. econstructor; eauto.
+               inv H8. econstructor; eauto.
                exploit FIND_TID. apply I. intros [X Y].
-               unfold injp_gw_compcert. simpl. 
+               unfold gw_tid. simpl. 
                setoid_rewrite X. lia.
        + (*join*)
          assert (lsc = CMulti.Returnj OpenC ls1 tar' vptr).
@@ -2095,7 +2138,7 @@ Qed.
          eapply val_inject_incr. 2: eauto. unfold injp_w_compcert. simpl.
          unfold get_injp in ACCEJ. inv ACCEJ. eauto.
          eapply val_inject_incr. 2: eauto. inv ACCt'. simpl.
-         setoid_rewrite <- H4 in ACCEJ. inv ACCEJ.
+         setoid_rewrite <- H0 in ACCEJ. inv ACCEJ.
          eapply inject_incr_trans. eauto. eauto.
          intros [tm''[MEM_RES' Hmj'']].
          set (r_a := (rs', tm'')).
