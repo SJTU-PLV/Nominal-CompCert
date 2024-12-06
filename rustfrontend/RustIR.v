@@ -345,3 +345,22 @@ Proof.
     auto.
     right. eapply in_cons. auto.
 Qed.    
+
+                                       
+Lemma length_S_inv : forall A n (l: list A),
+    length l = S n ->
+    exists l' a, l = l' ++ [a] /\ length l' = n.
+Proof.
+  induction n.
+  - intros. destruct l. cbn in *.
+    congruence.
+    cbn in H. inv H.
+    rewrite length_zero_iff_nil in H1.
+    subst. exists nil. cbn. eauto.
+  - intros. simpl in *. 
+    destruct l. cbn in H. congruence.
+    cbn in H. inv H.
+    generalize (IHn _ H1).
+    destruct 1 as (l' & a0 & eq & LEN). subst.
+    exists (a :: l'). cbn. eexists; split; eauto.
+Qed.

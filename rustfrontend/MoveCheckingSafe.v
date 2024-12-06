@@ -592,6 +592,7 @@ Inductive wt_footprint : type -> footprint -> Prop :=
     wt_footprint ty (fp_scalar ty)
 | wt_fp_struct: forall orgs id fpl co
     (CO: ce ! id = Some co)
+    (STRUCT: co_sv co = Struct)
     (** TODO: combine WT1 and WT2 elegantly. WT1 is used in getting
     the sub-field's footprint. WT2 is used in proving the properties
     of sub-field's footprint *)
@@ -612,7 +613,10 @@ Inductive wt_footprint : type -> footprint -> Prop :=
     wt_footprint (Tstruct orgs id) (fp_struct id fpl)
 | wt_fp_enum: forall orgs id tagz fid fty fofs fp co
     (CO: ce ! id = Some co)
+    (ENUM: co_sv co = TaggedUnion)
     (TAG: list_nth_z co.(co_members) tagz = Some (Member_plain fid fty))
+    (* avoid some norepet properties *)
+    (FTY: field_type fid co.(co_members) = OK fty)
     (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
     (WT: wt_footprint fty fp),
     wt_footprint (Tvariant orgs id) (fp_enum id orgs tagz fid fofs fp)
@@ -1004,8 +1008,41 @@ Lemma set_footprint_app_inv : forall l1 l2 fp fp' vfp1,
       /\ set_footprint l2 vfp1 fp'' = Some vfp2
       /\ set_footprint l1 vfp2 fp = Some fp'.
 Proof.
-Admitted.
+  induction l1; intros.
+  - simpl in H. exists fp, fp'. simpl.
+    repeat apply conj; auto.
+  - simpl in H. destruct a.
+    + destruct fp; try congruence.
+      destruct (set_footprint (l1 ++ l2) vfp1 fp) eqn: A; try congruence.
+      inv H. exploit IHl1; eauto.
+      intros (fp'' & vfp'2 & B1 & B2 & B3).
+      simpl.
+      exists fp'', vfp'2. repeat apply conj; auto.
+      rewrite B3. auto.
+    + destruct fp; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      destruct (set_footprint (l1 ++ l2) vfp1 f) eqn: A; try congruence.
+      inv H. exploit IHl1; eauto.
+      intros (fp'' & vfp'2 & B1 & B2 & B3).
+      simpl. rewrite FIND.
+      exists fp'', vfp'2. repeat apply conj; auto.
+      rewrite B3. auto.
+    + destruct fp; try congruence.
+      destruct ty; try congruence.
+      simpl.
+      destruct ident_eq; try congruence.
+      destruct list_eq_dec; try congruence.
+      destruct ident_eq; try congruence.
+      destruct (set_footprint (l1 ++ l2) vfp1 fp) eqn: A; try congruence.
+      inv H. exploit IHl1; eauto.
+      intros (fp'' & vfp'2 & B1 & B2 & B3).
+      simpl.      
+      exists fp'', vfp'2. repeat apply conj; auto.
+      rewrite B3. auto.
+Qed.
 
+      
 (* non-loc version of get_footprint_app *)
 Lemma get_footprint_app: forall l1 l2 fp1 fp2 fp3,
     get_footprint l1 fp1 = Some fp2 ->
@@ -1027,6 +1064,14 @@ Proof.
       destruct ident_eq; try congruence.
       eauto.
 Qed.
+
+Lemma get_footprint_app_inv: forall phl2 phl1 fp1 fp2,
+    get_footprint (phl1 ++ phl2) fp1 = Some fp2 ->
+    exists fp3,
+      get_footprint phl1 fp1 = Some fp3
+      /\ get_footprint phl2 fp3 = Some fp2.
+Admitted.
+
 
 Lemma get_loc_footprint_eq: forall l fp b ofs b1 ofs1 fp1,
     get_loc_footprint l fp b ofs = Some (b1, ofs1, fp1) ->
@@ -1353,6 +1398,12 @@ Lemma wf_own_env_init_place: forall own p,
     wf_own_env (init_place own p).
 Admitted.
 
+Lemma dominators_is_init_field: forall own p fid fty,
+    dominators_is_init own (Pfield p fid fty) = true ->
+    dominators_is_init own p = true.
+Proof.
+  intros. unfold dominators_is_init in *. simpl in H. auto.
+Qed.
 
 Section COMP_ENV.
 
@@ -1447,14 +1498,63 @@ Proof.
   auto.
 Qed.
 
+Lemma wt_place_wt_path: forall p e ce id l ty b,
+    wt_place (env_to_tenv e) ce p ->
+    path_of_place p = (id, l) ->
+    e ! id = Some (b, ty) ->
+    wt_path ce ty l (typeof_place p).
+Proof.
+  induction p; simpl; intros.
+  - inv H0. inv H.
+    unfold env_to_tenv in WT1.
+    rewrite PTree.gmap1 in WT1. rewrite H1 in WT1. inv WT1.
+    constructor.
+  - destruct (path_of_place p) eqn: POP. inv H0.
+    inv H. econstructor; eauto.
+    rewrite <- WT2. eauto.
+  - destruct (path_of_place p) eqn: POP. inv H0.
+    inv H. econstructor; eauto.
+  - destruct (path_of_place p) eqn: POP. inv H0.
+    inv H. rewrite WT2. econstructor; eauto.
+    rewrite <- WT2. eauto.
+Qed.    
+
+
 (** IMPORTANT TODO *)
-Lemma get_wt_footprint_wt: forall fp1 fp2 phl ty1 ty2,
-    wt_path ce ty1 phl ty2 ->
+Lemma get_wt_footprint_wt: forall phl ty1 ty2 (WTPH: wt_path ce ty1 phl ty2) fp1 fp2,
     wt_footprint ce ty1 fp1 ->
     get_footprint phl fp1 = Some fp2 ->
     wt_footprint ce ty2 fp2.
-Admitted.
-
+Proof.
+  induction 1; intros; simpl in *.
+  - inv H0. auto.
+  - exploit get_footprint_app_inv; eauto.
+    intros (fp3 & A1 & A2). simpl in A2. destruct fp3; try congruence.
+    inv A2. exploit IHWTPH; eauto.
+    intros A2. inv A2. simpl in WP2. inv WP2. auto.
+  - exploit get_footprint_app_inv; eauto.
+    intros (fp3 & A1 & A2). simpl in A2. destruct fp3; try congruence.
+    destruct (find_fields fid fpl) eqn: FIND; try congruence.
+    repeat destruct p. inv A2.
+    exploit IHWTPH; eauto. intros A3. inv A3.
+    exploit find_fields_some; eauto.
+    intros (B1 & B2). subst.
+    exploit WT2; eauto.
+    intros (fty & C1 & C2 & C3).
+    rewrite WP2 in CO. inv CO.
+    rewrite WP3 in C1. inv C1.
+    auto.
+  - exploit get_footprint_app_inv; eauto.
+    intros (fp3 & A1 & A2). simpl in A2. destruct fp3; try congruence.
+    destruct ident_eq in A2; try congruence.
+    destruct list_eq_dec in A2; try congruence.
+    destruct ident_eq in A2; try congruence.
+    inv A2.
+    exploit IHWTPH; eauto. intros A3. inv A3.
+    rewrite WP2 in CO. inv CO.
+    rewrite WP3 in FTY. inv FTY. auto.
+Qed.    
+    
 (** IMPRTANT TODO: use this lemma to prove eval_place_sound. Think
 about the field type in wt_footprint is correct or not? *)
 Lemma get_wt_place_footprint_wt: forall p fpm e b ofs fp,
@@ -1463,15 +1563,68 @@ Lemma get_wt_place_footprint_wt: forall p fpm e b ofs fp,
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     wt_footprint ce (typeof_place p) fp.
 Proof.
-  (* induction p; intros until fp; intros WF GET. *)
-  (* - simpl in GET. destruct (e!i) eqn: A; try congruence. *)
-  (*   repeat destruct p. *)
-  (*   destruct (fpm!i) eqn: B; try congruence. *)
-  (*   inv GET. exists ce. split. *)
-  (*   simpl. exploit wf_env_footprint; eauto. *)
-  (*   intros (fp1 & C & D). rewrite B in C. inv C. *)
-Admitted.
+  intros until fp. intros WFENV WTP GFP.
+  destruct (path_of_place p) eqn: POP.
+  simpl in *.
+  destruct (e!i) eqn: A; try congruence.
+  destruct p0.
+  destruct (fpm ! i) eqn: B; try congruence.
+  exploit wf_env_footprint; eauto. intros (fp1 & C1 & C2 & C3).
+  rewrite B in C1. inv C1.
+  eapply get_loc_footprint_eq in GFP.
+  eapply get_wt_footprint_wt; eauto.
+  eapply wt_place_wt_path; eauto.
+Qed.
 
+(* A well typed footprint can imply all the sub-footprint's
+well-typedness and the path to htis footprint also is well-typed *) 
+Lemma get_wt_footprint_exists_wt: forall phl fp b ofs b1 ofs1 fp1 ty,
+    wt_footprint ce ty fp ->
+    get_loc_footprint phl fp b ofs = Some (b1, ofs1, fp1) ->
+    exists ty1, wt_footprint ce ty1 fp1
+           /\ wt_path ce ty phl ty1.
+Proof.
+  intros phl. cut (exists n, length phl = n); eauto. intros (n & LEN).
+  generalize dependent phl.
+  induction n; intros.
+  - eapply length_zero_iff_nil in LEN. subst.
+    simpl in *. inv H0.
+    exists ty. split; eauto.
+    econstructor.
+  - exploit length_S_inv; eauto.
+    intros (phl' & a & TYS & LEN1). subst.
+    exploit get_loc_footprint_app_inv. eauto.
+    intros (b3 & ofs3 & fp3 & G1 & G2).
+    simpl in G2.
+    destruct a.
+    + destruct fp3; try congruence.
+      inv G2. exploit IHn; eauto.
+      intros (ty1 & A1 & A2).
+      inv A1.
+      exists ty0. split; auto. econstructor; eauto.      
+    + destruct fp3; try congruence.
+      destruct (find_fields fid fpl) eqn: A; try congruence.
+      repeat destruct p.
+      inv G2.
+      exploit find_fields_some; eauto. intros (A1 & A2). subst.
+      exploit IHn; eauto. intros (ty1 & W1 & W2).
+      inv W1.      
+      exploit WT2; eauto.
+      intros (fty & B1 & B2 & B3).
+      exists fty. split; auto.
+      econstructor; eauto. 
+    + destruct fp3; try congruence.
+      destruct ty0; try congruence.
+      destruct ident_eq; try congruence.
+      destruct list_eq_dec; try congruence.
+      destruct ident_eq; try congruence. subst.
+      inv G2. exploit IHn; eauto.
+      intros (ty1 & A1 & A2).
+      inv A1. exists fty. split; auto.
+      econstructor; eauto.
+Qed.
+
+      
 (* get_loc_footprint_map can succeed if the place is well-typed, the
 footprint is well-typed and the footprint is well shaped by
 mmatch. This lemma is used in dropplace state soundness. Because there
@@ -1497,7 +1650,8 @@ Proof.
   (* Pfield *)
   - inv WT.
     (** TODO: make it a lemma: prove p's dominators are init *)
-    assert (PDOM: dominators_is_init own p = true) by admit.
+    assert (PDOM: dominators_is_init own p = true).
+    { eapply dominators_is_init_field. eauto. }             
     assert (IHWF: forall (fid : ident) (ty : type),
                ~ In (ph_downcast ty fid) (snd (path_of_place p))).
     { intros. intro. eapply WF. simpl. destruct (path_of_place p) eqn: POP. simpl in *.
@@ -1541,7 +1695,7 @@ Proof.
   - exfalso. eapply WF.
     simpl. destruct (path_of_place p) eqn: POP. simpl. eapply in_app.
     right. econstructor. eauto.
-Admitted.
+Qed.
 
 (* Lemma wt_footprint_extend_ce: forall ce1 ce2 ty fp, *)
 (*     wt_footprint ce ce1 ty fp -> *)
@@ -2526,15 +2680,8 @@ Lemma must_movable_exists_shallow_prefix: forall ce init uninit universe p,
     Paths.Exists (fun p1 : Paths.elt => is_shallow_prefix (valid_owner p) p1 = true) (PathsMap.get (local_of_place p) universe).
 Admitted.
 
-
-Lemma wt_place_wt_path: forall p e ce id l ty b,
-    wt_place (env_to_tenv e) ce p ->
-    path_of_place p = (id, l) ->
-    e ! id = Some (b, ty) ->
-    wt_path ce ty l (typeof_place p).
-Admitted.
   
-Lemma set_wt_footprint: forall phl ty1 vty (WTPH: wt_path ce ty1 phl vty) fp1 vfp fp2,
+Lemma set_wt_footprint: forall phl ty1 vty ce (WTPH: wt_path ce ty1 phl vty) fp1 vfp fp2,
     set_footprint phl vfp fp1 = Some fp2 ->
     wt_footprint ce ty1 fp1 ->
     (* we should not say that vfp is well typed in ce! *)
@@ -2564,14 +2711,36 @@ Proof.
     + intros. rewrite WP2 in CO. inv CO.
       exploit WT1. eauto.
       intros (ffp & fofs & C1 & C2 & C3).
-      destruct (peq fid fid0).
+      erewrite find_fields_set_spec with (fofs:= fofs) (ffp:= ffp); eauto.
+      destruct peq.
       * subst. exists vfp, fofs.
         repeat apply conj; auto.
-        erewrite find_fields_set_spec; eauto.
-        destruct peq; try congruence.
         rewrite WP3 in H. inv H. auto.
-        (*** TODO  *)
-Admitted.
+      * eauto. 
+    + intros. rewrite WP2 in CO. inv CO.
+      exploit find_fields_some. eapply FIND. intros (C1 & C2). subst.
+      destruct (peq i fid0).
+      * subst.
+        exploit WT2.  eauto. intros (fty & F1 & F2 & F3).
+        erewrite find_fields_set_spec with (fofs:= z) (ffp:= f) in H; eauto.
+        inv H. destruct peq; try congruence. eauto.
+      * exploit find_fields_different_field. eauto. eauto.
+        intros FIND1.
+        exploit WT2.  eauto. intros (fty & F1 & F2 & F3).
+        eauto.
+  - exploit set_footprint_app_inv; eauto.
+    intros (fp3 & vfp1 & A1 & A2 & A3).
+    simpl in A2. destruct fp3; try congruence.
+    destruct ident_eq in A2; try congruence.
+    destruct list_eq_dec in A2; try congruence.
+    destruct ident_eq in A2; try congruence.
+    inv A2.
+    exploit get_wt_footprint_wt; eauto. intros B1. 
+    inv B1. eapply IHWTPH. eauto. auto.
+    econstructor; eauto.
+    rewrite WP2 in CO. inv CO. rewrite WP3 in FTY. inv FTY.
+    auto.
+Qed.
 
 (** IMPORTANT TODO: wf_env remain valid if we set a wt_footprint *)
 Lemma wf_env_set_wt_footprint: forall p fpm1 fpm2 ce e fp
@@ -2597,10 +2766,10 @@ Proof.
   - exists f0.
     rewrite A1 in B1. inv B1.
     split; auto. split.
-
-
-    
-    admit.
+    (* prove wt_footprint after setting *)
+    eapply set_wt_footprint.
+    eapply wt_place_wt_path; eauto.
+    eauto. auto. auto.
     (* stack block not in f0 *)
     intro.
     (* b in fp1 or fp *)
@@ -2610,15 +2779,89 @@ Proof.
     + eapply DIS; eauto.
       eapply in_footprint_of_env; eauto.
   - eauto.
-Admitted.    
-    
-    
+Qed.
+
+
+Lemma find_fields_clear_footprint1: forall fpl fid fofs ffp,
+    find_fields fid fpl = Some (fid, fofs, ffp) ->
+    find_fields fid
+      (map (fun '(fid, fofs, ffp) => (fid, fofs, clear_footprint_rec ffp)) fpl) =
+      Some (fid, fofs, (clear_footprint_rec ffp)).
+Admitted.
+
+Lemma find_fields_clear_footprint2: forall fpl fid fofs ffp,
+    find_fields fid
+      (map (fun '(fid, fofs, ffp) => (fid, fofs, clear_footprint_rec ffp)) fpl) =
+      Some (fid, fofs, ffp) ->
+    exists ffp', find_fields fid fpl = Some (fid, fofs, ffp')
+            /\ ffp = clear_footprint_rec ffp'.
+Admitted.
+
+Lemma wt_footprint_clear: forall fp ce ty,
+    wt_footprint ce ty fp ->
+    wt_footprint ce ty (clear_footprint_rec fp).
+Proof.
+  induction fp using strong_footprint_ind; intros; simpl; auto.
+  - inv H. econstructor. destruct ty; simpl in *; try congruence.
+  - inv H. econstructor. congruence.
+  - inv H0. econstructor; eauto.
+    + intros. exploit WT1; eauto.
+      intros (ffp & fofs & A1 & A2 & A3).
+      exists (clear_footprint_rec ffp), fofs. repeat apply conj; auto.
+      * eapply find_fields_clear_footprint1. eauto.
+      * exploit find_fields_some; eauto.
+        intros (B1 & B2).
+        eapply H; eauto.
+    + intros.
+      exploit find_fields_clear_footprint2; eauto.
+      intros (ffp' & A1 & A2). subst.
+      exploit WT2; eauto.
+      intros (fty & B1 & B2 & B3).
+      exists fty. repeat apply conj; auto.
+      exploit find_fields_some; eauto.
+      intros (C1 & C2).
+      eapply H; eauto.
+  - inv H. econstructor. congruence.
+Qed.    
+      
 (* clear some footprint does not affect wf_env *)
 Lemma wf_env_clear_footprint: forall fpm1 fpm2 ce e id phl,
     wf_env fpm1 ce e ->
     clear_footprint_map e (id, phl) fpm1 = Some fpm2 ->
     wf_env fpm2 ce e.
-Admitted.
+Proof.
+  intros until phl. intros WF CLR.
+  unfold clear_footprint_map in CLR.
+  destruct (get_loc_footprint_map e (id, phl) fpm1) eqn: A; try congruence.
+  repeat destruct p.
+  unfold set_footprint_map in CLR.
+  destruct (fpm1 ! id) eqn: A1; try congruence.
+  destruct (set_footprint phl (clear_footprint_rec f) f0) eqn: A2; try congruence.
+  inv CLR.
+  constructor. intros. exploit wf_env_footprint; eauto.
+  intros (fp1 & B1 & B2 & B3).
+  rewrite PTree.gsspec.
+  destruct peq; subst.
+  - exists f1.
+    rewrite A1 in B1. inv B1.
+    split; auto. split.
+    (* prove wt_footprint after setting *)
+    unfold get_loc_footprint_map in A. rewrite H in A. rewrite A1 in A.
+    exploit get_wt_footprint_exists_wt; eauto.
+    intros (ty1 & T1 & T2).  
+    eapply set_wt_footprint; eauto.
+    (* wt_footprint remain if clear the footprint *)
+    eapply wt_footprint_clear. auto.
+    (* stack block not in f0 *)
+    intro.
+    (* b in fp1 or fp *)
+    exploit set_footprint_incl. eauto. eauto.
+    intros [A3|B].
+    + congruence.
+    + rewrite empty_footprint_flat in B. inv B.
+  - eauto.
+Qed.
+  
 
 (* The value produced by eval_expr is semantics well-typed. We need to
 update the abstract memory (split the footprint of the value from
@@ -3062,13 +3305,6 @@ Lemma get_loc_footprint_map_different_local: forall id1 id2 phl1 phl2 fpm e b1 b
     get_loc_footprint_map e (id1, phl1) fpm = Some (b1, ofs1, fp1) ->
     get_loc_footprint_map e (id2, phl2) fpm = Some (b2, ofs2, fp2) ->
     b1 <> b2 /\ ~ In b1 (footprint_flat fp2) /\ ~ In b2 (footprint_flat fp1).
-Admitted.
-
-(** IMPORTANT TODO  *) 
-Lemma get_wt_footprint_exists_wt: forall phl fp b ofs b1 ofs1 fp1 ty,
-    wt_footprint ce ty fp ->
-    get_loc_footprint phl fp b ofs = Some (b1, ofs1, fp1) ->
-    exists ty1, wt_footprint ce ty1 fp1.
 Admitted.
 
 

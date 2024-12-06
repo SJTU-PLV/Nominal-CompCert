@@ -1788,24 +1788,6 @@ Proof.
   eapply Mem.perm_alloc_1; eauto.
   eapply inject_separated_refl.
 Qed.
-                                       
-Lemma length_S_inv : forall A n (l: list A),
-    length l = S n ->
-    exists l' a, l = l' ++ [a] /\ length l' = n.
-Proof.
-  induction n.
-  - intros. destruct l. cbn in *.
-    congruence.
-    cbn in H. inv H.
-    rewrite length_zero_iff_nil in H1.
-    subst. exists nil. cbn. eauto.
-  - intros. simpl in *. 
-    destruct l. cbn in H. congruence.
-    cbn in H. inv H.
-    generalize (IHn _ H1).
-    destruct 1 as (l' & a0 & eq & LEN). subst.
-    exists (a :: l'). cbn. eexists; split; eauto.
-Qed.
 
 Lemma deref_loc_rec_app: forall tys1 tys2 m b ofs b' ofs',
     deref_loc_rec m b ofs (tys1 ++ tys2) (Vptr b' ofs') <->
