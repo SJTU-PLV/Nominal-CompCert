@@ -104,6 +104,17 @@ Inductive ext_acce : relation ext_world :=
                      (MPD2: Mem.max_perm_decrease m2 m2'),
                      ext_acce (extw m1 m2 Hm) (extw m1' m2' Hm').
 
+Inductive ext_accg : relation ext_world :=
+    ext_accg_intro : forall (m1 m2 : mem) (Hm : Mem.extends m1 m2) 
+                     (m1' m2' : mem) (Hm' : Mem.extends m1' m2')
+                     (TID1: Mem.tid (Mem.support m1) <> Mem.tid (Mem.support m1'))
+                     (TID2: Mem.tid (Mem.support m2) <> Mem.tid (Mem.support m2'))
+                     (SUP1: Mem.sup_include (Mem.support m1) (Mem.support m1'))
+                     (SUP2: Mem.sup_include (Mem.support m2) (Mem.support m2'))
+                     (MPD1: Mem.max_perm_decrease m1 m1')
+                     (MPD2: Mem.max_perm_decrease m2 m2'),
+      ext_accg (extw m1 m2 Hm) (extw m1' m2' Hm').
+
 Instance ext_acce_preo : PreOrder ext_acce.
 Proof.
   split.

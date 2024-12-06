@@ -437,10 +437,12 @@ Section ConcurSim.
 
     Definition gw_nexttid gw : nat := injp_nexttid (injp_gw_compcert gw).
 
-    Definition gw_accg (gw gw' : GS.gworld cc_compcert) :=
-      injp_accg (injp_gw_compcert gw) (injp_gw_compcert gw').
+    Inductive gw_accg : GS.gworld cc_compcert -> GS.gworld cc_compcert -> Prop :=
+      gw_accg_intro : forall wj1 wj2 we1 we2,
+          injp_accg wj1 wj2 ->
+          ext_accg we1 we2 ->
+          gw_accg (tt,(tt,(wj1,we1))) (tt,(tt,(wj2,we2))).
 
-    Compute (GS.ccworld cc_compcert).
     (* "(Genv.symtbl *
    (ro_world * (Genv.symtbl * (Genv.symtbl * signature * (Genv.symtbl * (cc_cainjp_world * ext_world))))))%type" *)
 
@@ -989,7 +991,7 @@ Qed.
        unfold trs_q. rewrite Pregmap.gss. eauto. eauto. eauto.
        instantiate (1:= TTP1). fold ttm'2. eauto. reflexivity.
      - (** accg *)
-       simpl.
+       simpl. econstructor.
        econstructor; eauto; try red; intros; try congruence; eauto.
        split. split; eauto. inv MEM_CREATE. simpl. generalize (Mem.tid_valid (Mem.support m)). intro. unfold Mem.next_tid. lia.
        inv MEM_CREATE. constructor; eauto. simpl. red. intros. eauto with mem.
@@ -997,17 +999,19 @@ Qed.
        split. split; eauto. simpl. erewrite Mem.support_alloc; eauto. simpl. inv MEM_CREATE'. simpl.
        generalize (Mem.tid_valid (Mem.support tm)). intro. unfold Mem.next_tid. lia.
        constructor; eauto. simpl. red. intros. eauto with mem. intros. reflexivity.
-     - intros. inv H. inv MEM_CREATE. inv MEM_CREATE'. unfold gw_accg. unfold injp_gw_compcert.
-       simpl. unfold injp_gw_compcert in H0. setoid_rewrite <- H0.
-       assert (ROACC: ro_acc m2 tm'4). eapply ro_acc_trans. 2: eauto. constructor; eauto. destruct H23 as [_ [A _]].
-       eauto.
+       admit.
+     - intros. inv H. inv MEM_CREATE. inv MEM_CREATE'. constructor.
+       unfold injp_gw_compcert.
+       simpl. inv H17.
+       assert (ROACC: ro_acc m2 tm'4). eapply ro_acc_trans. 2: eauto.
+       destruct H24 as [_ [A _]]. constructor; eauto.
        econstructor; eauto.
        + inv ROACC. eauto.
        + inv ROACC. eauto.
-       + destruct H22 as [[A B] C]. constructor; simpl. split. unfold Mem.next_tid, Mem.sup_create in *. simpl. rewrite app_length. simpl. lia.
+       + destruct H23 as [[A B] C]. constructor; simpl. split. unfold Mem.next_tid, Mem.sup_create in *. simpl. rewrite app_length. simpl. lia.
          lia. inv C. constructor; simpl. eapply Mem.sup_include_trans. eauto. red. intros. rewrite <- Mem.sup_create_in. auto.
          intros. etransitivity. eauto. reflexivity. intros. etransitivity. reflexivity. eauto.
-       + destruct H23 as [[A B] C]. constructor; simpl. split. etransitivity. eauto.
+       + destruct H24 as [[A B] C]. constructor; simpl. split. etransitivity. eauto.
          unfold Mem.next_tid, Mem.sup_yield. simpl.
          rewrite HSUP. simpl. rewrite Mem.update_list_length. rewrite app_length. simpl. lia. lia.
          inv C. constructor; simpl. eapply Mem.sup_include_trans. eauto. red. intros. rewrite <- Mem.sup_yield_in.
@@ -1015,7 +1019,8 @@ Qed.
          intros. etransitivity. eauto. transitivity (Mem.perm tm'2 b ofs k p). reflexivity.
          transitivity (Mem.perm tm'3 b ofs k p). 2: reflexivity. inv UNC23. apply unchanged_on_perm0; eauto.
          red. simpl. rewrite <- Mem.sup_yield_in, <- Mem.sup_create_in. eauto.
-         intros. inv UNC23. rewrite unchanged_on_contents0; eauto. apply unchanged_on_perm in H3; eauto with mem.
+         intros. inv UNC23. rewrite unchanged_on_contents0; eauto. apply unchanged_on_perm in H0; eauto with mem.
+       + admit.
      - auto.
      - auto.
      - simpl. inv MEM_CREATE. inv MEM_CREATE'.
@@ -1083,7 +1088,7 @@ Qed.
      - congruence.
      - congruence.
      - congruence.
-   Qed.
+   Admitted.
 
    Lemma match_q_nid: forall qc qa w,
        GS.match_query cc_compcert w qc qa ->
@@ -1456,7 +1461,7 @@ Qed.
          eapply unchanged_on_contents; eauto. split; auto.
    Qed.
 
-      Lemma injp_accg_yield_acce : forall w1 w2 w3,
+   Lemma injp_accg_yield_acce : forall w1 w2 w3,
        injp_accg w1 w2 -> injp_acc_yield w2 w3 ->
        injp_tid w3 = injp_tid w1 ->
        injp_acce w1 w3.
@@ -1487,7 +1492,15 @@ Qed.
        + intros b ofs [A B] Hp. simpl.
          eapply unchanged_on_contents; eauto. split; auto.
    Qed.
-   
+
+   Lemma ext_accg_yield_acce : forall w1 w2 w3,
+       ext_accg w1 w2 -> ext_acc_yield w2 w3 ->
+       ext_tid w3 = ext_tid w1 ->
+       ext_acce w1 w3.
+   Proof.
+     intros. inv H0. inv H. constructor; eauto.
+     simpl in H1. simpl. inv Hm1. congruence.
+   Qed.
    (*
    Lemma yield_to_yield_accg2 : forall w1 w2 w3 w4 w5,
        injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_yield w3 w4 -> injp_acci w4 w5 ->
@@ -2183,6 +2196,21 @@ Qed.
          eapply foo; eauto. subst lsc. inv MS. simpl in *.
          assert (wpc = wPcur). congruence. subst wpc.
          apply FIND_TID in GETWp as X. destruct X as [HwaTid RNGtarget].
+         destruct wA as (se0 & [se0' m0'] & se1 & [se1' sig'] & se2 & wAca & wAe).
+         simpl in GETwpc, ACCY, ACC, GETWp, HwaTid, RSLD. inv ACCY.
+         assert (ACCEJ: injp_acce (get_injp wAca) (injpw f m' tm' Hmj')).
+         { eapply injp_accg_yield_acce; eauto. unfold injp_gw_compcert. simpl.
+           inv H3. econstructor; eauto. }
+         assert (ACCEE: ext_acce (extw m2 m3 Hme0) (extw tm' ttm' Hme')).
+         {
+           assert (BASE:injp_tid (get_injp wAca) = injp_tid (injpw f m' tm' Hmj')).
+           eauto.
+           eapply ext_accg_yield_acce; eauto. inv H8. econstructor; eauto.
+           simpl. rewrite <- H in BASE. simpl in BASE.
+           erewrite <- Mem.mext_sup. 2: eauto.
+           erewrite <- inject_tid. 2: eauto. rewrite BASE.
+           erewrite inject_tid. 2: eauto. inv Hme'3. congruence.
+         }
          assert (ACCE: injp_acce (get_injp wA) (injpw f m' tm' Hm')).
          eapply injp_accg_yield_acce; eauto.
          set (qc := cr Vundef m').
