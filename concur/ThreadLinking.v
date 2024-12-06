@@ -372,10 +372,14 @@ Section ConcurSim.
     
     Definition regset_lessdef (rs1 rs2: regset) := forall r, Val.lessdef (rs1 r) (rs2 r).
 
-    Compute GS.gworld cc_compcert.
 
     Definition injp_gw_compcert (w: GS.gworld cc_compcert) : injp_world :=
       fst (snd (snd (w))).
+
+    Inductive wt_w_compcert : GS.ccworld cc_compcert -> Prop :=
+      wt_gw_intro : forall se j m1 m2 m3 (tse: Genv.symtbl) sig Hmj Hme rs,
+          wt_w_compcert
+            (se, (row se m1, (se,(se,sig,(tse,(cajw (injpw j m1 m2 Hmj) sig rs, extw m2 m3 Hme)))))).
 
     Inductive match_thread_states : GS.ccworld cc_compcert -> (option (GS.ccworld cc_compcert)) -> GS.gworld cc_compcert -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
     |match_local : forall wB i sc sa wp
@@ -387,6 +391,7 @@ Section ConcurSim.
         match_thread_states wB None (get wB) i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
     |match_returny : forall wB wA i sc sa wp wp' rs
         (M_STATES: match_local_states wB wp i sc sa)
+        (WT_WA: wt_w_compcert wA)
         (WA_SIG : sig_w_compcert wA = yield_sig)
         (GET: get wA = wp')
         (RSLD: regset_lessdef (rs_w_compcert wA) rs)
@@ -403,6 +408,7 @@ Section ConcurSim.
         (M_STATES: match_local_states wB wp i sc sa)
         (WAIT: rs # RDI = Vint int /\ int_to_nat int = wait)
         (VPTR: Val.inject (injp_mi (injp_w_compcert wA)) vptr (rs # RSI))
+        (WT_WA: wt_w_compcert wA)
         (WA_SIG : sig_w_compcert wA = pthread_join_sig)
         (GET: get wA = wp')
         (ACC1: wp *-> wp')
@@ -433,6 +439,10 @@ Section ConcurSim.
 
     Definition gw_accg (gw gw' : GS.gworld cc_compcert) :=
       injp_accg (injp_gw_compcert gw) (injp_gw_compcert gw').
+
+    Compute (GS.ccworld cc_compcert).
+    (* "(Genv.symtbl *
+   (ro_world * (Genv.symtbl * (Genv.symtbl * signature * (Genv.symtbl * (cc_cainjp_world * ext_world))))))%type" *)
 
     Inductive match_states' : global_index -> (NatMap.t (option (GS.gworld cc_compcert))) -> CMulti.state OpenC -> state OpenA -> Prop :=
       |global_match_intro : forall threadsC threadsA cur next (worldsA : NatMap.t (option (GS.ccworld cc_compcert))) worldsB worldsP gi (w0 : GS.ccworld cc_compcert) m0 main_b wPcur tm0 sp0
@@ -1223,6 +1233,39 @@ Qed.
       congruence. congruence.
     Qed.
 
+    Definition ext_tid (w: ext_world) : nat :=
+     match w with extw j m tm => Mem.tid (Mem.support m) end.
+                     
+    Definition ext_nexttid (w: ext_world) : nat :=
+      match w with extw j m tm => Mem.next_tid (Mem.support m) end.
+
+    Inductive ext_acc_yield : ext_world -> ext_world -> Prop :=
+      ext_yield_intro : forall (m1 m2 : mem) (n : nat) (p : Mem.range_prop n (Mem.support m1))
+                          (tp : Mem.range_prop n (Mem.support m2)) (m1' m2' : Mem.mem') Hm Hm',
+                       m1' = Mem.yield m1 n p ->
+                       m2' = Mem.yield m2 n tp -> ext_acc_yield (extw m1 m2 Hm) (extw m1' m2' Hm').
+    
+
+    Lemma ext_acc_yield_acce : forall w1 w2,
+        ext_acc_yield w1 w2 ->
+        ext_tid w1 = ext_tid w2 ->
+        ext_acce w1 w2.
+    Proof.
+      intros. inv H.
+      constructor; try red; intros; eauto. simpl. simpl in H0.
+      inv Hm. congruence.
+    Qed.
+
+    Lemma ext_acc_yield_acci : forall w1 w2,
+        ext_acc_yield w1 w2 ->
+        ext_tid w1 = ext_tid w2 ->
+        ext_acci w1 w2.
+    Proof.
+      intros. inv H.
+      constructor; try red; intros; eauto. simpl. simpl in H0.
+      inv Hm. congruence.
+    Qed.
+    
     Lemma injp_acc_yield_acci : forall w1 w2,
         injp_acc_yield w1 w2 ->
         injp_tid w1 = injp_tid w2 ->
@@ -1515,12 +1558,6 @@ Qed.
      intros. destruct w as (a & b & c & d & e & f & g). reflexivity.
    Qed.
 
-   Inductive ext_acc_yield : ext_world -> ext_world -> Prop :=
-    ext_yield_intro : forall (m1 m2 : mem) (n : nat) (p : Mem.range_prop n (Mem.support m1))
-                        (tp : Mem.range_prop n (Mem.support m2)) (m1' m2' : Mem.mem') Hm Hm',
-                       m1' = Mem.yield m1 n p ->
-                       m2' = Mem.yield m2 n tp -> ext_acc_yield (extw m1 m2 Hm) (extw m1' m2' Hm').
-   
    Inductive gw_acc_yield : GS.gworld cc_compcert -> GS.gworld cc_compcert -> Prop :=
      gw_acc_yield_intro : forall j m1 m2 m3 m1' m2' m3' Hmj Hme Hmj' Hme',
          injp_acc_yield (injpw j m1 m2 Hmj) (injpw j m1' m2' Hmj') ->
@@ -1576,14 +1613,14 @@ Qed.
        set (ttm' := Mem.yield ttm_q target ttp).
        assert (Hme' : Mem.extends tm' ttm').
        eapply yield_extends; eauto.
+       inv H.
        eexists. exists tm', ttm'.
        set (wpj := injpw j m tm_q Hm).
        set (wpj' := injpw j m' tm' Hm').
        set (wp:= (tt,(tt,(wpj, extw tm_q ttm_q Hm1)))).
        set (wp' := (tt,(tt,(wpj', extw tm' ttm' Hme')))).
-
        (*exists (se, ((row se m1'), (se, (se, start_routine_sig, (tse,((cajw (injpw j m1' tm'3 Hmq) start_routine_sig rs_q) , extw tm'3 ttm'3 Hmqe))) ))). *)
-       set (wA := (se,(row se m0',(se,(se, sg, (tse,(wAca,extw tm_q ttm_q Hm1))))))).
+       set (wA := (se,(row se m,(se,(se, sg, (tse,(wAca,extw tm_q ttm_q Hm1))))))).
        exists (NatMap.set cur (Some wp) worldsP), wp, j, Hme', Hm'.
        repeat apply conj.
        + (*step*)
@@ -1606,10 +1643,10 @@ Qed.
          -- simpl. intros. destruct (Nat.eq_dec 1 cur).
             subst. rewrite NatMap.gss. congruence.
             rewrite NatMap.gso; eauto.
-         -- destruct CUR_INJP_TID. split.
-            rewrite <- H13 in TID. simpl in TID.
+         -- destruct CUR_INJP_TID as [X Y]. split.
+            rewrite <- X in TID. simpl in TID.
             unfold gw_tid in TID. simpl in TID. unfold gw_tid. simpl. congruence.
-            rewrite <- H14 in NTID. simpl in NTID.
+            rewrite <- Y in NTID. simpl in NTID.
             unfold gw_nexttid in NTID. simpl in NTID. unfold gw_nexttid. simpl. congruence.
          -- destruct CUR_INJP_TID.  simpl in *.
             intros. destruct (Nat.eq_dec n cur). subst.
@@ -1625,17 +1662,19 @@ Qed.
                repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
                rewrite NatMap.gss. reflexivity. rewrite NatMap.gss. reflexivity.
                simpl. simpl in wp'. assert (HRS: rs_q = cajw_rs wAca).  reflexivity.
-               eapply match_returny; eauto. inversion Q_YIE. subst m1 args sg vf next0. eauto.
-               red. intros. apply val_inject_id. eauto.
+               eapply match_returny; eauto.
+               unfold wA. econstructor; eauto.
+               inversion Q_YIE. subst m1 args sg vf next0. eauto.
+               red. intros. apply val_inject_id. eauto. simpl in MR.
                rewrite NatMap.gss. eauto. simpl. congruence.
             ++ (* clear - THREADS H3 OTHERi n0. *)
-               destruct (THREADS n H13) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+               destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
                exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
-               simpl. intros. specialize (J H14).
+               simpl. intros. specialize (J H13).
                eapply gw_accg_acci_accg; eauto.
        + intros. simpl. unfold CMulti.get_cur_thread, CMulti.update_cur_thread. simpl.
          unfold CMulti.get_thread, CMulti.update_thread. simpl. rewrite NatMap.gss. congruence.
@@ -1691,7 +1730,8 @@ Qed.
        set (wpj' := injpw j m' tm' Hm').
        set (wp:= (tt,(tt,(wpj, extw tm_q ttm_q Hm1)))).
        set (wp' := (tt,(tt,(wpj', extw tm' ttm' Hme')))).
-       set (wA := (se,(row se m0',(se,(se, pthread_join_sig, (tse,(wAca,extw tm_q ttm_q Hm1))))))).
+       inv H.
+       set (wA := (se,(row se m,(se,(se, pthread_join_sig, (tse,(wAca,extw tm_q ttm_q Hm1))))))).
        eexists. exists tm', ttm'. exists (NatMap.set cur (Some wp) worldsP). exists wp,j,Hme', Hm'.
        repeat apply conj; try rewrite NatMap.gss; eauto.
        + (*step*)
@@ -1706,9 +1746,9 @@ Qed.
          -- simpl. intros. destruct (Nat.eq_dec 1 cur).
             subst. rewrite NatMap.gss. congruence.
             rewrite NatMap.gso; eauto.
-         -- destruct CUR_INJP_TID. split.
-            rewrite H1. rewrite <- TID. reflexivity.
-            rewrite H13. rewrite <- NTID. reflexivity.
+         -- destruct CUR_INJP_TID as [X Y]. split.
+            rewrite X. rewrite <- TID. reflexivity.
+            rewrite Y. rewrite <- NTID. reflexivity.
          -- destruct CUR_INJP_TID.
             intros. destruct (Nat.eq_dec n cur). subst.
             rewrite NatMap.gss in H14. inv H14.
@@ -1726,15 +1766,16 @@ Qed.
                eapply match_returnj; eauto.
                red. intros. eapply val_inject_id; eauto.
                simpl. rewrite HRSI'. rewrite <- HRSI. eauto.
+               unfold wA. constructor.
                rewrite NatMap.gss. eauto. simpl. congruence.
             ++ (* clear - THREADS H3 OTHERi n0. *)
-               destruct (THREADS n H1) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+               destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
                exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
                rewrite NatMap.gso. simpl. eauto. lia.
-               simpl. intros. specialize (J H13).
+               simpl. intros. specialize (J H1).
                eapply gw_accg_acci_accg; eauto.
        +  intros. simpl. unfold CMulti.get_cur_thread, CMulti.update_cur_thread. simpl.
          unfold CMulti.get_thread, CMulti.update_thread. simpl. rewrite NatMap.gss. congruence.
@@ -1922,23 +1963,21 @@ Qed.
          rewrite CUR_GWORLD in GETWp. inv GETWp. reflexivity.
          subst wPcur.
          apply FIND_TID in GETWp as X. destruct X as [HwaTid RNGtarget].
-         (** destruct wA here? or we can define *)
-         (* assert (get wA o-> (tt,(tt,(injpw f m' tm' Hmj',extw tm' ttm' Hme')))).
-         assert (ACCE: gw_acce (get wA) (injpw f m' tm' Hmj')).
-         eapply injp_acc_yield_acce; eauto. *)
-
          destruct wA as (se0 & [se0' m0'] & se1 & [se1' sig'] & se2 & wAca & wAe).
          simpl in GETwpc, ACCY, ACC, GETWp, HwaTid, RSLD.
-
-         (* destruct H0 as [q1' [Hqr [q1'' [Hqw [qa' [Hqca Hqe]]]]]].
-         inv Hqr. inv Hqw. simpl in H. destruct H0. simpl in H0. inv H0. simpl in H1.
-         inv Hqca. destruct qa_ptc as [trs ttm]. inv Hqe. destruct H2 as [PCN Hme].
-         inv Hme. clear Hm4. rename Hm3 into Hme.
-         subst tvf targs. rewrite pthread_create_locs in H5. simpl in H5.
-         inv H5. inv H17. inv H18. inv H19.
-         destruct MSE as [EQ1 [EQ2 [MSE EQ3]]].
-         inv EQ1. inv EQ2. inv EQ3. inv H2. inv H3.
-          *)
+         inv ACCY.
+         assert (ACCEJ: injp_acce (get_injp wAca) (injpw f m' tm' Hmj')).
+         { eapply injp_acc_yield_acce. eauto. rewrite <- H. inv H3.
+           econstructor; eauto. eauto. }
+         assert (ACCEE: ext_acce (extw m2 m3 Hme0) (extw tm' ttm' Hme')).
+         {
+           assert (BASE:injp_tid (get_injp wAca) = injp_tid (injpw f m' tm' Hmj')).
+           eauto. eapply ext_acc_yield_acce; eauto. inv H8. econstructor; eauto.
+           simpl. rewrite <- H in BASE. simpl in BASE.
+           erewrite <- Mem.mext_sup. 2: eauto.
+           erewrite <- inject_tid. 2: eauto. rewrite BASE.
+           erewrite inject_tid. 2: eauto. inv Hme'3. congruence.
+         }
          set (qc := cr Vundef m'). rename rs into trs.
          set (rs := cajw_rs wAca).
          set (rs' := Pregmap.set PC (rs RA) rs).
@@ -1947,16 +1986,12 @@ Qed.
          set (tr_a := (trs', ttm')).
          exploit M_REPLIES; eauto. 
          instantiate (1:= (tt, (tt, (injpw f m' tm' Hmj', extw tm' ttm' Hme')))).
-         { inv ACCY.
-           repeat apply conj; simpl; eauto. eapply injp_acc_yield_acce; eauto.
-           rewrite <- H. inv H3. econstructor; eauto.
-           admit. (** lemma: ext_acc_yield_acce *)
-         } 
+         repeat apply conj; simpl; eauto.
          instantiate (1:= tr_a). unfold tr_a.
          { 
            eexists. split. instantiate (1:= cr Vundef m').
-           econstructor; eauto. constructor. admit.
-           (** we enhence CUR_GWORLD stating that memory in ro is the same as m1 later, also the sigs are the same *)
+           econstructor; eauto. constructor.
+           inv WT_WA. simpl in ACCEJ. inv ACCEJ. constructor; eauto. destruct H14 as [_ [A _]]. auto.
            eexists. split. econstructor; eauto. constructor.
            exists r_a. split. unfold r_a. simpl. destruct wAca. simpl. destruct cajw_injp.
            econstructor; eauto.
@@ -1985,12 +2020,12 @@ Qed.
             rewrite NatMap.gso. eauto. eauto.
          -- destruct CUR_INJP_TID as [X Y]. unfold wp'.
             split; eauto. 
-            inv ACCY. simpl. rewrite <- H. simpl. unfold wpj'.
-            inv H3. simpl. reflexivity.
+            simpl. simpl. unfold wpj'. 
+            inv H3. simpl. unfold gw_nexttid. simpl. rewrite <- H. reflexivity.
          -- intros. destruct (Nat.eq_dec n target).
-            subst. rewrite NatMap.gss in H. inv H.
+            subst. rewrite NatMap.gss in H0. inv H0.
             split. reflexivity. lia.
-            rewrite NatMap.gso in H.
+            rewrite NatMap.gso in H0.
             exploit FIND_TID; eauto. eauto.
          -- intros.
             instantiate (1:= NatMap.set target None worldsA).
@@ -2001,15 +2036,15 @@ Qed.
                rewrite NatMap.gss. reflexivity.
                rewrite NatMap.gss. reflexivity.
                rewrite NatMap.gss. reflexivity.
-               econstructor; eauto. rewrite NatMap.gss. reflexivity.
+               econstructor; eauto.
+               rewrite NatMap.gss. reflexivity.
                intros. congruence.
-            ++ destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+            ++ destruct (THREADS n H0) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
                exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; try rewrite NatMap.gso; eauto.
                rewrite <- OTHERi; eauto. lia.
                intros n1. specialize (J n1). subst wp'.
-               inv ACCY.
                eapply injp_accg_yield_accg; eauto. simpl. unfold injp_gw_compcert.
-               simpl. rewrite <- H0. unfold wpj'. inv H4. econstructor; eauto.
+               simpl. rewrite <- H. unfold wpj'. inv H3. econstructor; eauto.
                exploit FIND_TID. apply I. intros [X Y].
                unfold injp_gw_compcert. simpl. 
                setoid_rewrite X. lia.
@@ -2020,15 +2055,19 @@ Qed.
          rewrite CUR_GWORLD in GETWp. inv GETWp. reflexivity. subst wPcur.
          apply FIND_TID in GETWp as X. destruct X as [HwaTid RNGtarget].
          destruct wA as (se0 & [se0' m0'] & se1 & [se1' sig'] & se2 & wAca & wAe).
-         simpl in GETwpc, ACCY, ACC, GETWp, HwaTid, RSLD.
-         
-         assert (ACCE1: injp_acce (get_injp wAca) (injpw f m' tm' Hmj')).
-         admit.
-         (*{ inv ACCY. eapply injp_acc_yield_acce; eauto. inv H3. econstructor; eauto.
-          
-          simpl.
-          inv H3. simpl.
-          *)
+         simpl in GETwpc, ACCY, ACC, GETWp, HwaTid, RSLD. inv ACCY.
+         assert (ACCEJ: injp_acce (get_injp wAca) (injpw f m' tm' Hmj')).
+         { eapply injp_acc_yield_acce. rewrite <- H. inv H3.
+           econstructor; eauto. eauto. }
+         assert (ACCEE: ext_acce (extw m2 m3 Hme0) (extw tm' ttm' Hme')).
+         {
+           assert (BASE:injp_tid (get_injp wAca) = injp_tid (injpw f m' tm' Hmj')).
+           eauto. eapply ext_acc_yield_acce; eauto. inv H8. econstructor; eauto.
+           simpl. rewrite <- H in BASE. simpl in BASE.
+           erewrite <- Mem.mext_sup. 2: eauto.
+           erewrite <- inject_tid. 2: eauto. rewrite BASE.
+           erewrite inject_tid. 2: eauto. inv Hme'3. congruence.
+         }
          specialize (THREADS tar' RNG_WAIT) as THR_TAR'.
          destruct THR_TAR' as (wBt & owAt & wPt & lsct & lsat & lit & GETWt & GETit & MSEwt & GETCt & GETAt & GETWat & MSt & GETWpt & ACCt).         
          assert (lsct = CMulti.Final OpenC res ).   eapply foo; eauto. subst lsct.
@@ -2041,9 +2080,9 @@ Qed.
          set (trs' := Pregmap.set RAX (Vint Int.one)(Pregmap.set PC (trs RA) trs)).
          exploit Mem.storev_mapped_inject; eauto.
          eapply val_inject_incr. 2: eauto. unfold injp_w_compcert. simpl.
-         unfold get_injp in ACCE1. inv ACCE1. eauto.
+         unfold get_injp in ACCEJ. inv ACCEJ. eauto.
          eapply val_inject_incr. 2: eauto. inv ACCt'. simpl.
-         setoid_rewrite <- H2 in ACCE1. inv ACCE1.
+         setoid_rewrite <- H4 in ACCEJ. inv ACCEJ.
          eapply inject_incr_trans. eauto. eauto.
          intros [tm''[MEM_RES' Hmj'']].
          set (r_a := (rs', tm'')).
@@ -2053,28 +2092,33 @@ Qed.
          set (tr_a := (trs', ttm'')).
          set (wpj' := injpw f m'' tm'' Hmj'').
          set (wp' := (tt,(tt, (wpj', extw tm'' ttm'' Hme'')))).
-         assert (ACCE: injp_acce (get_injp wAca) wpj').
+         assert (ACCEJ2: injp_acce (get_injp wAca) wpj').
          {
            simpl in VPTR. destruct wAca. simpl in *.
            destruct cajw_injp. unfold wp'. simpl in *.
-           eapply injp_acce_storev; eauto.  inv ACCE1. eauto.
+           eapply injp_acce_storev; eauto.  inv ACCEJ. eauto.
          }
+         assert (ACCEE2: ext_acce (extw m2 m3 Hme0) (extw tm'' ttm'' Hme'')).
+         { etransitivity. eauto.
+         exploit ext_acci_storev. apply MEM_RES'. apply MEM_RES''. eauto. eauto. }
          exploit M_REPLIES; eauto.
          instantiate (1:= (tt,(tt,(injpw f m'' tm'' Hmj'', extw tm'' ttm'' Hme'')))).
-         { repeat eapply conj; simpl; eauto. etransitivity. instantiate (1:= extw tm' ttm' Hme').
-           admit. admit. }
+         repeat eapply conj; simpl; eauto. 
          instantiate (1:= tr_a). unfold tr_a. simpl.
          { (* match_reply *)
-           eexists. split. econstructor. constructor. admit.
-           eexists. split. econstructor. simpl. admit.
+           eexists. split. econstructor. constructor.
+           inv WT_WA. simpl in ACCEJ2. unfold wpj' in ACCEJ2. inv ACCEJ2.
+           destruct H15 as [_ [X _]]. constructor; eauto.
+           eexists. split. econstructor. inv WT_WA. unfold sig_w_compcert in WA_SIG.
+           simpl in WA_SIG. rewrite WA_SIG. simpl. auto.
            exists r_a. split. unfold r_a. simpl.
            destruct wAca. simpl in *.
-           econstructor; eauto. unfold sig_w_compcert in WA_SIG. simpl in WA_SIG.
-           assert (cajw_sg = pthread_join_sig). admit. rewrite H.
+           econstructor; eauto.  inv WT_WA. unfold sig_w_compcert in WA_SIG.
+           simpl in WA_SIG. rewrite WA_SIG.
            unfold Conventions1.loc_result.
            replace Archi.ptr64 with true. simpl. unfold rs'. rewrite Pregmap.gss. constructor. eauto.
            intros. unfold rs'.
-           destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
+           destruct r; simpl in H0; inv H0; repeat rewrite Pregmap.gso;
              simpl; try congruence; try reflexivity.
            constructor. simpl. intros. unfold rs', trs'.
            setoid_rewrite Pregmap.gsspec. destr; eapply val_inject_id; eauto.
@@ -2100,13 +2144,13 @@ Qed.
             split.
             transitivity (Mem.tid (Mem.support m')). reflexivity. erewrite Mem.support_storev; eauto.
             reflexivity.
-            inv ACCY. inv H4. simpl.
+            inv H3. simpl.
             rewrite <- H. simpl. unfold gw_nexttid. simpl. 
             transitivity (Mem.next_tid (Mem.support ((Mem.yield m1 n p)))). reflexivity. erewrite Mem.support_storev; eauto.
          -- intros. destruct (Nat.eq_dec n target).
-            subst. rewrite NatMap.gss in H. inv H. split.
+            subst. rewrite NatMap.gss in H0. inv H0. split.
             unfold wp'. unfold gw_tid. simpl. erewrite <- Mem.support_storev; eauto. reflexivity. simpl. lia.
-            rewrite NatMap.gso in H. eauto. eauto.
+            rewrite NatMap.gso in H0. eauto. eauto.
          -- intros.
             instantiate (1:= NatMap.set target None worldsA).
             destruct (Nat.eq_dec n target).
@@ -2114,15 +2158,17 @@ Qed.
                exists wB, None, wp'. eexists. eexists. exists li'.
                repeat apply conj; try rewrite NatMap.gss; eauto.
                econstructor; eauto. simpl. intros. congruence.
-            ++ destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+            ++ destruct (THREADS n H0) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
                exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; try rewrite NatMap.gso; eauto.
                rewrite <- OTHERi; eauto. lia.
                intros n1. specialize (J n1). simpl in n1. subst wp'. simpl in *.
-               eapply injp_accg_acci_accg. eauto. inv ACCY.
+               eapply injp_accg_acci_accg. eauto. 
                eapply injp_acci_storev; eauto. instantiate (1:= Hmj'1).
                eapply injp_acc_yield_acci; eauto. destruct wAca. simpl in *.
-               inv ACCE1. simpl in VPTR. eauto.
-               fold rs. unfold injp_w_compcert in VPTR. simpl in VPTR. setoid_rewrite <- H2 in VPTR.
+               unfold injp_gw_compcert. simpl. rewrite <- H.
+               inv H3. econstructor; eauto.
+               inv ACCEJ. simpl in VPTR. eauto.
+               fold rs. unfold injp_w_compcert in VPTR. simpl in VPTR. setoid_rewrite <- H in VPTR.
                eauto.
        + (*initial, impossible*)
          simpl in *. exfalso. eapply NOTINIT. eauto.
