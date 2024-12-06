@@ -430,6 +430,12 @@ Admitted.
 Definition find_fields (fid: ident) (fpl: list (ident * Z * footprint)) : option (ident * Z * footprint) :=
   find (fun '(fid', _, _) => if ident_eq fid fid' then true else false) fpl. 
 
+Definition set_field (fid: ident) (vfp: footprint) (fpl: list (ident * Z * footprint)) : list (ident * Z * footprint) :=
+  (map
+     (fun '(fid2, fofs2, ffp2) =>
+        if ident_eq fid fid2 then (fid2, fofs2, vfp) else (fid2, fofs2, ffp2)) fpl).
+
+
 Lemma find_fields_some: forall fid fid1 fpl fofs ffp,
     find_fields fid fpl = Some (fid1, fofs, ffp) ->
     fid = fid1 /\ In (fid, fofs, ffp) fpl.
@@ -440,7 +446,55 @@ Proof.
   subst. auto.
 Qed.
 
+Lemma find_fields_different_field: forall fpl fid id fofs ffp vfp,
+    id <> fid ->
+    find_fields fid (set_field id vfp fpl) = Some (fid, fofs, ffp) ->
+    find_fields fid fpl = Some (fid, fofs, ffp).
+Proof.
+  induction fpl; intros; simpl in *; try congruence.
+  destruct a. destruct p. destruct ident_eq in H0.
+  - subst. destruct ident_eq.
+    + subst. congruence.
+    + eapply IHfpl. eauto. eauto.
+  - destruct ident_eq.
+    + inv H0. auto.
+    + eauto.
+Qed.
 
+Lemma find_fields_same_offset: forall fpl fid id fofs ffp vfp,
+    find_fields fid (set_field id vfp fpl) = Some (fid, fofs, ffp) ->
+    exists vfp, find_fields fid fpl = Some (fid, fofs, vfp).
+Proof.
+  induction fpl; intros; simpl in *; try congruence.
+  destruct a. destruct p. destruct ident_eq in H.
+  - subst. destruct ident_eq.
+    + inv H. eauto.
+    + eapply IHfpl; eauto.
+  - destruct ident_eq.
+    + inv H. eauto.
+    + eauto.
+Qed.
+
+Lemma find_fields_set_spec: forall fpl fid1 fid2 fofs ffp vfp,
+    find_fields fid1 fpl = Some (fid1, fofs, ffp) ->
+    find_fields fid1 (set_field fid2 vfp fpl) = Some (fid1, fofs, if peq fid1 fid2 then vfp else ffp).
+Proof.
+  induction fpl; intros; simpl in *; try congruence.
+  destruct a. destruct p.
+  destruct ident_eq in H.
+  - subst. inv H. destruct ident_eq; subst.
+    + destruct ident_eq; try congruence.
+      auto.
+    + destruct ident_eq; try congruence.
+      destruct peq; try congruence. auto.
+  - destruct ident_eq; subst.
+    + destruct ident_eq; try congruence.
+      erewrite IHfpl; eauto. destruct peq; try congruence.
+    + destruct ident_eq; try congruence.
+      erewrite IHfpl; eauto.
+Qed.
+
+      
 (** * Definitions of semantics typedness (TODO: support user-defined semantics types) *)
 
 (* Semantics well typed location is mutually defined with semantics
@@ -525,18 +579,19 @@ Definition member_footprint_rel (wtfp: type -> footprint -> Prop) (co: composite
 says that the footprint is an abstract form of the syntactic type
 ty. We need an intermediate composite_env to act as the recursive
 guard to simulate the move checking because we do not allow unbounded
-appearence of shallow struct.*)
-Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
-| wt_fp_emp: forall ce1 ty
+appearence of shallow struct. What if we allow recursive struct in the
+footprint but if can be rule out in move checking? *)
+Inductive wt_footprint : type -> footprint -> Prop :=
+| wt_fp_emp: forall ty
     (* It means that the location with this type is not
         initialized or this location is scalar type *)
     (WF: forall orgs id, ty <> Tstruct orgs id),
-    wt_footprint ce1 ty fp_emp
-| wt_fp_scalar: forall ce1 ty
+    wt_footprint ty fp_emp
+| wt_fp_scalar: forall ty
     (WF: scalar_type ty = true),
-    wt_footprint ce1 ty (fp_scalar ty)
-| wt_fp_struct: forall orgs id fpl ce1 co
-    (CO: ce1 ! id = Some co)
+    wt_footprint ty (fp_scalar ty)
+| wt_fp_struct: forall orgs id fpl co
+    (CO: ce ! id = Some co)
     (** TODO: combine WT1 and WT2 elegantly. WT1 is used in getting
     the sub-field's footprint. WT2 is used in proving the properties
     of sub-field's footprint *)
@@ -547,14 +602,14 @@ Inductive wt_footprint : composite_env -> type -> footprint -> Prop :=
           find_fields fid fpl = Some (fid, fofs, ffp)
           /\ field_offset ce fid co.(co_members) = OK fofs
           (* bound condition *)
-          /\ wt_footprint (PTree.remove id ce1) fty ffp)
+          /\ wt_footprint fty ffp)
     (WT2: forall fid fofs ffp,
         find_fields fid fpl = Some (fid, fofs, ffp) ->
         exists fty,
           field_type fid co.(co_members) = OK fty
           /\ field_offset ce fid co.(co_members) = OK fofs
-          /\ wt_footprint (PTree.remove id ce1) fty ffp),
-    wt_footprint ce1 (Tstruct orgs id) (fp_struct id fpl)
+          /\ wt_footprint fty ffp),
+    wt_footprint ce (Tstruct orgs id) (fp_struct id fpl)
 | wt_fp_enum: forall orgs id tagz fid fty fofs fp ce1 co
     (CO: ce1 ! id = Some co)
     (TAG: list_nth_z co.(co_members) tagz = Some (Member_plain fid fty))
@@ -688,7 +743,7 @@ Fixpoint set_footprint (phl: list path) (v: footprint) (fp: footprint) : option 
             | Some (fid1, fofs, ffp) =>                
                 match set_footprint l v ffp with
                 | Some ffp1 =>
-                    Some (fp_struct id (map (fun '(fid2,fofs2, ffp2) => if ident_eq fid fid2 then (fid2, fofs2, ffp1) else (fid2, fofs2, ffp2)) fpl)) 
+                    Some (fp_struct id (set_field fid ffp1 fpl)) 
                 | None => None
                 end
             | None => None
@@ -1790,7 +1845,7 @@ Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit uni
     (POWN: must_movable ce1 init uninit universe p = true)
     (SOUND: sound_own own init uninit universe)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
-    (WTFP: wt_footprint ce ce1 (typeof_place p) fp)
+    (WTFP: wt_footprint_ce ce (typeof_place p) fp)
     (EXTEND: ce_extends ce1 ce),
     sem_wt_loc m fp b ofs
 .
@@ -1864,7 +1919,7 @@ Proof.
       (* fp is not empty *)
       exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
-      clear GCO. eapply EXTEND in P. rewrite P in *.
+      clear GCO. generalize P as P1. intros P1. eapply EXTEND in P. rewrite P in *.
       econstructor. simpl. eauto. eauto. econstructor; eauto.
       (* two cases *)
       destruct (must_init init uninit universe (Pderef p (Tstruct l id1))) eqn: INIT1; try congruence.
@@ -1877,7 +1932,7 @@ Proof.
       exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). simpl in *.
       (* prove sem_wt_loc: first eliminate Tbox *)
-      eapply WTLOC1.      
+      eapply WTLOC1.
       erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
       eauto.
       (** Case2: p is not in the universe *)
@@ -2137,44 +2192,6 @@ Proof.
   - admit.
   - admit.
 Admitted.      
-
-
-Lemma find_fields_different_field: forall fpl fid id fofs ffp vfp,
-    id <> fid ->
-    find_fields fid
-      (map
-         (fun '(fid2, fofs2, ffp2) =>
-            if ident_eq id fid2 then (fid2, fofs2, vfp) else (fid2, fofs2, ffp2)) fpl) =
-      Some (fid, fofs, ffp) ->
-    find_fields fid fpl = Some (fid, fofs, ffp).
-Proof.
-  induction fpl; intros; simpl in *; try congruence.
-  destruct a. destruct p. destruct ident_eq in H0.
-  - subst. destruct ident_eq.
-    + subst. congruence.
-    + eapply IHfpl. eauto. eauto.
-  - destruct ident_eq.
-    + inv H0. auto.
-    + eauto.
-Qed.
-
-Lemma find_fields_same_offset: forall fpl fid id fofs ffp vfp,
-    find_fields fid
-      (map
-         (fun '(fid2, fofs2, ffp2) =>
-            if ident_eq id fid2 then (fid2, fofs2, vfp) else (fid2, fofs2, ffp2)) fpl) =
-      Some (fid, fofs, ffp) ->
-    exists vfp, find_fields fid fpl = Some (fid, fofs, vfp).
-Proof.
-  induction fpl; intros; simpl in *; try congruence.
-  destruct a. destruct p. destruct ident_eq in H.
-  - subst. destruct ident_eq.
-    + inv H. eauto.
-    + eapply IHfpl; eauto.
-  - destruct ident_eq.
-    + inv H. eauto.
-    + eauto.
-Qed.
 
   
 (* Inductive not_shallow_prefix_paths: list path -> Prop := *)
@@ -2533,6 +2550,7 @@ Admitted.
 Lemma set_wt_footprint: forall phl ty1 vty (WTPH: wt_path ce ty1 phl vty) fp1 vfp fp2,
     set_footprint phl vfp fp1 = Some fp2 ->
     wt_footprint ce ce ty1 fp1 ->
+    (* we should not say that vfp is well typed in ce! *)
     wt_footprint ce ce vty vfp ->
     wt_footprint ce ce ty1 fp2.
 Proof.
@@ -2546,8 +2564,28 @@ Proof.
     inv B1.
     eapply IHWTPH. eauto. eauto.
     econstructor. simpl in WP2. inv WP2. auto.
-  - 
-    
+  - exploit set_footprint_app_inv; eauto.
+    intros (fp3 & vfp1 & A1 & A2 & A3).
+    simpl in A2. destruct fp3; try congruence.
+    destruct (find_fields fid fpl) eqn: FIND; try congruence.
+    repeat destruct p. inv A2.
+    exploit get_wt_footprint_wt; eauto. intros (ce' & B1 & B2).
+    inv B1.
+    eapply IHWTPH. eauto. eauto.
+    (* prove wt_footprint of the struct footprint *)
+    econstructor; eauto.
+    + intros. eapply B2 in CO. rewrite WP2 in CO. inv CO.
+      exploit WT1. eauto.
+      intros (ffp & fofs & C1 & C2 & C3).
+      destruct (peq fid fid0).
+      * subst. exists vfp, fofs.
+        repeat apply conj; auto.
+        erewrite find_fields_set_spec; eauto.
+        destruct peq; try congruence.
+        rewrite WP3 in H. inv H.
+        eapply wt_footprint_extend_ce. eauto.
+        eapply ce_extends_remove. eauto.
+      
 (** IMPORTANT TODO: wf_env remain valid if we set a wt_footprint *)
 Lemma wf_env_set_wt_footprint: forall p fpm1 fpm2 ce e fp
     (WFENV: wf_env fpm1 ce e)
@@ -3352,6 +3390,8 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (AS: assign_loc ce ty m1 b ofs v m2)
     (WT: sem_wt_val m1 vfp v)
     (WFENV: wf_env fpm1 ce e)
+    (* We cannot say vfp is well typed in ce because when inserting
+    vfp to fpm1, we need to use a smaller ce to typing vfp! *)
     (WTFP: wt_footprint ce ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
