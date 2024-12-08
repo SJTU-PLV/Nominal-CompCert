@@ -1281,7 +1281,8 @@ Definition variant_field_offset (env: composite_env) (id: ident) (ms: members) :
 Corollary variant_field_offset_in_range:
   forall env ms id ofs ty,
   variant_field_offset env id ms = OK ofs -> field_type id ms = OK ty ->
-  0 <= ofs /\ ofs + sizeof env ty <= sizeof_variant env ms.
+  (* skip the offset of tag *)
+  4 <= ofs /\ ofs + sizeof env ty <= sizeof_variant env ms.
 Proof.
 Admitted.
 

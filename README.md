@@ -55,7 +55,7 @@ make all
 make test
 ```
 
-The structure of the test cases is explained in [here](./rustexamples/compiler_tests/README.md).
+The structure of the test cases is explained [here](./rustexamples/compiler_tests/README.md).
 
 ## Structure of the source code
 
