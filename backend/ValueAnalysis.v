@@ -2337,6 +2337,39 @@ Proof.
   - intros. inv H0. inv H. constructor; eauto.
 Qed.
 
+(** ** The initial [ro] soundness for loading process *)
+(** This lemma should be moved to and proved in ValueAnalysis.v.
+       I'm 95% sure it's correct. Maybe we can somehow reuse the initialization
+       proofs in ValueAnalysis for this. Or slightly change the definition of
+       ro_sound_memory using existential [bc] if this approach is more ligheweight. *)
+
+   (** This lemma should also be part of the DR with closed simulation and behavior
+       refinement. We should refer the loading process proposed in CompCertOE *)      
+   Lemma initial_romatch : forall skel m0 se,
+       Genv.init_mem skel = Some m0 ->
+       Genv.symboltbl skel = se ->
+       ValueDomain.romatch (bc_of_symtbl se) m0 (romem_for_symtbl se).
+   Proof.
+     intros. constructor.
+     - unfold romem_for_symtbl in H2.
+       induction (Mem.sup_list (Genv.genv_sup se)); simpl in H2.
+       rewrite Maps.PTree.gempty in H2. congruence.
+       admit. (*ok*)
+     - admit. (*ok *)
+   Admitted.
+
+   Lemma initial_ro_sound :  forall skel m0 se,
+       Genv.init_mem skel = Some m0 ->
+       Genv.symboltbl skel = se ->
+       sound_memory_ro se m0.
+   Proof.
+     intros. constructor. eapply initial_romatch; eauto.
+     apply Genv.init_mem_genv_sup in H as SUP.
+     rewrite <- SUP. rewrite <- H0.
+     apply Mem.sup_include_refl.
+   Qed.
+
+   
 (** ** Block classification for an injection *)
 
 Program Definition bc_of_inj (f: meminj) (se: Genv.symtbl) :=

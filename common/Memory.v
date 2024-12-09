@@ -659,6 +659,14 @@ Definition mem := mem'.
 
 Definition nextblock (m:mem) := fresh_block (support m).
 
+Lemma mksup_ext:
+  forall stack1 stack2 tid1 tid2 a1 a2,
+    stack1 = stack2 -> tid1 = tid2 ->
+    Mem.mksup stack1 tid1 a1 = Mem.mksup stack2 tid2 a2.
+Proof.
+  intros. subst. f_equal; apply Axioms.proof_irr.
+Qed.
+   
 Lemma mkmem_ext:
  forall cont1 cont2 acc1 acc2 sup1 sup2 a1 a2 b1 b2 c1 c2 d1 d2,
   cont1=cont2 -> acc1=acc2 -> sup1=sup2 ->

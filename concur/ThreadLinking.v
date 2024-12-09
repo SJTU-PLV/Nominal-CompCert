@@ -255,26 +255,7 @@ Section ConcurSim.
      red. intros. eapply well_founed_go'; eauto.
    Qed.
 
-   (** This lemma should be moved to and proved in ValueAnalysis.v.
-       I'm 95% sure it's correct. Maybe we can somehow reuse the initialization
-       proofs in ValueAnalysis for this. Or slightly change the definition of
-       ro_sound_memory using existential [bc] if this approach is more ligheweight. *)
-
-   (** This lemma should also be part of the DR with closed simulation and behavior
-       refinement. We should refer the loading process proposed in CompCertOE *)      
-   Lemma initial_romatch : forall skel m0,
-       Genv.init_mem skel = Some m0 ->
-       Genv.symboltbl skel = se ->
-       ValueDomain.romatch (bc_of_symtbl se) m0 (romem_for_symtbl se).
-   Proof.
-     intros. constructor.
-     - unfold romem_for_symtbl in H2.
-       induction (Mem.sup_list (Genv.genv_sup se)); simpl in H2.
-       rewrite Maps.PTree.gempty in H2. congruence.
-       admit. (*ok*)
-     - admit. (*ok *)
-   Admitted.
-
+   
    Section Initial.
      
      Variable m0 : mem.
@@ -326,11 +307,7 @@ Section ConcurSim.
 
      Theorem sound_ro : sound_memory_ro se m0.
      Proof.
-       constructor.
-       - eapply initial_romatch; eauto.
-       - apply Genv.init_mem_genv_sup in INITM as SUP.
-         rewrite <- SUP. unfold se.
-         apply Mem.sup_include_refl.
+       eapply initial_ro_sound; eauto.
      Qed.
      
    End Initial.
@@ -356,7 +333,6 @@ Section ConcurSim.
 
     (** Maybe the thread_state needs to be further extended fsim_match_external *)
 
-    Compute GS.ccworld cc_compcert.
     
     Definition sig_w_compcert (w: GS.ccworld cc_compcert) : signature :=
       (snd (fst (snd (snd (snd w))))).
@@ -750,23 +726,14 @@ Qed.
       - inv mi_inj.
         constructor; eauto.
     Qed.
-    Locate mksup.
-    (** To be moved to Memory.v *)
-    Lemma mksup_ext:
-      forall stack1 stack2 tid1 tid2 a1 a2,
-        stack1 = stack2 -> tid1 = tid2 ->
-        Mem.mksup stack1 tid1 a1 = Mem.mksup stack2 tid2 a2.
-    Proof.
-      intros. subst. f_equal; apply Axioms.proof_irr.
-    Qed.
-    
+
     Lemma yield_extends : forall m tm n1 n2 p tp,
         Mem.extends m tm -> n1 = n2 ->
         Mem.extends (Mem.yield m n1 p) (Mem.yield tm n2 tp).
     Proof.
       intros. unfold Mem.yield. inv H.
       constructor; simpl; eauto.
-      - unfold Mem.sup_yield. apply mksup_ext; congruence.
+      - unfold Mem.sup_yield. apply Mem.mksup_ext; congruence.
       - inv mext_inj. constructor; eauto.
     Qed.
 
