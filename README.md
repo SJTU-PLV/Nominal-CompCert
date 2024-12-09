@@ -10,7 +10,7 @@ The development is known to compile with the following software:
 ## Instructions for compiling
 
 We recommend using the `opam` package manager to set up a build environment. 
-We have tested the building on **Linux** with the following shell commands. Note that we only target X86, so MacOS with M-series chips is unable to compiler the test cases.
+We have tested the building on **Linux** with the following shell commands. Note that we only target X86, so MacOS with M-series chips is unable to compile the test cases.
 
     # Initialize opam (if you haven't used it before)
     opam init --bare

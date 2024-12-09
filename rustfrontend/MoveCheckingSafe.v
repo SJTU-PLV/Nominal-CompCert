@@ -3590,7 +3590,36 @@ Qed.
 Lemma assign_loc_unchanged_on: forall ce ty m1 m2 b ofs v,
     assign_loc ce ty m1 b ofs v m2 ->
     Mem.unchanged_on (fun b1 ofs1 => ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)) m1 m2.
-Admitted.
+Proof.
+  intros until v. intros AS.
+  inv AS.
+  - eapply Mem.store_unchanged_on; eauto.
+    intros. intro. eapply H2. split; auto.
+    erewrite <- sizeof_by_value; eauto.
+  - exploit Mem.loadbytes_length. eauto.
+    intros LEN.
+    eapply Mem.storebytes_unchanged_on; eauto.
+    intros. intro. eapply H7. split; auto.
+    rewrite LEN in H6.
+    erewrite Z_to_nat_max in H6.
+    generalize (sizeof_pos ce0 ty). intros.
+    erewrite Z.max_l in H6. eauto. lia.
+Qed.
+
+    
+(* assignment does not change the permission of all the memory location *)
+Lemma assign_loc_perm_unchanged: forall ce ty m1 m2 b ofs v,
+    assign_loc ce ty m1 b ofs v m2 ->
+    (forall b ofs k p, Mem.perm m1 b ofs k p <-> Mem.perm m2 b ofs k p).
+Proof.
+  intros until v. intros AS. inv AS.
+  - intros. split; intros.
+    eapply Mem.perm_store_1; eauto.
+    eapply Mem.perm_store_2; eauto.
+  - intros. split; intros.
+    eapply Mem.perm_storebytes_1; eauto.
+    eapply Mem.perm_storebytes_2; eauto.
+Qed.
 
 (* It collects the blocks pointed by the box pointer in the footprint. It does not collect *)
 Fixpoint blocks_of_fp_box (fp: footprint) : list (block * Z) :=
@@ -3828,13 +3857,31 @@ Lemma blocks_perm_unchanged_fp_incl: forall fp1 fp2 m1 m2,
     blocks_perm_unchanged_fp fp2 m1 m2.
 Admitted.
 
+(* If we only update the contents of the memory, the permission is
+unchanged *)
+Lemma blocks_perm_unchanged_normal: forall m1 m2 fp,
+    (forall b ofs k p, Mem.perm m1 b ofs k p <-> Mem.perm m2 b ofs k p) ->
+    blocks_perm_unchanged_fp fp m1 m2.
+Proof.
+  intros. red. red. intros. eapply H. eauto.
+Qed.
+
+
 (* The location computed by get_loc_footprint is not in size
     record (i.e., (-size Mptr, 0) *)
-Lemma get_loc_footprint_range: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ce ty,
+Lemma get_loc_footprint_pos: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ce ty,
     ofs1 >= 0 ->
     get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
     wt_footprint ce ty fp1 ->
     ofs2 >= 0.
+Proof.
+Admitted.
+
+
+Lemma get_loc_footprint_map_pos: forall phl id b ofs fp fpm e ce,
+    get_loc_footprint_map e (id, phl) fpm = Some (b, ofs, fp) ->
+    wf_env fpm ce e ->
+    ofs >= 0.
 Admitted.
 
 
@@ -3885,7 +3932,7 @@ Proof.
     rewrite B1 in B1'. inv B1'.
     (* show that ofs1 >= 0 *)
     assert (GT1: ofs1 >= 0).
-    { eapply get_loc_footprint_range; eauto. }
+    { eapply get_loc_footprint_pos; eauto. }
     destruct ph; simpl in *.
     + destruct fp3; try congruence. inv A2. inv B2.
       (* key proof: phl' ++ [ph_deref] is not shallow path, so if
@@ -4190,12 +4237,49 @@ Proof.
     auto.
 Qed.
 
+
+Lemma footprint_norepet_fields_disjoint: forall (fpl: list (ident * Z * footprint)) id1 id2 fofs1 fofs2 fp1 fp2,
+    list_norepet (flat_map (fun '(_, _, fp) => footprint_flat fp) fpl) ->
+    In (id1, fofs1, fp1) fpl ->
+    In (id2, fofs2, fp2) fpl ->
+    id1 <> id2 ->
+    list_disjoint (footprint_flat fp1) (footprint_flat fp2).
+Proof.
+  induction fpl; simpl; intros; try contradiction.
+  destruct a. destruct p. 
+  eapply list_norepet_app in H. destruct H as (A1 & A2 & A3).
+  destruct H0; destruct H1.
+  - inv H. inv H0. congruence.
+  - inv H. red. intros. intro.
+    eapply A3. eauto.
+    eapply in_flat_map. exists (id2, fofs2, fp2). eauto. auto.
+  - inv H0. red. intros. intro.
+    eapply A3. eauto.
+    eapply in_flat_map. exists (id1, fofs1, fp1). eauto. auto.
+  - eauto.
+Qed.
+
+    
+Lemma footprint_norepet_fields_norepet: forall (fpl: list (ident * Z * footprint)) id fofs fp,
+    list_norepet (flat_map (fun '(_, _, fp) => footprint_flat fp) fpl) ->
+    In (id, fofs, fp) fpl ->
+    list_norepet (footprint_flat fp).
+Proof.
+  induction fpl; simpl; intros; try contradiction.
+  destruct a. destruct p. destruct H0.
+  - inv H0. eapply list_norepet_app in H. destruct H as (A1 & A2 & A3).
+    auto.
+  - eapply list_norepet_app in H. destruct H as (A1 & A2 & A3).
+    eauto.
+Qed.
+
+
 (** IMPORTANT TODO: some properties of wt_footprint. This lemma says
 that the (location, footprint) pairs obtained form disjoint paths are
 disjoint, i.e., the locations are disjoint and the footprints have no
 equal blocks. To express the disjointness of locaitons, we also need
 the type of the footprint to get its size, so we add wt_footprint
-premised in this lemma. *)
+premises in this lemma. *)
 Lemma get_loc_footprint_disjoint_paths: forall phl1 phl2 fp b ofs b1 b2 ofs1 ofs2 fp1 fp2 ty ty1 ty2,
     paths_disjoint phl1 phl2 ->
     list_norepet (footprint_flat fp) ->
@@ -4239,12 +4323,13 @@ Proof.
         exploit get_loc_footprint_disjoint_loc. eapply LOC_DIS. eauto. eauto.
         eapply WT2. eapply WT3.
         all: eauto.
-        (** not easy but correct: prove f and f0 are disjoint using fpl norepet *)
-        red. intros. 
-        admit.
+        (* prove f and f0 are disjoint using fpl norepet *)
+        eapply footprint_norepet_fields_disjoint; eauto.
+        congruence.
         (* norepet *)
         (* easy because f and f0 are in fpl and fpl is norepet *)
-        admit. admit.
+        eapply footprint_norepet_fields_norepet; eauto.
+        eapply footprint_norepet_fields_norepet; eauto.
         intro. eapply IN. eapply in_flat_map. eauto.
         intro. eapply IN. eapply in_flat_map. eauto.
         intro. eapply IN. eapply in_flat_map. eauto.
@@ -4260,8 +4345,9 @@ Proof.
       exploit get_loc_footprint_app_inv. eapply G2.
       intros (b4 & ofs4 & fp4 & C3 & C4).
       rewrite C1 in C3. inv C3.
-      (** TODO: destruct a and prove fp4 is well-typed  *)
-      assert (WTFP4: exists ty4, wt_footprint ce ty4 fp4). admit.
+      assert (WTFP4: exists ty4, wt_footprint ce ty4 fp4).
+      { exploit get_wt_footprint_exists_wt. eapply WT1. eapply C1.
+        intros (ty3 & A1 & A2). eauto. }
       destruct WTFP4 as (ty4 & WTFP4).
       (* use I.H. *)
       exploit get_loc_footprint_norepet. eapply NOREP. eauto.
@@ -4270,7 +4356,7 @@ Proof.
       eauto. eauto.
       eapply WT2. eapply WT3.
       all: eauto.
-Admitted. 
+Qed.
       
 Lemma norepet_flat_fp_map_element: forall fpm id fp,
     fpm ! id = Some fp ->
@@ -4340,6 +4426,12 @@ Proof.
     eapply wf_env_set_wt_footprint. eauto. erewrite <- TY.
     eauto. auto. rewrite POP. auto.
     auto. }
+  (* show that (b, ofs) does not locate in size record *)
+  assert (NSZREC: forall b1 ofs1 fp1, loc_of_size_record_fp fp1 b1 ofs1 ->
+                                 ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)).
+  { intros. intro. destruct H0. subst.
+    do 2 red in H. destruct H.
+    generalize (Ptrofs.unsigned_range ofs). lia. }      
   repeat apply conj; auto.
   (* mmatch *)
   - red. intros until fp.
@@ -4398,7 +4490,12 @@ Proof.
         split.
         (** task1: prove bmatch m2 b2 ofs2 fp4 using bmatch_set_subpath_wt_val *)
         eapply bmatch_set_subpath_wt_val. eauto.
+        eapply get_loc_footprint_map_pos; eauto.        
         eapply assign_loc_unchanged_on. eauto.
+        (* blocks_perm_unchanged_fp: the assignment does not change
+        permission of memory *)
+        eapply blocks_perm_unchanged_normal.
+        eapply assign_loc_perm_unchanged; eauto.
         eapply sem_wt_loc_implies_bmatch. eapply assign_loc_sem_wt. eauto. eauto.
         auto.
         (* prove b not in vfp *)
@@ -4418,52 +4515,6 @@ Proof.
         auto. auto.
         (** Task2: prove sem_wt_loc of (b2,ofs2) *)
         (*** TODO  *)
-        
-        
-        (* discuss in two cases: p0 is the shallow prefix of p or not *)
-        destruct (is_shallow_prefix p0 p) eqn: SHA.
-        (* is_shallow_prefix p0 p = true *)
-        -- assert (SHAPH: ~ not_shallow_prefix_paths phl).
-           { intro. eapply not_false_iff_true. eauto.
-             eapply path_of_not_shallow_prefix_reverse; eauto. }
-           assign_loc_sem_wt
-           assign_loc_unchanged_on
-           
-           Lemma get_loc_footprint_shallow_prefix_paths: forall 
-               
-               
-        (** TODO: properties of universe: show that phl is not shallow
-        prefix paths *)
-        assert (NOT_SHALLOW: is_shallow_prefix p0 p = false).
-        { destruct (is_shallow_prefix p0 p) eqn: SHA; auto.
-          exploit is_shallow_prefix_trans. eapply SHA. eauto.
-          intros B1. rewrite <- B1.
-        eapply wf_own_universe_shallow. eauto.
-        erewrite in_universe_eq.
-        eapply is_init_in_universe. eauto.
-        eapply move_place_eq_universe. 
-        unfold in_universe. eapply Paths.mem_1; auto.
-        erewrite <- is_shallow_prefix_same_local. 2: eapply B1.
-        erewrite <- valid_owner_same_local in A1.
-        erewrite is_shallow_prefix_same_local. eauto.
-        eauto. }
-      assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl).
-      { eapply path_of_not_shallow_prefix; eauto. }
-        assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl) by admit.
-        exploit bmatch_set_not_shallow_paths; eauto. intros BM2. split.
-        (* use bmatch_unchanged_on but we only need to show that b is
-        not equal to b2 *)
-        (** 1. Use A1, A2 and norepet of fpm1 and phl is not shallow
-        prefix paths to prove that b is not equal to b2; *)
-        eapply bmatch_unchanged_on_block. eauto.
-        (* prove the block [b2] is not equal to [b] because [b] can be
-        reached from [b2] *)
-        exploit assign_loc_unchanged_on. eauto.
-        intros UNC. eapply Mem.unchanged_on_implies. eauto.
-        intros. subst. intro. destruct H. subst.
-        exploit get_loc_footprint_map_norepet. eapply NOREP. eapply A1.
-        intros (NOREP3 & NOTIN).
-        eapply NOTIN. eapply get_loc_footprint_not_shallow_path; eauto.
         (* full -> sem_wt_loc *)
         intros FULL2.
         exploit assign_loc_sem_wt; eauto.
@@ -4476,8 +4527,7 @@ Proof.
         intros WTLOC1.
         eapply set_wt_loc_set_subpath_wt_val; eauto.
         instantiate (1 := (typeof_place p)).
-        eapply assign_loc_unchanged_on. eauto.
-        
+        eapply assign_loc_unchanged_on. eauto.        
       (** Case 3: p0 is not a prefix of p, so p0 and p are disjoint place *)
       * exploit is_not_prefix_disjoint; eauto.
         destruct (path_of_place p0) eqn: POP2. rewrite POP. simpl.
@@ -4500,7 +4550,7 @@ Proof.
           (* prove fp is wt_footprint *)
           exploit wf_env_footprint. eapply WFENV. eauto. intros (fp1 & E3 & E4 & IN).
           rewrite E2 in E3. inv E3.          
-          exploit get_wt_footprint_exists_wt. (** TODO: not use this lemma? *)
+          exploit get_wt_footprint_exists_wt.
           eauto. eauto.
           intros (ty1 & E5 & E6).
           exploit get_loc_footprint_disjoint_paths. eapply paths_disjoint_sym; eauto. 
@@ -4517,7 +4567,11 @@ Proof.
              ** split.
                 eapply bmatch_unchanged_on_loc; eauto.
                 eapply Mem.unchanged_on_implies. eauto.
-                intros. simpl. extlia.
+                intros. simpl. destruct H; try lia.
+                eapply NSZREC. eauto.
+                eapply blocks_perm_unchanged_normal.
+                eapply assign_loc_perm_unchanged; eauto.
+                (** * FIXME: Now to prove sem_wt_loc *)
                 intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
                 intros WTLOC.
@@ -4533,7 +4587,11 @@ Proof.
              ** split.
                 eapply bmatch_unchanged_on_loc; eauto.
                 eapply Mem.unchanged_on_implies. eauto.
-                intros. simpl. extlia.
+                intros. simpl. destruct H; try lia.
+                eapply NSZREC. eauto.
+                eapply blocks_perm_unchanged_normal.
+                eapply assign_loc_perm_unchanged; eauto.
+                (** * FIXME: Now to prove sem_wt_loc *)
                 intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
                 intros WTLOC.
@@ -4545,12 +4603,16 @@ Proof.
                 (** prove b must be not in fp *)
                 intro. destruct H2. subst.
                 congruence.
-                lia.                
+                lia.
           (* Case2: b <> b0 *)
           ++ intros (N & I1 & I2 & I3). clear N. split.
              ** eapply bmatch_unchanged_on_block. eauto.
                 eapply Mem.unchanged_on_implies. eauto.
-                intros. subst. intro. destruct H. congruence.
+                intros. simpl. destruct H; try lia.
+                eapply NSZREC. eauto.
+                eapply blocks_perm_unchanged_normal.
+                eapply assign_loc_perm_unchanged; eauto.
+             (** * FIXME: Now to prove sem_wt_loc *)
              ** intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
                 intros WTLOC.
@@ -4566,22 +4628,25 @@ Proof.
            erewrite <- get_set_different_local in GFP; eauto. 
            exploit MM. erewrite POP2. eauto. auto.           
            intros (BM1 & FULL1).
-           assert (UNC: Mem.unchanged_on (fun b2 _ => b2 <> b) m1 m2).
-           { eapply Mem.unchanged_on_implies. eapply assign_loc_unchanged_on; eauto.
-             intros. simpl. subst. intro. destruct H1. congruence. } 
+           exploit assign_loc_unchanged_on; eauto. intros UNC.
            split.
            eapply bmatch_unchanged_on_block. eauto.
-           eapply Mem.unchanged_on_implies. eauto. simpl. intros. subst. auto.
+           eapply Mem.unchanged_on_implies. eauto.
+           intros. simpl. destruct H; try lia.
+           eapply NSZREC. eauto.
+           eapply blocks_perm_unchanged_normal.
+           eapply assign_loc_perm_unchanged; eauto.
+           (** * FIXME: Now to prove sem_wt_loc *)
            intros FULL2.
            subst.
            erewrite <- init_place_full_unchanged in FULL2.
            exploit FULL1; eauto. intros WTLOC2.
            eapply sem_wt_loc_unchanged_blocks. eauto.
            eapply Mem.unchanged_on_implies. eauto. intros. simpl.
-           destruct H; auto.
-           (* b1 is in the fp: show that b must not be in the fp *)
-           intro. subst. congruence.
-           congruence.
+           (* destruct H; auto.            *)
+           (* (* b1 is in the fp: show that b must not be in the fp *) *)
+           (* intro. subst. congruence. *)
+           (* congruence. *)
 Admitted.
 
 Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
