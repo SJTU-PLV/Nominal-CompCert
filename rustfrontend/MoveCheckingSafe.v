@@ -3592,16 +3592,171 @@ Lemma assign_loc_unchanged_on: forall ce ty m1 m2 b ofs v,
     Mem.unchanged_on (fun b1 ofs1 => ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)) m1 m2.
 Admitted.
 
+(* It collects the blocks pointed by the box pointer in the footprint. It does not collect *)
+Fixpoint blocks_of_fp_box (fp: footprint) : list (block * Z) :=
+  match fp with
+  | fp_box b sz _ => (b, sz) :: nil
+  | fp_struct _ fpl =>
+      concat (map (fun '(fid, fofs, ffp) => blocks_of_fp_box ffp) fpl)
+  | fp_enum _ _ _ _ _ ffp =>
+      blocks_of_fp_box ffp
+  | _ => nil
+  end.
+
+(* The memory location of the size record in the allocated blocks *)
+Definition loc_of_size_record (bs: list block) :=
+  fun b ofs => In b bs /\ (- size_chunk Mptr) <= ofs < 0.
+
+Definition loc_of_size_record_fp (fp: footprint) :=
+  loc_of_size_record (map fst (blocks_of_fp_box fp)).
+
+(* The permissions of all blocks in bs are unchanged *)
+Definition blocks_perm_unchanged (bs: list (block * Z)) (m1 m2: mem) : Prop :=
+  forall b sz ofs k p,
+    In (b, sz) bs -> 0 <= ofs < sz ->
+    (* To avoid prove all blocks in the footprint are valid, we just
+    need m1 implies m2 *)
+    Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p.
+
+Definition blocks_perm_unchanged_fp (fp: footprint) (m1 m2: mem) : Prop :=
+  blocks_perm_unchanged (blocks_of_fp_box fp) m1 m2.
+
+
+Lemma loc_of_size_record_fp_subfield: forall fp fpl b ofs fid fofs id,
+    loc_of_size_record_fp fp b ofs ->
+    In (fid, fofs, fp) fpl ->           
+    loc_of_size_record_fp (fp_struct id fpl) b ofs.
+Proof.
+  intros. red. red.
+  repeat red in H. destruct H. split; auto.
+  eapply in_map_iff in H.
+  destruct H as ((b1 & sz) & A & IN). simpl in A. subst.
+  eapply in_map_iff.
+  exists (b, sz). split. auto.
+  simpl. eapply in_concat. exists (blocks_of_fp_box fp).
+  split; auto. eapply in_map_iff.
+  exists (fid, fofs, fp). eauto.
+Qed.
+
+Lemma blocks_perm_unchanged_fp_subfield: forall fp fpl m1 m2 fid fofs id,
+    blocks_perm_unchanged_fp (fp_struct id fpl) m1 m2 ->
+    In (fid, fofs, fp) fpl ->
+    blocks_perm_unchanged_fp fp m1 m2.
+Proof.
+  intros. red. red. intros.
+  do 2 red in H. eapply H; eauto.
+  simpl. eapply in_concat. exists (blocks_of_fp_box fp).
+  split; auto.
+  eapply in_map_iff.
+  exists (fid, fofs, fp). eauto.
+Qed.
+
+(* The permission of (-size Mptr, sz) (i.e., the size of allocation)
+is unchanged if the size record is unchanged_on and the permission of
+the block body is also unchanged *)
+Lemma size_record_and_perm_unchanged: forall fp m1 m2 b sz,
+    Mem.unchanged_on (fun b1 ofs1 => loc_of_size_record_fp fp b1 ofs1) m1 m2 ->
+    blocks_perm_unchanged_fp fp m1 m2 ->
+    In (b, sz) (blocks_of_fp_box fp) ->
+    forall k p,
+      (** FIXME: if we just prove this direction, we do not need to
+      prove that all the blocks in fp is valid blocks (which is used
+      in unchanged_on_perm). This proof may require lots of
+      effort... *)
+      Mem.range_perm m1 b (- size_chunk Mptr) sz k p ->
+      Mem.range_perm m2 b (- size_chunk Mptr) sz k p.
+Proof.
+  induction fp using strong_footprint_ind; intros m1 m2 b1 sz1 UNC PERM IN; simpl in *; try contradiction.
+  - destruct IN; try contradiction.
+    inv H.
+    do 2 red in PERM. intros. 
+    red. intros.
+    (* two cases: ofs < 0 and ofs >= 0 *)
+    destruct (Z.lt_decidable ofs 0).      
+    + erewrite <- Mem.unchanged_on_perm. eauto. eauto.
+      simpl. red. red. simpl. split; eauto.
+      lia.
+      (** b1 in m1 is valid  *)
+      eapply Mem.perm_valid_block. eauto.
+    + eapply PERM. simpl. eauto.
+      lia. eauto.
+  - intros k p RPERM. red. intros ofs RANGE.
+    (* (b1, sz1) is in one of the field box *)
+    eapply in_concat in IN. destruct IN as (bs & IN1 & IN2).
+    eapply in_map_iff in IN1.
+    destruct IN1 as (((fid & fofs) & ffp) & A1 & A2). subst.
+    (* use I.H. *)
+    eapply H. eauto.
+    (* unchanged_on *)
+    eapply Mem.unchanged_on_implies; eauto. simpl.
+    intros. eapply loc_of_size_record_fp_subfield; eauto.
+    (* perm unchanged *)
+    eapply blocks_perm_unchanged_fp_subfield; eauto.
+    eauto. auto. auto.
+  - intros k p RPERM. red. intros.
+    eapply IHfp.
+    eapply Mem.unchanged_on_implies; eauto.
+    red in PERM. simpl in PERM. red. eauto.
+    eauto. auto. auto.
+Qed.
+
+(* bmatch remians valid if we only changes the location outside the
+block b and the box blocks pointed by the the shallow footprint of
+fp *)
 Lemma bmatch_unchanged_on_block: forall fp m1 m2 b ofs,
     bmatch m1 b ofs fp ->
-    Mem.unchanged_on (fun b1 _ => b1 = b) m1 m2 ->
+    (* The memory block [b] and the location of the size record are
+    unchanged *)
+    Mem.unchanged_on (fun b1 ofs1 => b1 = b \/ loc_of_size_record_fp fp b1 ofs1) m1 m2 ->
+    (* We require that the permission of the box blocks pointed by the
+    shallow part of fp is unchanged *)
+    blocks_perm_unchanged_fp fp m1 m2 ->
     bmatch m2 b ofs fp.
-Admitted.
+Proof.
+  induction fp using strong_footprint_ind; intros m1 m2 b1 ofs1 BM UNC PERM.
+  - inv BM.
+  - inv BM. econstructor; eauto.
+    eapply Mem.load_unchanged_on. eauto. simpl. auto. eauto.
+    inv WT; econstructor. auto.
+  (* fp_box *)
+  - inv BM. econstructor.
+    eapply Mem.load_unchanged_on; eauto. simpl. auto.
+    (* the size loaded in m2 is unchanged *)
+    eapply Mem.load_unchanged_on; eauto. simpl.
+    intros. right. red. simpl. 
+    red. split. econstructor; auto. lia.
+    (* permission is unchanged *)
+    eapply size_record_and_perm_unchanged.
+    eapply Mem.unchanged_on_implies; eauto. simpl. eauto.
+    auto. simpl. auto. auto.
+  - inv BM. econstructor. intros fid fofs ffp FIND.
+    exploit FMATCH; eauto. intros BM1.
+    exploit find_fields_some; eauto.
+    intros (A1 & A2).
+    eapply H. eauto. eauto.
+    (* unchanged_on *)
+    eapply Mem.unchanged_on_implies. eauto.
+    simpl. intros. destruct H0; subst; auto.
+    right. eapply loc_of_size_record_fp_subfield; eauto.
+    (* perm unchanged *)
+    eapply blocks_perm_unchanged_fp_subfield; eauto.
+  - inv BM. econstructor.
+    (* prove the tag is unchanged *)
+    eapply Mem.load_unchanged_on; eauto. simpl. auto.
+    (* prove bmatch *)
+    eapply IHfp. eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    red. red in PERM. eauto.
+Qed.
 
+    
 Lemma bmatch_unchanged_on_loc: forall fp m1 m2 b ofs ty,
     bmatch m1 b ofs fp ->
     wt_footprint ce ty fp ->
-    Mem.unchanged_on (fun b1 ofs1 => (b1 = b /\ (ofs <= ofs1 < ofs + sizeof ce ty))) m1 m2 ->
+    Mem.unchanged_on (fun b1 ofs1 => (b1 = b /\ (ofs <= ofs1 < ofs + sizeof ce ty)) \/ loc_of_size_record_fp fp b1 ofs1) m1 m2 ->
+    (* We require that the permission of the box blocks pointed by the
+    shallow part of fp is unchanged *)
+    blocks_perm_unchanged_fp fp m1 m2 ->
     bmatch m2 b ofs fp.
 Admitted.
 
@@ -3660,16 +3815,47 @@ Proof.
   intros M3. lia.
 Qed.
 
+(* The box blocks of the footprint of shallow path are subset *)
+Lemma get_footprint_shallow_path_incl: forall phl fp1 fp2,
+    get_footprint phl fp1 = Some fp2 ->
+    ~ not_shallow_prefix_paths phl ->
+    incl (blocks_of_fp_box fp2) (blocks_of_fp_box fp1).
+Admitted.
+
+Lemma blocks_perm_unchanged_fp_incl: forall fp1 fp2 m1 m2,
+    incl (blocks_of_fp_box fp2) (blocks_of_fp_box fp1) ->
+    blocks_perm_unchanged_fp fp1 m1 m2 ->
+    blocks_perm_unchanged_fp fp2 m1 m2.
+Admitted.
+
+(* The location computed by get_loc_footprint is not in size
+    record (i.e., (-size Mptr, 0) *)
+Lemma get_loc_footprint_range: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ce ty,
+    ofs1 >= 0 ->
+    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
+    wt_footprint ce ty fp1 ->
+    ofs2 >= 0.
+Admitted.
+
 
 (* The memory is only changed in (b1, ofs1), the changed location is
 sem_wt. The memory is still bmatch *)
 Lemma bmatch_set_subpath_wt_val: forall phl fp1 fp2 vfp m1 m2 b ofs b1 ofs1 ty1 vty pfp
-    (BM: bmatch m1 b ofs fp1)
+    (BM: bmatch m1 b ofs fp1)    
+    (* It is used to ensure that the changed location is not size
+    record. Restrict ofs instead of ofs1 here is because we need to
+    strengthen the I.H. More generally, there are some locations in
+    the memory should be protected. They must be not modified by the
+    semantics. In our setting, these locations are the location of
+    size record allocated by malloc *)
+    (GT: ofs >= 0)
     (* Move this comment to sem_wt_loc_set_wt_val. Only changes the
     location which is updated with vfp. To use I.H., we need to relax
     this condition to that the memory not in the vfp and not in (b1,
     ofs1) is unchanged instead of just not in (b1, ofs1)*)
     (UNC: Mem.unchanged_on (fun b2 ofs2 => ~ (b2 = b1 /\ (ofs1 <= ofs2 < ofs1 + sizeof ce vty))) m1 m2)
+    (* The permission of the box blocks is unchanged *)
+    (PERMUNC: blocks_perm_unchanged_fp fp1 m1 m2)
     (* we just need (b1, ofs1) to be bmatch to strengthen the I.H. *)
     (WTLOC: bmatch m2 b1 ofs1 vfp)
     (* pfp is useless in this proof *)
@@ -3678,7 +3864,7 @@ Lemma bmatch_set_subpath_wt_val: forall phl fp1 fp2 vfp m1 m2 b ofs b1 ofs1 ty1 
     (WTFP1: wt_footprint ce ty1 fp1)
     (* relate ty1 and vty *)
     (WTPATH: wt_path ce ty1 phl vty)
-    (* separation of fp1 *)
+    (* separation of fp *)
     (NOREP: list_norepet (footprint_flat fp1))
     (DIS: ~ In b (footprint_flat fp1)),
     bmatch m2 b ofs fp2.
@@ -3697,7 +3883,9 @@ Proof.
     (* relate fp3 and fp3' *)
     exploit get_loc_footprint_eq. eapply A1. intros B1'.
     rewrite B1 in B1'. inv B1'.
-    (* case analysis of ph *)
+    (* show that ofs1 >= 0 *)
+    assert (GT1: ofs1 >= 0).
+    { eapply get_loc_footprint_range; eauto. }
     destruct ph; simpl in *.
     + destruct fp3; try congruence. inv A2. inv B2.
       (* key proof: phl' ++ [ph_deref] is not shallow path, so if
@@ -3707,10 +3895,17 @@ Proof.
       exploit get_footprint_incl. eauto. simpl. left; eauto.
       intros IN.
       assert (BNE: b1 <> b).
-      { intro. eapply DIS. subst. auto. }      
+      { intro. eapply DIS. subst. auto. }
+      (* To use bmatch_unchanged_on_block: we also need to prove that
+      the size record and the permission of the box blocks are
+      unchanged *)
       exploit bmatch_unchanged_on_block. eapply BM.
-      eapply Mem.unchanged_on_implies. eauto. intros. subst.
-      intuition. intros BM1.
+      eapply Mem.unchanged_on_implies. eauto. intros. simpl.
+      destruct H. subst. intro. eapply BNE. intuition.      
+      intro. destruct H1. subst. do 2 red in H. lia.
+      (* perm unchanged *)
+      auto.
+      intros BM1.
       (* use bmatch_set_not_shallow_paths *)
       eapply bmatch_set_not_shallow_paths. eauto.
       eapply SFP. eapply in_app. right. econstructor. auto.
@@ -3718,6 +3913,17 @@ Proof.
       destruct (find_fields fid fpl) eqn: FIND; try congruence.
       repeat destruct p. inv B2. inv A2.
       exploit find_fields_some. eapply FIND. intros (C1 & C2). subst.
+      (* Get the type *)
+      eapply wt_path_field_inv in WTPATH as (sid & orgs & co & WTPATH & CO & FTY & STR).
+      assert (WTFP:  wt_footprint ce (Tstruct orgs sid) (fp_struct id fpl)).
+      { eapply get_wt_footprint_wt; eauto. }
+      inv WTFP.
+      (* get the field_offset of i *)
+      rewrite CO in CO0. inv CO0.
+      exploit WT1. eapply FTY. intros (ffpi & fofsi & E1 & E2 & E3).
+      rewrite FIND in E1. inv E1.
+      (* show that fofsi >= 0 *)
+      exploit field_offset_in_range. eauto. eauto. intros (R1 & R2).      
       (* key proof: discuss phl is shallow path or not. If yes, prove
       bmatch m2 (fp_struct id (set_field i vfp fpl)) and then use
       I.H. *)
@@ -3727,10 +3933,14 @@ Proof.
         exploit (get_loc_footprint_not_shallow_path phl'). auto.
         eapply A1. intros IN.        
         assert (BNE: b1 <> b).
-        { intro. eapply DIS. subst. auto. }      
+        { intro. eapply DIS. subst. auto. }
         exploit bmatch_unchanged_on_block. eapply BM.
-        eapply Mem.unchanged_on_implies. eauto. intros. subst.
-        intuition. intros BM1.
+        eapply Mem.unchanged_on_implies. eauto. intros. simpl.
+        destruct H. subst. intuition.
+        intro. destruct H1. subst.
+        do 2 red in H. destruct H. lia.
+        auto.
+        intros BM1.
         (* use bmatch_set_not_shallow_paths *)
         eapply bmatch_set_not_shallow_paths. eauto.
         eapply SFP. eapply in_app. left. auto.
@@ -3740,13 +3950,6 @@ Proof.
       fpl)). Finally use I.H. to prove bmatch m2 fp2 *)
       * exploit get_loc_footprint_bmatch. eapply BM. 1-2: eauto.
         intros BM1.
-        eapply wt_path_field_inv in WTPATH as (sid & orgs & co & WTPATH & CO & FTY & STR).
-        assert (WTFP:  wt_footprint ce (Tstruct orgs sid) (fp_struct id fpl)).
-        { eapply get_wt_footprint_wt; eauto. }
-        inv WTFP.
-        (* get the field_offset of i *)
-        rewrite CO in CO0. inv CO0.
-        exploit WT1. eapply FTY. intros (ffpi & fofsi & E1 & E2 & E3).
         assert (BM2: bmatch m2 b1 ofs2 (fp_struct id (set_field i vfp fpl))).
         { inv BM1. econstructor.
           intros fid fofs ffp FIND1.
@@ -3771,14 +3974,25 @@ Proof.
             (* show unchanged_on i.e., (ofs2 + fofs) not in [(ofs2 +
             z), (ofs2 + z + size vty) *)
             eapply Mem.unchanged_on_implies. eauto.
-            simpl. intros. destruct H. subst. intro.
-            destruct H.
-            rewrite FIND in E1. inv E1.
+            simpl. intros. destruct H.
+            destruct H. subst. intro. destruct H.
             exploit field_offset_no_overlap_simplified.
             5: eauto. 1-4: eauto.
-            intros [A|B]. lia. lia. }
+            intros [A|B]. lia. lia.
+            (* loc_of_size_record_fp *)
+            intro. destruct H1. subst. do 2 red in H. destruct H. lia.
+            (* perm unchanged: we need to show that (blocks_of_fp_box
+            vfp1) ⊆ (blocks_of_fp_box fp1) because phl is shallow
+            prefix path *)
+            red.
+            exploit find_fields_some. eapply FIND2. intros (F1 & F2).
+            eapply blocks_perm_unchanged_fp_subfield; eauto.
+            eapply blocks_perm_unchanged_fp_incl; eauto.
+            eapply get_footprint_shallow_path_incl.
+            eapply get_loc_footprint_eq. eauto. auto. }
         (* prove by I.H. *)
-        eapply IHn. eauto. eauto.
+        eapply IHn. eauto. eauto. eapply GT.
+        2: eauto.
         2: eapply BM2. all: eauto.
         (* prove (ofs2+z) is in the range of the struct, i.e., [ofs2,
         ofs2+sizeof struct sid) *)
@@ -3786,7 +4000,6 @@ Proof.
         intros. simpl. intro. eapply H. destruct H1.
         split; auto. subst. clear H.
         (* show that z >= 0 *)
-        rewrite FIND in E1. inv E1.
         exploit field_offset_in_range_complete; eauto.
         simpl. rewrite CO. lia.
     (* enum case: the proof strategy is similar to struct *)
@@ -3805,10 +4018,14 @@ Proof.
         exploit (get_loc_footprint_not_shallow_path phl'). auto.
         eapply A1. intros IN.        
         assert (BNE: b1 <> b).
-        { intro. eapply DIS. subst. auto. }      
+        { intro. eapply DIS. subst. auto. }
         exploit bmatch_unchanged_on_block. eapply BM.
-        eapply Mem.unchanged_on_implies. eauto. intros. subst.
-        intuition. intros BM1.
+        eapply Mem.unchanged_on_implies. eauto. intros. simpl.
+        destruct H. subst. intuition.
+        intro. destruct H1. subst.
+        do 2 red in H. destruct H. lia.
+        auto.
+        intros BM1.
         (* use bmatch_set_not_shallow_paths *)
         eapply bmatch_set_not_shallow_paths. eauto.
         eapply SFP. eapply in_app. left. auto.
@@ -3827,11 +4044,12 @@ Proof.
           simpl. intros. intro. destruct H0.
           exploit variant_field_offset_in_range; eauto. lia. }
         (* prove by I.H. *)
-        eapply IHn. eauto. eauto.
+        eapply IHn. eauto. eauto. eauto.
+        2: eauto.
         2: eapply BM2. all: eauto.        
         eapply Mem.unchanged_on_implies; eauto.
-        intros. simpl. intro. eapply H. destruct H1.
-        split; auto. subst. clear H.                
+        intros. simpl. intro. destruct H1. subst. eapply H. 
+        split; auto. clear H.                
         exploit variant_field_offset_in_range_complete; eauto.
         simpl. rewrite CO. lia.
 Qed.
