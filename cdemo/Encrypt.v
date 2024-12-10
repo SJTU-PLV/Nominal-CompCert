@@ -54,4 +54,4 @@ Definition public_idents : list ident :=
 (key_id :: encrypt_id :: nil).
 
 (** Top-level definition of encrypt.s  *)
-Definition b1: program := mkprogram global_definitions_b1 public_idents main_id.
+Definition encrypt_s : program := mkprogram global_definitions_b1 public_idents main_id.

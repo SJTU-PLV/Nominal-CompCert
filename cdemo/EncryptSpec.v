@@ -44,10 +44,10 @@ End WITH_SE.
 
 Program Definition L_E : Smallstep.semantics li_c li_c :=
   {|
-   Smallstep.skel := erase_program b1;
+   Smallstep.skel := erase_program encrypt_s;
    Smallstep.state := state;
    Smallstep.activate se :=
-     let ge := Genv.globalenv se b1 in
+     let ge := Genv.globalenv se encrypt_s in
      {|
        Smallstep.step ge := step ge;
        Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);

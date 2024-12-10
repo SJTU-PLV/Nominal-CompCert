@@ -25,8 +25,8 @@ Section MS.
   
   Variable w: ccworld cc_c_asm_injp_new.
   Variable se tse : Genv.symtbl.
-  Let ge := Genv.globalenv se b1.
-  Let tge := Genv.globalenv tse b1.
+  Let ge := Genv.globalenv se encrypt_s.
+  Let tge := Genv.globalenv tse encrypt_s.
 
   Let wp := cajw_injp w.
   Let sg := cajw_sg w.
@@ -97,7 +97,7 @@ Proof.
 Qed.
 
 Lemma match_program_id :
-  match_program (fun _ f0 tf => tf = id f0) eq b1 b1.
+  match_program (fun _ f0 tf => tf = id f0) eq encrypt_s encrypt_s.
 Proof.
   red. red. constructor; eauto.
   constructor. constructor. eauto. simpl. econstructor; eauto.
@@ -287,7 +287,7 @@ Proof.
   intros. simpl. intro. subst. apply Mem.fresh_block_alloc in ALLOC. eapply ALLOC; eauto with mem.
 Qed.
   
-Lemma CAinjp_simulation_encrypt : forward_simulation (cc_c_asm_injp_new) L_E (Asm.semantics b1).
+Lemma CAinjp_simulation_encrypt : forward_simulation (cc_c_asm_injp_new) L_E (Asm.semantics encrypt_s).
 Proof.
   constructor.
   econstructor; eauto. instantiate (1:= fun _ _ _ => _). cbn beta.
@@ -334,7 +334,7 @@ Proof.
      destruct FINDK' as [b_mem' [VINJM FINDK']].
     rename H18 into Hpc. rename H17 into Hrsi. rename H13 into Hrdi.
     assert (exists s2': Asm.state,
-               plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b1) (State rs0 m2 true) E0 s2'
+               plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 encrypt_s) (State rs0 m2 true) E0 s2'
                /\ ms (injpw j m1 m2 Hm )(Final m') (Mem.support m2, s2')).
     {
       exploit enter_func_exec; eauto.
@@ -495,7 +495,7 @@ Proof.
     }
     destruct H as [s2' [STEP MS]].  cbn.
     exists (Mem.support m2, s2'). intuition eauto.
-    revert STEP. generalize (Mem.support m2), (Genv.globalenv se1 b1); clear; intros.
+    revert STEP. generalize (Mem.support m2), (Genv.globalenv se1 encrypt_s); clear; intros.
     pattern (State rs0 m2 true),E0,s2'. eapply plus_ind2; eauto; intros.
     * apply plus_one; eauto.
     * eapply plus_trans; eauto.
@@ -584,7 +584,7 @@ Qed.
 Require Import Asmselfsim.
 
 Theorem correctness_L_E :
-  forward_simulation cc_compcert L_E (Asm.semantics b1).
+  forward_simulation cc_compcert L_E (Asm.semantics encrypt_s).
 Proof.
   unfold cc_compcert.
   eapply st_fsim_vcomp. eapply self_simulation_ro.

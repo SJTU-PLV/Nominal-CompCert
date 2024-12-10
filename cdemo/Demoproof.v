@@ -1,5 +1,5 @@
 Require Import Coqlib Errors.
-Require Import AST Linking Smallstep Invariant CallconvAlgebra.
+Require Import AST Linking Smallstep SmallstepClosed Invariant CallconvAlgebra.
 
 Require Import Conventions Mach.
 Require Import Locations.
@@ -15,36 +15,72 @@ Require Import Asmgenproof0 Asmgenproof1.
 Require Import Encrypt EncryptSpec Encryptproof.
 Require Import Client Server.
 
-Require Import SmallstepLinking.
-Require Import Composition ThreadLinking Compiler.
+Require Import SmallstepLinking VCompBig HCompBig CallConvLibs.
+Require Import Composition CMulti AsmMulti ThreadLinking Compiler.
+
 
 Import GS.
 
 (** 1st step : module linking *)
 
-Lemma compose_transf_Clight_Asm_correct:
-  forall client_s server_s tp spec,
-  compose (Clight.semantics1 client) (Clight.semantics1 server) = Some spec ->
-  transf_clight_program client = OK client_s ->
-  transf_clight_program server = OK server_s ->
-  link client_s server_s = Some tp ->
-  forward_simulation cc_compcert spec (Asm.semantics tp).
-Proof.
-  intros.
-  rewrite <- (cc_compose_id_right cc_compcert) at 1.
-  rewrite <- (cc_compose_id_right cc_compcert) at 2.
-  eapply compose_forward_simulations.
-  2: { unfold compose in H.
-       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
-       cbn in *. inv H.
-       eapply AsmLinking.asm_linking; eauto. }
-  eapply compose_simulation.
-  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
-  eapply M_A_semantics_preservation.
-  eauto.
-  unfold compose. cbn.
-  apply link_erase_program in H1. rewrite H1. cbn. f_equal. f_equal.
-  apply Axioms.functional_extensionality. intros [|]; auto.
-Qed.
+Section LINKING.
+  Variable client_s server_s : Asm.program.
+  
+  Hypothesis compile_client : transf_clight_program client = OK client_s.
+  Hypothesis compile_server : transf_clight_program server = OK server_s.
 
-(** 2nd step : thread linking *)
+  Variable c_spec c_server_spec : Smallstep.semantics li_c li_c.
+  
+  Hypothesis compose_c1 : compose L_E (Clight.semantics1 server) = Some c_server_spec.
+  Hypothesis compose_c2 : compose (Clight.semantics1 client) c_server_spec = Some c_spec.
+
+  Variable asm_prog asm_server_prog : Asm.program.
+
+  Hypothesis compose_asm1 : link encrypt_s server_s = Some asm_server_prog.
+  Hypothesis compose_asm2 : link client_s asm_server_prog = Some asm_prog.
+
+  Lemma client_sim : forward_simulation cc_compcert (Clight.semantics1 client) (Asm.semantics client_s).
+  Proof.
+    eapply clight_semantic_preservation. eapply transf_clight_program_match.
+    apply compile_client.
+  Qed.
+
+  Lemma server_sim : forward_simulation cc_compcert (Clight.semantics1 server) (Asm.semantics server_s).
+  Proof.
+    eapply clight_semantic_preservation. eapply transf_clight_program_match.
+    apply compile_server.
+  Qed.
+
+  Lemma module_linking_correct1 :
+    forward_simulation cc_compcert c_server_spec (Asm.semantics asm_server_prog).
+  Proof.
+    rewrite <- cctrans_id_2.
+    eapply st_fsim_vcomp; eauto.
+    2: eapply asm_linking; eauto.
+    eapply compose_simulation.
+    apply correctness_L_E. apply server_sim. eauto.
+    unfold compose. cbn.
+    apply link_erase_program in compose_asm1. rewrite compose_asm1. cbn. f_equal. f_equal.
+    apply Axioms.functional_extensionality. intros [|]; auto.
+  Qed.
+
+  Theorem module_linking_correct :
+    forward_simulation cc_compcert c_spec (Asm.semantics asm_prog).
+  Proof.
+    rewrite <- cctrans_id_2.
+    eapply st_fsim_vcomp; eauto.
+    2: eapply asm_linking; eauto.
+    eapply compose_simulation.
+    apply client_sim. apply module_linking_correct1. eauto.
+    unfold compose. cbn.
+    apply link_erase_program in compose_asm2. rewrite compose_asm2. cbn. f_equal. f_equal.
+    apply Axioms.functional_extensionality. intros [|]; auto.
+  Qed.
+
+  Theorem thread_linking_correct :
+    Closed.forward_simulation (Concur_sem_c c_spec) (Concur_sem_asm (Asm.semantics asm_prog)).
+  Proof.
+    apply Opensim_to_Globalsim; eauto. apply module_linking_correct.
+  Qed.
+
+End LINKING.
