@@ -182,24 +182,11 @@ Admitted.
 
  *)
 
-Lemma romem_for_symtbl_sound:
-  ValueAnalysis.romem_for_symtbl se = ValueAnalysis.romem_for p.
-Proof.
-  unfold ValueAnalysis.romem_for, ValueAnalysis.romem_for_symtbl. unfold se.
-  unfold Genv.symboltbl.
-  destruct Hinitial_state_c as (INIT & SYM & FPTR).
-Abort.
-
 Lemma sound_memory_ro: ValueAnalysis.sound_memory_ro se m0_c.
 Proof.
   unfold se. destruct Hinitial_state_c. clear H0.
-  constructor.
-  (* apply ValueAnalysis.initial_mem_matches' in H as (? & ? & ? & ROM & ?).
-  2:intros; inv H0; auto.
-  specialize (ROM p ltac:(apply Linking.linkorder_refl)). *)
-  admit.
-  erewrite Genv.init_mem_genv_sup; eauto.
-Admitted. (*should be correct, just need to be proved*)
+  eapply ValueAnalysis.initial_ro_sound; eauto.
+Qed.
 
 Lemma main_block_genv: Genv.find_symbol se (prog_main tp) = Some main_block_c.
 Proof.
