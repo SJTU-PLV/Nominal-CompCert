@@ -1424,7 +1424,40 @@ Proof.
   auto.
 Qed.
 
-      
+Lemma norepet_flat_fp_map_element_disjoint: forall fpm id1 id2 fp1 fp2,
+    fpm ! id1 = Some fp1 ->
+    fpm ! id2 = Some fp2 ->
+    id1 <> id2 ->
+    list_norepet (flat_fp_map fpm) ->
+    list_disjoint (footprint_flat fp1) (footprint_flat fp2).
+Proof.
+  intros. unfold flat_fp_map in H2.
+  eapply PTree.elements_correct in H.
+  eapply PTree.elements_correct in H0.
+  generalize dependent (PTree.elements fpm).
+  induction l; intros; simpl in *; try contradiction.
+  destruct a. destruct H.
+  - inv H. destruct H0. inv H. try congruence.
+    eapply list_norepet_app in H2 as (N1 & N2 & N3).
+    simpl in *. red. intros.
+    eapply N3; auto.
+    eapply in_concat; eauto.
+    exists (footprint_flat fp2). split; auto.
+    eapply in_map_iff.
+    exists (id2, fp2). eauto.
+  - destruct H0. inv H0.
+    + eapply list_norepet_app in H2 as (N1 & N2 & N3).
+      simpl in *. eapply list_disjoint_sym. red. intros.
+      eapply N3; auto.
+      eapply in_concat; eauto.
+      exists (footprint_flat fp1). split; auto.
+      eapply in_map_iff.
+      exists (id1, fp1). eauto.
+    + eapply list_norepet_app in H2 as (N1 & N2 & N3).
+      eauto.
+Qed.
+
+    
 (** separating a footprint from the well-formed
 footprint map *)
 Lemma get_loc_footprint_map_norepet: forall phl id fpm b1 ofs1 fp1 e,
@@ -1464,45 +1497,6 @@ Lemma empty_footprint_disjoint: forall fp1 fp2,
 Proof.
   intros. rewrite empty_footprint_flat. red. intros. inv H0.
 Qed.
-
-Lemma set_footprint_incl: forall fp1 fp2 fp  phl b,
-    set_footprint phl fp fp1 = Some fp2 ->
-    In b (footprint_flat fp2) ->
-    In b (footprint_flat fp1) \/ In b (footprint_flat fp).
-Admitted.
-
-
-Lemma set_footprint_map_incl: forall fpm1 fpm2 fp id phl b,
-    set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
-    In b (flat_fp_map fpm2) ->
-    In b (flat_fp_map fpm1) \/ In b (footprint_flat fp).
-Admitted.
-
-Lemma set_footprint_norepet: forall phl fp1 fp2 vfp,
-    set_footprint phl vfp fp1 = Some fp2 ->
-    list_norepet (footprint_flat fp1) ->
-    list_norepet (footprint_flat vfp) ->
-    list_disjoint (footprint_flat fp1) (footprint_flat vfp) ->
-    list_norepet (footprint_flat fp2).
-Admitted.
-
-(* Set a footprint also remove the original one out. This removed
-   footprint is disjoint with the updated footprint map *)
-Lemma get_set_disjoint_footprint_map: forall l i fpm1 fpm2 b ofs fp1 fp2 le,
-    get_loc_footprint_map le (i, l) fpm1 = Some (b, ofs, fp1) ->
-    set_footprint_map (i, l) fp2 fpm1 = Some fpm2 ->
-    list_disjoint (footprint_flat fp1) (footprint_flat fp2) ->
-    list_norepet (flat_fp_map fpm1) ->
-    list_disjoint (flat_fp_map fpm2) (footprint_flat fp1).
-Admitted.
-
-
-(* (fpm\fp) * fp = fpm *)
-Lemma get_clear_footprint_equiv: forall fpm1 fpm2 fp le id phl b ofs,
-    get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp) ->
-    clear_footprint_map le (id, phl) fpm1 = Some fpm2 ->
-    list_equiv (footprint_flat fp ++ flat_fp_map fpm2) (flat_fp_map fpm1).
-Admitted.
 
 Lemma get_footprint_incl: forall phl fp fp1,
     get_footprint phl fp = Some fp1 ->
@@ -1551,6 +1545,107 @@ Proof.
   eapply in_map_iff. exists (id, f). simpl. split; auto.
   eapply PTree.elements_correct. auto.
 Qed.
+
+
+Lemma set_footprint_incl: forall fp1 fp2 fp  phl b,
+    set_footprint phl fp fp1 = Some fp2 ->
+    In b (footprint_flat fp2) ->
+    In b (footprint_flat fp1)
+    \/ In b (footprint_flat fp).
+Admitted.
+
+(* TODO *)
+Lemma set_footprint_map_incl: forall fpm1 fpm2 fp id phl b,
+    set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
+    In b (flat_fp_map fpm2) ->
+    In b (flat_fp_map fpm1) \/ In b (footprint_flat fp).
+Admitted.
+
+Lemma set_footprint_norepet: forall phl fp1 fp2 vfp,
+    set_footprint phl vfp fp1 = Some fp2 ->
+    list_norepet (footprint_flat fp1) ->
+    list_norepet (footprint_flat vfp) ->
+    list_disjoint (footprint_flat fp1) (footprint_flat vfp) ->
+    list_norepet (footprint_flat fp2).
+Admitted.
+
+Lemma get_set_disjoint_footprint: forall phl fp fp' fp1 fp2,
+    get_footprint phl fp = Some fp1 ->
+    set_footprint phl fp2 fp = Some fp' ->
+    list_disjoint (footprint_flat fp1) (footprint_flat fp2) ->
+    list_norepet (footprint_flat fp) ->
+    list_disjoint (footprint_flat fp') (footprint_flat fp1).
+Proof.
+  induction phl; intros until fp2; intros GFP SFP DIS NOREP; simpl in *.
+  - inv GFP. inv SFP.
+    eapply list_disjoint_sym. auto.
+  - destruct a.
+    + destruct fp; try congruence.
+      destruct (set_footprint phl fp2 fp) eqn: S1; try congruence.
+      inv SFP. simpl in *.
+      red. intros. inv H.
+      * inv NOREP. intro. subst. eapply H2.
+        eapply get_footprint_incl; eauto.
+      * eapply IHphl; eauto.
+        inv NOREP; auto.
+    + destruct fp; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      exploit find_fields_some. eapply FIND. intros (A1 & A2). subst.
+      destruct (set_footprint phl fp2 f) eqn: S1; try congruence.
+      inv SFP. simpl in *.
+      red. intros.
+      eapply in_flat_map in H.
+      destruct H as (((fid1 & fofs1) & ffp1) & IN1 & IN2).
+      eapply in_map_iff in IN1.
+      destruct IN1 as (((fid2 & fofs2) & ffp2) & IN3 & IN4).
+      destruct ident_eq in IN3.
+      * inv IN3. eapply IHphl; eauto.
+        eapply footprint_norepet_fields_norepet; eauto.
+      * inv IN3.
+        eapply footprint_norepet_fields_disjoint. eauto.
+        eapply IN4. eapply A2. auto. auto.
+        eapply get_footprint_incl; eauto.
+    + destr_fp_enum fp ty.
+      destruct (set_footprint phl fp2 fp) eqn: S1; try congruence.
+      inv SFP. simpl in *. eapply IHphl; eauto.
+Qed.
+
+(* Set a footprint also remove the original one out. This removed
+   footprint is disjoint with the updated footprint map *)
+Lemma get_set_disjoint_footprint_map: forall l i fpm1 fpm2 b ofs fp1 fp2 le,
+    get_loc_footprint_map le (i, l) fpm1 = Some (b, ofs, fp1) ->
+    set_footprint_map (i, l) fp2 fpm1 = Some fpm2 ->
+    list_disjoint (footprint_flat fp1) (footprint_flat fp2) ->
+    list_norepet (flat_fp_map fpm1) ->
+    list_disjoint (flat_fp_map fpm2) (footprint_flat fp1).
+Proof.
+  intros. simpl in *.
+  destruct (le ! i) eqn: A1; try congruence. destruct p.
+  destruct (fpm1 ! i) eqn: A2; try congruence.
+  destruct (set_footprint l fp2 f) eqn: A3; try congruence. inv H0.
+  red. intros.
+  eapply in_concat in H0.
+  destruct H0 as (bs & IN1 & IN2). eapply in_map_iff in IN1.
+  destruct IN1 as ((id & fp) & B1 & B2). simpl in *. subst.
+  eapply PTree.elements_complete in B2. rewrite PTree.gsspec in B2.
+  destruct peq in B2.
+  - inv B2.
+    eapply get_set_disjoint_footprint; eauto.
+    eapply get_loc_footprint_eq; eauto.
+    eapply norepet_flat_fp_map_element; eauto.
+  - eapply norepet_flat_fp_map_element_disjoint. eapply B2. eapply A2.
+    auto. auto. auto.
+    eapply get_loc_footprint_incl; eauto.
+Qed.      
+    
+    
+(* (fpm\fp) * fp = fpm *)
+Lemma get_clear_footprint_equiv: forall fpm1 fpm2 fp le id phl b ofs,
+    get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp) ->
+    clear_footprint_map le (id, phl) fpm1 = Some fpm2 ->
+    list_equiv (footprint_flat fp ++ flat_fp_map fpm2) (flat_fp_map fpm1).
+Admitted.
 
 
 
@@ -6607,23 +6702,6 @@ Lemma in_flat_fp_map: forall b fp fpm id,
     In b (flat_fp_map fpm).
 Admitted.
 
-Lemma footprint_in_flat_fp_map_norepet: forall fp fpm id,
-    list_norepet (flat_fp_map fpm) ->
-    fpm ! id = Some fp ->
-    list_norepet (footprint_flat fp).
-Proof.
-  intros. unfold flat_fp_map in H.
-  eapply PTree.elements_correct in H0.
-  generalize dependent (PTree.elements fpm).
-  induction l; intros. simpl in *. contradiction.
-  simpl in *. destruct H0.
-  - destruct a. inv H0.
-    eapply list_norepet_app in H. destruct H as (A1 & A2 & A3).
-    simpl in *. auto.
-  - eapply list_norepet_app in H. destruct H as (A1 & A2 & A3).
-    eapply IHl; eauto.
-Qed.
-
     
 (* If the footprint shrinks, the flat_footprint_separated is
     satisfied trivially *)
@@ -6734,7 +6812,7 @@ Proof.
       eapply in_footprint_flat_fp_map; eauto. auto.
       (* norepet of fp *)
       eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
-      eapply footprint_in_flat_fp_map_norepet; eauto.
+      eapply norepet_flat_fp_map_element; eauto.
       intros [(B1 & B2 & B3) | (B1 & B2)]; subst.
       (* case1: b is in the stack (i.e., in the le) *)
       eapply in_app. left. eapply in_footprint_of_env; eauto.    
