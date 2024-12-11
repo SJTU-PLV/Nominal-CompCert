@@ -2925,14 +2925,6 @@ End INITIAL.
 *)
 
 (** ** The initial [ro] soundness for loading process *)
-(** 
-    I'm 95% sure it's correct. Maybe we can somehow reuse the initialization
-    proofs in ValueAnalysis for this. Or slightly change the definition of
-    ro_sound_memory using existential [bc] if this approach is more ligheweight. *)
-
-(** This lemma should also be part of the DR with closed simulation and behavior
-    refinement. We could refer the loading process proposed in CompCertOE if necessary *)
-
 
 Lemma romem_valid_exists:
   forall se id ab,
