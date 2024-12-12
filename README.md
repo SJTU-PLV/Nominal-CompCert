@@ -89,7 +89,7 @@ The structure of the test cases is explained [here](./rustexamples/compiler_test
 The calling conventions adapted in the Rust interface: [RA.v](./driver/RA.v) and [CallConvRust.v](./driver/CallConvRust.v)
 
 **Theorem of compiler correctness:**
-[transf_rustlight_program_correct](./driver/Compiler.v#L1102) in [driver/Compiler.v](./driver/Compiler.v)
+[transf_rustlight_program_correct](./driver/Compiler.v#L1105) in [driver/Compiler.v](./driver/Compiler.v)
 
 To see the statistics of the LOC of our development, use the following command:
 ```

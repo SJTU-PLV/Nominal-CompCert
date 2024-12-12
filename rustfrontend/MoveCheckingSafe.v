@@ -3418,23 +3418,6 @@ Proof.
 Qed.
 
 
-(** IMPORTANT TODO: The alignment of subfiled divides the
-      alignment of the complete composite *)
-Lemma field_alignof_divide_composite: forall fty fid co ce,
-    field_type fid (co_members co) = OK fty ->
-    (alignof ce fty | alignof_composite ce (co_sv co) (co_members co)).
-Admitted.
-
-(** IMPORTANT TODO: the offset of the field in the enum is align with
-the alignment of the field type *)
-Lemma variant_field_offset_aligned:
-  forall env id fld ofs ty,
-  variant_field_offset env id fld = OK ofs -> field_type id fld = OK ty ->
-  (alignof env ty | ofs).
-Proof.
-Admitted.
-
-
 (* The location returned by get_loc_footprint is align with the type
 of the footprint *)
 Lemma get_loc_footprint_align: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ty1 ty2,
@@ -3812,6 +3795,8 @@ Qed.
 Definition list_interval {A: Type} (l: list A) (lo: Z) (sz: Z) :=
   firstn (Z.to_nat sz) (skipn (Z.to_nat lo) l).
 
+(* lo is the offset of the field and sz is the size of this field. hi
+is the size of the composite *)
 Definition in_range (lo sz hi: Z) : Prop :=
   0 <= lo /\ lo + sz <= hi.
 
@@ -3823,6 +3808,16 @@ Lemma loadbytes_interval: forall m b ofs sz ofs1 sz1 bytes,
     Mem.loadbytes m b (ofs + ofs1) sz1 = Some (list_interval bytes ofs1 sz1).
 Admitted.
 
+Lemma  co_alignof_pos: forall co,
+    co_alignof co > 0.
+Proof.
+  intros.
+  generalize (co_alignof_two_p co). intros (n & ALPOW).
+  rewrite ALPOW. rewrite two_power_nat_equiv.
+  generalize (Nat2Z.is_nonneg n). intros A.
+  exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia.
+  eauto. lia.
+Qed.
 
 Lemma sem_wt_loc_unchanged_on_copy: forall fp m1 m2 ty b1 ofs1 b2 ofs2 bytes,
     sem_wt_loc ce m1 fp b1 ofs1 ->
@@ -3869,16 +3864,18 @@ Proof.
     (* align *)
     eapply Z.divide_add_r.
     eapply Z.divide_trans; eauto. simpl. rewrite CO.
-    (** TODO: align of composite is dividable by the alignment of each member *)
-    admit.
-    (** TODO: add (alignof ce fty | fofs) in wt_footprint *)
-    admit.
+    (** align of composite is dividable by the alignment of each member *)
+    erewrite co_consistent_alignof; eauto.
+    eapply field_alignof_divide_composite; eauto.
+    (** the field offset is dividable by the alignment of each field *)
+    eapply field_offset_aligned; eauto.
     eapply Z.divide_add_r.
     eapply Z.divide_trans; eauto. simpl. rewrite CO.
-    (** TODO: align of composite is dividable by the alignment of each member *)
-    admit.
-    (** TODO: add (alignof ce fty | fofs) in wt_footprint *)
-    admit.
+    (** align of composite is dividable by the alignment of each member *)
+    erewrite co_consistent_alignof; eauto.
+    eapply field_alignof_divide_composite; eauto.
+    (** the field offset is dividable by the alignment of each field *)
+    eapply field_offset_aligned; eauto.
     (* unchanged *)
     eapply Mem.unchanged_on_implies; eauto.
     intros. simpl. 
@@ -3886,17 +3883,72 @@ Proof.
     (* loadbytes *)
     eapply loadbytes_interval. instantiate (1 := sizeof ce (Tstruct orgs id)).
     (* in_range *)
-    admit.
+    red. simpl. rewrite CO. exploit field_offset_in_range_complete; eauto.    
     eauto.
+    (* loadbytes *)
     eapply loadbytes_interval. instantiate (1 := sizeof ce (Tstruct orgs id)).
     (* in_range *)
-    admit.
+    red. simpl. rewrite CO. eapply field_offset_in_range_complete; eauto.
     eauto.
   - inv SEMWT.
     inv WT. simpl in *. rewrite CO in *.
     (** IMPORTANT TODO: the shape of sizeof variant (4 + ...), to get
     the bytes of the tag *)
-Admitted.
+    econstructor.
+    exploit Mem.load_loadbytes; eauto. intros (tagbytes & LTAG & DEC). simpl in LTAG.   
+    erewrite co_consistent_sizeof in *; eauto. rewrite ENUM in *. simpl in *.
+    generalize (sizeof_variant_ge4 ce (co_members co)). intros GE4.
+    assert (GE: 4 <= (align (sizeof_variant ce (co_members co)) (co_alignof co))).
+    { generalize (co_alignof_pos co). intros POS.
+      generalize (align_le (sizeof_variant ce (co_members co)) (co_alignof co) POS). 
+      lia. }                                     
+    exploit Z.le_exists_sub. eapply GE.
+    intros (n1 & A1 & A2). rewrite Z.add_comm in A1. rewrite A1 in *.
+    exploit Mem.loadbytes_split. eapply LOAD1. lia. lia. 
+    intros (tagbytes1 & bytes1 & B1 & B2 & B3). subst.
+    rewrite LTAG in B1. inv B1.
+    exploit Mem.loadbytes_split. eapply LOAD2. lia. lia.
+    intros (tagbytes2 & bytes2 & B4 & B5 & B6). subst.
+    exploit Mem.loadbytes_length. eapply LTAG. intros L1.
+    exploit Mem.loadbytes_length. eapply B4. intros L2.
+    exploit list_append_injective_l; eauto. intuition.
+    intros (C1 & C2). subst.
+    erewrite DEC.
+    eapply Mem.loadbytes_load. auto.    
+    (* 4 | ofs2 *)
+    eapply Z.divide_trans; eauto.
+    erewrite co_consistent_alignof; eauto. rewrite ENUM in *.
+    eapply tag_align_divide_composite.
+    (* end of loading the tag *)
+    eapply IHfp; eauto.
+    (* align *)
+    eapply Z.divide_add_r.
+    eapply Z.divide_trans; eauto. 
+    (** align of composite is dividable by the alignment of each member *)
+    erewrite co_consistent_alignof; eauto.
+    eapply field_alignof_divide_composite; eauto.
+    (** the field offset is dividable by the alignment of each field *)
+    eapply variant_field_offset_aligned; eauto.
+    eapply Z.divide_add_r.
+    eapply Z.divide_trans; eauto. 
+    (** align of composite is dividable by the alignment of each member *)
+    erewrite co_consistent_alignof; eauto.
+    eapply field_alignof_divide_composite; eauto.
+    (** the field offset is dividable by the alignment of each field *)
+    eapply variant_field_offset_aligned; eauto.
+    (* loadbytes *)
+    eapply loadbytes_interval. instantiate (1 := sizeof ce (Tvariant orgs id)).
+    (* in_range *)
+    red. simpl. rewrite CO. exploit variant_field_offset_in_range_complete; eauto.
+    lia.
+    simpl. rewrite CO. eauto.
+    (* loadbytes *)
+    eapply loadbytes_interval. instantiate (1 := sizeof ce (Tvariant orgs id)).
+    (* in_range *)
+    red. simpl. rewrite CO. exploit variant_field_offset_in_range_complete; eauto.
+    lia.
+    simpl. rewrite CO. eauto.
+Qed.
 
 Lemma load_result_int: forall chunk n sz si,
     Cop.cast_int_int sz si n = n ->
@@ -3921,8 +3973,9 @@ location semantics well-typed. The difficult part is the align and
 composite. *)
 Lemma assign_loc_sem_wt: forall fp ty m1 b ofs v m2
     (* We may require that the location is aligned (note that the
-    location is calculated from l-value) *)
+    location is calculated from l-value) *)                           
     (AS: assign_loc ce ty m1 b ofs v m2)
+    (AL: (alignof ce ty | (Ptrofs.unsigned ofs)))
     (WT: sem_wt_val ce m1 fp v)
     (WTFP: wt_footprint ce ty fp)
     (* the assignment does not affect the footprint *)
@@ -3985,8 +4038,8 @@ Proof.
   - inv AS. inv WTFP. simpl in *. try congruence.
     inv WT.
     eapply sem_wt_loc_unchanged_on_copy; eauto.
-    (** TODO: align: maybe we can add this check in semantics *)
-    admit. admit.    
+    (* alignment *)
+    inv WTFP. eauto.
     (* unchanged *)
     eapply Mem.storebytes_unchanged_on; eauto.    
     eapply Mem.loadbytes_length in H4.
@@ -3998,8 +4051,8 @@ Proof.
   - inv AS. inv WTFP. simpl in *. try congruence.
     inv WT.
     eapply sem_wt_loc_unchanged_on_copy; eauto.
-    (** TODO: align: maybe we can add this check in semantics *)
-    admit. admit.    
+    (* alignment *)
+    inv WTFP. eauto.
     (* unchanged *)
     eapply Mem.storebytes_unchanged_on; eauto.    
     eapply Mem.loadbytes_length in H4.
@@ -4008,7 +4061,7 @@ Proof.
     auto.
     rewrite H4. erewrite Z_to_nat_max.
     generalize (sizeof_pos ce ty). lia.
-Admitted.
+Qed.
 
 Lemma sem_wt_subpath: forall phl fp1 b1 ofs1 b2 ofs2 fp2 m,
     sem_wt_loc ce m fp1 b1 ofs1 ->
@@ -5274,6 +5327,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (MM: mmatch fpm1 ce m1 e own1)
     (TY: ty = typeof_place p)
     (AS: assign_loc ce ty m1 b ofs v m2)
+    (AL: (alignof ce ty | Ptrofs.unsigned ofs))
     (WT: sem_wt_val ce m1 vfp v)
     (WFENV: wf_env fpm1 ce e)
     (WTFP: wt_footprint ce ty vfp)
@@ -5337,7 +5391,7 @@ Proof.
       intros (b1 & ofs1 & fp1 & D & E). rewrite B in D. inv D.
       (* prove that assign_loc assigns a sem_wt_val then the location
       is sem_wt_loc *)
-      exploit assign_loc_sem_wt; eauto. 
+      exploit assign_loc_sem_wt; eauto.      
       (** b1 is not in fp1. Use B to show that location and its
       footprint are disjoint *)
       exploit get_loc_footprint_map_norepet. eapply NOREP2. eapply B. eauto. eauto.
@@ -5384,8 +5438,7 @@ Proof.
         permission of memory *)
         eapply blocks_perm_unchanged_normal.
         eapply assign_loc_perm_unchanged; eauto.
-        eapply sem_wt_loc_implies_bmatch. eapply assign_loc_sem_wt. eauto. eauto.
-        auto.
+        eapply sem_wt_loc_implies_bmatch. eapply assign_loc_sem_wt; eauto. 
         (* prove b not in vfp *)
         exploit get_loc_footprint_map_in_range. eapply PFP.
         intros IN. eapply in_app in IN. destruct IN.
@@ -6927,7 +6980,8 @@ Proof.
     intros (pfp & GFP & WTFP3).
     exploit (@list_equiv_norepet block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
-    exploit assign_loc_sound; eauto.
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+    exploit assign_loc_sound; eauto.    
     intros (fpm3 & SFP & MM3 & NOREP3 & WFENV3).        
     (* construct get_IM and sound_own *)
     exploit analyze_succ. 1-3: eauto.

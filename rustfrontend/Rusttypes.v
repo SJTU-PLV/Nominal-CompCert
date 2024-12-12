@@ -827,6 +827,15 @@ Proof.
     apply alignof_composite_two_p'.
 Qed.
 
+Lemma alignof_composite'_pos:
+  forall env m,  (alignof_composite' env m) > 0.
+Proof.
+  intros.
+  exploit alignof_composite_two_p'.
+  intros [n EQ].
+  rewrite EQ; apply two_power_nat_pos.
+Qed.
+
 
 Lemma alignof_composite_pos:
   forall env m sv, (alignof_composite env sv m) > 0.
@@ -1278,25 +1287,153 @@ Definition variant_field_offset (env: composite_env) (id: ident) (ms: members) :
 
 (* variant_field_offset in range *)
 
+Lemma variant_field_offset_in_range_aux: forall ce ms fty fid,
+    field_type fid ms = OK fty ->
+    sizeof ce fty <= sizeof_variant' ce ms.
+Proof.
+  induction ms; intros; simpl in *; try congruence.
+  destruct ident_eq in H. inv H. lia.
+  generalize (IHms fty fid H); eauto. lia.
+Qed.
+
 Corollary variant_field_offset_in_range:
   forall env ms id ofs ty,
   variant_field_offset env id ms = OK ofs -> field_type id ms = OK ty ->
   (* skip the offset of tag *)
   4 <= ofs /\ ofs + sizeof env ty <= sizeof_variant env ms.
 Proof.
-Admitted.
+  intros. unfold variant_field_offset in H.
+  destruct existsb eqn: EX in H; try congruence.
+  inv H. split.
+  - assert (POS: (alignof_composite' env ms * 8) > 0).
+    { generalize (alignof_composite'_pos env ms). lia. }
+    generalize (align_le 32 (alignof_composite' env ms * 8) POS).
+    intros A1.
+    eapply Z.div_le_lower_bound. lia. auto.
+  - unfold sizeof_variant.
+    unfold bytes_of_bits.
+    eapply Z.div_le_lower_bound. lia.
+    rewrite Z.mul_add_distr_l.
+    rewrite <- (Z.add_assoc _ _ 7).    
+    eapply Z.add_le_mono.
+    eapply Z.mul_div_le. lia.
+    assert (LE: sizeof env ty <= align (sizeof_variant' env ms) (alignof_composite' env ms)).
+    { eapply Z.le_trans.
+      2: eapply align_le.
+      eapply variant_field_offset_in_range_aux; eauto.
+      eapply alignof_composite'_pos. }
+    lia.
+Qed.
+
+    
+(* I don't know how to prove it *)
+(* Lemma align_mul_div: forall x y n, *)
+(*     n > 0 -> *)
+(*     x > 0 -> *)
+(*     y > 0 -> *)
+(*     (align (x * n) (y * n)) / n = align x y. *)
 
 (** Properties used for subplace  *)
 
-Lemma alignof_composite_max_aux: forall ce co fid fty,
-    field_type fid (co_members co) = OK fty ->
-    alignof ce fty <= alignof_composite' ce (co_members co).
-Admitted.
+Lemma alignof_composite_max_aux: forall ce fld fid fty,
+    field_type fid fld = OK fty ->
+    alignof ce fty <= alignof_composite' ce fld.
+Proof.
+  induction fld; intros; simpl in *; try congruence.
+  destruct ident_eq in H.
+  - inv H. lia.
+  - generalize (IHfld fid  fty H); eauto. lia.
+Qed.
 
 Lemma alignof_composite_max: forall ce co fid fty,
     field_type fid (co_members co) = OK fty ->
     alignof ce fty <= alignof_composite ce (co_sv co) (co_members co).
-Admitted.
+Proof.
+  intros. destruct (co_sv co).
+  - simpl. eapply alignof_composite_max_aux. eauto.
+  - simpl. generalize (alignof_composite_max_aux ce (co_members co) fid fty H); eauto.
+    lia.
+Qed.
+
+(** The alignment of subfiled divides the alignment of the complete
+     composite *)
+Lemma field_alignof_divide_composite: forall fty fid co ce,
+    field_type fid (co_members co) = OK fty ->
+    (alignof ce fty | alignof_composite ce (co_sv co) (co_members co)).
+Proof.
+  intros fty fid co ce0 FTY.
+  generalize (alignof_composite_two_p ce0 (co_members co) (co_sv co)).
+  intros (n2 & A2).
+  generalize (alignof_two_p ce0 fty).
+  intros (n1 & A1).
+  rewrite A1. rewrite A2.
+  do 2 erewrite two_power_nat_equiv in *.
+  set (nz1:= Z.of_nat n1) in *.
+  set (nz2:= Z.of_nat n2) in *.
+  assert (LE: nz1 <= nz2).
+  { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+    unfold nz2. eapply Nat2Z.is_nonneg.
+    rewrite <- A1. rewrite <- A2.
+    eapply alignof_composite_max. eauto. }
+  exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+  rewrite MZEQ. erewrite Z.pow_add_r; auto.
+  eapply Z.divide_factor_r.
+  unfold nz1. eapply Nat2Z.is_nonneg.
+Qed.
+
+Lemma tag_align_divide_composite: forall co ce,
+    (4 | alignof_composite ce TaggedUnion (co_members co)).
+Proof.
+  intros. simpl.
+  generalize (alignof_composite_two_p' ce (co_members co)).
+  intros (n2 & A2). rewrite A2.
+  erewrite two_power_nat_equiv in *.
+  replace 4 with (2 ^ 2) by lia.
+  eapply Z.max_case_strong; intros.
+  eapply Z.divide_refl.
+  assert (LE: 2 <= Z.of_nat n2).
+  { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+    eapply Nat2Z.is_nonneg. auto. }
+  exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+  rewrite MZEQ. erewrite Z.pow_add_r; auto.
+  eapply Z.divide_factor_r.
+  lia.
+Qed.
+
+Lemma variant_field_offset_aligned:
+  forall env id fld ofs ty,
+  variant_field_offset env id fld = OK ofs -> field_type id fld = OK ty ->
+  (alignof env ty | ofs).
+Proof.
+  intros. unfold variant_field_offset in H.
+  destruct existsb eqn: EX in H; try congruence.
+  inv H.
+  replace (alignof env ty) with (alignof env ty * 8 / 8).
+  2: { eapply Z.div_mul. lia. }
+  eapply Z.divide_div. lia. eapply Z.divide_mul_r. eapply Z.divide_refl.
+  eapply Z.divide_trans.
+  2: { eapply align_divides.
+       generalize (alignof_composite'_pos env fld).
+       lia. }
+  eapply Z.mul_divide_mono_r.
+  generalize (alignof_composite_two_p' env fld).
+  intros (n2 & A2).
+  generalize (alignof_two_p env ty).
+  intros (n1 & A1).
+  rewrite A1. rewrite A2.
+  do 2 erewrite two_power_nat_equiv in *.
+  set (nz1:= Z.of_nat n1) in *.
+  set (nz2:= Z.of_nat n2) in *.
+  assert (LE: nz1 <= nz2).
+  { eapply Z.pow_le_mono_r_iff with (a:= 2). lia.
+    unfold nz2. eapply Nat2Z.is_nonneg.
+    rewrite <- A1. rewrite <- A2.
+    eapply alignof_composite_max_aux. eauto. }
+  exploit Z.le_exists_sub; eauto. intros (p & MZEQ & PG).
+  rewrite MZEQ. erewrite Z.pow_add_r; auto.
+  eapply Z.divide_factor_r.
+  unfold nz1. eapply Nat2Z.is_nonneg.
+Qed.
 
 
 (** Stability properties for alignments, sizes, and ranks.  If the type is
