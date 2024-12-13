@@ -34,7 +34,15 @@ Proof.
   destruct ty1; intros; simpl in *; try congruence.
 Qed.
 
-      
+(* We do not support array type and reference type for now *)
+Definition valid_type (ty: type) : bool :=
+  match ty with
+  | Tarray _ _
+  | Treference _ _ _
+  | Tfunction _ _ _ _ _ => false
+  | _ => true
+  end.
+
 Definition typenv := PTree.t type.
 
 Section TYPING.
@@ -44,11 +52,13 @@ Variable ce: composite_env.
 
 Inductive wt_place : place -> Prop :=
 | wt_local: forall id ty
-    (WT1: te ! id = Some ty),
+    (WT1: te ! id = Some ty)
+    (VTY: valid_type ty = true),
     wt_place (Plocal id ty)
 | wt_deref: forall p ty
     (WT1: wt_place p)
-    (WT2: type_deref (typeof_place p) = OK ty),
+    (WT2: type_deref (typeof_place p) = OK ty)
+    (VTY: valid_type ty = true),
     wt_place (Pderef p ty)
 | wt_field: forall p ty fid co orgs id
     (WT1: wt_place p)
@@ -121,7 +131,7 @@ Lemma wt_place_prefix: forall p2 p1 ce e,
 Proof.
   induction p2; intros; unfold is_prefix in H at 1; simpl in *.
   - inv H0. destruct place_eq; subst; simpl in *; try congruence.
-    constructor. auto.
+    constructor. auto. auto.
   - inv H0. destruct place_eq; simpl in H; try congruence.
     + subst. econstructor; eauto.
     + destruct place_eq in H; simpl in H; try congruence.
@@ -1188,20 +1198,39 @@ Proof.
 Qed.
 
 
-Lemma get_loc_footprint_app_inv: forall phl2 phl1 b1 b2 ofs1 ofs2 fp1 fp2,
+Lemma get_loc_footprint_app_inv: forall phl1 phl2 b1 b2 ofs1 ofs2 fp1 fp2,
     get_loc_footprint (phl1 ++ phl2) fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
     exists b3 ofs3 fp3,
       get_loc_footprint phl1 fp1 b1 ofs1 = Some (b3, ofs3, fp3)
       /\ get_loc_footprint phl2 fp3 b3 ofs3 = Some (b2, ofs2, fp2).
-Admitted.
+Proof.
+  induction phl1; intros; simpl in *.
+  - eauto.
+  - destruct a.
+    + destruct fp1; try congruence.
+      eauto.
+    + destruct fp1; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      eauto.
+    + destr_fp_enum fp1 ty.
+      eauto.
+Qed.
 
-
+      
 Lemma get_loc_footprint_map_app_inv: forall phl2 phl1 id e fpm b1 ofs1 fp1,
     get_loc_footprint_map e (id, phl1 ++ phl2) fpm = Some (b1, ofs1, fp1) ->
     exists b ofs fp,
       get_loc_footprint_map e (id, phl1) fpm = Some (b, ofs, fp)
       /\ get_loc_footprint phl2 fp b ofs = Some (b1, ofs1, fp1).
-Admitted.
+Proof.
+  intros. simpl in *.
+  destruct (e!id); try congruence.
+  destruct p.
+  destruct (fpm!id); try congruence.
+  eapply get_loc_footprint_app_inv; eauto.
+Qed.
+
 
 Lemma get_set_footprint_map_exists: forall phl id fp fp1 fpm1 b ofs le,
     get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp1) ->
@@ -2189,273 +2218,6 @@ Qed.
 (* Admitted. *)
 
 
-(* The locations evaluated by get_loc_footprint_map and eval_place are
-the same. *)
-Lemma eval_place_get_loc_footprint_map_equal: forall m le p fpm fp b1 ofs1 b2 ofs2 own
-    (GFP: get_loc_footprint_map le (path_of_place p) fpm = Some (b1, ofs1, fp))
-    (WT: wt_place le ce p)
-    (WFENV: wf_env fpm ce le)
-    (EVAL: eval_place ce le m p b2 ofs2)
-    (MM: mmatch fpm ce m le own)
-    (DOM: dominators_is_init own p = true),
-    b1 = b2
-    /\ ofs1 = Ptrofs.unsigned ofs2
-    (* It is used to strengthen this lemma *)
-    /\ wt_footprint ce (typeof_place p) fp.
-Proof.
-  induction p; intros.
-  - inv EVAL. simpl in GFP. rewrite H3 in GFP.
-    destruct (fpm ! i) eqn: FP; try congruence. inv GFP.
-    repeat apply conj; auto.
-    simpl. exploit wf_env_footprint; eauto.
-    intros (fp0 & A1 & A2). rewrite FP in A1. inv A1. auto.    
-  - inv EVAL. simpl in GFP. destruct (path_of_place p) eqn: POP.
-    exploit get_loc_footprint_map_app_inv; eauto.
-    intros (b3 & ofs3 & fp3 & G1 & G2).
-    exploit IHp; eauto. inv WT. eauto.
-    intros (A1 & A2 & A3). subst.
-    simpl in G2. destruct fp3; try congruence.
-    destruct (find_fields i fpl) eqn: FIND; try congruence. repeat destruct p0.
-    inv G2. inv A3. rewrite H3 in H0. inv H0.
-    exploit find_fields_some; eauto. intros (B1 & B2). subst.
-    exploit WT2; eauto.
-    intros (fty & C1 & C2 & C3).
-    rewrite H6 in CO. inv CO.
-    rewrite H7 in C2. inv C2.
-    repeat apply conj; auto.
-    rewrite Ptrofs.add_unsigned.
-    (** range proof obligation *)
-    rewrite !Ptrofs.unsigned_repr. auto.
-    admit. admit.
-    inv WT. rewrite H3 in WT3. inv WT3.
-    rewrite H6 in WT4. inv WT4.
-    rewrite C1 in WT5. inv WT5. 
-    simpl. eauto.
-  - inv EVAL. inv WT. destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
-    inv WT2. inv H4; simpl in *; try congruence. inv H.
-    destruct (path_of_place p) eqn: POP. 
-    exploit get_loc_footprint_map_app_inv; eauto.
-    intros (b3 & ofs3 & fp3 & G1 & G2).
-    unfold dominators_is_init in DOM. simpl in DOM.
-    eapply andb_true_iff in DOM. destruct DOM as (D1 & D2).
-    exploit IHp; eauto.
-    intros (A1 & A2 & A3). subst.
-    simpl in G2. destruct fp3; try congruence. inv G2.
-    inv A3.
-    exploit MM. erewrite POP. eauto. auto. intros (BM & FULL).
-    inv BM. rewrite H0 in LOAD. inv LOAD.
-    repeat apply conj; auto.    
-  - inv EVAL. simpl in GFP. destruct (path_of_place p) eqn: POP.
-    exploit get_loc_footprint_map_app_inv; eauto.
-    intros (b3 & ofs3 & fp3 & G1 & G2).
-    unfold dominators_is_init in *. simpl in DOM.
-    eapply andb_true_iff in DOM. destruct DOM as (A & B).
-      assert (DOM1: dominators_is_init own p = true).
-    { destruct p; simpl in *; auto.
-      eapply andb_true_iff. auto. }
-    exploit IHp; eauto. inv WT. eauto.
-    intros (A1 & A2 & A3). subst.
-    simpl in G2. destruct fp3; try congruence. rewrite H3 in G2.
-    destruct ident_eq in G2; try congruence.
-    destruct list_eq_dec in G2; try congruence.
-    destruct ident_eq in G2; try congruence. inv G2.
-    rewrite H3 in A3. inv A3.
-    rewrite H4 in CO. inv CO.
-    rewrite H9 in FOFS. inv FOFS.
-    repeat apply conj; auto.
-    rewrite Ptrofs.add_unsigned.
-    (** range proof obligation *)
-    rewrite !Ptrofs.unsigned_repr. auto.
-    admit. admit.
-    inv WT. rewrite H3 in WT2. inv WT2.
-    rewrite H4 in WT3. inv WT3.
-    exploit valid_owner_place_footprint. erewrite POP. eauto. auto.
-    intros (fp' & ofs' & ofs1 & G2 & VFP & OFS).
-    exploit MM. eapply G2. auto.
-    intros (BM' & FULL').
-    assert (BM1: bmatch ce m b1 (Ptrofs.unsigned ofs) (fp_enum id orgs tag0 fid ofs0 fp)).
-    { rewrite OFS. eapply valid_owner_bmatch. eauto. eauto. }
-    inv BM1.
-    simpl in H5. rewrite H5 in TAG0. inv TAG0.
-    rewrite Int.unsigned_repr in H8. rewrite H8 in TAG. inv TAG.
-    simpl. auto.
-    (* tag is in range *)
-    admit.
-Admitted.
-
-(* The footprint contained in the location of a place *)
-Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
-    (EVAL: eval_place ce e m p b ofs)
-    (MM: mmatch fpm ce m e own)
-    (WFOWN: wf_env fpm ce e)
-    (WT: wt_place (env_to_tenv e) ce p)
-    (SOWN: sound_own own init uninit universe)
-    (* evaluating the address of p does not require that p is
-    owned. Shallow own is used in bmatch *)
-    (POWN: dominators_must_init init uninit universe p = true),
-  (* Do we need to specify the properties of fp? Do we need to show
-  the permission of the location of p? *)
-  exists fp (* ce' *) (* phl *), get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
-                      /\ wt_footprint ce (typeof_place p) fp.
-                      (* /\ ce_extends ce' ce. *)
-            (* /\ path_of_place ce p (local_of_place p, phl) *)
-            (* /\ get_footprint_map (local_of_place p, phl) fpm = Some fp. *)
-        (* /\ wt_footprint ce (typeof_place p) fp. *)
-    (* if consider reference, we cannot say that p is a subplace of
-    p', instead we need to state that the owner p points to is a
-    subplace of p' *)
-Proof.
-  induction 1; intros.
-  (* Plocal *)
-  - rewrite Ptrofs.unsigned_zero.
-    exploit wf_env_footprint; eauto. intros (fp & FP & WTFP).
-    exists fp. repeat apply conj. simpl. rewrite H. rewrite FP. auto.
-    simpl. auto.
-  (* Pfield *)
-  - inv WT.
-    (* two type facts, reduce one *)
-    rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
-    (** TODO: make it a lemma: prove p's dominators are init *)
-    assert (PDOM: dominators_must_init init uninit universe p = true) by admit.    
-    exploit IHEVAL. 1-5: auto.
-    intros (fp & PFP & WTFP).
-    (* exploit field_type_implies_field_tag; eauto. intros (tag & FTAG & TAGN). *)
-    (** TODO: produce some range requirement *)
-    erewrite Ptrofs.add_unsigned.
-    rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr.
-    (** Inversion of WTFP *)
-    rewrite H in WTFP. inv WTFP; simpl in *; try congruence.
-    rewrite H0 in CO. inv CO.
-    exploit WT0; eauto. intros (ffp & fofs & INFPL & FOFS& WTFP1).
-    exists ffp. repeat apply conj; auto.
-    (* get_loc_footprint_map *)
-    simpl. destruct (path_of_place p) eqn: POP.
-    eapply get_loc_footprint_map_app. eauto.
-    simpl.  rewrite INFPL. rewrite H1 in FOFS. inv FOFS. auto.        
-    (* simpl. auto. *)
-    (** *** TODO: Begin range proof *** *)
-    (* Can we require that the size of p' is in the range of *)
-(*     Ptrofs.max_unsigned, so that any subplace is in this range *)
-(*     (including its successor) *)
-    (* exploit wf_place_size; eauto. intros PSIZE. *)
-    (* generalize (subplace_upper_bound _ _ _ _ _ SUBP CONSISTENT H5 (Z.lt_le_incl _ _ PSIZE)).    rewrite H. simpl. rewrite H0. *)
-    (* erewrite co_consistent_sizeof; eauto. rewrite H9. simpl. *)
-    (* assert (ALPOS: co_alignof co0 > 0). *)
-    (* { exploit co_alignof_two_p. intros (n & ALPOW). *)
-    (*   rewrite ALPOW. rewrite two_power_nat_equiv. *)
-    (*   generalize (Nat2Z.is_nonneg n). intros A. *)
-    (*   exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia. *)
-    (*   eauto. lia. } *)
-    (* generalize (align_le (sizeof_struct ce (co_members co0)) _ ALPOS). *)
-    (* intros STRUCTSZ BOUND. *)
-    (* exploit field_offset_in_range; eauto. intros (RANGE1 & RANGE2). *)
-    (* generalize (Ptrofs.unsigned_range ofs). intros OFSRANGE. *)
-    (* generalize (sizeof_pos ce ty). intros TYSZPOS. *)
-    (* (* *** End range proof *** *) *)
-    (* rewrite Ptrofs.add_unsigned. *)
-    (* do 2 rewrite Ptrofs.unsigned_repr. *)
-    (* econstructor. auto. eauto. eauto. *)
-    (* eauto. *)
-    (* (** dirty work: specify the requirement to prevent overflow *) *)
-    (* lia. lia. lia. *)
-    (* unfold is_shallow_prefix. eapply orb_true_intro. *)
-  (* right. simpl. destruct (place_eq p p). auto. congruence. *)
-    admit. admit. admit.
-  (* Pdowncast *)
-  - inv WT.
-    rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
-    (** TODO: make it a lemma: prove p's dominators are init *)
-    (** It is impossible to be proved  *)
-    assert (PDOM: dominators_must_init init uninit universe p = true).
-    { unfold dominators_must_init in *. simpl in *.
-      eapply andb_true_iff in POWN. destruct POWN as (A & B).
-      destruct p; simpl in *; auto.
-      eapply andb_true_iff. auto. }
-    (** Prove that p is_init  *)
-    exploit IHEVAL. 1-5: auto.
-    intros (fp & PFP & WTFP).
-    (** TODO: produce some range requirement *)
-    erewrite Ptrofs.add_unsigned.
-    rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr.
-    (** Prove that p is_init: NO!! We can only show that (valid_owner
-    p) is init *)
-    exploit valid_owner_place_footprint. eauto. eauto. intros (fp1 & ofs1 & fofs1 & PFP1 & VOFS1 & OFSEQ).
-    unfold dominators_must_init in POWN. simpl in POWN.
-    eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).
-    exploit MM. eauto.
-    eapply must_init_sound; eauto.        
-    (* valid owner's bmatch implies subfield bmatch *)
-    intros (BM & FULL).
-    assert (BM1: bmatch ce m b (Ptrofs.unsigned ofs) fp).
-    { rewrite OFSEQ. eapply valid_owner_bmatch. eauto. eauto. }
-    rewrite H in WTFP. (* inv BM1. *)
-    (* rewrite some redundant premises *)
-    simpl in H1. 
-    inv WTFP; simpl in *; try congruence. inv BM1.
-    inv BM1. rewrite H1 in TAG0. inv TAG0. rewrite Int.unsigned_repr in H2.
-    (* do some rewrting *)
-    rewrite H0 in CO. inv CO.
-    rewrite H2 in TAG. inv TAG. simpl.
-    rewrite H3 in FOFS. inv FOFS.
-    exists fp0. repeat apply conj.
-    (* get_loc_footprint_map *)
-    destruct (path_of_place p) eqn: POP.
-    eapply get_loc_footprint_map_app. eauto. simpl.
-    rewrite H. repeat destruct ident_eq; simpl; try congruence.
-    destruct list_eq_dec; simpl; try congruence.
-    (* destruct type_eq; simpl; try congruence.  *) auto.    
-    (** *** TODO: Begin range proof *** *)
-    (* exploit wf_place_size; eauto. intros PSIZE. *)
-    (* generalize (subplace_upper_bound _ _ _ _ _ SUBP CONSISTENT H7 (Z.lt_le_incl _ _ PSIZE)).    rewrite H. simpl. rewrite H0. *)
-    (* erewrite co_consistent_sizeof; eauto. rewrite H11. simpl. *)
-    (* assert (ALPOS: co_alignof co0 > 0). *)
-    (* { exploit co_alignof_two_p. intros (n & ALPOW). *)
-    (*   rewrite ALPOW. rewrite two_power_nat_equiv. *)
-    (*   generalize (Nat2Z.is_nonneg n). intros A. *)
-    (*   exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia. *)
-    (*   eauto. lia. } *)
-    (* generalize (align_le (sizeof_variant ce (co_members co0)) _ ALPOS). *)
-    (* intros ENUMSZ BOUND. *)
-    (* exploit variant_field_offset_in_range; eauto. intros (RANGE1 & RANGE2). *)
-    (* generalize (Ptrofs.unsigned_range ofs). intros OFSRANGE. *)
-    (* generalize (sizeof_pos ce ty). intros TYSZPOS. *)
-    (* (* *** End range proof *** *) *)
-    (* rewrite Ptrofs.add_unsigned. *)
-    (* do 2 rewrite Ptrofs.unsigned_repr. *)
-    (* econstructor. auto. eauto. eauto. *)
-    (* eauto. *)
-    (* (** dirty work: specify the requirement to prevent overflow *) *)
-    (* lia. lia. lia. *)
-    (* (* shallow prefix *) *)
-    (* unfold is_shallow_prefix. eapply orb_true_intro. *)
-  (* right. simpl. destruct (place_eq p p). auto. congruence. *)
-    1-4: admit. 
-  (* Pderef *)
-  - inv WT.
-    unfold dominators_must_init in POWN. simpl in POWN.
-    eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).    
-    exploit IHEVAL; eauto.
-    intros (fp & PFP & WTFP).
-    exploit MM. eauto.
-    eapply must_init_sound; eauto.
-    intros (BM & FULL). destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
-    inv WT2.
-    inv WTFP; inv BM; simpl in *; try congruence.
-    exists fp0. repeat apply conj.    
-    (* prove ofs' = 0 *)
-    inv H; simpl in *; try congruence.
-    simpl in *. inv H0. rewrite LOAD in H1. inv H1.
-    rewrite Ptrofs.unsigned_zero.    
-    (* get_loc_footprint_map *)
-    destruct (path_of_place p) eqn: POP.
-    eapply get_loc_footprint_map_app. eauto.
-    simpl. auto.
-    (* wt_footprint *)
-    simpl. auto.
-    (* eapply place_footprint_wt in FP. rewrite PTY in FP. inv FP.  *)
-    (* simpl. auto. *)
-Admitted.
-
 End COMP_ENV.
 
 
@@ -2465,16 +2227,13 @@ footprint of this place (obtained by get_loc_footprint_map) has the
 same structure as its type, which is used to prevent dynamic footprint
 splitting! *)
 Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit universe
-    (MM: mmatch fpm ce m e own)    
-    (* p owns the ownership chain. To finish this proof, we need to
-    first fix some error in must_movable *)    
+    (MM: mmatch fpm ce m e own)
     (POWN: must_movable ce1 init uninit universe p = true)
     (SOUND: sound_own own init uninit universe)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
     (WTFP: wt_footprint ce (typeof_place p) fp)
     (EXTEND: ce_extends ce1 ce),
-    sem_wt_loc ce m fp b ofs
-.
+    sem_wt_loc ce m fp b ofs.
 Proof.
   intros ce. intros c. pattern c. apply well_founded_ind with (R := removeR).
   eapply well_founded_removeR.
@@ -2498,7 +2257,7 @@ Proof.
     destruct (is_full universe p) eqn: PFULL.
     (* p is full: it must be sem_wt *)
     eapply MM. eauto. eapply must_init_sound; eauto.
-    erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.
+    erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.    
     (* adhoc generalization *)
     clear PFULL.
     generalize dependent p. generalize dependent b.
@@ -2506,7 +2265,7 @@ Proof.
     induction t; intros; simpl in *; try congruence.
     + exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
-      econstructor. simpl. eauto. eauto.
+      econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p Tunit)) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
@@ -2514,10 +2273,37 @@ Proof.
       exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
-    (* The same as Tunit case *)
-    + admit.
-    + admit.
-    + admit.
+    (* The same as Tunit case (just copying) *)
+    + exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
+      econstructor. eauto.
+      econstructor; eauto.
+      assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tint i s))) fpm = Some (b0, 0, fp0)).
+      { simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
+      econstructor; simpl; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
+      econstructor. eauto.
+      econstructor; eauto.
+      assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tlong s))) fpm = Some (b0, 0, fp0)).
+      { simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
+      econstructor; simpl; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
+      econstructor. eauto.
+      econstructor; eauto.
+      assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tfloat f))) fpm = Some (b0, 0, fp0)).
+      { simpl. destruct (path_of_place p) eqn: POP.
+        eapply get_loc_footprint_map_app; eauto. }
+      exploit MM. eauto. eapply must_init_sound; eauto.
+      intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
+      econstructor; simpl; eauto.
     (* Induction case *)
     + destruct (must_init init uninit universe (Pderef p (Tbox t))) eqn: INIT2; try congruence.
       destruct (is_full universe (Pderef p (Tbox t))) eqn: PFULL1.
@@ -2573,8 +2359,11 @@ Proof.
       eapply IH. instantiate (1 := (PTree.remove id1 ce1)).
       eapply PTree_removeR. eauto. eauto.
       assert (INMEM: In (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) (map (fun '(Member_plain fid fty) => (Pfield (Pderef p (Tstruct l id1)) fid fty, fty)) (co_members co))).
-      (** TODO *)
-      { admit. }
+      { exploit field_type_implies_field_tag. eapply A.
+        intros (tag & FTAG & NTH). eapply list_nth_z_in in NTH.
+        eapply in_map_iff. exists (Member_plain fid fty).
+        rewrite  P in CO. inv CO.
+        split; eauto. }
       generalize (POWN (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) INMEM).
       instantiate (1 := Pfield (Pderef p (Tstruct l id1)) fid fty).
       eauto.
@@ -2587,7 +2376,7 @@ Proof.
       (* wt_footprint *)
       simpl. auto.
       (* ce_extend *)
-      admit.
+      eapply ce_extends_remove. auto.
     (* Tvariant *)
     + destruct (ce1 ! i) eqn: CO; try congruence.      
       eapply andb_true_iff in POWN. destruct POWN as (INIT1 & FULL).
@@ -2603,8 +2392,7 @@ Proof.
       eapply get_loc_footprint_map_app; eauto.      
       eapply must_init_sound; eauto.
       erewrite <- is_full_same; eauto.
-      eapply sound_own_universe; eauto.
-      
+      eapply sound_own_universe; eauto.      
   (* Tstruct *)
   - destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
     destruct (must_init init uninit universe p) eqn: INIT; try congruence.
@@ -2624,8 +2412,12 @@ Proof.
     eapply IH. instantiate (1 := (PTree.remove id1 ce1)).
     eapply PTree_removeR. eauto. eauto.
     assert (INMEM: In (Pfield p fid fty, fty) (map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) (co_members co))).
-    (** TODO *)
-    { admit. }
+    { exploit field_type_implies_field_tag. eapply A.
+      intros (tag & FTAG & NTH). eapply list_nth_z_in in NTH.
+      eapply in_map_iff. exists (Member_plain fid fty).
+      generalize P as P1. intros. eapply EXTEND in P1.
+      rewrite P1 in CO. inv CO.
+      split; eauto. }    
     generalize (POWN (Pfield p fid fty, fty) INMEM).
     instantiate (1 := (Pfield p fid fty)). eauto.    
     auto.
@@ -2636,7 +2428,7 @@ Proof.
     (* wt_footprint *)
     simpl. auto.
     (* ce_extend *)
-    admit.
+    eapply ce_extends_remove; eauto.
   (* Tvariant *)
   - destruct (ce1 ! i) eqn: CO; try congruence.
     eapply andb_true_iff in POWN. destruct POWN as (INIT & FULL).
@@ -2646,7 +2438,7 @@ Proof.
     eapply WTLOC.
     erewrite <- is_full_same; eauto.
     eapply sound_own_universe; eauto.
-Admitted.
+Qed.
 
    
 (* properties of place_dominator *)
@@ -2692,6 +2484,9 @@ Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
 Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s s.
 
 Hypothesis CONSISTENT: composite_env_consistent ce.
+
+Hypothesis COMP_RANGE: forall id co, ce ! id = Some co -> co_sizeof co <= Ptrofs.max_unsigned.
+Hypothesis COMP_LEN: forall id co, ce ! id = Some co -> list_length_z (co_members co) <= Int.max_unsigned.
 
 (** Try to prove eval_expr_sem_wt  *)
 
@@ -3058,6 +2853,327 @@ Proof.
   destruct in_dec in *; simpl in *; try congruence.
   exfalso. eapply path_of_not_shallow_prefix_reverse_aux; eauto.
 Qed.  
+
+(** Properties of evaluation of place  *)
+
+Lemma  co_alignof_pos: forall co,
+    co_alignof co > 0.
+Proof.
+  intros.
+  generalize (co_alignof_two_p co). intros (n & ALPOW).
+  rewrite ALPOW. rewrite two_power_nat_equiv.
+  generalize (Nat2Z.is_nonneg n). intros A.
+  exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia.
+  eauto. lia.
+Qed.
+
+Lemma maxv:
+  Ptrofs.max_unsigned = 18446744073709551615.
+Proof.
+  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+  unfold two_power_nat. unfold Wordsize_Ptrofs.wordsize.
+  replace Archi.ptr64 with true by reflexivity. reflexivity.
+Qed.
+
+
+Lemma sizeof_in_range: forall ty,
+    valid_type ty = true ->
+    sizeof ce ty <= Ptrofs.max_unsigned.
+Proof.
+  destruct ty; simpl; rewrite maxv; try lia.
+  destruct i; lia.
+  destruct f; lia.
+  destruct Archi.ptr64; lia.
+  destruct Archi.ptr64; lia.
+  congruence.
+  destruct (ce ! i) eqn: A; try lia. 
+  generalize (COMP_RANGE i c A). rewrite maxv. auto.
+  destruct (ce ! i) eqn: A; try lia. 
+  generalize (COMP_RANGE i c A). rewrite maxv. auto.
+Qed.
+
+Lemma field_offset_in_max_range: forall ofs fofs co fty fid,
+    field_offset ce fid (co_members co) = OK fofs ->
+    field_type fid (co_members co) = OK fty ->
+    Ptrofs.unsigned ofs + co_sizeof co <= Ptrofs.max_unsigned ->
+    composite_consistent ce co ->
+    co_sv co = Struct ->
+    0 <= fofs <= Ptrofs.max_unsigned
+    /\ 0 <= Ptrofs.unsigned ofs + fofs <= Ptrofs.max_unsigned
+    /\ Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.max_unsigned.
+Proof.
+  intros until fid; intros FOFS FTY R1 COMP STRUCT.
+  generalize (Ptrofs.unsigned_range ofs). intros RAN1.
+  generalize (sizeof_pos ce fty). intros SZGT.
+  generalize (field_offset_in_range ce (co_members co) _ _ _ FOFS FTY).
+  intros (DELR1 & DELR2). 
+  (* not easy range proof *)
+  assert (RAN2: Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.max_unsigned).
+  {
+    erewrite co_consistent_sizeof in *; eauto.
+    rewrite STRUCT in *. simpl in *.
+    generalize (align_le (sizeof_struct ce (co_members co)) (co_alignof co) (co_alignof_pos co)).
+    intros. lia. }
+  lia.
+Qed.
+
+Lemma variant_field_offset_in_max_range: forall ofs fofs co fty fid,
+    variant_field_offset ce fid (co_members co) = OK fofs ->
+    field_type fid (co_members co) = OK fty ->
+    Ptrofs.unsigned ofs + co_sizeof co <= Ptrofs.max_unsigned ->
+    composite_consistent ce co ->
+    co_sv co = TaggedUnion ->
+    0 <= fofs <= Ptrofs.max_unsigned
+    /\ 0 <= Ptrofs.unsigned ofs + fofs <= Ptrofs.max_unsigned
+    /\ Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.max_unsigned.
+Proof.  
+  intros until fid; intros FOFS FTY R1 COMP ENUM.
+  generalize (Ptrofs.unsigned_range ofs). intros RAN1.
+  generalize (sizeof_pos ce fty). intros SZGT.
+  generalize (variant_field_offset_in_range ce (co_members co) _ _ _ FOFS FTY).
+  intros (DELR1 & DELR2). 
+  (* not easy range proof *)
+  assert (RAN2: Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.max_unsigned).
+  {
+    erewrite co_consistent_sizeof in *; eauto.
+    rewrite ENUM in *. simpl in *.
+    generalize (align_le (sizeof_variant ce (co_members co)) (co_alignof co) (co_alignof_pos co)).
+    intros. lia. }
+  lia.
+Qed.
+
+
+(* The locations evaluated by get_loc_footprint_map and eval_place are
+the same. *)
+Lemma eval_place_get_loc_footprint_map_equal: forall m le p fpm fp b1 ofs1 b2 ofs2 own
+    (GFP: get_loc_footprint_map le (path_of_place p) fpm = Some (b1, ofs1, fp))
+    (WT: wt_place le ce p)
+    (WFENV: wf_env fpm ce le)
+    (EVAL: eval_place ce le m p b2 ofs2)
+    (MM: mmatch fpm ce m le own)
+    (DOM: dominators_is_init own p = true),
+    b1 = b2
+    /\ ofs1 = Ptrofs.unsigned ofs2
+    (* It is used to strengthen this lemma *)
+    /\ wt_footprint ce (typeof_place p) fp
+    /\ ofs1 + sizeof ce (typeof_place p) <= Ptrofs.max_unsigned.
+Proof.
+  induction p; intros.
+  - inv EVAL. simpl in GFP. rewrite H3 in GFP.
+    destruct (fpm ! i) eqn: FP; try congruence. inv GFP.
+    repeat apply conj; auto.
+    simpl. exploit wf_env_footprint; eauto.
+    intros (fp0 & A1 & A2). rewrite FP in A1. inv A1. auto.
+    simpl. inv WT. eapply sizeof_in_range. auto.
+  - inv EVAL. simpl in GFP. destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b3 & ofs3 & fp3 & G1 & G2).
+    exploit IHp; eauto. inv WT. eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    simpl in G2. destruct fp3; try congruence.
+    destruct (find_fields i fpl) eqn: FIND; try congruence. repeat destruct p0.
+    inv G2. inv A3. rewrite H3 in H0. inv H0.
+    exploit find_fields_some; eauto. intros (B1 & B2). subst.
+    exploit WT2; eauto.
+    intros (fty & C1 & C2 & C3).
+    rewrite H6 in CO. inv CO.
+    rewrite H7 in C2. inv C2.
+    (* some range properties *)
+    rewrite H3 in *. simpl in A4. rewrite H6 in A4.
+    exploit field_offset_in_max_range; eauto.
+    intros (R1 & R2 & R3).
+    (* some rewrite *)
+    inv WT. rewrite H3 in WT3. inv WT3.
+    rewrite H6 in WT4. inv WT4.
+    rewrite C1 in WT5. inv WT5. 
+    repeat apply conj; auto.
+    rewrite Ptrofs.add_unsigned; auto.
+    (** range proof obligation *)
+    rewrite !Ptrofs.unsigned_repr; auto.
+    rewrite !Ptrofs.unsigned_repr; auto.        
+  - inv EVAL. inv WT. destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
+    inv WT2. inv H4; simpl in *; try congruence. inv H.
+    destruct (path_of_place p) eqn: POP. 
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b3 & ofs3 & fp3 & G1 & G2).
+    unfold dominators_is_init in DOM. simpl in DOM.
+    eapply andb_true_iff in DOM. destruct DOM as (D1 & D2).
+    exploit IHp; eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    simpl in G2. destruct fp3; try congruence. inv G2.
+    inv A3.
+    exploit MM. erewrite POP. eauto. auto. intros (BM & FULL).
+    inv BM. rewrite H0 in LOAD. inv LOAD.
+    repeat apply conj; auto.
+    simpl. eapply sizeof_in_range; eauto.
+  - inv EVAL. simpl in GFP. destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b3 & ofs3 & fp3 & G1 & G2).
+    unfold dominators_is_init in *. simpl in DOM.
+    eapply andb_true_iff in DOM. destruct DOM as (A & B).
+      assert (DOM1: dominators_is_init own p = true).
+    { destruct p; simpl in *; auto.
+      eapply andb_true_iff. auto. }
+    exploit IHp; eauto. inv WT. eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    simpl in G2. destruct fp3; try congruence. rewrite H3 in G2.
+    destruct ident_eq in G2; try congruence.
+    destruct list_eq_dec in G2; try congruence.
+    destruct ident_eq in G2; try congruence. inv G2.
+    rewrite H3 in A3. inv A3.
+    rewrite H4 in CO. inv CO.
+    rewrite H9 in FOFS. inv FOFS.
+    (* some range properties *)
+    rewrite H3 in *. simpl in A4. rewrite H4 in A4.
+    exploit variant_field_offset_in_max_range; eauto.
+    intros (R1 & R2 & R3).
+    (* some rewrite *)
+    inv WT. rewrite H3 in WT2. inv WT2.
+    rewrite H4 in WT3. inv WT3.
+    repeat apply conj; auto.
+    rewrite Ptrofs.add_unsigned.
+    (** range proof obligation *)
+    rewrite !Ptrofs.unsigned_repr; auto.
+    rewrite !Ptrofs.unsigned_repr; auto.
+    exploit valid_owner_place_footprint. erewrite POP. eauto. eauto.
+    intros (fp' & ofs' & ofs1 & G2 & VFP & OFS).
+    exploit MM. eapply G2. auto.
+    intros (BM' & FULL').
+    assert (BM1: bmatch ce m b1 (Ptrofs.unsigned ofs) (fp_enum id orgs tag0 fid ofs0 fp)).
+    { rewrite OFS. eapply valid_owner_bmatch. eauto. eauto. }
+    inv BM1.
+    simpl in H5. rewrite H5 in TAG0. inv TAG0.
+    rewrite Int.unsigned_repr in H8. rewrite H8 in TAG. inv TAG.
+    simpl. auto.
+    (* tag is in range *)
+    generalize (list_nth_z_range _ _ TAG).
+    generalize (COMP_LEN id co H4). lia.
+    rewrite FTY in WT4. inv WT4.
+    auto.
+Qed.
+
+(* The footprint contained in the location of a place *)
+Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
+    (EVAL: eval_place ce e m p b ofs)
+    (MM: mmatch fpm ce m e own)
+    (WFOWN: wf_env fpm ce e)
+    (WT: wt_place (env_to_tenv e) ce p)
+    (SOWN: sound_own own init uninit universe)
+    (* evaluating the address of p does not require that p is
+    owned. Shallow own is used in bmatch *)
+    (POWN: dominators_must_init init uninit universe p = true),
+  exists fp (* ce' *) (* phl *), get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
+                            /\ wt_footprint ce (typeof_place p) fp
+                            (* range *)
+                            /\ (Ptrofs.unsigned ofs) + (sizeof ce (typeof_place p)) <= Ptrofs.max_unsigned.
+Proof.
+  induction 1; intros.
+  (* Plocal *)
+  - rewrite Ptrofs.unsigned_zero.
+    exploit wf_env_footprint; eauto. intros (fp & FP & WTFP).
+    exists fp. repeat apply conj. simpl. rewrite H. rewrite FP. auto.
+    simpl. auto.
+    simpl. eapply sizeof_in_range. inv WT. auto.    
+  (* Pfield *)
+  - inv WT.
+    (* two type facts, reduce one *)
+    rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
+    exploit IHEVAL. 1-5: auto.
+    intros (fp & PFP & WTFP & RAN0). rewrite H in RAN0. simpl in RAN0.
+    (** Inversion of WTFP *)
+    rewrite H in WTFP. inv WTFP; simpl in *; try congruence.
+    rewrite H0 in *. inv CO.
+    exploit WT0; eauto. intros (ffp & fofs & INFPL & FOFS& WTFP1).
+    (* construct some range hypotheses *)
+    exploit field_offset_in_max_range; eauto.
+    intros (R1 & R2 & R3). 
+    rewrite H1 in FOFS. inv FOFS. 
+    (* exploit field_type_implies_field_tag; eauto. intros (tag & FTAG & TAGN). *)
+    erewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr; auto.
+    exists ffp. repeat apply conj; auto.
+    (* get_loc_footprint_map *)
+    simpl. destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto.
+    simpl.  rewrite INFPL. auto.
+  (* Pdowncast *)
+  - inv WT.
+    rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
+    (** TODO: make it a lemma: prove p's dominators are init *)
+    (** It is impossible to be proved  *)
+    assert (PDOM: dominators_must_init init uninit universe p = true).
+    { unfold dominators_must_init in *. simpl in *.
+      eapply andb_true_iff in POWN. destruct POWN as (A & B).
+      destruct p; simpl in *; auto.
+      eapply andb_true_iff. auto. }
+    (** Prove that p is_init  *)
+    exploit IHEVAL. 1-5: auto.
+    intros (fp & PFP & WTFP & RAN0).
+    rewrite H in RAN0. simpl in RAN0. rewrite H0 in RAN0.
+    (* construct some range hypotheses *)
+    exploit variant_field_offset_in_max_range; eauto.
+    intros (R1 & R2 & R3). 
+    (* produce some range requirement *)
+    erewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr; auto.
+    (** Prove that p is_init: NO!! We can only show that (valid_owner
+    p) is init *)
+    exploit valid_owner_place_footprint. eauto. eauto. intros (fp1 & ofs1 & fofs1 & PFP1 & VOFS1 & OFSEQ).
+    unfold dominators_must_init in POWN. simpl in POWN.
+    eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).
+    exploit MM. eauto.
+    eapply must_init_sound; eauto.        
+    (* valid owner's bmatch implies subfield bmatch *)
+    intros (BM & FULL).
+    assert (BM1: bmatch ce m b (Ptrofs.unsigned ofs) fp).
+    { rewrite OFSEQ. eapply valid_owner_bmatch. eauto. eauto. }
+    rewrite H in WTFP. (* inv BM1. *)
+    (* rewrite some redundant premises *)
+    simpl in H1. 
+    inv WTFP; simpl in *; try congruence. inv BM1.
+    inv BM1. rewrite H1 in TAG0. inv TAG0. rewrite Int.unsigned_repr in H2.
+    (* do some rewrting *)
+    rewrite H0 in CO. inv CO.
+    rewrite H2 in TAG. inv TAG. simpl.
+    rewrite H3 in FOFS. inv FOFS.
+    exists fp0. repeat apply conj.
+    (* get_loc_footprint_map *)
+    destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto. simpl.
+    rewrite H. repeat destruct ident_eq; simpl; try congruence.
+    destruct list_eq_dec; simpl; try congruence.
+    auto.
+    lia.
+    generalize (list_nth_z_range _ _ TAG).
+    generalize (COMP_LEN id0 co CO). 
+    lia.
+  (* Pderef *)
+  - inv WT.
+    unfold dominators_must_init in POWN. simpl in POWN.
+    eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).    
+    exploit IHEVAL; eauto.
+    intros (fp & PFP & WTFP & RAN0).
+    exploit MM. eauto.
+    eapply must_init_sound; eauto.
+    intros (BM & FULL). destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
+    inv WT2.
+    inv WTFP; inv BM; simpl in *; try congruence.
+    exists fp0. repeat apply conj.    
+    (* prove ofs' = 0 *)
+    inv H; simpl in *; try congruence.
+    simpl in *. inv H0. rewrite LOAD in H1. inv H1.
+    rewrite Ptrofs.unsigned_zero.    
+    (* get_loc_footprint_map *)
+    destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_app. eauto.
+    simpl. auto.
+    (* wt_footprint *)
+    simpl. auto.
+    (* range proof: first show that ofs' is zero *)
+    inv H; simpl in *; try congruence.
+    inv H0. rewrite LOAD in H1. inv H1. rewrite Ptrofs.unsigned_zero.
+    generalize (sizeof_in_range ty VTY). lia.
+Qed.
 
 (* The location from a not_shallow_prefix path must be in the
         footprint being gotten *)
@@ -3545,7 +3661,7 @@ Proof.
     (* p is not downcast *)
     + eapply andb_true_iff in CHECK. destruct CHECK as (DONW & MOVABLE).
       exploit eval_place_sound; eauto.
-      intros (pfp &  PFP & WTFP).
+      intros (pfp &  PFP & WTFP & RAN).
       (** TODO: wt_footprint implication *)
       (* location of p is sem_wt *)
       exploit movable_place_sem_wt; eauto.
@@ -3592,7 +3708,7 @@ Proof.
     (* p is downcast *)
     + do 2 rewrite andb_true_iff in CHECK. destruct CHECK as ((DOWN & INIT) & FULL).
       exploit eval_place_sound; eauto.
-      intros (fp1 & PFP & WTFP).
+      intros (fp1 & PFP & WTFP & RAN).
       exploit valid_owner_place_footprint; eauto.
       intros (fp2 & ofs1 & fofs1 & PFP1 & VOFS & OFSEQ).
       exploit MM. eauto. eapply must_init_sound; eauto.
@@ -3801,23 +3917,35 @@ Definition in_range (lo sz hi: Z) : Prop :=
   0 <= lo /\ lo + sz <= hi.
 
 
-(** May be very difficult  *)
+(** Load the interval bytes of a list of bytes *)
 Lemma loadbytes_interval: forall m b ofs sz ofs1 sz1 bytes,
     in_range ofs1 sz1 sz ->
     Mem.loadbytes m b ofs sz = Some bytes ->
     Mem.loadbytes m b (ofs + ofs1) sz1 = Some (list_interval bytes ofs1 sz1).
-Admitted.
-
-Lemma  co_alignof_pos: forall co,
-    co_alignof co > 0.
 Proof.
-  intros.
-  generalize (co_alignof_two_p co). intros (n & ALPOW).
-  rewrite ALPOW. rewrite two_power_nat_equiv.
-  generalize (Nat2Z.is_nonneg n). intros A.
-  exploit Z.pow_pos_nonneg. instantiate (1:= 2). lia.
-  eauto. lia.
+  intros. red in H. destruct H.
+  unfold list_interval.
+  destruct (Z.le_decidable 0 sz1).
+  - exploit Z.le_exists_sub. eapply H1.
+    intros (n & A1 & A2). rewrite Z.add_comm in A1. subst.
+    rewrite <- Z.add_assoc in H0.
+    exploit Mem.loadbytes_split; eauto. lia. lia.
+    intros (bytes1 & bytes2 & B1 & B2 & B3). subst.
+    exploit Mem.loadbytes_split. eapply B2. lia. lia.
+    intros (bytes3 & bytes4 & B4 & B5 & B6). subst.
+    erewrite B4. f_equal.
+    exploit Mem.loadbytes_length. eapply B1. intros LEN1.
+    exploit Mem.loadbytes_length. eapply B4. intros LEN2.
+    erewrite <- LEN1. erewrite <- LEN2.
+    erewrite skipn_app. rewrite Nat.sub_diag. simpl.
+    erewrite skipn_all. simpl.
+    erewrite firstn_app. rewrite Nat.sub_diag. simpl.
+    rewrite firstn_all. apply app_nil_end.    
+  - erewrite Z_to_nat_neg. simpl.
+    erewrite Mem.loadbytes_empty. auto.
+    lia. lia.
 Qed.
+
 
 Lemma sem_wt_loc_unchanged_on_copy: forall fp m1 m2 ty b1 ofs1 b2 ofs2 bytes,
     sem_wt_loc ce m1 fp b1 ofs1 ->
@@ -6701,7 +6829,7 @@ Proof.
     same. Do we need to prove that all the dominators of r is init to
     utilize mmatch? *)
     exploit eval_place_get_loc_footprint_map_equal; eauto.
-    intros (B1 & B2 & B3). subst.
+    intros (B1 & B2 & B3 & B4). subst.
     exploit A. auto. intros A2. inv A2.
     (* prove (b',ofs') = (b1,0) *)
     inv PVAL; simpl in *; try congruence. inv H.
@@ -6977,7 +7105,7 @@ Proof.
     (** sound_own after moving the place in the expression *)
     destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
     eapply move_place_sound. auto.     
-    intros (pfp & GFP & WTFP3).
+    intros (pfp & GFP & WTFP3 & PRAN).
     exploit (@list_equiv_norepet block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
