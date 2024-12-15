@@ -9,7 +9,7 @@ Require Import Globalenvs.
 Require Import Smallstep SmallstepLinking SmallstepLinkingSafe.
 Require Import LanguageInterface CKLR Invariant.
 Require Import Rusttypes Rustlight Rustlightown.
-Require Import RustIR RustIRcfg.
+Require Import RustOp RustIR RustIRcfg Rusttyping.
 Require Import Errors.
 Require Import InitDomain InitAnalysis.
 Require Import RustIRown MoveChecking.
@@ -77,8 +77,35 @@ Inductive wt_place : place -> Prop :=
 
 Inductive wt_pexpr: pexpr -> Prop :=
 | wt_Eunit:
-  wt_pexpr Eunit.
-
+  wt_pexpr Eunit
+| wt_Econst_int: forall n sz si,
+    wt_pexpr (Econst_int n (Tint sz si))
+| wt_Econst_float: forall f sz,
+    wt_pexpr (Econst_float f (Tfloat sz))
+| wt_Econst_single: forall f sz,
+    wt_pexpr (Econst_single f (Tfloat sz))
+| wt_Econst_long: forall n si,
+    wt_pexpr (Econst_long n (Tlong si))
+| wt_Eplace: forall p
+    (WTP1: wt_place p),
+    wt_pexpr (Eplace p (typeof_place p))
+| wt_Ecktag: forall p fid orgs id
+    (WTP1: typeof_place p = Tvariant orgs id),
+    wt_pexpr (Ecktag p fid)
+| wt_Eref: forall p org mut
+    (WTP1: wt_place p),
+    wt_pexpr (Eref org mut p (Treference org mut (typeof_place p)))
+| wt_Eunop: forall uop pe ty
+    (WTP1: wt_pexpr pe)
+    (WTP2: type_unop uop (typeof_pexpr pe) = OK ty),
+    wt_pexpr (Eunop uop pe ty)
+| wt_Ebinop: forall bop pe1 pe2 ty
+    (WTP1: wt_pexpr pe1)
+    (WTP2: wt_pexpr pe2)
+    (** FIXME: we use a very restrictive type checking for binary operation *)
+    (WTP2: type_binop bop (typeof_pexpr pe1) (typeof_pexpr pe2) = OK ty),
+    wt_pexpr (Ebinop bop pe1 pe2 ty).
+    
 Inductive wt_expr: expr -> Prop :=
 | wt_move_place: forall p
     (WT1: wt_place p)
@@ -605,12 +632,12 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 | wt_val_unit:
   sem_wt_val m (fp_scalar Tunit) (Vint Int.zero)
 | wt_val_int: forall sz si n,
-    Cop.cast_int_int sz si n = n ->
+    (* Cop.cast_int_int sz si n = n -> *)
     sem_wt_val m (fp_scalar (Tint sz si)) (Vint n)
-| wt_val_single: forall n,
-    sem_wt_val m (fp_scalar (Tfloat Ctypes.F32)) (Vsingle n)
-| wt_val_float: forall n,
-    sem_wt_val m (fp_scalar (Tfloat Ctypes.F64)) (Vfloat n)
+| wt_val_single: forall n sz,
+    sem_wt_val m (fp_scalar (Tfloat sz)) (Vsingle n)
+| wt_val_float: forall n sz,
+    sem_wt_val m (fp_scalar (Tfloat sz)) (Vfloat n)
 | wt_val_long: forall si n,
     sem_wt_val m (fp_scalar (Tlong si)) (Vlong n)
 | wt_val_box: forall b fp sz
@@ -734,6 +761,7 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> Prop :=
 
 End COMP_ENV.
 
+Global Hint Constructors sem_wt_val sem_wt_loc: sem_ty.
 
 (* Getter and Setter of footprint map  *)
 
@@ -3337,17 +3365,196 @@ Proof.
   (* enum *)
   - econstructor. eapply sem_wt_enum; eauto. auto.
 Qed.
+
+
+
+(* The location returned by get_loc_footprint is align with the type
+of the footprint *)
+Lemma get_loc_footprint_align: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ty1 ty2,
+    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
+    wt_footprint ce ty1 fp1 ->
+    wt_path ce ty1 phl ty2 ->
+    (* ofs1 must be aligned first *)
+    (alignof ce ty1 | ofs1) ->
+    (alignof ce ty2 | ofs2).
+Proof.
+  intros phl. cut (exists n, length phl = n); eauto. intros (n & LEN).
+  generalize dependent phl.
+  induction n; intros until ty2; intros GFP WTFP WTPH AL.
+  - eapply length_zero_iff_nil in LEN. subst.
+    simpl in *. inv GFP.
+    eapply wt_path_nil_inv in WTPH. subst. auto.
+  - exploit length_S_inv; eauto. 
+    intros (phl' & ph & A1 & LEN1). subst.
+    exploit get_loc_footprint_app_inv; eauto.
+    intros (b3 & ofs3 & fp3 & G1 & G2). simpl in *.
+    destruct ph.
+    + destruct fp3; try congruence.
+      inv G2. eapply Z.divide_0_r.
+    + destruct fp3; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p. inv G2.
+      eapply wt_path_field_inv in WTPH as (id1 & orgs & co & A1 & A2 & A3 & A4).
+      exploit get_wt_footprint_wt. eauto. eauto.
+      eapply get_loc_footprint_eq. eauto. intros WTFP1.
+      inv WTFP1.
+      exploit find_fields_some; eauto. intros (B1 & B2). subst.
+      exploit WT2; eauto.
+      intros (fty & FTY & FOFS & WTFP2).
+      rewrite A2 in CO. inv CO. rewrite A3 in FTY. inv FTY.
+      exploit IHn; eauto. intros AL1.
+      eapply Z.divide_add_r.
+      (* show that the alignment of field type can be divided by the
+      alignment of the struct *)      
+      eapply Z.divide_trans; eauto.      
+      simpl. rewrite A2.
+      erewrite co_consistent_alignof; eauto.
+      eapply field_alignof_divide_composite. eauto.
+      (* show that the field offset is aligned *)            
+      eapply field_offset_aligned; eauto.
+    + destr_fp_enum fp3 ty.
+      inv G2.
+      eapply wt_path_downcast_inv in WTPH as (id1 & orgs1 & co & A1 & A2 & A3 & A4 & A5).
+      inv A1.
+      exploit get_wt_footprint_wt. eauto. eauto.
+      eapply get_loc_footprint_eq. eauto. intros WTFP1.
+      inv WTFP1.
+      rewrite A3 in CO. inv CO. rewrite A4 in FTY. inv FTY.
+      exploit IHn; eauto. intros AL1.
+      eapply Z.divide_add_r.
+      (* show that the alignment of field type can be divided by the
+      alignment of the struct *)      
+      eapply Z.divide_trans; eauto.      
+      simpl. rewrite A3.
+      erewrite co_consistent_alignof; eauto.
+      eapply field_alignof_divide_composite. eauto.
+      (* show that the field offset is aligned *)            
+      eapply variant_field_offset_aligned; eauto.
+Qed.
+      
+  
+(* The location returned by get_loc_footprint is align with the type
+of the footprint *)  
+Lemma get_loc_footprint_map_align: forall le p fpm b ofs fp,
+    get_loc_footprint_map le (path_of_place p) fpm = Some (b, ofs, fp) ->
+    wf_env fpm ce le ->
+    wt_place le ce p ->
+    (alignof ce (typeof_place p) | ofs).
+Proof.
+  intros until fp. intros GFP WFENV WTP.      
+  destruct (path_of_place p) eqn: POP.
+  exploit wt_place_wt_local. eauto. rewrite local_of_paths_of_place. erewrite POP.
+  simpl. intros (b0 & ty0 & LE).
+  exploit wt_place_wt_path; eauto. intros WTPH.
+  simpl in GFP. rewrite LE in GFP.
+  destruct (fpm ! i) eqn: A; try congruence.
+  exploit wf_env_footprint; eauto.
+  intros (fp1 & A1 & A2). rewrite A in A1. inv A1.  
+  eapply get_loc_footprint_align; eauto.
+  eapply Z.divide_0_r.
+Qed.
+
+Lemma bmatch_scalar_type_sem_wt_loc: forall b ofs fp ty m,
+    scalar_type ty = true ->
+    bmatch ce m b ofs fp ->
+    wt_footprint ce ty fp ->
+    sem_wt_loc ce m fp b ofs
+    /\ fp = fp_scalar ty.
+Proof.
+  destruct ty; intros; simpl in *; try congruence.
+  all: inv H1; inv H0; split; econstructor; eauto.
+Qed.
+
+(* Tedious proof *)
+Lemma sem_wt_val_type_unop: forall uop ty1 ty2 m v1 v2,
+    type_unop uop ty1 = OK ty2 ->
+    Cop.sem_unary_operation uop v1 (to_ctype ty1) m = Some v2 ->
+    sem_wt_val ce m (fp_scalar ty1) v1 ->
+    sem_wt_val ce m (fp_scalar ty2) v2.
+Proof.
+  intros until v2. intros TY SEM WT1.
+  destruct uop; simpl in TY; simpl in SEM.
+  - unfold Cop.sem_notbool in SEM.
+    assert (A: ty2 = Tint Ctypes.IBool Ctypes.Signed) by (destruct (classify_bool ty1); inv TY; auto). 
+    assert (B: exists b, v2 = Val.of_bool b).
+    { destruct (Cop.bool_val v1 (to_ctype ty1) m); inv SEM. exists (negb b); auto. }
+    destruct B as [b B]. subst.
+    destruct b. econstructor. econstructor.
+  - unfold Cop.sem_notint in SEM; Ctyping.DestructCases; eauto with sem_ty.
+    inv WT1. simpl in *. try congruence.
+    inv WT1. simpl in *. try congruence.
+    simpl in *. try congruence.
+  (* neg *)
+  - unfold Cop.sem_neg in SEM; DestructCases; eauto with sem_ty.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    destruct si; inv H0; try constructor.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    inv WT1; simpl in *; try congruence. inv TY. econstructor.
+  - unfold Cop.sem_absfloat in SEM; DestructCases; eauto with sem_ty.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    destruct si; inv H0; try constructor.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
+    inv WT1; simpl in *; try congruence. inv TY. econstructor.
+Qed.
+
+(* tedious *)
+Lemma sem_wt_val_type_binop: forall bop ty1 ty2 ty v1 v2 v m,
+    type_binop bop ty1 ty2 = OK ty ->
+    Cop.sem_binary_operation_rust bop v1 (to_ctype ty1) v2 (to_ctype ty2) m = Some v ->
+    sem_wt_val ce m (fp_scalar ty1) v1 ->
+    sem_wt_val ce m (fp_scalar ty2) v2 ->
+    sem_wt_val ce m (fp_scalar ty) v.
+Admitted.
   
 (* The result of eval_expr is semantically well typed *)
 
 (* The footprint must be fp_emp in pexpr *)
-Lemma eval_pexpr_sem_wt: forall fpm m le own pe v init uninit universe
+Lemma eval_pexpr_sem_wt: forall pe fpm m le own v init uninit universe
     (MM: mmatch fpm ce m le own)
     (EVAL: eval_pexpr ce le m pe v)
     (SOUND: sound_own own init uninit universe)
-    (CHECK: move_check_pexpr init uninit universe pe = true),
+    (CHECK: move_check_pexpr init uninit universe pe = true)
+    (WTPE: wt_pexpr le ce pe)
+    (WFENV: wf_env fpm ce le),
     sem_wt_val ce m (fp_scalar (typeof_pexpr pe)) v.
-Admitted.
+Proof.  
+  induction pe; intros.
+  - simpl. inv EVAL. econstructor.
+  - simpl. inv EVAL. inv WTPE. econstructor. 
+  - simpl. inv EVAL. inv WTPE. econstructor.
+  - simpl. inv EVAL. inv WTPE. econstructor.
+  - simpl. inv EVAL. inv WTPE. econstructor.
+  - inv EVAL.
+    simpl in CHECK. destruct (scalar_type t) eqn: TYP; try congruence.
+    eapply andb_true_iff in CHECK as (DOM & INIT).
+    inv WTPE.
+    exploit eval_place_sound; eauto.
+    intros (pfp & GFP & WTFP & RAN).
+    exploit get_loc_footprint_map_align; eauto. intros AL.
+    (* show that (b, ofs) is sem_wt_loc *)
+    exploit MM. eauto. eapply must_init_sound; eauto.
+    intros (BM & FULL).
+    (* scalar typed bmatch is sem_wt_loc *)
+    exploit bmatch_scalar_type_sem_wt_loc; eauto. intros (WTLOC & FPEQ).
+    subst.
+    exploit deref_sem_wt_loc_sound; eauto.
+  - simpl. inv WTPE. inv EVAL.
+    destruct Int.eq. econstructor. econstructor.
+  (* reference: impossible *)
+  - simpl in CHECK. congruence.
+  - simpl. inv WTPE. simpl in CHECK. inv EVAL.
+    exploit IHpe; eauto.
+    intros WTVAL.
+    eapply sem_wt_val_type_unop; eauto.
+  - simpl. inv WTPE. simpl in CHECK. inv EVAL.
+    eapply andb_true_iff in CHECK as (C1 & C2).
+    exploit IHpe1; eauto. intros WTVAL1.
+    exploit IHpe2; eauto. intros WTVAL2.
+    eapply sem_wt_val_type_binop; eauto.
+  - inv EVAL.       
+Qed.
 
 (* used to prove the premise of [mmatch_move_place_sound] *)
 Lemma must_movable_exists_shallow_prefix: forall ce init uninit universe p,
@@ -3531,93 +3738,6 @@ Proof.
     (* wt_footprint remain if clear the footprint *)
     eapply wt_footprint_clear. auto.
   - eauto.
-Qed.
-
-
-(* The location returned by get_loc_footprint is align with the type
-of the footprint *)
-Lemma get_loc_footprint_align: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ty1 ty2,
-    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
-    wt_footprint ce ty1 fp1 ->
-    wt_path ce ty1 phl ty2 ->
-    (* ofs1 must be aligned first *)
-    (alignof ce ty1 | ofs1) ->
-    (alignof ce ty2 | ofs2).
-Proof.
-  intros phl. cut (exists n, length phl = n); eauto. intros (n & LEN).
-  generalize dependent phl.
-  induction n; intros until ty2; intros GFP WTFP WTPH AL.
-  - eapply length_zero_iff_nil in LEN. subst.
-    simpl in *. inv GFP.
-    eapply wt_path_nil_inv in WTPH. subst. auto.
-  - exploit length_S_inv; eauto. 
-    intros (phl' & ph & A1 & LEN1). subst.
-    exploit get_loc_footprint_app_inv; eauto.
-    intros (b3 & ofs3 & fp3 & G1 & G2). simpl in *.
-    destruct ph.
-    + destruct fp3; try congruence.
-      inv G2. eapply Z.divide_0_r.
-    + destruct fp3; try congruence.
-      destruct (find_fields fid fpl) eqn: FIND; try congruence.
-      repeat destruct p. inv G2.
-      eapply wt_path_field_inv in WTPH as (id1 & orgs & co & A1 & A2 & A3 & A4).
-      exploit get_wt_footprint_wt. eauto. eauto.
-      eapply get_loc_footprint_eq. eauto. intros WTFP1.
-      inv WTFP1.
-      exploit find_fields_some; eauto. intros (B1 & B2). subst.
-      exploit WT2; eauto.
-      intros (fty & FTY & FOFS & WTFP2).
-      rewrite A2 in CO. inv CO. rewrite A3 in FTY. inv FTY.
-      exploit IHn; eauto. intros AL1.
-      eapply Z.divide_add_r.
-      (* show that the alignment of field type can be divided by the
-      alignment of the struct *)      
-      eapply Z.divide_trans; eauto.      
-      simpl. rewrite A2.
-      erewrite co_consistent_alignof; eauto.
-      eapply field_alignof_divide_composite. eauto.
-      (* show that the field offset is aligned *)            
-      eapply field_offset_aligned; eauto.
-    + destr_fp_enum fp3 ty.
-      inv G2.
-      eapply wt_path_downcast_inv in WTPH as (id1 & orgs1 & co & A1 & A2 & A3 & A4 & A5).
-      inv A1.
-      exploit get_wt_footprint_wt. eauto. eauto.
-      eapply get_loc_footprint_eq. eauto. intros WTFP1.
-      inv WTFP1.
-      rewrite A3 in CO. inv CO. rewrite A4 in FTY. inv FTY.
-      exploit IHn; eauto. intros AL1.
-      eapply Z.divide_add_r.
-      (* show that the alignment of field type can be divided by the
-      alignment of the struct *)      
-      eapply Z.divide_trans; eauto.      
-      simpl. rewrite A3.
-      erewrite co_consistent_alignof; eauto.
-      eapply field_alignof_divide_composite. eauto.
-      (* show that the field offset is aligned *)            
-      eapply variant_field_offset_aligned; eauto.
-Qed.
-      
-  
-(* The location returned by get_loc_footprint is align with the type
-of the footprint *)  
-Lemma get_loc_footprint_map_align: forall le p fpm b ofs fp,
-    get_loc_footprint_map le (path_of_place p) fpm = Some (b, ofs, fp) ->
-    wf_env fpm ce le ->
-    wt_place le ce p ->
-    (alignof ce (typeof_place p) | ofs).
-Proof.
-  intros until fp. intros GFP WFENV WTP.      
-  destruct (path_of_place p) eqn: POP.
-  exploit wt_place_wt_local. eauto. rewrite local_of_paths_of_place. erewrite POP.
-  simpl. intros (b0 & ty0 & LE).
-  exploit wt_place_wt_path; eauto. intros WTPH.
-  simpl in GFP. rewrite LE in GFP.
-  destruct (fpm ! i) eqn: A; try congruence.
-  exploit wf_env_footprint; eauto.
-  intros (fp1 & A1 & A2). rewrite A in A1. inv A1.  
-  eapply get_loc_footprint_align; eauto.
-  eapply Z.divide_0_r.
 Qed.
   
   
@@ -4104,6 +4224,8 @@ Lemma assign_loc_sem_wt: forall fp ty m1 b ofs v m2
     location is calculated from l-value) *)                           
     (AS: assign_loc ce ty m1 b ofs v m2)
     (AL: (alignof ce ty | (Ptrofs.unsigned ofs)))
+    (* The value stored in the memory must be casted *)
+    (CAST: RustOp.val_casted v ty)
     (WT: sem_wt_val ce m1 fp v)
     (WTFP: wt_footprint ce ty fp)
     (* the assignment does not affect the footprint *)
@@ -4124,20 +4246,21 @@ Proof.
       inv WTFP.
       eapply sem_wt_base; eauto.
       eapply Mem.load_store_same. eauto.
+      simpl.
       erewrite load_result_int; eauto.
-      econstructor. auto.
+      econstructor. inv CAST. auto.
     (* single *)
     + inv AS. inv WTFP.
       eapply sem_wt_base; eauto.
       eapply Mem.load_store_same. eauto.
-      simpl in H. inv H. simpl.
+      simpl in H. inv CAST. inv H.
       econstructor.
     (* float *)
     + inv AS. inv WTFP.
       eapply sem_wt_base; eauto.
       eapply Mem.load_store_same. eauto.
-      simpl in H. inv H. simpl.
-      econstructor.      
+      simpl in H. inv CAST. inv H.
+      econstructor.
     (* long *)
     + inv AS. inv WTFP.
       eapply sem_wt_base; eauto.
@@ -4391,7 +4514,7 @@ Proof.
   - inv BM.
   - inv BM. econstructor; eauto.
     eapply Mem.load_unchanged_on. eauto. simpl. auto. eauto.
-    inv WT; econstructor. auto.
+    inv WT; econstructor. 
   (* fp_box *)
   - inv BM. econstructor.
     eapply Mem.load_unchanged_on; eauto. simpl. auto.
@@ -5456,6 +5579,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (TY: ty = typeof_place p)
     (AS: assign_loc ce ty m1 b ofs v m2)
     (AL: (alignof ce ty | Ptrofs.unsigned ofs))
+    (CAST: val_casted v ty)
     (WT: sem_wt_val ce m1 vfp v)
     (WFENV: wf_env fpm1 ce e)
     (WTFP: wt_footprint ce ty vfp)
@@ -7109,7 +7233,8 @@ Proof.
     exploit (@list_equiv_norepet block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
-    exploit assign_loc_sound; eauto.    
+    exploit cast_val_is_casted; eauto. intros CASTED.
+    exploit assign_loc_sound; eauto.
     intros (fpm3 & SFP & MM3 & NOREP3 & WFENV3).        
     (* construct get_IM and sound_own *)
     exploit analyze_succ. 1-3: eauto.
@@ -7193,7 +7318,7 @@ Proof.
     admit.
     (* wt_state *)
     admit.
-    
+
 Admitted.
 
   (* (* assign_variant sound *) *)

@@ -172,7 +172,7 @@ RUSTFRONTEND=Rusttypes.v Rustsyntax.v Rustlight.v RustIR.v\
   InitDomain.v InitAnalysis.v ElaborateDrop.v ElaborateDropProof.v\
   MoveChecking.v MoveCheckingSafe.v\
   Clightgen.v Clightgenspec.v Clightgenproof.v\
-  RustOp.v \
+  RustOp.v Rusttyping.v\
   # BorrowCheckDomain.v ReplaceOrigins.v BorrowCheckPolonius.v
   # BorrowCheckSafe.v
 

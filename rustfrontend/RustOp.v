@@ -84,16 +84,18 @@ Definition classify_cast (tfrom tto: type) : classify_cast_cases :=
   | Tint IBool _ , Tfloat F64 => cast_case_f2bool
   | Tint IBool _ , Tfloat F32 => cast_case_s2bool
   (* To [int] other than [_Bool] *)
-  | Tint sz2 si2 , Tint _ _  =>
-      if Archi.ptr64 then cast_case_i2i sz2 si2
-      else if intsize_eq sz2 I32 then cast_case_pointer
-      else cast_case_i2i sz2 si2
+  (** FIXME  *)
+  | Tint sz2 si2 , Tint _ _  => cast_case_i2i sz2 si2
+      (* if Archi.ptr64 then cast_case_i2i sz2 si2 *)
+      (* else if intsize_eq sz2 I32 then cast_case_pointer *)
+      (* else cast_case_i2i sz2 si2 *)
   | Tint sz2 si2 , Tlong _  => cast_case_l2i sz2 si2
   | Tint sz2 si2 , Tfloat F64  => cast_case_f2i sz2 si2
   | Tint sz2 si2 , Tfloat F32  => cast_case_s2i sz2 si2
   (* To [long] *)
-  | Tlong _ , Tlong _  =>
-      if Archi.ptr64 then cast_case_pointer else cast_case_l2l
+  (** FIXME  *)
+  | Tlong _ , Tlong _  => cast_case_l2l
+      (* if Archi.ptr64 then cast_case_pointer else cast_case_l2l *)
   | Tlong _ , Tint sz1 si1  => cast_case_i2l si1
   | Tlong si2 , Tfloat F64  => cast_case_f2l si2
   | Tlong si2 , Tfloat F32  => cast_case_s2l si2
@@ -108,6 +110,7 @@ Definition classify_cast (tfrom tto: type) : classify_cast_cases :=
   | Tfloat F32 , Tfloat F64  => cast_case_f2s
   (* To pointer types *)
   | Treference _ _ _ , Treference _ _ _ => cast_case_pointer
+  | Tbox _, Tbox _ => cast_case_pointer
   (* To struct or union types *)
   | Tstruct _ id2 , Tstruct _ id1  => cast_case_struct id1 id2
   | Tvariant _ id2 , Tvariant _ id1  => cast_case_union id1 id2
@@ -120,7 +123,7 @@ Definition sem_cast (v: val) (t1 t2: type) : option val :=
   match classify_cast t1 t2 with
   | cast_case_pointer =>
       match v with
-      | Vptr _ _ => Some v      
+      | Vptr _ _ => Some v
       | _ => None
       end
   | cast_case_i2i sz2 si2 =>
@@ -324,4 +327,27 @@ Lemma val_casted_inject_list: forall tyl vl1 vl2 j,
 Proof.
   induction tyl; intros vl1 vl2 j CAST INJ; inv CAST; inv INJ; econstructor; eauto.
   eapply val_casted_inject; eauto.
+Qed.
+
+
+Ltac DestructCases :=
+  match goal with
+  | [H: match match ?x with _ => _ end with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCases
+  | [H: match ?x with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCases
+  | [H: Some _ = Some _ |- _ ] => inv H; DestructCases
+  | [H: None = Some _ |- _ ] => discriminate H
+  | [H: @eq intsize _ _ |- _ ] => discriminate H || (clear H; DestructCases)
+  | [ |- val_casted (Vint (if ?x then Int.zero else Int.one)) _ ] =>
+       try (constructor; destruct x; reflexivity)
+  | [ |- val_casted (Vint _) (Tint ?sz ?sg) ] =>
+       try (constructor; apply (cast_int_int_idem sz sg))
+  | _ => idtac
+  end.
+
+
+Lemma cast_val_is_casted:
+  forall v ty ty' v' , sem_cast v ty ty' = Some v' -> val_casted v' ty'.
+Proof.
+  unfold sem_cast; intros.
+  destruct ty, ty'; simpl in H; DestructCases; try constructor; auto.
 Qed.
