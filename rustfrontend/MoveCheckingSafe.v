@@ -3203,6 +3203,99 @@ Proof.
     generalize (sizeof_in_range ty VTY). lia.
 Qed.
 
+(* Defererence of a location has no memory error *)
+Lemma deref_loc_no_mem_error: forall fp b ofs ty m
+        (WTFP: wt_footprint ce ty fp)
+        (BM: bmatch ce m b (Ptrofs.unsigned ofs) fp)
+        (ERR: deref_loc_mem_error ty m b ofs),
+        False.
+Proof.
+  intros. inv ERR.
+  destruct ty; intros; try (simpl in *; congruence).
+  - inv H. inv WTFP; inv BM. inv MODE.
+    eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM; simpl in *; try congruence.
+    inv H. eauto with mem.
+  - inv WTFP; inv BM. simpl in *.
+    inv WT.
+Qed.
+    
+Lemma dominators_must_init_deref1: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_deref2: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_downcast: forall init uninit universe p fid fty,
+    dominators_must_init init uninit universe (Pdowncast p fid fty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in *.
+  eapply forallb_forall. intros.
+  erewrite forallb_forall in H. eapply H.
+  eapply place_dominators_downcast_incl; auto.
+Qed.
+
+(** The evaluation of place has no memory error  *)
+
+(* This lemma requires eval_place_sound *)
+Lemma eval_place_no_mem_error: forall p m le own init uninit universe fpm
+    (MM: mmatch fpm ce m le own)
+    (ERR: eval_place_mem_error ce le m p)
+    (WFOWN: wf_env fpm ce le)
+    (WT: wt_place (env_to_tenv le) ce p)
+    (SOWN: sound_own own init uninit universe)
+    (POWN: dominators_must_init init uninit universe p = true),
+    False.
+Proof.
+  induction p; intros; inv ERR; inv WT.
+  - eapply IHp; eauto.
+  - eapply IHp. 1-5: eauto. 
+    eapply dominators_must_init_deref1. eauto.
+  - exploit dominators_must_init_deref1; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    (* show that the location (l, ofs) is bmatch so
+    deref_loc_mem_error is impossible *)
+    exploit MM. eauto.
+    eapply must_init_sound. eauto. eapply dominators_must_init_deref2; eauto.
+    intros (BM & FULL).
+    eapply deref_loc_no_mem_error; eauto.
+  - exploit dominators_must_init_downcast; eauto.
+  - exploit dominators_must_init_downcast; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    exploit valid_owner_place_footprint; eauto.
+    intros (fp' & ofs' & fofs & GFP & VOWN & EQ).
+    exploit MM. eapply GFP.
+    eapply must_init_sound. eauto.
+    unfold dominators_must_init in POWN. simpl in POWN.
+    eapply andb_true_iff in POWN. destruct POWN. auto.
+    intros (BM & FULL).
+    exploit valid_owner_bmatch; eauto.
+    intros BM1.
+    rewrite WT2 in *. inv A2. inv BM1.
+    simpl in *; try congruence. inv BM1.
+    eapply H3. rewrite EQ.
+    eapply Mem.load_valid_access; eauto.
+Qed.
+
 (* The location from a not_shallow_prefix path must be in the
         footprint being gotten *)
 Lemma get_loc_footprint_not_shallow_path: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
@@ -3365,7 +3458,6 @@ Proof.
   (* enum *)
   - econstructor. eapply sem_wt_enum; eauto. auto.
 Qed.
-
 
 
 (* The location returned by get_loc_footprint is align with the type
@@ -5867,9 +5959,17 @@ Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
     sem_wt_val ce m fp v1 ->
     wt_footprint ce ty1 fp ->
     RustOp.sem_cast v1 ty1 ty2 = Some v2 ->
-    sem_wt_val ce m fp v2 /\ wt_footprint ce ty2 fp.
-Admitted.
-
+    (* The scalar type in the footprint may be changed *)
+    exists fp', sem_wt_val ce m fp' v2
+           /\ wt_footprint ce ty2 fp'
+           /\ footprint_flat fp = footprint_flat fp'.
+Proof.
+  destruct ty1; intros until ty2; intros WTVAL WTFP CAST; inv WTFP; inv WTVAL;
+    destruct ty2; (unfold sem_cast in CAST; simpl in CAST; DestructCases); try congruence.
+  all: try (eexists; repeat apply conj; econstructor;eauto).
+  inv WTLOC.
+  econstructor; eauto.
+Qed.
 
 
 (* The location of the member is sem_wt_loc. It is used in the invariant of dropstate *)
@@ -7224,7 +7324,7 @@ Proof.
     exploit eval_expr_sem_wt; eauto.
     intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
     exploit sem_cast_sem_wt; eauto.
-    intros (WTVAL2 & WTFP2).
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
     exploit eval_place_sound; eauto.
     (** sound_own after moving the place in the expression *)
     destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.

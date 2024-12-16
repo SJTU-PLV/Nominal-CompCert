@@ -110,7 +110,9 @@ Definition classify_cast (tfrom tto: type) : classify_cast_cases :=
   | Tfloat F32 , Tfloat F64  => cast_case_f2s
   (* To pointer types *)
   | Treference _ _ _ , Treference _ _ _ => cast_case_pointer
-  | Tbox _, Tbox _ => cast_case_pointer
+  | Tbox ty1, Tbox ty2 =>
+      (* We do not allow casting box type with different inner type *)
+      if type_eq ty1 ty2 then cast_case_pointer else cast_case_default
   (* To struct or union types *)
   | Tstruct _ id2 , Tstruct _ id1  => cast_case_struct id1 id2
   | Tvariant _ id2 , Tvariant _ id1  => cast_case_union id1 id2
