@@ -20,9 +20,11 @@ Let liB1 := li_c.
 Let sg := AST.mksignature nil (AST.Tret AST.Tint) AST.cc_default.
 Let main_function_value_c := Vptr main_block_c Ptrofs.zero.
 Let query1 := cq main_function_value_c sg nil m0_c.
+
 Inductive reply1 : int -> c_reply -> Prop :=
   | reply1_intro: forall r m,
       reply1 r (cr (Vint r) m).
+
 Let s1 := Csem.semantics p.
 Let se1 := se.
 Let lts1' := (Smallstep.activate s1 se1).
@@ -39,9 +41,10 @@ Import Asm.
 
 Let s2 := Asm.semantics tp.
 Let ge_asm := Smallstep.globalenv (s2 se).
-Variable m0_asm : mem.
-Hypothesis Hinitial_state_asm :
-  Genv.init_mem (erase_program tp) = Some m0_asm.
+Variable m0_asm' m0_asm : mem.
+Variable dsp : block. (** The dummy block as stack pointer *)
+Hypothesis Hinitial_state_asm1: Genv.init_mem (erase_program tp) = Some m0_asm'.
+Hypothesis Hinitial_state_asm2: Mem.alloc m0_asm' 0 0 = (m0_asm, dsp).
 
 Let liA2 := li_asm.
 Let liB2 := li_asm.
@@ -49,32 +52,17 @@ Let rs0 :=
     (Pregmap.init Vundef)
     # PC <- (Genv.symbol_address ge_asm tp.(prog_main) Ptrofs.zero)
     # RA <- Vnullptr
-    # RSP <- Vnullptr.
+    # RSP <- (Vptr dsp Ptrofs.zero).
+
 Let query2 := (rs0, m0_asm).
+
 Inductive reply2: int -> (regset * mem) -> Prop :=
-  | reply2_intro: forall r rs m,
-      rs#PC = Vnullptr ->
+  | reply2_intro: forall r (rs:regset) m,
+      (* rs#PC = Vnullptr -> *)
       rs#RAX = Vint r ->
       reply2 r (rs, m).
 Let se2 := se.
 Let lts2' := (Smallstep.activate s2 se2).
-
-Ltac clean_destr :=
-  match goal with
-  | H: _ = left _ |- _ => clear H
-  | H: _ = right _ |- _ => clear H
-  end.
-
-Ltac destr :=
-  match goal with
-    |- context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
-  end; repeat clean_destr.
-
-Ltac destr_in H :=
-  match type of H with
-    context [match ?a with _ => _ end] => destruct a eqn:?; try intuition congruence
-  | _ => inv H
-  end; repeat clean_destr.
 
 Lemma erase_same: erase_program p = erase_program tp.
 Proof.
@@ -123,9 +111,9 @@ Proof.
   auto.
 Qed.
 
-Lemma m0_same: m0_c = m0_asm.
+Lemma m0_same: m0_c = m0_asm'.
 Proof.
-  rewrite erase_same, Hinitial_state_asm in Hinitial_state_c.
+  rewrite erase_same, Hinitial_state_asm1 in Hinitial_state_c.
   destruct Hinitial_state_c. inv H. auto.
 Qed.
 
@@ -140,24 +128,44 @@ Proof.
   destruct v. constructor; constructor.
 Qed.
 
-Lemma m0_inject: Mem.inject (Mem.flat_inj (Mem.support m0_c)) m0_c m0_asm.
+Lemma m0_inject_c: Mem.inject (Mem.flat_inj (Mem.support m0_c)) m0_c m0_c.
 Proof.
-  rewrite <- m0_same.
   apply (Genv.initmem_inject (erase_program p)).
-  destruct Hinitial_state_c. auto.
+  apply Hinitial_state_c.
+Qed.
+
+Lemma m0_inject_c_asm: Mem.inject (Mem.flat_inj (Mem.support m0_c)) m0_c m0_asm.
+Proof.
+  eapply Mem.alloc_right_inject.
+  2: apply Hinitial_state_asm2; eauto.
+  rewrite <- m0_same.   apply m0_inject_c.
+Qed.
+
+Let j' := fun b => if eq_block b dsp then Some (dsp ,0) else (Mem.flat_inj (Mem.support m0_c)) b.
+
+Lemma m0_inject_asm : Mem.inject j' m0_asm m0_asm.
+Proof.
+  generalize m0_inject_c. intro H. rewrite m0_same in H.  
+  exploit Mem.alloc_parallel_inject. eauto.
+  apply Hinitial_state_asm2. reflexivity. reflexivity.
+  intros (j'1 & m2' & dsp' & A &B & C & D& E).
+  generalize Hinitial_state_asm2. intro H2. rewrite A in H2. inv H2.
+  replace j' with j'1. eauto.
+  apply Axioms.functional_extensionality.
+  intros. unfold j'. destr. subst. eauto. rewrite m0_same. eapply E; eauto.
 Qed.
 
 Let wB : ccworld ccB.
   unfold ccB, cc_compcert, CA.cc_c_asm_injp. simpl.
   (* ro *)
-  split. split. exact se. split. exact se. exact m0_asm.
+  split. split. exact se. split. exact se. exact m0_c.
   (* wt_c *)
   split. split. exact se. split. exact se. exact sg.
   (* cc_c_asm_injp *)
   split. split. exact se. split.
-  simpl. econstructor. exact m0_inject. exact sg. exact rs0.
+  simpl. econstructor. exact m0_inject_c_asm. exact sg. exact rs0.
   (* cc_asm injp *)
-  econstructor. exact m0_inject.
+  econstructor. exact m0_inject_asm.
 Defined.
 
 Hypothesis closed:
@@ -175,7 +183,7 @@ Proof.
   unfold lts2', s2, se2. simpl. intros. destruct s.
   inversion H. eexists. econstructor.
   admit.
-Admitted.
+Abort.
 (*
 1. rs#RAX should be a integer
 2. rs#PC should be Vnullptr
@@ -200,11 +208,17 @@ Proof.
   eapply Genv.find_symbol_not_fresh; eauto.
 Qed.
 
+Lemma size_0: Conventions.size_arguments sg = 0.
+Proof.
+  unfold Conventions.size_arguments, Conventions1.loc_arguments. simpl.
+  destruct Archi.ptr64, Archi.win64; simpl; auto.
+Qed.
+
 Lemma Hmatch_query : match_query ccB wB query1 query2.
 Proof.
   simpl.
   exists query1. split.
-  constructor. rewrite <- m0_same. constructor. exact sound_memory_ro.
+  constructor. constructor. exact sound_memory_ro.
   exists query1. split.
   constructor. split. reflexivity. simpl. auto.
   exists query2. split.
@@ -216,13 +230,11 @@ Proof.
   rewrite main_block_genv.
   econstructor. unfold Mem.flat_inj. pose proof has_main_block. destr.
   rewrite Ptrofs.add_zero. auto.
-  intros. inv H.
+  intros. rewrite size_0 in H. inv H. extlia.
   cbn. unfold Vnullptr, Tptr. destruct Archi.ptr64; simpl; auto.
   cbn. unfold Vnullptr, Tptr. destruct Archi.ptr64; simpl; auto.
-  admit. (* rs0 RSP = Vnullptr *)
-  econstructor.
-  unfold Conventions.tailcall_possible, Conventions.size_arguments, Conventions1.loc_arguments. simpl.
-  destruct Archi.ptr64, Archi.win64; simpl; auto.
+  constructor. eapply Mem.valid_new_block. eapply Hinitial_state_asm2.
+  econstructor. apply size_0.
   unfold main_function_value_c. discriminate.
   discriminate.
   unfold cc_asm_match'. simpl. split; [|split].
@@ -230,20 +242,23 @@ Proof.
   destruct (PregEq.eq r RSP); [subst; rewrite Pregmap.gss|
   rewrite Pregmap.gso; auto; destruct (PregEq.eq r RA); [subst; rewrite Pregmap.gss|
   rewrite Pregmap.gso; auto; destruct (PregEq.eq r PC); [subst; rewrite Pregmap.gss|
-  rewrite Pregmap.gso; auto]]].
-  unfold Vnullptr. destr; constructor.
+                                                          rewrite Pregmap.gso; auto]]].
+  econstructor; eauto. unfold j'. destr. rewrite Ptrofs.add_zero. reflexivity.
   unfold Vnullptr. destr; constructor.
   unfold Genv.symbol_address. destr; econstructor.
   unfold ge_asm in Heqo. simpl in Heqo. rewrite main_block_genv in Heqo. inv Heqo.
-  unfold Mem.flat_inj. pose proof has_main_block. destr.
+  unfold j'. unfold Mem.flat_inj. pose proof has_main_block. destr.
+  pose proof Hinitial_state_asm2. inv e.
+  apply Mem.fresh_block_alloc in H0. rewrite <- m0_same in H0. elim H0. rewrite <- H1. eauto.
+  destr.
   rewrite Ptrofs.add_zero. auto.
   unfold rs0.
   rewrite Pregmap.gso; [|discriminate].
   rewrite Pregmap.gso; [|discriminate].
   rewrite Pregmap.gss.
   unfold ge_asm. simpl. unfold Genv.symbol_address. rewrite main_block_genv. discriminate.
-  rewrite <- m0_same at 2. constructor.
-Admitted. (*ok, just nullptr issue*)
+  constructor.
+Qed.
 
 Lemma Hmatch_reply1 : forall r r1 r2,
     match_reply ccB wB r1 r2 ->
@@ -254,8 +269,6 @@ Proof.
   destruct Hasm as [wj [Hw Hr]].
   destruct r2. inv Hr.
   constructor.
-  (*r0 PC -> rs' PC -> rs0 RA : the initial return address should be a valid pointer*)
-  admit.
   (*r0 RAX -> rs' RAX -> Vint r via the signature sg*)
   assert (tres = rs' RAX).
   { unfold tres. unfold sg. unfold CA.rs_getpair.
@@ -264,7 +277,7 @@ Proof.
   inv H8. generalize (H1 RAX).
   intro. simpl in H4. rewrite <- H3 in H4. rewrite <- H6 in H4.
   inv H4. reflexivity.
-Admitted.
+Qed.
 
 Lemma Hmatch_reply2 : forall r r1 r2,
     match_reply ccB wB r1 r2 ->
@@ -279,89 +292,70 @@ Proof.
   unfold CA.rs_getpair in tres. simpl in tres.
   unfold map_rpair in tres. simpl in tres.
   assert (tres = rs' RAX).
-  unfold tres. rewrite H3. simpl. reflexivity.
-  rewrite H4 in H8.
+  unfold tres. rewrite H2. simpl. reflexivity.
+  rewrite H3 in H7.
   admit. (*problem: res can be Vundef*)
-Admitted.
+Abort.
 
 Lemma Hmatch_reply : forall r r1 r2,
   match_reply ccB wB r1 r2 ->
   reply1 r r1 <-> reply2 r r2.
 Proof.
-  simpl. intros.
-  destruct H, H, H0, H0, H1, H1.
-  split; intro r'; inv r'.
+Abort.
 
-  inv H. inv H0. inv H1. inv H2. destruct r2.
-  inv H0. simpl in H2. inv H2.
-  unfold rs0 in H16.
-  rewrite Pregmap.gso in H16; [|discriminate]. rewrite Pregmap.gss in H16.
-  assert (r0 PC = Vnullptr). {
-    pose proof (INJ := H0 PC). rewrite H16 in INJ.
-    unfold Vnullptr. unfold Vnullptr in INJ.
-    destruct Archi.ptr64; inv INJ; auto.
-  }
-  constructor; auto.
-  unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
-  subst tres.
-  destr_in H10; simpl in H10; inv H10;
-  specialize (H0 RAX); rewrite <- H7 in H0; inv H0; auto.
+Lemma m0_se_support : Genv.genv_sup se = Mem.support m0_c.
+Proof.
+  unfold se. rewrite erase_same. rewrite m0_same.
+  eapply Genv.init_mem_genv_sup; eauto.
+Qed.
 
-  inv H2. inv H5. destruct x1. simpl in H6. inv H6.
-  specialize (H5 RAX). rewrite H4 in H5. inv H5.
-  inv H1. destruct r1.
-  inv H. destruct H1. inv H0. unfold sg, proj_sig_res in H5. simpl in H5.
-  assert (res = Vint r). {
-    unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
-    subst tres. destr_in H15; simpl in H15.
-    rewrite <- H8 in H15. inv H15. auto.
-    admit. (* Vundef *)
-    rewrite <- H8 in H15. inv H15. auto.
-    admit.
-  }
-  subst res. constructor.
-  inv H1. destruct r1.
-  inv H. inv H0.
-  unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
-  subst tres. destr_in H15; simpl in H15; rewrite <- H8 in H15; inv H15.
-  admit.
-  admit.
-Admitted.
-
+Lemma match_se_initial : Genv.match_stbls (Mem.flat_inj (Mem.support m0_c)) se se.
+Proof.
+  pose proof m0_se_support as SUP.
+  constructor; intros; eauto.
+  - rewrite <- SUP. unfold Mem.flat_inj. rewrite pred_dec_true; eauto.
+  - rewrite <- SUP. exists b2. unfold Mem.flat_inj. rewrite pred_dec_true; eauto.
+  - unfold Mem.flat_inj in H. destruct Mem.sup_dec in H; inv H. reflexivity.
+  - unfold Mem.flat_inj in H. destruct Mem.sup_dec in H; inv H. reflexivity.
+  - unfold Mem.flat_inj in H. destruct Mem.sup_dec in H; inv H. reflexivity.
+Qed.
+    
 Lemma Hmatch_senv : match_senv ccB wB se1 se2.
 Proof.
+  pose proof m0_se_support as SUP.
+  pose proof Hinitial_state_asm2 as ALLOC.
+  apply Mem.fresh_block_alloc in ALLOC as FRESH; eauto.
+  rewrite <- m0_same in FRESH.
+  assert (SUPINCL: Mem.sup_include (Mem.support m0_c) (Mem.support m0_asm)).
+  apply Mem.support_alloc in ALLOC. rewrite ALLOC. red.
+  intros. apply Mem.sup_incr_in2; eauto. rewrite <- m0_same. eauto.
   unfold ccB, cc_compcert, se1, se2. simpl.
   split; [|split; [|split]].
-
   constructor. auto.
   constructor. auto.
-
-  destruct Hinitial_state_c as (INIT & ? & ?).
-  unfold se. unfold Mem.flat_inj.
+  constructor. apply match_se_initial; eauto.
+  rewrite SUP. eauto.
+  rewrite SUP. eauto.
   constructor.
-  split; try erewrite Genv.init_mem_genv_sup by eauto; auto; intros.
-  exists b1. destr.
-  exists b2. destr.
-  1,2,3:destr_in H1.
-  1,2:erewrite Genv.init_mem_genv_sup by eauto. 2:rewrite m0_same.
-  1,2:apply Mem.sup_include_refl.
-
-  destruct Hinitial_state_c as (INIT & ? & ?).
-  unfold se. unfold Mem.flat_inj.
-  constructor.
-  split; try erewrite Genv.init_mem_genv_sup by eauto; auto; intros.
-  exists b1. destr.
-  exists b2. destr.
-  1,2,3:destr_in H1.
-  1,2:erewrite Genv.init_mem_genv_sup by eauto. 2:rewrite m0_same.
-  1,2:apply Mem.sup_include_refl.
+  eapply Genv.match_stbls_incr. apply match_se_initial.
+  red. intros. unfold j'. destr. subst b. unfold Mem.flat_inj in H. destr_in H.
+  intros. unfold j' in H0. destr_in H0. subst b1. inv H0.
+  rewrite SUP. split; eauto.
+  rewrite SUP. eauto.
+  rewrite SUP. eauto.
 Qed.
+
+(* Lemma open_fsim : Smallstep.forward_simulation ccA ccB s1 s2.
+Proof.
+  exploit clight_semantic_preservation.
+  apply transf_c_program_match. auto. *)
 
 Lemma open_simulation: Smallstep.backward_simulation ccA ccB s1 s2.
 Proof.
   apply c_semantic_preservation, transf_c_program_match. auto.
 Qed.
 
+(*
 Lemma compcert_close_sound :
   backward_simulation (L1 query1 reply1 s1 se1) (L2 query2 reply2 s2 se2).
 Proof.
@@ -369,13 +363,21 @@ Proof.
     closed2, reply_sound2, Hvalid, Hmatch_query, Hmatch_senv, open_simulation.
   intros. eapply Hmatch_reply2; eauto.
 Qed.
+ *)
 
 Lemma compcert_close_sound_forward : 
   forward_simulation (L1 query1 reply1 s1 se2) (L2 query2 reply2 s2 se2).
 Proof.
   eapply close_sound_forward; eauto.
   exact Hvalid. eapply Hmatch_query; eauto. exact Hmatch_senv.
-  intros. eapply Hmatch_reply1; eauto.
-  admit.
+  intros.
+  eapply Hmatch_reply1; eauto.
+  admit. (*The missing Open Sim *)
 Abort.
 End CLOSE_COMPCERT.
+(*
+Lemma loading_forward: forall L1 L2,
+    Smallstep.forward_simulation cc_compcert cc_compcert L1 L2 ->
+    exists CL1 CL2,
+    forward_simulation CL1 CL2.
+*)

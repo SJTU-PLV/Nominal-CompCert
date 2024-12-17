@@ -1807,6 +1807,7 @@ Definition close_semantics :=
 
 End CLOSE_SEMANTICS.
 
+
 Section CLOSE_SOUND.
 
 Variable liA1 liB1 : language_interface.
