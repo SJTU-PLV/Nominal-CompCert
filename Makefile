@@ -103,8 +103,7 @@ COMMON=Errors.v AST.v Linking.v \
   Invariant.v \
   CallconvAlgebra.v \
   SmallstepClosed.v \
-
-# Behaviors.v
+  Behaviors.v \
 # Determinism.v
 
 # Compcert Kripke Logical Relations
@@ -180,7 +179,7 @@ endif
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v CallConv.v CA.v Compiler.v
+DRIVER=Compopts.v CallConv.v CA.v Compiler.v CompilerClosed.v
 
 # Complements.v
 
