@@ -1563,65 +1563,6 @@ Proof.
     red. intros. eapply Mem.perm_unchanged_on; eauto.
 Qed.
 
-
-Lemma drop_glue_children_types_last: forall tys ty hty,
-    drop_glue_children_types ty = hty :: tys ->
-    ty = last tys hty.
-Proof.
-  destruct tys.
-  simpl. intros.
-  destruct ty; simpl in H; inv H; auto.
-  destruct (drop_glue_children_types ty). simpl in *. inv H1. auto.
-  simpl in H1. inv H1. exfalso.
-  eapply app_cons_not_nil. eauto.
-  intros.
-  intros. destruct ty; simpl in H; inv H.
-  assert (last (hty::t::tys) hty = Tbox ty).
-  rewrite <- H1. eapply last_last.
-  simpl in *. auto.
-Qed.
-
-
-Lemma app_not_nil {A: Type}:  forall (l1 l2: list A) (a b: A),
-    l1 ++ (a :: nil) = b :: l2 ->
-    (a = b /\ l1 = nil /\ l2 = nil)
-    \/ (exists l1', l1 = b :: l1' /\ l2 = l1' ++ (a::nil)).
-Proof.
-  induction l1; simpl; intros.
-  - destruct l2; inv H. auto.
-  - inv H. destruct l1.
-    + exploit (IHl1 nil a0 a0). auto.
-      intros [(A1 & A2 & A3)|(A3 & A4 & A5)]; subst.
-      * right. eauto.
-      * inv A4.
-    + exploit (IHl1 (l1 ++ [b]) b a). auto.
-      intros [(A1 & A2 & A3)|(A3 & A4 & A5)]; subst.
-      inv A2. inv A4.
-      right. exists (a::A3). auto.
-Qed.
-
-(* The first element must be struct/variant/box, the rest of the list must be box *)
-Lemma drop_glue_children_types_wf: forall ty tys hty,
-    drop_glue_children_types ty = hty :: tys ->
-    ((exists orgs id, hty = Tstruct orgs id) \/
-       (exists orgs id, hty = Tvariant orgs id) \/
-       (exists ty', hty = Tbox ty'))
-    /\ (forall t, In t tys -> exists ty', t = Tbox ty').
-Proof.
-  induction ty; simpl; intros; try congruence.
-  - eapply app_not_nil in H.
-    destruct H as [(A1 & A2 & A3)| (A1 & A2 & A3)]; subst.
-    + split. eauto. intros. inv H.
-    + exploit IHty. eauto. intros (B1 & B2).
-      split. auto.
-      intros. eapply in_app in H. destruct H; eauto.
-      inv H; eauto. inv H0.
-  - inv H. split; eauto.
-    intros. inv H.
-  - inv H. split; eauto.
-    intros. inv H.
-Qed.
-    
 Lemma match_dropmemb_stmt_struct_member: forall id arg fid fty,
     match_dropmemb_stmt id arg Struct (type_to_drop_member_state ge fid fty) (drop_glue_for_member ce dropm arg (Member_plain fid fty)).
 Proof.

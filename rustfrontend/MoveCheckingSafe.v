@@ -6189,8 +6189,16 @@ Inductive deref_loc_rec_footprint (m: mem) (b: block) (ofs: Z) (fty: type) (fp: 
 (*           b1 = b2 /\ ofs1 = Ptrofs.repr ofs2. *)
 (* Admitted. *)
 
+(* This definition is about the invariant of the drop_member_state
+used in the evaluation of Dropstate (i.e., the evaluation of the drop
+glue). It says that the drop_member_state has the footprint fp if the
+composite resides in the end of the box chain is sem_wt_loc w.r.t the
+footprint obtained by recusively derefercing fp
+(deref_loc_rec_footprint). deref_loc_rec_footprint also checks the
+validity (e.g., Freeable) of the memory locaiton it dereferences. *)
 Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : option drop_member_state -> Prop :=
 | drop_member_fp_none:
+  (* We do not care fp is fp_emp or not. We just drop it from the fpf_drop *)
     drop_member_footprint m co b ofs fp None
 | drop_member_fp_comp_struct: forall fid fofs fty tyl b1 ofs1 fp1 compty
     (STRUCT: co.(co_sv) = Struct)
@@ -6220,7 +6228,47 @@ Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp
     drop_member_footprint m co b ofs fp (Some (drop_member_box fid fty tyl))
 .
 
+Lemma sound_drop_glue_children_types: forall fp fty ty tys b ofs m
+   (WTFP: wt_footprint ce fty fp)
+   (WTLOC: sem_wt_loc ce m fp b ofs)
+   (CHILD: drop_glue_children_types fty = ty :: tys),
+  exists b1 ofs1 fp1,
+    deref_loc_rec_footprint m b ofs fty fp tys b1 ofs1 ty fp1
+    /\ sem_wt_loc ce m fp1 b1 ofs1
+    /\ wt_footprint ce ty fp1.
+Admitted.
 
+Lemma sound_type_to_drop_member_state: forall fid fty fofs fp m b ofs co
+    (WTFP: wt_footprint ce fty fp)
+    (WTLOC: sem_wt_loc ce m fp b (ofs + fofs))
+    (FOFS: match co_sv co with
+           | Struct =>
+               field_offset ce fid (co_members co) = OK fofs
+           | TaggedUnion =>
+               variant_field_offset ce fid (co_members co) = OK fofs
+           end) ,
+    drop_member_footprint m co b ofs fp (type_to_drop_member_state ge fid fty).
+Proof.
+  intros. unfold type_to_drop_member_state.
+  destruct (own_type ge fty); try constructor.
+  destruct (drop_glue_children_types fty) eqn: TYS.
+  econstructor.
+  exploit drop_glue_children_types_wf; eauto.
+  intros (A1 & A2).
+  destruct A1 as [ (orgs & i & ?)|[(orgs & i & ?) | (ty' & ?)] ]; subst.
+  - destruct ((genv_dropm ge) ! i) eqn: DM.
+    2: constructor.
+    destruct (co_sv co) eqn: COSV.
+    + exploit sound_drop_glue_children_types; eauto.
+      intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
+      eapply drop_member_fp_comp_struct; eauto.
+      
+      
+  - destruct ((genv_dropm ge) ! i) eqn: DM.
+    admit.
+    constructor.
+  - 
+  
 Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
   match k with
   | Kcall p _ _ _ _ =>
@@ -7142,6 +7190,7 @@ Proof.
   destruct a. destruct p.
   f_equal. eapply IHfpl.
 Qed.
+    
 
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
@@ -7488,7 +7537,31 @@ Proof.
     repeat destruct H; auto. right. right. left. eapply EQUIV1. eapply in_app; eauto.
     (* wt_state *)
     admit.
-  - admit.
+  (* step_dropplace_enum *)
+  - inv SOUND. inv SDP. 
+    exploit sound_split_fully_own_place_eval_place; eauto.
+    intros (b3 & ofs3 & EVALR & A).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (B1 & B2 & B3 & B4). subst.
+    exploit A. auto. intros A2. inv A2.
+    (* show that fp1 is fp_enum *)
+    erewrite PTY in *. inv WTFP; inv WTLOC. simpl in WF0. congruence.
+    (* some rewrites *)
+    unfold ce in CO.
+    rewrite SCO in CO. inv CO.
+    simpl in TAG. rewrite TAG in TAG1. inv TAG1.
+    rewrite Int.unsigned_repr in MEMB.
+    (* show that tag is in range *)
+    2: { generalize (list_nth_z_range _ _ TAG0).
+         generalize (COMP_LEN id co0 SCO). lia. }
+    rewrite MEMB in TAG0. inv TAG0.
+    (* show that *)
+    rewrite 
+    split.
+    eapply sound_dropstate with (fp := ; eauto.
+    type_to_drop_member_state
+
+    
 Admitted.
 
 Lemma norepet_fpf_func_internal1: forall le fpm fpf,
@@ -7710,7 +7783,7 @@ Proof.
   (** NOTEASY: step_to_dropplace sound *)
   - inv SOUND. inv STMT. simpl in TR.
     simpl_getIM IM.
-    (* Properties about own_env (make it a lemma) *)
+    (** TODO: Properties about own_env (make it a lemma) *)
     exploit split_drop_place_meet_spec; eauto.
     intros SPLIT_SPEC.
     (* make ORDER_SPEC a lemma *)
@@ -7738,7 +7811,10 @@ Proof.
     eauto. eauto. eauto. eauto.
     simpl. eauto.
     (* rsw_acc *)
-    instantiate (1 := sg). admit.
+    instantiate (1 := sg).
+    eapply rsw_acc_trans; eauto. simpl.
+    eapply rsw_acc_refl.
+    (* sound_drop_place_state *)
     econstructor.
     eauto.
     eauto.

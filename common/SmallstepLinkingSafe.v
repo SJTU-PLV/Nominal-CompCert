@@ -914,7 +914,94 @@ End SAFETYK_PRESERVATION.
 (** *End of Experiment code: safety preservation using type preserving method *)
 
 
+(** *Experiment code about inductive defined open forward simulation  *)
 
+Section FSIMK.
+
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
+
+Context (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
+  (order: index -> index -> Prop).
+  (* (match_states: index -> state1 -> state2 -> Prop). *)
+
+
+Inductive fsimk : nat -> nat -> index -> state1 -> state2 -> Prop :=
+| fsimk_step: forall i s1 s2 s1' t k n,
+    Step L1 s1 t s1' ->
+    (forall t' s1'',
+        Step L1 s1 t' s1'' ->
+        exists i' s2' m,
+          (starN (step L2) (globalenv L2) (S m) s2 t' s2'
+           /\ fsimk n (Nat.sub k (S m)) i' s1'' s2')
+          \/ (starN (step L2) (globalenv L2) m s2 t' s2'
+             /\ order i' i
+             /\ fsimk n (Nat.sub k m) i' s1'' s2')) ->
+    fsimk (S n) k i s1 s2
+| fsimk_external: forall i s1 s2 w q1 q2 k n,
+    at_external L1 s1 q1 ->
+    at_external L2 s2 q2 ->
+    match_query ccA w q1 q2 ->
+    match_senv ccA w se1 se2 ->
+    (forall r1 r2 s1',
+        match_reply ccA w r1 r2 ->
+        after_external L1 s1 r1 s1' ->
+        exists i' s2', after_external L2 s2 r2 s2'                  
+                  /\ fsimk n k i' s1' s2') ->
+    fsimk (S n) (S k) i s1 s2
+| fsimk_final: forall s1 s2 r1 r2 i n k,
+    final_state L1 s1 r1 ->
+    final_state L2 s2 r2 ->
+    match_reply ccB wB r1 r2 ->
+    fsimk n k i s1 s2
+| fsimk_stuck: forall n k i s1 s2,
+    ~ not_stuck L1 s1 ->
+    fsimk n k i s1 s2
+.
+
+End FSIMK.
+
+Section SAFEK_PRESERVATION.
+
+Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2).
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
+Context (IA1 : invariant liA1) (IB1: invariant liB1).
+
+Hypothesis L1_determ: open_determinate L1.
+Hypothesis L2_determ: open_determinate L2.
+
+Section FSIMK.
+  
+Context (se1 se2: Genv.symtbl) (ccwB: ccworld ccB) (wB1: inv_world IB1) (index: Type)
+  (order: index -> index -> Prop)
+  (match_states: index -> (state L1) -> (state L2) -> Prop).
+
+Context (MENV: match_senv ccB ccwB se1 se2).
+
+Let fsimk n k i s1 s2 := fsimk ccA ccB se1 se2 ccwB (L1 se1) (L2 se2) index order n k i s1 s2. 
+
+Lemma safak_preserved_under_fsimk: forall n k i s1 s2,
+    fsimk n k i s1 s2 ->
+    safek se1 (L1 se1) IA1 IB1 (SIF se1) wB1 (S n) s1 ->
+    safek se2 (L2 se2) (invcc IA1 ccA) (invcc IB1 ccB) (SIF se1) (wB1, ccwB) k s2.
+Proof.
+  induction n; intros until s2; intros FSIM SAFE.
+  - inv FSIM.
+    admit.
+    admit.
+  - inv FSIM.
+    + 
+    (* use receptive to prove that t1**t2 must have length less than
+    1. So we can use SAFE to prove that any step s1 take is also
+    safek *)
+Admitted.    
+
+End FSIMK.
+
+End SAFEK_PRESERVATION.
+(** *end of Experiment code *)
 
 (** * The following code is experiment code about safek preservation *)
 
