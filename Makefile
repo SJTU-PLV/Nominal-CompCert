@@ -102,7 +102,7 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
-  SmallstepClosed.v \
+  SmallstepClosed.v Loading.v \
   Behaviors.v \
 # Determinism.v
 

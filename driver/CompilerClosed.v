@@ -1,6 +1,6 @@
 Require Import Coqlib Errors Events Globalenvs Ctypes AST Memory Values Integers.
 Require Import LanguageInterface.
-Require Import Smallstep SmallstepClosed.
+Require Import Smallstep SmallstepClosed Loading.
 Require Import ValueAnalysis.
 Require Import Compiler.
 
@@ -373,8 +373,11 @@ Proof.
   intros.
   eapply Hmatch_reply1; eauto.
   admit. (*The missing Open Sim *)
-Abort.
+Admitted.
 End CLOSE_COMPCERT.
+
+
+
 (*
 Lemma loading_forward: forall L1 L2,
     Smallstep.forward_simulation cc_compcert cc_compcert L1 L2 ->
