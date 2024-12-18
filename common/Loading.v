@@ -83,17 +83,19 @@ Lemma Hvalid : Genv.valid_for (skel s1) se1.
 Proof. apply initial_valid_for. Qed.
 
 (** The construction of initial world *)
-Variable wB : ccworld ccB.
-
-Hypothesis Hmatch_senv : match_senv ccB wB se1 se2.
+(* Variable wB : ccworld ccB.
+ 
+Hypothesis Hmatch_senv : match_senv ccB wB se1 se2. *)
 
 Section FORWARD.
 
 Hypothesis Hmatch_query_forward : forall q1,      
     query1 q1 ->
-    exists q2, match_query ccB wB q1 q2 /\ query2 q2.
+    exists wB q2, match_query ccB wB q1 q2 /\
+               match_senv ccB wB se1 se2 /\
+               query2 q2.
   
-Hypothesis Hmatch_reply_forward : forall r r1 r2,
+Hypothesis Hmatch_reply_forward : forall r r1 r2 wB,
   match_reply ccB wB r1 r2 ->
   reply1 r r1 -> reply2 r r2.
 
@@ -103,20 +105,27 @@ Proof.
   intro open_simulation.
   unfold Smallstep.forward_simulation in open_simulation.
   inv open_simulation. inv X.
-  specialize (fsim_lts se1 se2 wB Hmatch_senv Hvalid). inv fsim_lts.
+  (* specialize (fsim_lts se1 se2 wB Hmatch_senv Hvalid). inv fsim_lts. *)
   unfold L1, L2, close_semantics.
-  do 2 econstructor; simpl; eauto.
+  econstructor. instantiate (1:= fun i s1 s2 => exists wB, fsim_match_states se1 se2 wB i s1 s2 /\ match_senv ccB wB se1 se2).
+  econstructor; simpl; eauto.
   - (* initial *)
     intros s1' [q1 [q1valid INI]]. exploit Hmatch_query_forward; eauto.
-    intros [q2 [MATCH_QUERT q2valid]].
+    intros (wB & q2 & MQ & MS & q2valid).
+    specialize (fsim_lts se1 se2 wB MS Hvalid). inv fsim_lts.
     exploit fsim_match_initial_states0; eauto.
     intros (i & s2' & INI' & FM).
-    do 2 eexists. split; eauto.
+    do 2 eexists. split; simpl; eauto.
   - (* match final state *)
-    intros i s1' s2' r MS (r1 & R1 & FINAL).
+    intros i s1' s2' r [wB [Mstate MS]] (r1 & R1 & FINAL).
+    specialize (fsim_lts se1 se2 wB MS Hvalid). inv fsim_lts.
     exploit fsim_match_final_states0; eauto. intros (r2 & FINAL' & MATCH_REPLY).
     eexists. split; eauto.
-  - eapply match_senv_public_preserved; eauto.
+  - intros s1' t s1'' STEP i s2' [wB [Mstate MS]].
+    specialize (fsim_lts se1 se2 wB MS Hvalid). inv fsim_lts.
+    exploit fsim_simulation0; eauto. intros (i' & s2'' & STEP' & MS').
+    exists i'. eexists. split; eauto.
+  - unfold se. rewrite fsim_skel. reflexivity.
 Qed.
 
 End FORWARD.
@@ -129,7 +138,6 @@ Proof.
   unfold safe, Smallstep.safe, L1, lts1, close_semantics. simpl. intros.
   specialize (H _ H0) as [(r & r0 & REPLY & FS)|(t & s'' & STEP)]; eauto.
 Qed.
-
 
 Hypothesis closed2 : forall s q, Smallstep.safe lts2 s -> ~ at_external lts2 s q.
 

@@ -1,9 +1,26 @@
 Require Import Coqlib Errors Events Globalenvs Ctypes AST Memory Values Integers.
-Require Import LanguageInterface.
+Require Import LanguageInterface Asm.
 Require Import Smallstep SmallstepClosed Loading.
 Require Import ValueAnalysis.
 Require Import Compiler.
 
+(** Instantiation of [close_sound_forward] for simulation using the simconv [cc_compcert] *)
+Section CLOSE_FORWARD.
+  
+Variable L_c : semantics li_c li_c.
+Variable L_a : semantics li_asm li_asm.
+
+Hypothesis FSIM_CC : forward_simulation cc_compcert cc_compcert L_c L_a.
+
+Let skel_c := skel L_c.
+
+
+Theorem match_senv : match_senv cc_compcert
+Definition 
+
+
+  
+(*
 Section CLOSE_COMPCERT.
 Import Closed.
 
@@ -375,7 +392,7 @@ Proof.
   admit. (*The missing Open Sim *)
 Admitted.
 End CLOSE_COMPCERT.
-
+*)
 
 
 (*
