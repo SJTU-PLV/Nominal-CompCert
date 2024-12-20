@@ -8,17 +8,84 @@ Require Import Compiler.
 Section CLOSE_FORWARD.
   
 Variable L_c : semantics li_c li_c.
-Variable L_a : semantics li_asm li_asm.
+Variable L_asm : semantics li_asm li_asm.
 
-Hypothesis FSIM_CC : forward_simulation cc_compcert cc_compcert L_c L_a.
+Hypothesis FSIM_CC : forward_simulation cc_compcert cc_compcert L_c L_asm.
 
 Let skel_c := skel L_c.
+Let main_id_c := prog_main skel_c.
 
+Let skel_asm := skel L_asm.
+Let main_id_asm := prog_main skel_asm.
+
+Let se := Genv.symboltbl skel_c.
+Let tse := Genv.symboltbl skel_asm.
+
+Definition main_sg := AST.mksignature nil (AST.Tret AST.Tint) AST.cc_default.
+
+Inductive initial_c : query li_c -> Prop :=
+|initial_c_intro: forall m main_b,
+    Genv.init_mem skel_c = Some m ->
+    Genv.find_symbol se main_id_c = Some main_b ->
+    initial_c (cq (Vptr main_b Ptrofs.zero) main_sg nil m).
+
+(*maybe we need to change this for backward*)
+Inductive final_c : int -> reply li_c -> Prop :=
+|final_c_intro : forall r m,
+    final_c r (cr (Vint r) m).
+
+Definition initial_regset (pc : val) (sp: val):=
+    (Pregmap.init Vundef) # PC <- pc
+                          # RA <- Vnullptr
+                          # RSP <- sp.
+
+Inductive initial_asm : query li_asm -> Prop :=
+|initial_asm_intro : forall m0 m main_b bsp rs,
+    Genv.init_mem skel_asm = Some m0 ->
+    Mem.alloc m0 0 0 = (m, bsp) ->
+    Genv.find_symbol tse main_id_asm = Some main_b ->
+    rs = initial_regset (Vptr main_b Ptrofs.zero) (Vptr bsp Ptrofs.zero) ->
+    initial_asm (rs,m).
+
+Inductive final_asm : int -> reply li_asm -> Prop :=
+|final_asm_intro : forall r rs m,
+     rs # PC = Vnullptr ->
+     rs # RAX = Vint r ->
+    final_asm r (rs,m).
+    
+  
+Lemma match_initial_forward_ca : forall q1,
+    initial_c q1 -> exists wB q2,
+      match_query cc_compcert wB q1 q2 /\
+        match_senv cc_compcert wB se tse /\
+        initial_asm q2.
+Proof.
+Admitted.
+
+Lemma match_final_forward_ca : forall r r1 r2 wB,
+    match_reply cc_compcert wB r1 r2 ->
+    final_c r r1 -> final_asm r r2.
+Proof.
+Admitted.
+
+Definition close_c := close_semantics L_c initial_c final_c.
+Definition close_asm := close_semantics L_asm initial_asm final_asm.
+Theorem closed_forward_simulation_cc_compcert :
+  Closed.forward_simulation close_c close_asm.
+Proof.
+  eapply close_sound_forward.
+  exact match_initial_forward_ca.
+  exact match_final_forward_ca.
+  exact FSIM_CC.
+Qed.
+  
 End CLOSE_FORWARD.
-(* Theorem match_senv : match_senv cc_compcert
-Definition  *)
 
-
+(* Checking whether the defs and lemmas from are typed as we want in the outside of the Section.
+Check close_c.
+Check close_asm.
+Check closed_forward_simulation_cc_compcert.
+*)
   
 (*
 Section CLOSE_COMPCERT.
