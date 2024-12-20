@@ -645,7 +645,11 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
     (* The value stored in (b,0) has type ty and occupies footprint fp *)
     (WTLOC: sem_wt_loc m fp b 0)
     (VALID: Mem.range_perm m b (- size_chunk Mptr) sz Cur Freeable)
-    (SIZE: Mem.load Mptr m b (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz))),
+    (SIZE: Mem.load Mptr m b (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz)))
+    (* sz >0 is used to make sure extcall_ext_free succeeds and sz <=
+    max_unsigned is used to provent overflow when traversing some
+    field offsets *)
+    (RANGE: 0 < sz <= Ptrofs.max_unsigned),
     sem_wt_val m (fp_box b sz fp) (Vptr b Ptrofs.zero)
 (* TODO *)
 (* | wt_val_ref: forall b ofs ty org mut, *)
@@ -739,10 +743,9 @@ Inductive wt_footprint : type -> footprint -> Prop :=
     wt_footprint (Tvariant orgs id) (fp_enum id orgs tagz fid fofs fp)
 | wt_fp_box: forall ty b fp
     (* this is ensured by bm_box *)
-    (WT: wt_footprint ty fp)
+    (WT: wt_footprint ty fp),
     (* It is used to make sure that dropping any location within a
     block does not cause overflow *)
-    (RANGE: sizeof ce ty <= Ptrofs.max_unsigned),
     wt_footprint (Tbox ty) (fp_box b (sizeof ce ty) fp).
 
 
@@ -750,7 +753,8 @@ Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> Prop :=
 | bm_box: forall b1 fp sz
     (LOAD: Mem.load Mptr m b ofs = Some (Vptr b1 Ptrofs.zero))
     (SIZE: Mem.load Mptr m b1 (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz)))
-    (VRES: Mem.range_perm m b1 (- size_chunk Mptr) sz Cur Freeable),
+    (VRES: Mem.range_perm m b1 (- size_chunk Mptr) sz Cur Freeable)
+    (RANGE: 0 < sz <= Ptrofs.max_unsigned),
     bmatch m b ofs (fp_box b1 sz fp)
 | bm_struct: forall fpl id
     (* all fields are semantically well typed *)
@@ -2406,6 +2410,13 @@ Qed.
 
 End COMP_ENV.
 
+Lemma maxv:
+  Ptrofs.max_unsigned = 18446744073709551615.
+Proof.
+  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+  unfold two_power_nat. unfold Wordsize_Ptrofs.wordsize.
+  replace Archi.ptr64 with true by reflexivity. reflexivity.
+Qed.
 
 (* if a place passes must_movable checking, then the location of this
 place is sem_wt_loc. wt_footprint here is used to make sure that the
@@ -2511,7 +2522,7 @@ Proof.
       eapply IHt; eauto. simpl. auto.
       (* get_loc_footprint_map *)
       simpl. destruct (path_of_place p) eqn: POP.
-        eapply get_loc_footprint_map_app; eauto.
+      eapply get_loc_footprint_map_app; eauto.
     (* Tstruct *)
     + destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
       (* fp is not empty *)
@@ -3054,14 +3065,6 @@ Proof.
   eauto. lia.
 Qed.
 
-Lemma maxv:
-  Ptrofs.max_unsigned = 18446744073709551615.
-Proof.
-  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
-  unfold two_power_nat. unfold Wordsize_Ptrofs.wordsize.
-  replace Archi.ptr64 with true by reflexivity. reflexivity.
-Qed.
-
 
 Lemma sizeof_in_range: forall ty,
     valid_type ty = true ->
@@ -3191,7 +3194,7 @@ Proof.
     inv A3.
     exploit MM. erewrite POP. eauto. auto. intros (BM & FULL).
     inv BM. rewrite H0 in LOAD. inv LOAD.
-    repeat apply conj; auto.
+    repeat apply conj; auto. lia.
     (* simpl. eapply sizeof_in_range; eauto. *)
   - inv EVAL. simpl in GFP. destruct (path_of_place p) eqn: POP.
     exploit get_loc_footprint_map_app_inv; eauto.
@@ -3847,7 +3850,6 @@ Proof.
     inv B1.
     eapply IHWTPH. eauto. eauto.
     econstructor. simpl in WP2. inv WP2. auto.
-    auto.
   - exploit set_footprint_app_inv; eauto.
     intros (fp3 & vfp1 & A1 & A2 & A3).
     simpl in A2. destruct fp3; try congruence.
@@ -4234,7 +4236,7 @@ Proof.
     simpl. auto.
     eapply Mem.perm_valid_block; eauto.
     eapply Mem.load_unchanged_on; eauto.
-    simpl. auto.
+    simpl. auto. auto.
   - inv WT. econstructor.
     intros. exploit FWT; eauto.
     intros WTLOC.
@@ -4275,7 +4277,7 @@ Proof.
     simpl. auto.
     eapply Mem.perm_valid_block; eauto.
     eapply Mem.load_unchanged_on; eauto.
-    simpl. auto.
+    simpl. auto. auto.
   - inv WT. inv WTFP. econstructor.
     intros. exploit FWT; eauto.
     intros WTLOC.
@@ -4375,7 +4377,7 @@ Proof.
     simpl. auto.
     eapply Mem.perm_valid_block; eauto.
     eapply Mem.load_unchanged_on; eauto.
-    simpl. auto.    
+    simpl. auto. auto.
   - inv SEMWT.
     inv WT. econstructor.
     intros until ffp. intros FIND.
@@ -4794,7 +4796,7 @@ Proof.
     (* permission is unchanged *)
     eapply size_record_and_perm_unchanged.
     eapply Mem.unchanged_on_implies; eauto. simpl. eauto.
-    auto. simpl. auto. auto.
+    auto. simpl. auto. auto. auto.
   - inv BM. econstructor. intros fid fofs ffp FIND.
     exploit FMATCH; eauto. intros BM1.
     exploit find_fields_some; eauto.
@@ -4845,7 +4847,7 @@ Proof.
     (* permission is unchanged *)
     eapply size_record_and_perm_unchanged.
     eapply Mem.unchanged_on_implies; eauto. simpl. eauto.
-    auto. simpl. auto. auto.
+    auto. simpl. auto. auto. auto.
   - inv BM. inv WTFP.
     econstructor. intros fid fofs ffp FIND.
     exploit FMATCH; eauto. intros BM1.
@@ -5349,7 +5351,7 @@ Proof.
         (* load the size record *)
         eapply Mem.load_unchanged_on; eauto.
         simpl. intros. intro. red in H0. destruct H0. lia.
-        congruence. }
+        congruence. lia. }
       eapply IHn. eauto. eapply WTLOC1.
       3: eapply WTLOC3.
       (* unchanged_on *)
@@ -6174,7 +6176,7 @@ Inductive deref_loc_rec_footprint (m: mem) (b: block) (ofs: Z) (fty: type) (fp: 
     (LOAD: Mem.load Mptr m b1 ofs1 = Some (Vptr b2 Ptrofs.zero))
     (SIZE: Mem.load Mptr m b2 (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz)))
     (PERM: Mem.range_perm m b2 (- size_chunk Mptr) sz Cur Freeable)
-    (RANGE: sz <= Ptrofs.max_unsigned),
+    (RANGE: 0 < sz <= Ptrofs.max_unsigned),
     deref_loc_rec_footprint m b ofs fty fp ((Tbox ty) :: tys) b2 0 ty fp2.
 
 (* Invariant of deref_loc_rec_footprint *)
@@ -6282,7 +6284,7 @@ Proof.
       exists b1, ofs1, fp1. repeat apply conj; auto.
       eapply deref_loc_rec_footprint_app; eauto.
       econstructor. econstructor.
-      all: eauto.
+      all: eauto. 
   - inv CHILD.
     exists b, ofs, fp. repeat apply conj; auto.
     econstructor.
@@ -6330,7 +6332,7 @@ Proof.
       inv WTLOC1. inv WT0.
       eapply drop_member_fp_box; eauto.
       erewrite COSV. eauto.
-      econstructor; eauto.
+      econstructor; eauto. 
     + exploit sound_drop_glue_children_types; eauto.
       intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1).
       inv WTFP1. inv WTLOC1.
@@ -6338,7 +6340,7 @@ Proof.
       inv WTLOC1. inv WT0.
       eapply drop_member_fp_box; eauto.
       erewrite COSV. eauto.
-      econstructor; eauto.
+      econstructor; eauto. 
 Qed.
 
 Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
@@ -6400,7 +6402,7 @@ Inductive sound_split_fully_own_place (m: mem) (r: place) (b: block) (ofs: Z) (r
     (SIZE: Mem.load Mptr m b2 (- size_chunk Mptr) = Some (Vptrofs (Ptrofs.repr sz)))
     (PERM: Mem.range_perm m b2 (- size_chunk Mptr) sz Cur Freeable)
     (* avoid overflow *)
-    (RANGE: sz <= Ptrofs.max_unsigned),
+    (RANGE: 0 < sz <= Ptrofs.max_unsigned),
     sound_split_fully_own_place m r b ofs rfp (p1 :: l) (Pderef p1 ty) b2 0 ty fp2  
 .
 
@@ -6572,6 +6574,35 @@ Proof.
     + econstructor; eauto.
 Qed.
 
+Lemma deref_loc_rec_footprint_app_inv: forall l1 l2 b2 ofs2 ty2 fp2 b0 ty0 fp0 ofs0 m,
+    deref_loc_rec_footprint m b0 ofs0 ty0 fp0 (l1 ++ l2) b2 ofs2 ty2 fp2 ->
+    exists b1 ofs1 ty1 fp1,
+      deref_loc_rec_footprint m b1 ofs1 ty1 fp1 l1 b2 ofs2 ty2 fp2
+      /\ deref_loc_rec_footprint m b0 ofs0 ty0 fp0 l2 b1 ofs1 ty1 fp1.
+Proof.
+  induction l1; intros.
+  - simpl in H. exists b2, ofs2, ty2, fp2.
+    split. econstructor. auto.
+  - simpl in H. inv H.
+    exploit IHl1; eauto.
+    intros (b3 & ofs2 & ty1 & fp1 & A1 & A2).
+    do 4 eexists. split.
+    econstructor; eauto. auto.
+Qed.
+
+Lemma deref_loc_rec_footprint_get: forall tys m ty b ofs rfp b1 ofs1 ty1 fp1
+    (SOUND: deref_loc_rec_footprint m b ofs ty rfp tys b1 ofs1 ty1 fp1),
+    get_loc_footprint (repeat ph_deref (length tys)) rfp b ofs = Some (b1, ofs1, fp1).
+Proof.
+  induction tys; intros.
+  - inv SOUND. simpl. auto.
+  - inv SOUND. exploit IHtys; eauto.
+    intros A.
+    cbn [length]. cbn [repeat].
+    erewrite repeat_cons.
+    eapply get_loc_footprint_app; eauto.
+Qed.
+
 Lemma deref_loc_rec_footprint_range: forall tys m ty b ofs rfp b1 ofs1 ty1 fp1,
     deref_loc_rec_footprint m b ofs ty rfp tys b1 ofs1 ty1 fp1 ->
     ofs + sizeof ce ty <= Ptrofs.max_unsigned ->
@@ -6703,6 +6734,9 @@ Inductive sound_state: state -> Prop :=
     (CONT: sound_cont an body cfg k next cont brk nret m fpf)
     (FLAT: flat_fp = flat_fp_frame (fpf_drop fp fpl fpf))
     (NOREP: list_norepet flat_fp)
+    (* The location of the composite to be dropped is not in the
+    current footprint ! Note that it may resides in fpf! *)
+    (DIS: ~ In b (footprint_flat fp ++ flat_map footprint_flat fpl))
     (ACC: rsw_acc w (rsw sg flat_fp m))
     (RANGE: Ptrofs.unsigned ofs + co_sizeof co <= Ptrofs.max_unsigned),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
@@ -6801,7 +6835,7 @@ Proof.
       exists b1, ofs1, fp1. repeat apply conj; auto.
       eapply sound_split_fully_own_place_app.
       econstructor. erewrite <- PTY. econstructor.
-      all: auto.   
+      all: auto. 
   - destruct l0; try congruence. inv SPLIT.
     exists b, ofs, fp. repeat apply conj; auto.
       econstructor.
@@ -7058,6 +7092,7 @@ Proof.
 Qed.
 
 
+
 Lemma deref_loc_rec_footprint_eq: forall tys m b ofs fty fp b1 ofs1 ty1 fp1 b2 ofs2,
     deref_loc_rec_footprint m b (Ptrofs.unsigned ofs) fty fp tys b1 ofs1 ty1 fp1 ->
     deref_loc_rec m b ofs tys (Vptr b2 ofs2) ->
@@ -7071,6 +7106,196 @@ Proof.
     auto.
     simpl in H0; congruence.
     simpl in H0; congruence.
+Qed.
+
+Lemma deref_loc_rec_app: forall l1 l2 b1 b2 b3 ofs1 ofs2 ofs3 m,
+    deref_loc_rec m b1 ofs1 l2 (Vptr b2 ofs2) ->
+    deref_loc_rec m b2 ofs2 l1 (Vptr b3 ofs3) ->
+    deref_loc_rec m b1 ofs1 (l1 ++ l2) (Vptr b3 ofs3).
+Proof.
+  induction l1; intros.
+  - inv H0. simpl. auto.
+  - inv H0. econstructor; eauto.
+Qed.
+
+(* If the footprint not in fp1 is unchanged,
+deref_loc_rec_footprint remains valid *)
+Lemma deref_loc_rec_footprint_unchanged: forall l m1 m2 b ofs  ty fp b1 ofs1 ty1 fp1
+    (DEF: deref_loc_rec_footprint m1 b ofs ty fp l b1 ofs1 ty1 fp1)
+    (UNC: Mem.unchanged_on (fun b' _ => ~ In b' (footprint_flat fp1)) m1 m2)
+    (NIN: ~ In b (footprint_flat fp))
+    (NOREP: list_norepet (footprint_flat fp)),
+    deref_loc_rec_footprint m2 b ofs ty fp l b1 ofs1 ty1 fp1.
+Proof.
+  induction l; intros.
+  - inv DEF. econstructor.
+  - inv DEF.
+    exploit deref_loc_rec_footprint_get; eauto. intros GFP.
+    exploit get_loc_footprint_norepet; eauto. intros (N1 & N2).
+    (* exploit get_loc_footprint_in; eauto. intros IN. *)
+    exploit IHl; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro. eapply H. auto.
+    intros DEF1.
+    econstructor; eauto.
+    (* load *)
+    eapply Mem.load_unchanged_on; eauto.
+    simpl. intros.
+    intro. eapply N2. simpl. eauto.
+    (* load size record *)
+    eapply Mem.load_unchanged_on; eauto.
+    simpl. intros.
+    simpl in N1. inv N1. eauto.
+    (* range_perm *)
+    red. intros. eapply Mem.perm_unchanged_on; eauto.
+    simpl.
+    simpl in N1. inv N1. eauto.
+Qed.
+
+(* We need to prove that freeing the blocks in l1 does not change the
+address computing of deref_loc_rec *)
+Lemma drop_box_rec_app: forall l1 l2 b1 ofs1 b2 ofs2 m1 m2 m3 b3 ofs3 ty ty1 fp fp1
+    (DFP: deref_loc_rec_footprint m1 b2 (Ptrofs.unsigned ofs2) ty fp l1 b3 ofs3 ty1 fp1)
+    (NIN: ~ In b2 (footprint_flat fp))
+    (* used to prove get_clear_footprint *)
+    (WTFP: wt_footprint ce ty fp)
+    (* freeing the blocks of l1 does not change the result of
+    deref_loc_rec in l2 *)
+    (NOREP: list_norepet (footprint_flat fp))
+    (UNC: forall m1', Mem.unchanged_on (fun b' _ => ~ In b' (footprint_flat fp)) m1 m1' ->
+                 deref_loc_rec m1' b1 ofs1 l2 (Vptr b2 ofs2)) 
+    (DLOC: deref_loc_rec m1 b1 ofs1 l2 (Vptr b2 ofs2))      
+    (DROP1: drop_box_rec ge b2 ofs2 m1 l1 m2)
+    (DROP2: drop_box_rec ge b1 ofs1 m2 l2 m3),
+    drop_box_rec ge b1 ofs1 m1 (l1 ++ l2) m3.
+Proof.
+  induction l1; intros.
+  - inv DROP1. simpl. auto.
+  - replace (a::l1) with ((a::nil) ++ l1) in DFP by auto.
+    exploit deref_loc_rec_footprint_app_inv. eauto.
+    intros (b4 & ofs4 & ty2 & fp2 & A1 & A2).
+    inv A1. inv DEREF.
+    (* remove b3 from (fp_box b3 ...) *)
+    exploit deref_loc_rec_footprint_set; eauto.
+    instantiate (1 := clear_footprint_rec (fp_box b3 (sizeof ce ty1) fp1)).
+    intros (rfp1 & B1 & B2 & B3).
+    (* show rfp1 is norepet *)
+    assert (NOREP1: list_norepet (footprint_flat rfp1)).
+    { eapply set_footprint_norepet; eauto.
+      simpl. econstructor. simpl. red. intros. inv H0. }
+    inv DROP1. inv H2; simpl in *; try congruence. inv H.
+    econstructor.
+    eapply deref_loc_rec_app; eauto.
+    econstructor; eauto. simpl. auto.
+    eauto.
+    (* show that the result of A2 and B3 are the same address *)
+    exploit deref_loc_rec_footprint_eq; eauto. intros (C1 & C2). subst.
+    rewrite LOAD in H0. inv H0.
+    (* show fp = rfp1 + b5 *)
+    generalize (get_clear_footprint_equiv _ _ _ _ _ _ WTFP B1 B2); eauto.
+    intros EQUIV.
+    exploit get_footprint_norepet. eapply NOREP. eauto.
+    simpl. intros NOREP2. inv NOREP2.
+    (* apply I.H. *)
+    eapply IHl1.
+    (* deref_loc_rec_footprint: we need to show that b2 not in fp *)
+    eapply deref_loc_rec_footprint_unchanged. eapply A2.
+    inv H4.
+    eapply Mem.free_unchanged_on; eauto. intros.
+    intro. eapply H0. simpl. auto.
+    (* not in *)
+    all: eauto.
+    (* intro. eapply H0. eapply EQUIV. *)
+    (* eapply in_app. simpl. eauto. *)
+    (* unchanged *)
+    inv H4.
+    intros. eapply UNC.
+    eapply Mem.unchanged_on_trans.
+    eapply Mem.free_unchanged_on; eauto.
+    (* show b5 in fp *)
+    intros. intro. eapply H4. eapply EQUIV.
+    eapply in_app. simpl. eauto.
+    eapply Mem.unchanged_on_implies; eauto. 
+    (* deref_loc_rec in m0 *)
+    eapply UNC. inv H4.
+    eapply Mem.free_unchanged_on. eauto.
+    intros.
+    intro. eapply H0.
+    eapply EQUIV.
+    eapply in_app. simpl. eauto. 
+Qed.
+
+
+(* We prove that deref_loc_rec_footprint can make drop_box_rec a total function *)
+Lemma drop_box_rec_progress_and_unchanged: forall tys b ofs m1 fp ty b1 ofs1 ty1 fp1
+    (* norepet is to make sure that DEREF can hold if we free a block in m1 *)
+    (NOREP: list_norepet (footprint_flat fp))
+    (* used to prove drop_box_rec_app *)
+    (WTFP: wt_footprint ce ty fp)
+    (* we need to consider b = b1 in induction case *)
+    (NIN: ~ In b (footprint_flat fp))
+    (DEREF: deref_loc_rec_footprint m1 b (Ptrofs.unsigned ofs) ty fp tys b1 ofs1 ty1 fp1),
+    (* We do not care fp1 is changed or not  *)
+    exists m2,
+      drop_box_rec ge b ofs m1 tys m2
+      /\ Mem.unchanged_on (fun b1 _ => ~ In b1 (footprint_flat fp)) m1 m2.
+Proof.
+  intro. cut (exists n, length tys = n); eauto. intros (n & LEN).
+  generalize dependent tys.
+  induction n; intros.
+  - eapply length_zero_iff_nil in LEN. subst. simpl in *.
+    inv DEREF. exists m1. split.
+    econstructor.
+    eapply Mem.unchanged_on_refl.
+  - eapply length_S_inv in LEN. destruct LEN as (tys' & ty' & APP & LEN).
+    subst.
+    exploit deref_loc_rec_footprint_app_inv; eauto.
+    intros (b2 & ofs2 & ty2 & fp2 & A1 & A2). inv A2. inv DEREF0.
+    replace 0 with (Ptrofs.unsigned Ptrofs.zero) in A1 by auto.
+    simpl in NOREP. inv NOREP.
+    exploit IHn. eauto. 
+    4: eapply A1. auto.
+    inv WTFP. eauto. auto.
+    intros (m2 & DROP & UNC1).
+    (* show that we can free b2 in m2 *)
+    exploit Mem.load_unchanged_on. eapply UNC1.
+    2: eapply SIZE. auto. intros SIZE1.
+    assert (PERM1: Mem.range_perm m2 b2 (- size_chunk Mptr) (sizeof ce ty2) Cur Freeable).
+    { red. intros. erewrite<- Mem.unchanged_on_perm. eapply PERM. auto.
+      eauto. auto.
+      eapply Mem.perm_valid_block; eauto. }
+    assert (FREE1: {m2'| Mem.free m2 b2 (-size_chunk Mptr) (sizeof ce ty2) = Some m2'}).
+    { eapply Mem.range_perm_free; eauto. }
+    destruct FREE1 as (m2' & FREE1).
+    assert (FREE2: extcall_free_sem ge [Vptr b2 Ptrofs.zero] m2 E0 Vundef m2').
+    { econstructor; eauto.
+      rewrite Ptrofs.unsigned_repr; lia.
+      rewrite <- FREE1. f_equal.
+      rewrite Ptrofs.unsigned_zero. simpl.
+      rewrite Ptrofs.unsigned_repr; lia. }
+    exists m2'. split.
+    eapply drop_box_rec_app; eauto.
+    inv WTFP. eauto.
+    (* unchanged_on *)
+    intros. econstructor; eauto. econstructor.
+    econstructor. simpl. eauto.
+    simpl. eapply Mem.load_unchanged_on; eauto.
+    simpl. intros. simpl in NIN. intro. eapply NIN. auto.
+    (* deref_loc_rec *)
+    econstructor; eauto. econstructor.
+    econstructor; simpl; eauto.
+    (* drop_box_rec *)
+    econstructor;eauto.
+    econstructor. econstructor; simpl; eauto.
+    eapply Mem.load_unchanged_on; eauto.
+    simpl. intros.
+    simpl in NIN. intro. eapply NIN. auto.
+    econstructor.
+    (* unchanged_on *)
+    simpl. eapply Mem.unchanged_on_trans.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro. eapply H. auto.
+    eapply Mem.free_unchanged_on; eauto.
 Qed.
 
 Lemma step_dropstate_sound: forall s1 t s2,
@@ -7092,6 +7317,9 @@ Proof.
     simpl in NOREP. simpl.
     rewrite <- app_assoc in NOREP.
     eapply list_norepet_append_right. eauto.
+    (* disjoint *)
+    intro. eapply DIS. simpl in H. simpl.
+    eapply in_app. eauto.
     (* rsw_acc *)
     instantiate (1:= sg).
     eapply rsw_acc_trans. eauto.
@@ -7167,6 +7395,9 @@ Proof.
     econstructor; eauto.
     econstructor; eauto.
     rewrite <- OFSEQ. eauto.
+    (* disjoint *)
+    (*** TODO: show the norepet of deref_loc_rec_footprint and then prove drop_box_rec_progress in step_dropstate_box *)
+    
     (* rsw_acc *)
     instantiate (1 := sg).
     eapply rsw_acc_trans. eauto.
@@ -7180,7 +7411,7 @@ Proof.
     repeat destruct H; auto. left. eapply EQUIV1. eapply in_app; auto.
     (* wt_state *)
     admit.
-      
+    
   (* step_dropstate_enum *)
   - inv SOUND.
     inv DROPMEMB.
@@ -7268,9 +7499,32 @@ Proof.
     admit.
   (* step_dropstate_box *)
   - inv SOUND.
-    (* try to reduce the proof code *)
-Admitted.    
-      
+    inv DROPMEMB.
+    (* prove that (Ptrofs.unsigned ofs + fofs0) is in the range *)
+    unfold ce in *.
+    rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty <= co_sizeof co0).
+    { destruct (co_sv co0) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit (variant_field_offset_in_range_complete ge co0); eauto. lia. }
+    destruct R as (R1 & R2).
+    generalize (sizeof_pos ge fty). intros R3.
+    generalize (COMP_RANGE id co0 CO1). intros R4.
+    rewrite Ptrofs.add_unsigned in DROPB.
+    rewrite Ptrofs.unsigned_repr in DROPB. 2: lia.    
+    assert (OFSEQ: Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned ofs + fofs0)) = (Ptrofs.unsigned ofs + fofs0)).
+    { erewrite Ptrofs.unsigned_repr. auto.
+      generalize (Ptrofs.unsigned_range ofs). lia. }
+    
+    
+    split.
+    eapply sound_dropstate with (fp:= fp_emp) (fpl:= fpl); eauto.
+    econstructor. instantiate (1 := Tunit). econstructor. congruence.
+    (* member_footprint *)
+    
+    
+    
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
     wt_state ce s1 ->
