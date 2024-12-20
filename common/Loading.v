@@ -161,7 +161,7 @@ Hypothesis Hmatch_query_backward2 : forall q1 q2,
         match_query ccB wB q1 q2 /\ match_senv ccB wB se1 se2 /\ valid_wB wB.
 
 Hypothesis Hmatch_reply_backward : forall r r1 r2 wB,
-  match_reply ccB wB r1 r2 ->
+  match_reply ccB wB r1 r2 -> valid_wB wB ->
   reply2 r r2 -> reply1 r r1.
 
 Lemma close_sound_backward:

@@ -179,7 +179,7 @@ endif
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v CallConv.v CA.v Compiler.v CompilerClosed.v
+DRIVER=Compopts.v CallConv.v CA.v Compiler.v ClosedForward.v ClosedBackward.v
 
 # Complements.v
 

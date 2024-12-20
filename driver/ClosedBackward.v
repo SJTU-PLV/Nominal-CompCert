@@ -5,13 +5,13 @@ Require Import ValueAnalysis.
 Require Import Inject InjectFootprint.
 Require Import CA Compiler.
 
-(** Instantiation of [close_sound_forward] for simulation using the simconv [cc_compcert] *)
-Section CLOSE_FORWARD.
+(** Instantiation of [close_sound_backward] for simulation using the simconv [cc_compcert] *)
+Section CLOSE_BACKWARD.
   
 Variable L_c : semantics li_c li_c.
 Variable L_asm : semantics li_asm li_asm.
 
-Hypothesis FSIM_CC : forward_simulation cc_compcert cc_compcert L_c L_asm.
+Hypothesis BSIM_CC : backward_simulation cc_compcert cc_compcert L_c L_asm.
 
 Let skel_c := skel L_c.
 Let main_id_c := prog_main skel_c.
@@ -23,7 +23,7 @@ Let se := Genv.symboltbl skel_c.
 Let tse := Genv.symboltbl skel_asm.
 
 Lemma skel_eq : skel_asm = skel_c.
-Proof. inv FSIM_CC. inv X. eauto. Qed.
+Proof. inv BSIM_CC. inv X. eauto. Qed.
 
 Lemma main_id_eq : main_id_asm = main_id_c.
 Proof. pose proof skel_eq. unfold main_id_asm, main_id_c. congruence. Qed.
@@ -158,7 +158,6 @@ Section Initial.
          
   (** match_senv *)
   
-  
   Lemma match_se_initial : Genv.match_stbls (Mem.flat_inj (Mem.support m0)) se se.
   Proof.
     pose proof m0_se_support as SUP.
@@ -193,8 +192,18 @@ Section Initial.
   Qed.
 
 End Initial.
-   
-Lemma match_initial_forward_ca : forall q1,
+
+Let LTS_asm := L_asm tse.
+
+(** not sure about safe *)
+Lemma closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
+Proof. Admitted.
+
+(** seems to be unprovable for any given LTS where the [final_state] is opaque *)
+Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
+Proof. Admitted.
+
+Lemma match_initial_backward_ca1 : forall q1,
     initial_c q1 -> exists wB q2,
       match_query cc_compcert wB q1 q2 /\
         match_senv cc_compcert wB se tse /\
@@ -248,33 +257,36 @@ Proof.
   - constructor.
 Qed.
 
-Lemma match_final_forward_ca : forall r r1 r2 wB,
-    match_reply cc_compcert wB r1 r2 -> valid_world_cc_compcert wB ->
-    final_c r r1 -> final_asm r r2.
+(** seems to be correct *)
+Lemma match_initial_backward_ca2 : forall q1 q2,
+    initial_c q1 -> initial_asm q2 -> exists wB,
+        match_query cc_compcert wB q1 q2 /\ match_senv cc_compcert wB se tse /\ valid_world_cc_compcert wB.
 Proof.
-  intros. inv H0.
-  destruct H as [r1' [Hr1 [r2' [Hr2 [r3 [Hr3 Hr4]]]]]].
-  inv Hr1. inv Hr2. inv Hr3. inv Hr4. inv H. simpl in H0. inv H1.
-  destruct H2. inv H.
-  destruct r2. inv H1.
-  constructor. unfold Conventions1.loc_result in tres. subst tres.
-  replace (Archi.ptr64) with true in H7 by reflexivity.
-  unfold Conventions1.loc_result_64 in H7. simpl in H7.
-  inv H7. specialize (H RAX). rewrite <- H5 in H. inv H. reflexivity.
-Qed.
+Admitted.
+
+(** seems we have to deal with the Vundef issue *)
+Lemma match_final_backward_ca : forall r r1 r2 wB,
+    match_reply cc_compcert wB r1 r2 -> valid_world_cc_compcert wB ->
+    final_asm r r2 -> final_c r r1.
+Proof.
+Admitted.
 
 Definition close_c := close_semantics L_c initial_c final_c.
 Definition close_asm := close_semantics L_asm initial_asm final_asm.
+
 Theorem closed_forward_simulation_cc_compcert :
-  Closed.forward_simulation close_c close_asm.
+  Closed.backward_simulation close_c close_asm.
 Proof.
-  eapply close_sound_forward.
-  exact match_initial_forward_ca.
-  exact match_final_forward_ca.
-  exact FSIM_CC.
+  eapply close_sound_backward.
+  exact closed_cc_compcert.
+  exact reply_sound_cc_compcert.
+  exact match_initial_backward_ca1.
+  exact match_initial_backward_ca2.
+  exact match_final_backward_ca.
+  exact BSIM_CC.
 Qed.
   
-End CLOSE_FORWARD.
+End CLOSE_BACKWARD.
 
 (* Checking whether the defs and lemmas from are typed as we want in the outside of the Section. *)
 Check close_c.
