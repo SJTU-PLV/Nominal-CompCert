@@ -6155,6 +6155,7 @@ Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: foo
 | member_footprint_struct: forall fofs fid fty
     (STRUCT: co.(co_sv) = Struct)
     (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+    (FTY: field_type fid co.(co_members) = OK fty)
     (WTLOC: sem_wt_loc ce m fp b (ofs + fofs))
     (WTFP: wt_footprint ce fty fp),
     member_footprint m co b ofs fp (Member_plain fid fty)
@@ -6205,32 +6206,48 @@ Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp
 | drop_member_fp_none:
   (* We do not care fp is fp_emp or not. We just drop it from the fpf_drop *)
     drop_member_footprint m co b ofs fp None
-| drop_member_fp_comp_struct: forall fid fofs fty tyl b1 ofs1 fp1 compty
-    (STRUCT: co.(co_sv) = Struct)
-    (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+| drop_member_fp_comp: forall fid fofs fty tyl b1 ofs1 fp1 compty
+    (* (STRUCT: co.(co_sv) = Struct) *)
+    (FOFS: match co.(co_sv) with
+           | Struct =>
+               field_offset ce fid co.(co_members)
+           | TaggedUnion =>
+               variant_field_offset ce fid co.(co_members)
+           end = OK fofs)
+    (* maybe unused *)
+    (FTY: field_type fid co.(co_members) = OK fty)
     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 compty fp1)
     (* (b1, ofs1) is sem_wt_loc *)
     (WTLOC: sem_wt_loc ce m fp1 b1 ofs1)
     (WTFP: wt_footprint ce compty fp1),
     drop_member_footprint m co b ofs fp (Some (drop_member_comp fid fty compty tyl))
-| drop_member_fp_comp_enum: forall fid fofs fty tyl b1 ofs1 fp1 compty
-    (ENUM: co.(co_sv) = TaggedUnion)
-    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
-    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 compty fp1)
-    (* (b1, ofs1) is sem_wt_loc *)
-    (WTLOC: sem_wt_loc ce m fp1 b1 ofs1)
-    (WTFP: wt_footprint ce compty fp1),
-    drop_member_footprint m co b ofs fp (Some (drop_member_comp fid fty compty tyl))
-| drop_member_fp_box_struct: forall fid fofs fty tyl b1 ofs1 ty fp1
-    (STRUCT: co.(co_sv) = Struct)
-    (FOFS: field_offset ce fid co.(co_members) = OK fofs)
+(* | drop_member_fp_comp_enum: forall fid fofs fty tyl b1 ofs1 fp1 compty *)
+(*     (ENUM: co.(co_sv) = TaggedUnion) *)
+(*     (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs) *)
+(*     (FTY: field_type fid co.(co_members) = OK fty)         *)
+(*     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 compty fp1) *)
+(*     (* (b1, ofs1) is sem_wt_loc *) *)
+(*     (WTLOC: sem_wt_loc ce m fp1 b1 ofs1) *)
+(*     (WTFP: wt_footprint ce compty fp1), *)
+(*     drop_member_footprint m co b ofs fp (Some (drop_member_comp fid fty compty tyl)) *)
+| drop_member_fp_box: forall fid fofs fty tyl b1 ofs1 ty fp1
+    (* (STRUCT: co.(co_sv) = Struct) *)
+    (* reduce the size of proof *)
+    (FOFS: match co.(co_sv) with
+           | Struct =>
+               field_offset ce fid co.(co_members)
+           | TaggedUnion =>
+               variant_field_offset ce fid co.(co_members)
+           end = OK fofs)
+    (FTY: field_type fid co.(co_members) = OK fty)    
     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 ty fp1),
     drop_member_footprint m co b ofs fp (Some (drop_member_box fid fty tyl))
-| drop_member_fp_box_enum: forall fid fofs fty tyl b1 ofs1 ty fp1
-    (ENUM: co.(co_sv) = TaggedUnion)
-    (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs)
-    (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 ty fp1),
-    drop_member_footprint m co b ofs fp (Some (drop_member_box fid fty tyl))
+(* | drop_member_fp_box_enum: forall fid fofs fty tyl b1 ofs1 ty fp1 *)
+(*     (ENUM: co.(co_sv) = TaggedUnion) *)
+(*     (FOFS: variant_field_offset ce fid co.(co_members) = OK fofs) *)
+(*     (FTY: field_type fid co.(co_members) = OK fty)        *)
+(*     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 ty fp1), *)
+(*     drop_member_footprint m co b ofs fp (Some (drop_member_box fid fty tyl)) *)
 .
 
 Lemma deref_loc_rec_footprint_app: forall l1 l2 b1 ofs1 ty1 fp1 b2 ofs2 ty2 fp2 b0 ty0 fp0 ofs0 m,
@@ -6282,7 +6299,8 @@ Lemma sound_type_to_drop_member_state: forall fid fty fofs fp m b ofs co
                field_offset ce fid (co_members co) = OK fofs
            | TaggedUnion =>
                variant_field_offset ce fid (co_members co) = OK fofs
-           end) ,
+           end)
+    (FTY: field_type fid (co_members co) = OK fty),
     drop_member_footprint m co b ofs fp (type_to_drop_member_state ge fid fty).
 Proof.
   intros. unfold type_to_drop_member_state.
@@ -6294,36 +6312,32 @@ Proof.
   destruct A1 as [ (orgs & i & ?)|[(orgs & i & ?) | (ty' & ?)] ]; subst.
   - destruct ((genv_dropm ge) ! i) eqn: DM.
     2: constructor.
-    destruct (co_sv co) eqn: COSV.
-    + exploit sound_drop_glue_children_types; eauto.
-      intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
-      eapply drop_member_fp_comp_struct; eauto.
-     + exploit sound_drop_glue_children_types; eauto.
-       intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
-       eapply drop_member_fp_comp_enum; eauto.
+    exploit sound_drop_glue_children_types; eauto.
+    intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1).
+    eapply drop_member_fp_comp; eauto.
+    destruct (co_sv co); auto.
   - destruct ((genv_dropm ge) ! i) eqn: DM.
     2: constructor.
-    destruct (co_sv co) eqn: COSV.
-    + exploit sound_drop_glue_children_types; eauto.
-      intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
-      eapply drop_member_fp_comp_struct; eauto.
-     + exploit sound_drop_glue_children_types; eauto.
-       intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
-       eapply drop_member_fp_comp_enum; eauto.
+    exploit sound_drop_glue_children_types; eauto.
+    intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1). 
+    eapply drop_member_fp_comp; eauto.
+    destruct (co_sv co); auto.
   - destruct (co_sv co) eqn: COSV.
     + exploit sound_drop_glue_children_types; eauto.
       intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1).
       inv WTFP1. inv WTLOC1.
       simpl in WF. congruence.
       inv WTLOC1. inv WT0.
-      eapply drop_member_fp_box_struct; eauto.
+      eapply drop_member_fp_box; eauto.
+      erewrite COSV. eauto.
       econstructor; eauto.
     + exploit sound_drop_glue_children_types; eauto.
       intros (b1 & ofs1 & fp1 & DEREF & WTLOC1 & WTFP1).
       inv WTFP1. inv WTLOC1.
       simpl in WF. congruence.
       inv WTLOC1. inv WT0.
-      eapply drop_member_fp_box_enum; eauto.
+      eapply drop_member_fp_box; eauto.
+      erewrite COSV. eauto.
       econstructor; eauto.
 Qed.
 
@@ -6535,7 +6549,40 @@ Proof.
     + econstructor; eauto.
 Qed.
 
-    
+(* similar to sound_split_fully_own_place_set *)
+Lemma deref_loc_rec_footprint_set: forall tys m ty b ofs rfp b1 ofs1 ty1 fp1 fp2
+    (SOUND: deref_loc_rec_footprint m b ofs ty rfp tys b1 ofs1 ty1 fp1),
+  exists rfp1,
+    get_footprint (repeat ph_deref (length tys)) rfp = Some fp1
+    /\ set_footprint (repeat ph_deref (length tys)) fp2 rfp = Some rfp1
+    /\ deref_loc_rec_footprint m b ofs ty rfp1 tys b1 ofs1 ty1 fp2.
+Proof.
+  induction tys; intros.
+  - inv SOUND. simpl. eexists. repeat apply conj; eauto.
+    econstructor.
+  - inv SOUND. exploit IHtys; eauto.
+    instantiate (1 := fp_box b1 (sizeof ce ty1) fp2).    
+    intros (rfp1 & A & B & C).
+    cbn [length]. cbn [repeat].
+    erewrite repeat_cons.
+    exists rfp1. repeat apply conj.
+    + eapply get_footprint_app; eauto.
+    + eapply set_footprint_app; eauto.
+      simpl. auto.
+    + econstructor; eauto.
+Qed.
+
+Lemma deref_loc_rec_footprint_range: forall tys m ty b ofs rfp b1 ofs1 ty1 fp1,
+    deref_loc_rec_footprint m b ofs ty rfp tys b1 ofs1 ty1 fp1 ->
+    ofs + sizeof ce ty <= Ptrofs.max_unsigned ->
+    ofs1 + sizeof ce ty1 <= Ptrofs.max_unsigned.
+Proof.
+  destruct tys; intros.
+  - inv H. lia.    
+  - inv H. lia.
+Qed.
+
+
 (* soundness of continuation: the execution of current function cannot
 modify the footprint maintained by the continuation *)
 
@@ -6643,11 +6690,14 @@ Inductive sound_state: state -> Prop :=
     (* no need to maintain borrow check domain in dropplace? But how
     to record the pc and next statement? *)
     sound_state (Dropplace f st drops k e own1 m)
-| sound_dropstate: forall an body cfg next cont brk nret id co fp fpl b ofs st m membs k fpf flat_fp sg
+| sound_dropstate: forall an body cfg next cont brk nret id co fp fpl b ofs st m membs k fpf flat_fp sg ty
     (CO: ce ! id = Some co)
     (* The key is how to prove semantics well typed can derive the
     following two properties *)
     (DROPMEMB: drop_member_footprint m co b (Ptrofs.unsigned ofs) fp st)
+    (* This wt_footprint is just used to make sure that fp is
+    well-founded (e.g, field names are norepet) *)
+    (WTMEMFP: wt_footprint ce ty fp)
     (* all the remaining members are semantically well typed *)
     (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
     (CONT: sound_cont an body cfg k next cont brk nret m fpf)
@@ -6897,6 +6947,8 @@ Proof.
   intros (fty & A2 & A3 & A4). 
   econstructor.
   econstructor; eauto. rewrite <- A1. eauto.
+  rewrite <- A1. erewrite field_type_skip_prefix. simpl. destruct ident_eq; try congruence.
+  intro. eapply N3; eauto. simpl. auto.
   eapply FWT with (fid := id). destruct ident_eq; try congruence; auto.
   erewrite field_type_skip_prefix in A2. simpl in A2. destruct ident_eq in A2; try congruence.
   intro. eapply N3; eauto. simpl. auto.
@@ -6976,6 +7028,27 @@ Proof.
   eapply list_equiv_norepet2; eauto.
 Qed.
 
+Lemma dropstate_to_dropstate_footprint_norepet: forall (l1 l2 l3 l1' fp: flat_footprint)
+    (EQUIV: list_equiv (fp ++ l1') l1)
+    (NOREP: list_norepet (l1 ++ l2 ++ l3))
+    (NOREP1: list_norepet (fp ++ l1')),
+    list_norepet (fp ++ l1' ++ l2 ++ l3).
+(* Proof. *)
+(*   intros. *)
+(*   eapply list_norepet_append_commut. *)
+(*   rewrite !app_assoc. *)
+(*   rewrite <- (app_assoc _ _ fp). *)
+(*   rewrite <- (app_assoc _ l2' _). *)
+(*   rewrite app_assoc in NOREP.         *)
+(*   eapply list_norepet_append_commut2. *)
+(*   rewrite <- !app_assoc. *)
+(*   do 2 rewrite app_assoc. *)
+(*   eapply list_norepet_append_commut2 in NOREP. *)
+(*   rewrite app_assoc in NOREP. *)
+(*   eapply list_equiv_norepet2; eauto. *)
+(* Qed. *)
+Admitted.
+
 Lemma footprint_flat_fp_struct_eq: forall id fpl,
     footprint_flat (fp_struct id fpl) = flat_map footprint_flat (flat_fp_struct fpl).
 Proof.
@@ -6984,19 +7057,21 @@ Proof.
   f_equal. eapply IHfpl.
 Qed.
 
-Lemma deref_loc_rec_footprint_wt: forall tys m b ofs fty fp b1 ofs1 ty1 fp1
-    (WTLOC: sem_wt_loc ce m fp b ofs)
-    (WTFP: wt_footprint ce fty fp)
-    (DEREF: deref_loc_rec_footprint m b ofs fty fp tys b1 ofs1 ty1 fp1),
-    sem_wt_loc ce m fp1 b1 ofs1 /\ wt_footprint ce ty1 fp1.
-Proof.
-Admitted.
 
 Lemma deref_loc_rec_footprint_eq: forall tys m b ofs fty fp b1 ofs1 ty1 fp1 b2 ofs2,
     deref_loc_rec_footprint m b (Ptrofs.unsigned ofs) fty fp tys b1 ofs1 ty1 fp1 ->
     deref_loc_rec m b ofs tys (Vptr b2 ofs2) ->
     b1 = b2 /\ ofs1 = Ptrofs.unsigned ofs2.
-Admitted.
+Proof.
+  induction tys; intros.
+  - inv H0. inv H. auto.
+  - inv H0. inv H. exploit IHtys; eauto.
+    intros (A1 & A2). subst.
+    inv H5. simpl in H0. simpl in H. inv H. rewrite LOAD in H0. inv H0.
+    auto.
+    simpl in H0; congruence.
+    simpl in H0; congruence.
+Qed.
 
 Lemma step_dropstate_sound: forall s1 t s2,
     sound_state s1 ->
@@ -7028,15 +7103,173 @@ Proof.
   (* step_dropstate_struct *)
   - inv SOUND.
     inv DROPMEMB.
-    (* from struct to struct *)
-    + unfold ce in *.
-      rewrite CO1 in CO. inv CO. rewrite STRUCT0 in FOFS.
-      rewrite FOFS in FOFS0. inv FOFS0.
-      (* rewrite Ptrofs.add_unsigned in DEREF.  *)
-      (* rewrite Ptrofs.unsigned_repr in DEREF. *)
+    (* prove that (Ptrofs.unsigned ofs1 + fofs0) is in the range *)
+    unfold ce in *.
+    rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty <= co_sizeof co).
+    { destruct (co_sv co) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit variant_field_offset_in_range_complete; eauto. lia. }
+    destruct R as (R1 & R2).
+    generalize (sizeof_pos ge fty). intros R3.
+    generalize (COMP_RANGE id1 co CO1). intros R4.
+    rewrite Ptrofs.add_unsigned in DEREF.
+    rewrite Ptrofs.unsigned_repr in DEREF. 2: lia.
+    (* show that deref_loc_rec and deref_loc_rec_footprint return the same address *)
+    assert (OFSEQ: Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned ofs1 + fofs0)) = (Ptrofs.unsigned ofs1 + fofs0)).
+    { erewrite Ptrofs.unsigned_repr. auto.
+      generalize (Ptrofs.unsigned_range ofs1). lia. }
+    rewrite <- OFSEQ in FFP.
+    exploit deref_loc_rec_footprint_eq; eauto. intros (E1 & E2). subst.
+    (* construct the footprint list for the members to be dropped *)
+    inv WTFP; inv WTLOC. simpl in WF. congruence.
+    exploit sem_wt_member_footprint; eauto.
+    exists nil. auto. intros MEMWT.
+    (* remove (fp_struct id2 fpl0) from fp *)
+    generalize FFP as FFP1. intros.
+    eapply deref_loc_rec_footprint_set with (fp2 := clear_footprint_rec (fp_struct id2 fpl0)) in FFP1.
+    destruct FFP1 as (rfp1 & GFP1 & SFP1 & FFP2).
+    (* some rewrites *)
+    rewrite CO2 in CO. inv CO.
+    (* norepet *)
+    assert (NOREP1: list_norepet (footprint_flat fp)).
+    { simpl in NOREP. eapply list_norepet_append_left. eauto. }
+    assert (NOREP2: list_norepet (footprint_flat rfp1)).
+    { eapply set_footprint_norepet; eauto.
+      rewrite empty_footprint_flat. econstructor.
+      eapply empty_footprint_disjoint. }
+    assert (EQUIV1: list_equiv (footprint_flat (fp_struct id2 fpl0) ++ footprint_flat rfp1)
+                      (footprint_flat fp)).
+    { eapply get_clear_footprint_equiv; eauto. }
+    assert (NOREP3: list_norepet
+                      (flat_fp_frame (fpf_drop fp_emp (flat_fp_struct fpl0) (fpf_drop rfp1 fpl fpf)))).
+    { simpl. simpl in NOREP.
+      erewrite <- (footprint_flat_fp_struct_eq id2); eauto.
+      eapply dropstate_to_dropstate_footprint_norepet; eauto.
+      eapply list_norepet_app. repeat apply conj.
+      eapply get_footprint_norepet. eapply NOREP1. eauto.
+      auto.
+      eapply list_disjoint_sym.
+      eapply get_set_disjoint_footprint; eauto.
+      rewrite empty_footprint_flat. red. intros. inv H0. }
+    (* range *)
+    assert (R5: Ptrofs.unsigned cofs + co_sizeof co0 <= Ptrofs.max_unsigned).
+    { specialize (deref_loc_rec_footprint_range _ _ _ _ _ _ _ _ _ _ FFP2).
+      rewrite OFSEQ. simpl. unfold ce. rewrite CO2. intros. eapply H.
+      lia. }
+    split.
+    eapply sound_dropstate with (fp:= fp_emp) (fpf:= (fpf_drop rfp1 fpl fpf)) (fpl:= (flat_fp_struct fpl0)); eauto.
+    econstructor.
+    (* wt_footprint *)
+    instantiate (1 := Tunit). econstructor. congruence.
+    (* sound_cont *)
+    econstructor; eauto.
+    econstructor; eauto.
+    rewrite <- OFSEQ. eauto.
+    (* rsw_acc *)
+    instantiate (1 := sg).
+    eapply rsw_acc_trans. eauto.
+    simpl. econstructor. eapply Mem.unchanged_on_refl.
+    eapply flat_footprint_separated_shrink.
+    red. intros.
+    erewrite !in_app in H.
+    erewrite !in_app.
+    destruct H. left. eapply EQUIV1.
+    erewrite <- (footprint_flat_fp_struct_eq id2 fpl0) in H. eapply in_app; auto.
+    repeat destruct H; auto. left. eapply EQUIV1. eapply in_app; auto.
+    (* wt_state *)
+    admit.
       
-      (* 1-2: rewrite Ptrofs.unsigned_repr; auto. *)
-Admitted.
+  (* step_dropstate_enum *)
+  - inv SOUND.
+    inv DROPMEMB.
+    (* prove that (Ptrofs.unsigned ofs1 + fofs0) is in the range *)
+    unfold ce in *.
+    rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty1 <= co_sizeof co).
+    { destruct (co_sv co) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit (variant_field_offset_in_range_complete ge co); eauto. lia. }
+    destruct R as (R1 & R2).
+    generalize (sizeof_pos ge fty1). intros R3.
+    generalize (COMP_RANGE id1 co CO1). intros R4.
+    rewrite Ptrofs.add_unsigned in DEREF.
+    rewrite Ptrofs.unsigned_repr in DEREF. 2: lia.
+    (* show that deref_loc_rec and deref_loc_rec_footprint return the same address *)
+    assert (OFSEQ: Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned ofs1 + fofs0)) = (Ptrofs.unsigned ofs1 + fofs0)).
+    { erewrite Ptrofs.unsigned_repr. auto.
+      generalize (Ptrofs.unsigned_range ofs1). lia. }
+    rewrite <- OFSEQ in FFP.
+    exploit deref_loc_rec_footprint_eq; eauto. intros (E1 & E2). subst.
+    (* show that fp1 is fp_enum *)
+    inv WTFP; inv WTLOC. simpl in MODE. congruence.
+    (* remove (fp_enum id2 orgs tagz fid fofs fp0) from rfp *)
+    generalize FFP as FFP1. intros.
+    eapply deref_loc_rec_footprint_set with (fp2 := clear_footprint_rec (fp_enum id2 orgs tagz fid fofs fp0)) in FFP1.
+    destruct FFP1 as (rfp1 & GFP1 & SFP1 & FFP2).
+    (* some rewrites *)
+    rewrite CO2 in CO. inv CO.
+    (* norepet *)
+    assert (NOREP1: list_norepet (footprint_flat fp)).
+    { simpl in NOREP. eapply list_norepet_append_left. eauto. }
+    assert (NOREP2: list_norepet (footprint_flat rfp1)).
+    { eapply set_footprint_norepet; eauto.
+      rewrite empty_footprint_flat. econstructor.
+      eapply empty_footprint_disjoint. }
+    assert (EQUIV1: list_equiv (footprint_flat (fp_enum id2 orgs tagz fid fofs fp0) ++ footprint_flat rfp1)
+                      (footprint_flat fp)).
+    { eapply get_clear_footprint_equiv; eauto. }
+    assert (NOREP3: list_norepet
+                      (flat_fp_frame (fpf_drop fp0 nil (fpf_drop rfp1 fpl fpf)))).
+    { simpl. simpl in NOREP.
+      eapply dropstate_to_dropstate_footprint_norepet; eauto.
+      eapply list_norepet_app. repeat apply conj.
+      exploit get_footprint_norepet. eapply NOREP1. eauto. simpl. auto.
+      auto.
+      eapply list_disjoint_sym.
+      red. intros.
+      eapply get_set_disjoint_footprint; eauto. 
+      simpl. red. intros. inv H2. }            
+    (* range *)
+    assert (R5: Ptrofs.unsigned cofs + co_sizeof co0 <= Ptrofs.max_unsigned).
+    { specialize (deref_loc_rec_footprint_range _ _ _ _ _ _ _ _ _ _ FFP2).
+      rewrite OFSEQ. simpl. unfold ce. rewrite CO2. intros. eapply H.
+      lia. }
+    (* show that fp satisfies drop_member_footprint *)
+    exploit sound_type_to_drop_member_state; eauto. rewrite ENUM0. eauto.
+    intros MEMFP.
+    (* show tag = tagz and then fid2 = fid *)
+    simpl in TAG. rewrite TAG in TAG1. inv TAG1. 
+    eauto. rewrite Int.unsigned_repr in MEMB. rewrite MEMB in TAG0. inv TAG0.
+    (* show that tag is in range *)
+    2: { generalize (list_nth_z_range _ _ TAG0).
+         generalize (COMP_LEN id2 co0 CO2). lia. }     
+    split.
+    eapply sound_dropstate with (fp:= fp0) (fpf:= (fpf_drop rfp1 fpl fpf)) (fpl:= nil); eauto.
+    econstructor.
+    (* sound_cont *)
+    econstructor; eauto.
+    econstructor; eauto.
+    rewrite <- OFSEQ. eauto.
+    (* rsw_acc *)
+    instantiate (1 := sg).
+    eapply rsw_acc_trans. eauto.
+    simpl. econstructor. eapply Mem.unchanged_on_refl.
+    eapply flat_footprint_separated_shrink.
+    red. intros.
+    erewrite !in_app in H.
+    erewrite !in_app.
+    destruct H. left. eapply EQUIV1.
+    eapply in_app; auto.
+    repeat destruct H; auto. left. eapply EQUIV1. eapply in_app; auto.
+    (* wt_state *)
+    admit.
+  (* step_dropstate_box *)
+  - inv SOUND.
+    (* try to reduce the proof code *)
+Admitted.    
       
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
@@ -7356,6 +7589,8 @@ Proof.
     split.
     eapply sound_dropstate with (fp:= fp_emp) (fpf:= (fpf_dropplace le fpm rfp1 fpf)); eauto.
     econstructor.
+    (* wt_footprint *)
+    instantiate (1 := Tunit). econstructor. congruence.
     (* sound_cont *)
     econstructor; eauto.   
     (* easy: sound_drop_place_state *)
