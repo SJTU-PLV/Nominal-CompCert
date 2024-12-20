@@ -14,9 +14,9 @@ Hypothesis FSIM_CC : forward_simulation cc_compcert cc_compcert L_c L_a.
 
 Let skel_c := skel L_c.
 
-
-Theorem match_senv : match_senv cc_compcert
-Definition 
+End CLOSE_FORWARD.
+(* Theorem match_senv : match_senv cc_compcert
+Definition  *)
 
 
   

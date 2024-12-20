@@ -145,13 +145,17 @@ Hypothesis reply_sound2: forall s r, Smallstep.final_state lts2 s r -> exists i,
 
 (** for bsim_initial_states_exists *)
 Hypothesis Hmatch_query_backward1 : forall q1,      
-    query1 q1 -> exists q2, match_query ccB wB q1 q2 /\ query2 q2.
+    query1 q1 -> exists wB q2,
+      match_query ccB wB q1 q2
+      /\ match_senv ccB wB se1 se2 
+      /\query2 q2.
 
 (** for bsim_match_initial_states  *)
 Hypothesis Hmatch_query_backward2 : forall q1 q2,
-    query1 q1 -> query2 q2 -> match_query ccB wB q1 q2.
+    query1 q1 -> query2 q2 -> exists wB,
+        match_query ccB wB q1 q2 /\ match_senv ccB wB se1 se2.
 
-Hypothesis Hmatch_reply_backward : forall r r1 r2,
+Hypothesis Hmatch_reply_backward : forall r r1 r2 wB,
   match_reply ccB wB r1 r2 ->
   reply2 r r2 -> reply1 r r1.
 
@@ -161,37 +165,55 @@ Proof.
   intro open_simulation.
   unfold Smallstep.backward_simulation in open_simulation.
   inv open_simulation. inv X.
-  specialize (bsim_lts se1 se2 wB Hmatch_senv Hvalid).
-  inv bsim_lts.
+  (* specialize (bsim_lts se1 se2 wB Hmatch_senv Hvalid).
+  inv bsim_lts. *)
   unfold L1, L2, close_semantics.
+  econstructor.
+  instantiate (1:= fun i s1 s2 => exists wB, bsim_match_states se1 se2 wB i s1 s2 /\ match_senv ccB wB se1 se2).
   (* specialize (bsim_match_initial_states0 _ _ Hmatch_query). *)
   (* inv bsim_match_initial_states0. *)
-  do 2 econstructor; simpl; simpl; eauto.
+  econstructor; simpl; simpl; eauto.
   - intros s1' [q1 [q1valid INI1]]. exploit Hmatch_query_backward1; eauto.
-    intros [q2 [Hm q2valid]]. exploit bsim_match_initial_states0; eauto.
+    intros [wB [q2 [Hq [Hs q2valid]]]].
+    specialize (bsim_lts se1 se2 wB Hs Hvalid).
+    inv bsim_lts.
+    exploit bsim_match_initial_states0; eauto.
     intros HH. inv HH. exploit bsim_match_cont_exist; eauto.
     intros [s2' A]. exists s2', q2. split; eauto.
   - intros s1' s2' [q1 [q1valid INI1]] [q2 [q2valid INI2]].
-    exploit Hmatch_query_backward2; eauto. intro Hmatch.
+    exploit Hmatch_query_backward2; eauto. intros [wB [Hmatch Hs]].
+    specialize (bsim_lts se1 se2 wB Hs Hvalid).
+    inv bsim_lts.
     exploit bsim_match_initial_states0; eauto.
     intro HH. inv HH. exploit bsim_match_cont_match; eauto.
     intros (s1'' & A& B). inv B. exists x, s1''.
     split; eauto.
   - (*final states*)
-  intros. apply safe_sound_1 in H0. destruct H1 as (r0 & REPLY & FS).
-  specialize (bsim_match_final_states0 _ _ _ _ H H0 FS) as (s1' & r1 & STAR & FS' & MS).
+    intros. apply safe_sound_1 in H0. destruct H1 as (r0 & REPLY & FS).
+    destruct H as [wB [H Hs]].
+    specialize (bsim_lts se1 se2 wB Hs Hvalid).
+    inv bsim_lts.
+    specialize (bsim_match_final_states0 _ _ _ _ H H0 FS) as (s1' & r1 & STAR & FS' & MS).
   exists s1'. split; eauto.
   - (* progress *)
-  intros. apply safe_sound_1 in H0.
-  pose proof (progress := bsim_progress0).
-  specialize (bsim_progress0 _ _ _ H H0) as [(r & FS)|[|]].
-  left. destruct (reply_sound2 _ _ FS) as (ri & REPLY). eauto.
-  destruct H1. exfalso. eapply closed2; eauto. eapply open_progress'; eauto.
-  auto.
+    intros. apply safe_sound_1 in H0.
+    destruct H as [wB [H Hs]].
+    specialize (bsim_lts se1 se2 wB Hs Hvalid).
+    inv bsim_lts.
+    pose proof (progress := bsim_progress0).
+    specialize (bsim_progress0 _ _ _ H H0) as [(r & FS)|[|]].
+    left. destruct (reply_sound2 _ _ FS) as (ri & REPLY). eauto.
+    destruct H1. exfalso. eapply closed2; eauto. eapply open_progress'; eauto.
+    auto.
   - (* simulation *)
-  intros. apply safe_sound_1 in H1.
-  eapply bsim_simulation0; eauto.
-  - eapply  match_senv_public_preserved; eauto.
+    intros. apply safe_sound_1 in H1.
+    destruct H0 as [wB [H0 Hs]].
+    specialize (bsim_lts se1 se2 wB Hs Hvalid).
+    inv bsim_lts. simpl.
+    exploit bsim_simulation0; eauto.
+    intros (i' & s1' & A & B).
+    exists i', s1'. split; eauto.
+  - unfold se. rewrite bsim_skel. reflexivity.
 Qed.
 
 End BACKWARD.
