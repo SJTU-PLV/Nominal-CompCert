@@ -6483,6 +6483,17 @@ Proof.
   exploit get_loc_footprint_norepet; eauto.
 Qed.
 
+Lemma sound_split_fully_own_place_footprint_in: forall m r b ofs rfp l p b1 ofs1 ty1 fp1,
+    list_norepet (footprint_flat rfp) ->
+    sound_split_fully_own_place m r b ofs rfp l p b1 ofs1 ty1 fp1 ->
+    In b1 (b :: footprint_flat rfp).
+Proof.
+  intros.
+  exploit sound_split_fully_own_place_footprint_get; eauto.
+  intros GFP.
+  exploit get_loc_footprint_in; eauto.
+Qed.
+
 (* sound_split_fully_own_place remains satisfied if the changed blocks
 are inside the fp1. It is mostly the same as
 deref_loc_rec_footprint_unchanged *)
@@ -6624,7 +6635,17 @@ Proof.
   intros GFP.
   exploit get_loc_footprint_norepet; eauto.
 Qed.
-  
+
+Lemma deref_loc_rec_footprint_in: forall tys m ty b ofs b1 ofs1 ty1 fp fp1
+    (DEF: deref_loc_rec_footprint m b ofs ty fp tys b1 ofs1 ty1 fp1),
+    In b1 (b :: footprint_flat fp).
+Proof.
+  intros.
+  exploit deref_loc_rec_footprint_get; eauto.
+  intros GFP.
+  exploit get_loc_footprint_in; eauto.
+Qed.
+
 Lemma deref_loc_rec_footprint_app_inv: forall l1 l2 b2 ofs2 ty2 fp2 b0 ty0 fp0 ofs0 m,
     deref_loc_rec_footprint m b0 ofs0 ty0 fp0 (l1 ++ l2) b2 ofs2 ty2 fp2 ->
     exists b1 ofs1 ty1 fp1,
@@ -6673,7 +6694,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (RET: cfg ! nret = Some Iend)
     (WFOWN: wf_own_env own),
     sound_cont an body cfg (Kcall p f e own k) nret None None nret m fpf
-| sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf mayinit mayuninit rfp
+| sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf mayinit mayuninit rfp rfpty
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc cont brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
@@ -6686,7 +6707,9 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (ORDERED: move_ordered_split_places_spec own1 (map fst ps))
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
     (OWN: sound_own own2 mayinit mayuninit universe)
-    (WFOWN: wf_own_env own1),
+    (WFOWN: wf_own_env own1)
+    (FULL: (forall p full, In (p, full) ps -> is_full (own_universe own1) p = full))
+    (WTRFP: wt_footprint ce rfpty rfp),
     sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg (Kdropplace f st ps e own1 k) pc cont brk nret m (fpf_dropplace e fpm rfp fpf)
 | sound_Kdropcall: forall an body cfg k pc cont brk nret fpf st co fp ofs b membs fpl id m
     (CO: ce ! id = Some co)
@@ -6694,7 +6717,9 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (MEMBFP: list_forall2 (member_footprint m co b (Ptrofs.unsigned ofs)) fpl membs)
     (RANGE: Ptrofs.unsigned ofs + co_sizeof co <= Ptrofs.max_unsigned)
     (** Do we need some separation properties? *)
-    (SOUND: sound_cont an body cfg k pc cont brk nret m fpf),
+    (SOUND: sound_cont an body cfg k pc cont brk nret m fpf)
+    (INFRM: In b (flat_fp_frame fpf))
+    (CONTDIS: ~ In b (footprint_flat fp ++ flat_map footprint_flat fpl)),
     sound_cont an body cfg (Kdropcall id (Vptr b ofs) st membs k) pc cont brk nret m (fpf_drop fp fpl fpf)
 
 with sound_stacks : cont -> mem -> fp_frame -> Prop :=
@@ -6772,6 +6797,9 @@ Inductive sound_state: state -> Prop :=
     (* The location of the composite to be dropped is not in the
     current footprint ! Note that it may resides in fpf! *)
     (DIS: ~ In b (footprint_flat fp ++ flat_map footprint_flat fpl))
+    (* b is in fpf to make sure that changing the memory outside
+    flat_fp does not change b *)
+    (INFRM: In b (flat_fp_frame fpf))
     (ACC: rsw_acc w (rsw sg flat_fp m))
     (RANGE: Ptrofs.unsigned ofs + co_sizeof co <= Ptrofs.max_unsigned),
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
@@ -6796,26 +6824,53 @@ Inductive sound_state: state -> Prop :=
     (SEP: list_norepet (flat_fp ++ (footprint_flat rfp))),
     sound_state (Returnstate v k m)
 .
-
-
-
-(* (* sound_cont is preserved if its footprint is unchanged *) *)
-
-(* (* Similar to non-interference properties? *) *)
-Lemma sound_cont_unchanged: forall m1 m2 fpf k an body cfg next cont brk nret
-  (SOUND: sound_cont an body cfg k next cont brk nret m1 fpf)
-  (UNC: Mem.unchanged_on (fun b _ => In b (flat_fp_frame fpf)) m1 m2),
-    sound_cont an body cfg k next cont brk nret m2 fpf.
-Admitted.
-
+    
 Lemma mmatch_unchanged: forall m1 m2 fpm e own,
     mmatch fpm ce m1 e own ->
-    Mem.unchanged_on (fun b _ => In b (flat_fp_map fpm)) m1 m2 ->
+    Mem.unchanged_on (fun b _ => In b (footprint_of_env e ++ flat_fp_map fpm)) m1 m2 ->
     mmatch fpm ce m2 e own.
 Admitted.
 
-           
+Lemma sound_drop_place_state_unchanged: forall e m1 m2 fpm own rfp ps,
+    sound_drop_place_state e m1 fpm own rfp ps ->
+    Mem.unchanged_on (fun b _ => In b (footprint_of_env e ++ flat_fp_map fpm ++ footprint_flat rfp)) m1 m2 ->
+    sound_drop_place_state e m2 fpm own rfp ps.
+Admitted.
 
+(* (* sound_cont is preserved if its footprint is unchanged *) *)
+
+(* Similar to non-interference properties? *)
+Lemma sound_cont_unchanged: forall m1 m2 k fpf an body cfg next cont brk nret
+  (SOUND: sound_cont an body cfg k next cont brk nret m1 fpf)
+  (UNC: Mem.unchanged_on (fun b _ => In b (flat_fp_frame fpf)) m1 m2),
+    sound_cont an body cfg k next cont brk nret m2 fpf.
+Proof.
+  induction k; intros; inv SOUND; try (econstructor; eauto; fail).
+  - econstructor; eauto. inv MSTK.
+    econstructor; eauto.
+    eapply IHk; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. eapply in_app. right. eapply in_app; auto.
+    (* mmatch unchanged *)
+    eapply mmatch_unchanged. eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. rewrite app_assoc. eapply in_app. auto.
+  - econstructor; eauto.
+    eapply IHk; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. rewrite !app_assoc. eapply in_app. auto.
+    eapply mmatch_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. rewrite app_assoc. eapply in_app. auto.
+    (* sound_drop_place_state unchanged *)
+    eapply sound_drop_place_state_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. erewrite app_assoc with (n:= flat_fp_frame fpf0).
+    erewrite app_assoc. eapply in_app; auto.
+  - econstructor; eauto.
+Admitted.    
+
+    
 Lemma initial_state_sound: forall q s,
     query_inv wt_rs (se, w) q ->
     Smallstep.initial_state L q s ->
@@ -7420,6 +7475,27 @@ Proof.
     eauto.
 Qed.
 
+Lemma member_footprint_unchanged: forall fpl membs m1 m2 co b ofs,
+    list_forall2 (member_footprint m1 co b ofs) fpl membs ->
+    Mem.unchanged_on (fun b' _ => b' = b \/ In b' (flat_map footprint_flat fpl)) m1 m2 ->
+    list_forall2 (member_footprint m2 co b ofs) fpl membs.
+Proof.
+  induction 1; intros UNC.
+  - econstructor.
+  - exploit IHlist_forall2; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros.
+    destruct H1; auto.
+    right. eapply in_app; eauto.
+    intros. econstructor; eauto.
+    inv H. econstructor; eauto.
+    eapply sem_wt_loc_unchanged_blocks; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros.
+    destruct H; auto.
+    right. eapply in_app; auto.
+Qed.
+
 Lemma step_dropstate_sound: forall s1 t s2,
     sound_state s1 ->
     wt_state ce s1 ->
@@ -7481,6 +7557,8 @@ Proof.
     { simpl in NOREP. eapply list_norepet_append_left. eauto. }
     exploit deref_loc_rec_footprint_norepet; eauto. 
     intro. eapply DIS. eapply in_app; eauto. intros (N1 & N2).
+    (* show that cb is in (b1::fp) *)
+    exploit deref_loc_rec_footprint_in; eauto. intros IN.
     (* remove (fp_struct id2 fpl0) from fp *)
     generalize FFP as FFP1. intros.
     eapply deref_loc_rec_footprint_set with (fp2 := clear_footprint_rec (fp_struct id2 fpl0)) in FFP1.
@@ -7522,8 +7600,14 @@ Proof.
     exploit set_wt_footprint; eauto.
     eapply clear_wt_footprint_wt; eauto.
     rewrite <- OFSEQ. eauto.
+    intro. eapply DIS. eapply in_app_iff in H. eapply in_app.
+    destruct H; auto. left.
+    eapply EQUIV1. eapply in_app; auto.
     (* disjoint *)
     simpl. erewrite <- footprint_flat_fp_struct_eq. eauto.
+    (* cb in (fpf_drop rfp1 fpl fpf) *)
+    simpl. erewrite !in_app. inv IN; auto.
+    eapply EQUIV1 in H. eapply in_app in H. destruct H; try congruence. auto.    
     (* rsw_acc *)
     instantiate (1 := sg).
     eapply rsw_acc_trans. eauto.
@@ -7567,6 +7651,8 @@ Proof.
     { simpl in NOREP. eapply list_norepet_append_left. eauto. }
     exploit deref_loc_rec_footprint_norepet; eauto. 
     intro. eapply DIS. eapply in_app; eauto. intros (N1 & N2).
+    (* show that cb is in (b1::fp) *)
+    exploit deref_loc_rec_footprint_in; eauto. intros IN.
     (* remove (fp_enum id2 orgs tagz fid fofs fp0) from rfp *)
     generalize FFP as FFP1. intros.
     eapply deref_loc_rec_footprint_set with (fp2 := clear_footprint_rec (fp_enum id2 orgs tagz fid fofs fp0)) in FFP1.
@@ -7618,8 +7704,15 @@ Proof.
     exploit set_wt_footprint; eauto.
     eapply clear_wt_footprint_wt; eauto.
     rewrite <- OFSEQ. eauto.
+    intro. eapply DIS. eapply in_app_iff in H. eapply in_app.
+    destruct H; auto. left.
+    eapply EQUIV1. eapply in_app; auto.
     (* disjoint *) 
     simpl. rewrite app_nil_r. simpl in N2. auto.
+    (* show cb is in (fpf_drop rfp1 fpl fpf) *)
+    simpl. rewrite !in_app. inv IN; auto.
+    eapply EQUIV1 in H. eapply in_app in H.
+    destruct H; try congruence. auto.
     (* rsw_acc *)
     instantiate (1 := sg).
     eapply rsw_acc_trans. eauto.
@@ -7652,18 +7745,72 @@ Proof.
     assert (OFSEQ: Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned ofs + fofs0)) = (Ptrofs.unsigned ofs + fofs0)).
     { erewrite Ptrofs.unsigned_repr. auto.
       generalize (Ptrofs.unsigned_range ofs). lia. }
+    (* show that fp and fpl are disjoint *)
+    generalize NOREP as NOREP1. intros.
+    simpl in NOREP1. eapply list_norepet_app in NOREP1 as (N1 & N2 & N3).
+    assert (DIS1: list_disjoint (footprint_flat fp) (flat_map footprint_flat fpl)).
+    { red. intros. eapply N3; eauto.
+      eapply in_app; auto. }
     (* show drop_box_rec must succeed *)
     rewrite <- OFSEQ in FFP.
     exploit drop_box_rec_progress_and_unchanged; eauto.
     simpl in NOREP. eapply list_norepet_app in NOREP. intuition.
-    intro. eapply DIS. eapply in_app; auto.
     intros (m2 & DROP & UNC).
     exploit drop_box_rec_det. eapply DROPB. eapply DROP. intros. subst.
     split.
     eapply sound_dropstate with (fp:= fp_emp) (fpl:= fpl) (fpf:= fpf); eauto.
     econstructor. 
     (* member_footprint *)
-    
+    eapply member_footprint_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto. simpl. intros.
+    destruct H. subst.
+    intro. eapply DIS. eapply in_app; auto.
+    intro. eapply DIS1; eauto.
+    (* sound_cont *)
+    eapply sound_cont_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto.    
+    intros. simpl. intro.
+    eapply N3; eauto. eapply in_app; auto.
+    (* disjoint *)
+    simpl. intro. eapply DIS. eapply in_app; auto.
+    (* rsw_acc *)
+    instantiate (1 := sg).
+    simpl. eapply rsw_acc_trans; eauto.
+    simpl. econstructor.
+    eapply Mem.unchanged_on_implies; eauto. simpl.
+    intros. intro. eapply H. eapply in_app; auto.
+    eapply flat_footprint_separated_shrink; eauto.
+    eapply incl_appr. eapply incl_refl.
+    (* wt_state *)
+    admit.
+  (* step_dropstate_return1 *)
+  - inv SOUND. inv DROPMEMB. inv MEMBFP.
+    inv CONT.
+    split.
+    econstructor; eauto. 
+    (* rsw_acc *)
+    instantiate (1 := sg).
+    eapply rsw_acc_trans; eauto.
+    simpl. econstructor. eapply Mem.unchanged_on_refl.
+    eapply flat_footprint_separated_shrink.
+    eapply incl_appr. eapply incl_refl.
+    (* wt_state *)
+    admit.
+  (* step_dropstate_return2 *)
+  - inv SOUND. inv CONT. inv MEMBFP.
+    split.
+    econstructor; eauto.
+    simpl in *. eapply list_norepet_append_right; eauto.
+    (* rsw_acc *)
+    instantiate (1 := sg).
+    eapply rsw_acc_trans; eauto.
+    simpl. econstructor. eapply Mem.unchanged_on_refl.
+    eapply flat_footprint_separated_shrink.
+    eapply incl_appr. eapply incl_refl.
+    (* wt_state *)
+    admit.
+Admitted.
+
     
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
@@ -7892,9 +8039,11 @@ Proof.
     erewrite app_assoc in NOREP.
     eapply list_norepet_app in NOREP.
     destruct NOREP as (N1 & N2 & N3).
-    assert (NOTIN: ~ In b' (flat_fp_map fpm ++ flat_fp_frame fpf)).
-    { intro. eapply in_app in H. destruct H.
-      eapply N3. eapply in_app. left. eapply in_app. eauto.
+    assert (NOTIN: ~ In b' (footprint_of_env le ++ flat_fp_map fpm ++ flat_fp_frame fpf)).
+    { intro. erewrite !in_app in H. repeat destruct H.
+      eapply N3. erewrite! in_app. eauto.
+      eapply get_footprint_incl; eauto. simpl. eauto. auto.
+      eapply N3. erewrite! in_app. eauto.
       eapply get_footprint_incl; eauto. simpl. eauto. auto.
       eapply N3. eapply in_app. right. eauto.
       eapply get_footprint_incl; eauto. simpl. eauto. auto. }
@@ -7909,11 +8058,11 @@ Proof.
     (* sound_cont *)
     eapply sound_cont_unchanged; eauto.
     eapply Mem.free_unchanged_on; eauto. intros.
-    intro. eapply NOTIN. eapply in_app_iff. right. auto.
+    intro. eapply NOTIN. erewrite !in_app; auto.
     (* mmatch *)
     eapply mmatch_unchanged; eauto.
     eapply Mem.free_unchanged_on; eauto. intros.
-    intro. eapply NOTIN. eapply in_app_iff. left. auto.
+    intro. eapply NOTIN. rewrite app_assoc. eapply in_app; auto.
     (* norepet *)
     simpl.
     erewrite app_assoc.
@@ -7968,6 +8117,13 @@ Proof.
       intro. eapply N3. eauto. eapply in_app; eauto. auto. }
     exploit sound_split_fully_own_place_footprint_norepet; eauto. 
     intros (N1 & N2).
+    (* show that b is in (b3::rfp) *)
+    exploit sound_split_fully_own_place_footprint_in. eapply NOREP0. eauto.
+    intros IN1.
+    (* show b3 s in (le ++ fpm) *)
+    assert (IN2: In b3 (footprint_of_env le ++ flat_fp_map fpm)).
+    { destruct (path_of_place r) eqn: POP.
+      eapply get_loc_footprint_map_in_range; eauto. }
     (* remove (fp_struct id fpl) from rfp *)
     generalize SPLIT as SPLIT1. intros.
     eapply sound_split_fully_own_place_set with (fp2 := clear_footprint_rec (fp_struct id fpl)) in SPLIT1.
@@ -7998,6 +8154,11 @@ Proof.
     simpl in RAN1. rewrite CO in RAN1.
     unfold ce in CO.
     rewrite SCO in CO. inv CO.
+    (* show that rfp1 is wt_footprint *)
+    exploit get_wt_footprint_exists_wt. eapply WTRFP. eauto.
+    intros (ty1 & WTFP1 & WTPH1).
+    exploit set_wt_footprint; eauto.
+    eapply clear_wt_footprint_wt; eauto. intros WTRFP1.
     split.
     eapply sound_dropstate with (fp:= fp_emp) (fpf:= (fpf_dropplace le fpm rfp1 fpf)); eauto.
     econstructor.
@@ -8007,6 +8168,10 @@ Proof.
     econstructor; eauto.
     (* disjoint *)
     simpl. erewrite <- footprint_flat_fp_struct_eq; eauto.
+    (* prove b in (fpf_dropplace le fpm rfp1 fpf) *)
+    simpl. rewrite !in_app. erewrite !in_app in IN2.
+    inv IN1. destruct IN2; auto.
+    eapply EQUIV1 in H. erewrite !in_app in H. destruct H; try congruence; auto.
     (* rsw_acc *)
     instantiate (1 := sg).
     eapply rsw_acc_trans. eauto.
@@ -8059,6 +8224,13 @@ Proof.
     eapply sound_split_fully_own_place_set with (fp2 := clear_footprint_rec (fp_enum id orgs tagz fid0 fofs fp )) in SPLIT1.
     destruct SPLIT1 as (rfp1 & GFP1 & SFP1 & SPLIT1).
     simpl in SPLIT1.
+    (* show that b is in (b3::rfp) *)
+    exploit sound_split_fully_own_place_footprint_in. eapply NOREP0. eauto.
+    intros IN1.
+    (* show b3 s in (le ++ fpm) *)
+    assert (IN2: In b3 (footprint_of_env le ++ flat_fp_map fpm)).
+    { destruct (path_of_place r) eqn: POP.
+      eapply get_loc_footprint_map_in_range; eauto. }
     assert (NOREP2: list_norepet (footprint_flat rfp1)).
     { eapply set_footprint_norepet; eauto.
       rewrite empty_footprint_flat. econstructor.
@@ -8079,6 +8251,12 @@ Proof.
       simpl. red. intros. inv H2. }
     assert (NOREP4: list_norepet (flat_fp_frame (fpf_dropplace le fpm rfp1 fpf))).
     { simpl. simpl in NOREP3. eapply list_norepet_app in NOREP3. intuition. }
+    (* show that rfp1 is wt_footprint *)
+    exploit get_wt_footprint_exists_wt. eapply WTRFP. eauto.
+    intros (ty1 & WTFP1 & WTPH1).
+    exploit set_wt_footprint; eauto.
+    inv WTFP1. econstructor. congruence.
+    intros WTRFP1.
     split.
     eapply sound_dropstate with (fp := fp) (fpl:= nil); eauto.
     econstructor.
@@ -8088,6 +8266,10 @@ Proof.
     eapply sound_drop_place_state_box; eauto.
     (* disjoint *)
     simpl. rewrite app_nil_r. auto.
+    (* prove b in (fpf_dropplace le fpm rfp1 fpf) *)
+    simpl. rewrite !in_app. erewrite !in_app in IN2.
+    inv IN1. destruct IN2; auto.
+    eapply EQUIV1 in H. erewrite !in_app in H. destruct H; try congruence; auto.
     (* rsw_acc *)
     instantiate (1 := sg). 
     eapply rsw_acc_trans. eauto.
