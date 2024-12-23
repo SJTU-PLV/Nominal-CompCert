@@ -522,10 +522,21 @@ Qed.
 Definition find_fields (fid: ident) (fpl: list (ident * Z * footprint)) : option (ident * Z * footprint) :=
   find (fun '(fid', _, _) => if ident_eq fid fid' then true else false) fpl. 
 
-Definition set_field (fid: ident) (vfp: footprint) (fpl: list (ident * Z * footprint)) : list (ident * Z * footprint) :=
-  (map
-     (fun '(fid2, fofs2, ffp2) =>
-        if ident_eq fid fid2 then (fid2, fofs2, vfp) else (fid2, fofs2, ffp2)) fpl).
+(* Definition set_field (fid: ident) (vfp: footprint) (fpl: list (ident * Z * footprint)) : list (ident * Z * footprint) := *)
+(*   (map *)
+(*      (fun '(fid2, fofs2, ffp2) => *)
+(*         if ident_eq fid fid2 then (fid2, fofs2, vfp) else (fid2, fofs2, ffp2)) fpl). *)
+
+(* only set the first occurence of fid *)
+Fixpoint set_field (fid: ident) (vfp: footprint) (fpl: list (ident * Z * footprint)) : list (ident * Z * footprint) :=
+  match fpl with
+  | nil => nil
+  | (fid', fofs, ffp) :: fpl' =>
+      if ident_eq fid fid' then
+        (fid, fofs, vfp) :: fpl'
+      else
+        (fid', fofs, ffp) :: (set_field fid vfp fpl')
+  end.
 
 
 Lemma find_fields_some: forall fid fid1 fpl fofs ffp,
@@ -547,12 +558,22 @@ Proof.
   destruct a. destruct p. destruct ident_eq in H0.
   - subst. destruct ident_eq.
     + subst. congruence.
-    + eapply IHfpl. eauto. eauto.
+    + simpl in H0. destruct ident_eq in H0; try congruence.
   - destruct ident_eq.
-    + inv H0. auto.
-    + eauto.
+    + subst. simpl in H0. destruct ident_eq in H0; try congruence.
+    + simpl in H0. destruct ident_eq in H0; try congruence.
+      eauto.
 Qed.
 
+Ltac simpl_find_fields :=
+  match goal with
+  | [H :find_fields _ (_ :: _) = Some _ |- _ ] =>
+      simpl; simpl in H;
+      destruct ident_eq; try congruence
+  | [ |- find_fields _ (_ :: _) = Some _ ] =>
+      simpl;
+      destruct ident_eq; try congruence
+  end.
 
 Lemma find_fields_same_offset: forall fpl fid id fofs ffp vfp,
     find_fields fid (set_field id vfp fpl) = Some (fid, fofs, ffp) ->
@@ -560,10 +581,10 @@ Lemma find_fields_same_offset: forall fpl fid id fofs ffp vfp,
 Proof.
   induction fpl; intros; simpl in *; try congruence.
   destruct a. destruct p. destruct ident_eq in H.
-  - subst. destruct ident_eq.
+  - subst. simpl_find_fields.
     + inv H. eauto.
-    + eapply IHfpl; eauto.
-  - destruct ident_eq.
+    + eauto.
+  - simpl_find_fields.
     + inv H. eauto.
     + eauto.
 Qed.
@@ -574,11 +595,8 @@ Lemma find_fields_same_footprint: forall fpl fid fofs ffp vfp,
 Proof.
   induction fpl; intros; simpl in *; try congruence.
   destruct a. destruct p. destruct ident_eq in H.
-  - subst. destruct ident_eq; auto.
-    inv H. auto. eauto.
-  - destruct ident_eq.
-    + congruence.
-    + eauto.
+  - subst. simpl_find_fields.
+  - simpl_find_fields. eauto.
 Qed.
 
 Lemma find_fields_set_spec: forall fpl fid1 fid2 fofs ffp vfp,
@@ -590,14 +608,46 @@ Proof.
   destruct ident_eq in H.
   - subst. inv H. destruct ident_eq; subst.
     + destruct ident_eq; try congruence.
+      simpl. destruct ident_eq; try congruence.
       auto.
-    + destruct ident_eq; try congruence.
+    + simpl_find_fields.
       destruct peq; try congruence. auto.
   - destruct ident_eq; subst.
-    + destruct ident_eq; try congruence.
-      erewrite IHfpl; eauto. destruct peq; try congruence.
-    + destruct ident_eq; try congruence.
-      erewrite IHfpl; eauto.
+    + simpl_find_fields.
+    + simpl_find_fields. eauto.
+Qed.
+
+Definition name_footprints (fpl: list (ident * Z * footprint)) : list ident :=
+  map (fun '(fid, _, _) => fid) fpl.
+
+Lemma find_fields_split: forall fpl id fofs ffp,
+    find_fields id fpl = Some (id, fofs, ffp) ->
+    exists l1 l2,
+      fpl = l1 ++ (id, fofs, ffp) :: l2
+      /\ ~ In id (name_footprints l1).
+Proof.
+  induction fpl; simpl; intros.
+  - inv H.
+  - destruct a. destruct p.
+    destruct ident_eq.
+    + inv H. exists nil, fpl.
+      split. simpl. auto.
+      intro. inv H.
+    + exploit IHfpl; eauto. intros (l1 & l2 & A1 & A2).
+      subst.
+      exists ((i,z,f)::l1), l2. split; auto.
+      intro. inv H0; congruence. 
+Qed.
+      
+Lemma set_fields_split: forall l1 l2 id fofs ffp ffp1,
+    ~ In id (name_footprints l1) ->
+    set_field id ffp1 (l1 ++ (id, fofs, ffp) :: l2 ) = (l1 ++ (id, fofs, ffp1) :: l2).
+Proof.
+  induction l1; simpl; intros.
+  - destruct ident_eq; try congruence.
+  - destruct a. destruct p. eapply Decidable.not_or in H.
+    destruct H. destruct ident_eq; try congruence.
+    f_equal. eauto.
 Qed.
 
 Section COMP_ENV.
@@ -692,9 +742,6 @@ Definition member_footprint_rel (wtfp: type -> footprint -> Prop) (co: composite
                              /\ wtfp fty fp
   end.
 
-Definition name_footprints (fpl: list (ident * Z * footprint)) : list ident :=
-  map (fun '(fid, _, _) => fid) fpl.
-
 Definition name_members (membs: members) : list ident :=
   map name_member membs.
 
@@ -735,11 +782,11 @@ Inductive wt_footprint : type -> footprint -> Prop :=
           /\ wt_footprint fty ffp)
     (* make sure that the flattened footprint list has the same order
     as that of the members *)
-    (FLAT: name_footprints fpl = name_members (co_members co))
+    (FLAT: name_footprints fpl = name_members (co_members co)),
     (* This norepet property is used to ensure that set_field onlys
     update one footprint instead of overriding some footprint with the
     same name *)
-    (NOREP: list_norepet (name_footprints fpl)),
+    (* (NOREP: list_norepet (name_footprints fpl)), *)
     wt_footprint (Tstruct orgs id) (fp_struct id fpl)
 | wt_fp_enum: forall orgs id tagz fid fty fofs fp co
     (CO: ce ! id = Some co)
@@ -1803,7 +1850,8 @@ Proof.
       eapply in_flat_map; eauto.
       intros NF.
       (*** Big problem: what if i has repetition in fpl??? The conclusion can not be proved! *)
-      
+Admitted.
+
       
 (* Key lemma to simplify the proof of set_disjoint_footprint_norepet *)
 Lemma PTree_remove_elements_eq {A: Type}: forall id (v: A) m,
@@ -1932,6 +1980,7 @@ Lemma set_footprint_map_incl: forall fpm1 fpm2 fp id phl b,
     In b (flat_fp_map fpm1) \/ In b (footprint_flat fp).
 Admitted.
 
+
 Lemma get_set_disjoint_footprint: forall phl fp fp' fp1 fp2,
     get_footprint phl fp = Some fp1 ->
     set_footprint phl fp2 fp = Some fp' ->
@@ -1957,18 +2006,26 @@ Proof.
       exploit find_fields_some. eapply FIND. intros (A1 & A2). subst.
       destruct (set_footprint phl fp2 f) eqn: S1; try congruence.
       inv SFP. simpl in *.
+      exploit find_fields_split; eauto.
+      intros (l1 & l2 & B1 & B2). subst.
+      erewrite set_fields_split; eauto.
+      erewrite flat_map_app in NOREP.
+      eapply list_norepet_app in NOREP as (N1 & N2 & N3).
       red. intros.
-      eapply in_flat_map in H.
-      destruct H as (((fid1 & fofs1) & ffp1) & IN1 & IN2).
-      eapply in_map_iff in IN1.
-      destruct IN1 as (((fid2 & fofs2) & ffp2) & IN3 & IN4).
-      destruct ident_eq in IN3.
-      * inv IN3. eapply IHphl; eauto.
-        eapply footprint_norepet_fields_norepet; eauto.
-      * inv IN3.
-        eapply footprint_norepet_fields_disjoint. eauto.
-        eapply IN4. eapply A2. auto. auto.
+      rewrite flat_map_app in H.
+      eapply in_app_iff in H. destruct H.
+      * eapply N3. eauto.
+        simpl. eapply in_app. left.
         eapply get_footprint_incl; eauto.
+      * simpl in H. eapply in_app in H.
+        destruct H.
+        (* adhoc *)
+        -- eapply IHphl; eauto.
+           simpl in N2. eapply list_norepet_append_left. eauto.
+        -- simpl in N2.
+           eapply list_norepet_app in N2 as (N4 & N5 & N6).
+           intro. subst. eapply N6; eauto.
+           eapply get_footprint_incl; eauto.
     + destr_fp_enum fp ty.
       destruct (set_footprint phl fp2 fp) eqn: S1; try congruence.
       inv SFP. simpl in *. eapply IHphl; eauto.
@@ -2014,6 +2071,7 @@ Proof.
  rewrite empty_footprint_flat in B. inv B.
 Qed.
 
+(* May be with the new version of set_field, we do not need this lemma? *)
 Lemma in_norepet_footprint_list: forall fpl id fofs1 fofs2 ffp1 ffp2,
     In (id, fofs1, ffp1) fpl ->
     In (id, fofs2, ffp2) fpl ->
@@ -2021,9 +2079,8 @@ Lemma in_norepet_footprint_list: forall fpl id fofs1 fofs2 ffp1 ffp2,
     fofs1 = fofs2 /\ ffp1 = ffp2.
 Admitted.
 
-Lemma get_clear_footprint_incl2: forall phl fp1 fp2 fp3 ce ty (WTFP: wt_footprint ce ty fp1),
+Lemma get_clear_footprint_incl2: forall phl fp1 fp2 fp3,
     get_footprint phl fp1 = Some fp2 ->
-    (** It may clear more blocks than fp2!!  *)
     set_footprint phl (clear_footprint_rec fp2) fp1 = Some fp3 ->
     incl (footprint_flat fp1) (footprint_flat fp2 ++ footprint_flat fp3).
 Proof.
@@ -2033,8 +2090,8 @@ Proof.
   - destruct a.
     + destruct fp1; try congruence.
       destruct (set_footprint phl (clear_footprint_rec fp2) fp1) eqn: A; try congruence.
-      inv H0. inv WTFP.
-      generalize (IHphl fp1 fp2 f _ _ WT H A). intros INCL1.
+      inv H0. 
+      generalize (IHphl fp1 fp2 f H A). intros INCL1.
       red. simpl. intros. destruct H0; subst.
       * eapply in_app_iff. right. econstructor. auto.
       * eapply INCL1 in H0. eapply in_app_iff in H0. destruct H0.
@@ -2044,35 +2101,26 @@ Proof.
       destruct (find_fields fid fpl) eqn: FIND; try congruence.
       repeat destruct p.
       destruct (set_footprint phl (clear_footprint_rec fp2) f) eqn: A; try congruence.
-      inv H0. inv WTFP.
+      inv H0. 
       exploit find_fields_some; eauto. intros (B1 & B2). subst.
-      exploit WT2; eauto. intros (fty & FTY & FOFS & WTFP).
-      generalize (IHphl f fp2 f0 _ _ WTFP H A). intros INCL1.
+      generalize (IHphl f fp2 f0 H A). intros INCL1.
       red. simpl. intros.
       eapply in_flat_map in H0. destruct H0 as (((fid & fofs) & ffp) & IN1 & IN2).
-      destruct (ident_eq i fid).
-      * subst.
-        (* show that IN1 and B2 is the same *)
-        exploit in_norepet_footprint_list. eapply B2. eapply IN1. eauto.
-        intros (C1 & C2). subst.
-        eapply INCL1 in IN2. eapply in_app in IN2. destruct IN2.
-        -- eapply in_app; eauto.
-        -- eapply in_app. right.
-           eapply in_flat_map. exists (fid, fofs, f0).
-           split; auto.
-           eapply in_map_iff. exists (fid, fofs, ffp). destruct ident_eq; try congruence.
-           split; auto.
-      * eapply in_app_iff. right.
-        eapply in_flat_map.
-        exists (fid, fofs, ffp). split; auto.
-        eapply in_map_iff.
-        exists (fid, fofs, ffp). destruct ident_eq; try congruence. split; auto.
-    + destr_fp_enum fp1 ty0.
+      exploit find_fields_split; eauto. intros (l1 & l2 & A1 & A2). subst.
+      erewrite set_fields_split; eauto.
+      rewrite flat_map_app. simpl. rewrite !in_app. rewrite !in_app in IN1.
+      destruct IN1.
+      * right. left. eapply in_flat_map; eauto.
+      * inv H0.
+        -- inv H1. eapply INCL1 in IN2.
+           eapply in_app in IN2. destruct IN2; auto.
+        -- repeat right. eapply in_flat_map; eauto.
+    + destr_fp_enum fp1 ty.
       destruct (set_footprint phl (clear_footprint_rec fp2) fp1) eqn: A; try congruence.
-      inv H0. simpl. inv WTFP. eauto.
+      inv H0. simpl. eauto.
 Qed.
 
-Lemma get_clear_footprint_equiv: forall phl fp1 fp2 fp3 ce ty (WTFP: wt_footprint ce ty fp1),
+Lemma get_clear_footprint_equiv: forall phl fp1 fp2 fp3,
     get_footprint phl fp1 = Some fp2 ->
     set_footprint phl (clear_footprint_rec fp2) fp1 = Some fp3 ->
     list_equiv (footprint_flat fp2 ++ footprint_flat fp3) (footprint_flat fp1).
@@ -2264,13 +2312,12 @@ Record wf_env (ce: composite_env) (e: env): Prop := {
 End FPM.
 
 (* (fpm\fp ) * fp = fpm: this lemma relies on wf_env so we put here *)
-Lemma get_clear_footprint_map_equiv: forall fpm1 fpm2 ce fp le id phl b ofs,
-    wf_env fpm1 ce le ->
+Lemma get_clear_footprint_map_equiv: forall fpm1 fpm2 fp le id phl b ofs,
     get_loc_footprint_map le (id, phl) fpm1 = Some (b, ofs, fp) ->
     clear_footprint_map le (id, phl) fpm1 = Some fpm2 ->
     list_equiv (footprint_flat fp ++ flat_fp_map fpm2) (flat_fp_map fpm1).
 Proof.
-  intros until ofs. intros WFENV GFP CLR.
+  intros until ofs. intros GFP CLR.
   unfold clear_footprint_map in CLR. rewrite GFP in CLR.
   split.   
   - intros. eapply in_app_iff in H. destruct H.
@@ -2283,9 +2330,8 @@ Proof.
     destruct (fpm1 ! id) eqn: A2; try congruence.
     destruct (set_footprint phl (clear_footprint_rec fp) f) eqn: A3; try congruence.
     inv CLR.
-    exploit wf_env_footprint; eauto. intros (fp1 & B1 & B2). rewrite A2 in B1. inv B1.
     generalize GFP as GFP1. intros. eapply get_loc_footprint_eq in GFP1.
-    generalize (get_clear_footprint_equiv _ _ _ _ _ _ B2 GFP1 A3). intros EQV.
+    generalize (get_clear_footprint_equiv _ _ _ _ GFP1 A3). intros EQV.
     eapply in_flat_map in IN as ((id1 & fp2) & IN3 & IN4).
     simpl in *. eapply PTree.elements_complete in IN3.
     destruct (ident_eq id id1).
@@ -3103,22 +3149,14 @@ Proof.
       intros (B1 & B2). subst.
       destruct (set_footprint phl vfp f) eqn: B; try congruence.
       inv H0. inv H. econstructor.
-      intros.
+      intros.            
       exploit find_fields_some. eauto. intros (C1 & C2).
-      eapply in_map_iff in C2.
-      destruct C2 as (x & C2 & C3).
-      destruct x. destruct p.
-      destruct ident_eq in C2; inv C2.
-      (* if fid is equal to i *)
-      exploit find_fields_same_offset. eauto. intros (vfp' & E1).
-      rewrite A in E1. inv E1.
-      exploit FMATCH. eapply A. intros D1.
-      eapply IHphl; eauto.
-      (* if fid <> i *)
-      eapply FMATCH. instantiate (1 := fid).
-      (* prove that changing the footprint in i does not affect the
-      footprint in fid if i <> fid *)
-      eapply find_fields_different_field; eauto.
+      destruct (ident_eq fid i).
+      * subst. erewrite find_fields_set_spec in H; eauto.
+        inv H. destruct peq; try congruence.
+        eapply IHphl; eauto.
+      * eapply FMATCH.
+        eapply find_fields_different_field with (fid:=fid) (id:= i); eauto. 
     + destruct fp1; try congruence.
       destruct ty; try congruence.
       destruct (ident_eq i id) in H0; try congruence; subst.
@@ -4075,7 +4113,7 @@ Lemma name_footprints_set_field_same: forall fpl fid fp,
 Proof.
   induction fpl; simpl; eauto; intros.
   destruct a. destruct p. destruct ident_eq; subst.
-  f_equal. eauto. f_equal. eauto.
+  simpl. f_equal. simpl. f_equal. eauto.
 Qed.
 
 Lemma name_footprints_update_same: forall fpl,
@@ -4134,7 +4172,6 @@ Proof.
         intros FIND1.
         exploit WT2.  eauto. intros (fty & F1 & F2 & F3).
         eauto.
-    + erewrite name_footprints_set_field_same; eauto.
     + erewrite name_footprints_set_field_same; eauto.
   - exploit set_footprint_app_inv; eauto.
     intros (fp3 & vfp1 & A1 & A2 & A3).
@@ -4234,7 +4271,6 @@ Proof.
       eapply H; eauto.
     + intros. 
       erewrite name_footprints_update_same; eauto.
-    + erewrite name_footprints_update_same; eauto.
   - inv H. econstructor. congruence.
 Qed.    
       
@@ -5707,8 +5743,9 @@ Proof.
       (* unchanged on *)
       eapply Mem.unchanged_on_implies; eauto. simpl. rewrite CO.
       intros. intro. eapply H. clear H.
-      eapply loc_in_footprint_subfield; eauto.      
-      eapply in_map_iff. exists (i, fofsi, ffpi). destruct ident_eq; try congruence; auto.
+      eapply loc_in_footprint_subfield; eauto.
+      exploit find_fields_some. eapply find_fields_set_spec with (fid2:=i); eauto.
+      destruct peq; try congruence. intros (K1 & K2). eauto.
       (* permission unchanged *)
       intros. eapply perm_unchanged_in_loc; eauto.
       all: eauto.
@@ -5716,27 +5753,47 @@ Proof.
       intros. destruct (in_dec eq_block y (footprint_flat vfp)).
       eapply DIS2; eauto. intro. eapply H0.
       simpl. eapply in_flat_map. exists (i, fofsi, ffpi). eauto.
+      (* These code used in DIS3 and DIS4, how to generalize it? *)
       assert (IN1: In y (footprint_flat (fp_struct id fpl))).
       { simpl. simpl in H1. eapply in_flat_map in H1.
         destruct H1 as (((fid & fofs) & ffp) & IN2 & IN3).
-        eapply in_map_iff in IN2. destruct IN2 as (((fid1 & fofs1) & ffp1) & IN4 & IN5).
-        destruct ident_eq in IN4. inv IN4. contradiction.
-        inv IN4. eapply in_flat_map. exists (fid, fofs, ffp). eauto. }
+        exploit find_fields_split; eauto. intros (l1 & l2 & G1 & G2). subst.
+        erewrite set_fields_split in IN2; eauto.
+        eapply in_app in IN2. rewrite flat_map_app. simpl.
+        rewrite !in_app.
+        destruct IN2.
+        - left. eapply in_flat_map; eauto.
+        - inv H1.
+          + inv H2. contradiction.
+          + right. right. eapply in_flat_map; eauto. }
       intro. subst. contradiction.
       (* DIS3 *)
       intro. simpl in H. eapply in_flat_map in H.
       destruct H as (((fid & fofs) & ffp) & IN2 & IN3).
-      eapply in_map_iff in IN2. destruct IN2 as (((fid1 & fofs1) & ffp1) & IN4 & IN5).
-      destruct ident_eq in IN4. inv IN4. contradiction.
-      inv IN4. eapply NIN. simpl. eapply in_flat_map. eauto.
+      eapply NIN. simpl.
+      { exploit find_fields_split; eauto. intros (l1 & l2 & G1 & G2). subst.
+        erewrite set_fields_split in IN2; eauto.
+        eapply in_app in IN2. rewrite flat_map_app. simpl.
+        rewrite !in_app.
+        destruct IN2.
+        - left. eapply in_flat_map; eauto.
+        - inv H.
+          + inv H0. contradiction.
+          + right. right. eapply in_flat_map; eauto. }
       (* DIS4 *)
       intro. simpl in H. eapply in_flat_map in H.
       destruct H as (((fid & fofs) & ffp) & IN2 & IN3).
-      eapply in_map_iff in IN2. destruct IN2 as (((fid1 & fofs1) & ffp1) & IN4 & IN5).
-      destruct ident_eq in IN4. inv IN4. contradiction.
-      inv IN4. eapply DIS1.
+      eapply DIS1.
       eapply get_loc_footprint_incl. eauto. simpl.
-      eapply in_flat_map. eauto.
+      { exploit find_fields_split; eauto. intros (l1 & l2 & G1 & G2). subst.
+        erewrite set_fields_split in IN2; eauto.
+        eapply in_app in IN2. rewrite flat_map_app. simpl.
+        rewrite !in_app.
+        destruct IN2.
+        - left. eapply in_flat_map; eauto.
+        - inv H.
+          + inv H0. contradiction.
+          + right. right. eapply in_flat_map; eauto. }
     + destr_fp_enum fp3 ty. 
       inv A2. inv B2.
       exploit get_loc_footprint_sem_wt_loc. eapply WTLOC1. eapply A1.
@@ -7011,7 +7068,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (RET: cfg ! nret = Some Iend)
     (WFOWN: wf_own_env own),
     sound_cont an body cfg (Kcall p f e own k) nret None None nret m fpf
-| sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf mayinit mayuninit rfp rfpty
+| sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf mayinit mayuninit rfp (* rfpty *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc cont brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
@@ -7026,7 +7083,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (OWN: sound_own own2 mayinit mayuninit universe)
     (WFOWN: wf_own_env own1)
     (FULL: (forall p full, In (p, full) ps -> is_full (own_universe own1) p = full))
-    (WTRFP: wt_footprint ce rfpty rfp),
+    (* (WTRFP: wt_footprint ce rfpty rfp) *),
     sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg (Kdropplace f st ps e own1 k) pc cont brk nret m (fpf_dropplace e fpm rfp fpf)
 | sound_Kdropcall: forall an body cfg k pc cont brk nret fpf st co fp ofs b membs fpl id m
     (CO: ce ! id = Some co)
@@ -7074,7 +7131,7 @@ Inductive sound_state: state -> Prop :=
     (* invariant of the own_env *)
     (WFOWN: wf_own_env own),
     sound_state (State f s k e own m)
-| sound_dropplace: forall f cfg entry maybeInit maybeUninit universe next cont brk nret st drops k e own1 own2 m fpm fpf flat_fp sg mayinit mayuninit rfp rfpty
+| sound_dropplace: forall f cfg entry maybeInit maybeUninit universe next cont brk nret st drops k e own1 own2 m fpm fpf flat_fp sg mayinit mayuninit rfp (* rfpty  *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (CONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k next cont brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
@@ -7093,7 +7150,7 @@ Inductive sound_state: state -> Prop :=
     (WF: wf_env fpm ce e)
     (* We just want to make rfp well structured (e.g., field names are
     norepet and the size of blocks are in range) *)
-    (WTRFP: wt_footprint ce rfpty rfp)
+    (* (WTRFP: wt_footprint ce rfpty rfp)  *)
     (IM: get_IM_state maybeInit!!next maybeUninit!!next (Some (mayinit, mayuninit)))
     (* Why sound_own own2 here not own1? because the analysis result is about the next node *)
     (OWN: sound_own own2 mayinit mayuninit universe)
@@ -7699,8 +7756,6 @@ address computing of deref_loc_rec *)
 Lemma drop_box_rec_app: forall l1 l2 b1 ofs1 b2 ofs2 m1 m2 m3 b3 ofs3 ty ty1 fp fp1
     (DFP: deref_loc_rec_footprint m1 b2 (Ptrofs.unsigned ofs2) ty fp l1 b3 ofs3 ty1 fp1)
     (NIN: ~ In b2 (footprint_flat fp))
-    (* used to prove get_clear_footprint *)
-    (WTFP: wt_footprint ce ty fp)
     (* freeing the blocks of l1 does not change the result of
     deref_loc_rec in l2 *)
     (NOREP: list_norepet (footprint_flat fp))
@@ -7734,7 +7789,7 @@ Proof.
     exploit deref_loc_rec_footprint_eq; eauto. intros (C1 & C2). subst.
     rewrite LOAD in H0. inv H0.
     (* show fp = rfp1 + b5 *)
-    generalize (get_clear_footprint_equiv _ _ _ _ _ _ WTFP B1 B2); eauto.
+    generalize (get_clear_footprint_equiv _ _ _ _  B1 B2); eauto.
     intros EQUIV.
     exploit get_footprint_norepet. eapply NOREP. eauto.
     simpl. intros NOREP2. inv NOREP2.
@@ -7772,8 +7827,6 @@ Qed.
 Lemma drop_box_rec_progress_and_unchanged: forall tys b ofs m1 fp ty b1 ofs1 ty1 fp1
     (* norepet is to make sure that DEREF can hold if we free a block in m1 *)
     (NOREP: list_norepet (footprint_flat fp))
-    (* used to prove drop_box_rec_app *)
-    (WTFP: wt_footprint ce ty fp)
     (* we need to consider b = b1 in induction case *)
     (NIN: ~ In b (footprint_flat fp))
     (DEREF: deref_loc_rec_footprint m1 b (Ptrofs.unsigned ofs) ty fp tys b1 ofs1 ty1 fp1),
@@ -7796,8 +7849,8 @@ Proof.
     replace 0 with (Ptrofs.unsigned Ptrofs.zero) in A1 by auto.
     simpl in NOREP. inv NOREP.
     exploit IHn. eauto. 
-    4: eapply A1. auto.
-    inv WTFP. eauto. auto.
+    3: eapply A1. auto.
+    auto.
     intros (m2 & DROP & UNC1).
     (* show that we can free b2 in m2 *)
     exploit Mem.load_unchanged_on. eapply UNC1.
@@ -7817,7 +7870,6 @@ Proof.
       rewrite Ptrofs.unsigned_repr; lia. }
     exists m2'. split.
     eapply drop_box_rec_app; eauto.
-    inv WTFP. eauto.
     (* unchanged_on *)
     intros. econstructor; eauto. econstructor.
     econstructor. simpl. eauto.
@@ -8026,10 +8078,6 @@ Proof.
     (* sound_cont *)
     econstructor; eauto.
     econstructor; eauto.
-    (* show that rfp1 is wt_footprint *)
-    exploit get_wt_footprint_exists_wt; eauto. intros (ty1 & WTFP1 & WTPH1).
-    exploit set_wt_footprint; eauto.
-    eapply clear_wt_footprint_wt; eauto.
     rewrite <- OFSEQ. eauto.
     intro. eapply DIS. eapply in_app_iff in H. eapply in_app.
     destruct H; auto. left.
@@ -8129,11 +8177,6 @@ Proof.
     (* sound_cont *)
     econstructor; eauto.
     econstructor; eauto.
-    (* show that rfp1 is wt_footprint *)
-    exploit get_wt_footprint_exists_wt. eapply WTFFP. eauto.
-    intros (ty1 & WTFP1 & WTPH1).
-    exploit set_wt_footprint; eauto.
-    eapply clear_wt_footprint_wt; eauto.
     rewrite <- OFSEQ. eauto.
     intro. eapply DIS. eapply in_app_iff in H. eapply in_app.
     destruct H; auto. left.
@@ -8520,11 +8563,6 @@ Proof.
     simpl in H0. contradiction.
     (* sound_drop_place_state *)
     econstructor; eauto.
-    (* wt_footprint *)
-    exploit get_wt_footprint_exists_wt. eapply WTRFP. eauto.
-    intros (ty2 & WTFP2 & WTPH).    
-    eapply set_wt_footprint; eauto.
-    econstructor. inv WTFP2. congruence.    
     (* wt_state *)
     admit.
   (* step_dropplace_struct *)
@@ -8587,11 +8625,6 @@ Proof.
     simpl in RAN1. rewrite CO in RAN1.
     unfold ce in CO.
     rewrite SCO in CO. inv CO.
-    (* show that rfp1 is wt_footprint *)
-    exploit get_wt_footprint_exists_wt. eapply WTRFP. eauto.
-    intros (ty1 & WTFP1 & WTPH1).
-    exploit set_wt_footprint; eauto.
-    eapply clear_wt_footprint_wt; eauto. intros WTRFP1.
     split.
     eapply sound_dropstate with (fp:= fp_emp) (fpf:= (fpf_dropplace le fpm rfp1 fpf)); eauto.
     econstructor.
@@ -8684,12 +8717,6 @@ Proof.
       simpl. red. intros. inv H2. }
     assert (NOREP4: list_norepet (flat_fp_frame (fpf_dropplace le fpm rfp1 fpf))).
     { simpl. simpl in NOREP3. eapply list_norepet_app in NOREP3. intuition. }
-    (* show that rfp1 is wt_footprint *)
-    exploit get_wt_footprint_exists_wt. eapply WTRFP. eauto.
-    intros (ty1 & WTFP1 & WTPH1).
-    exploit set_wt_footprint; eauto.
-    inv WTFP1. econstructor. congruence.
-    intros WTRFP1.
     split.
     eapply sound_dropstate with (fp := fp) (fpl:= nil); eauto.
     econstructor.
@@ -8717,7 +8744,7 @@ Proof.
     admit.
   - inv SOUND. inv SDP. inv SPLIT.
     split.
-    eapply sound_dropplace with (rfp:= fp_emp) (rfpty:= Tunit); eauto.
+    eapply sound_dropplace with (rfp:= fp_emp); eauto.
     (* norepet *)
     simpl. simpl in NOREP.
     rewrite app_assoc in NOREP.
@@ -8734,7 +8761,7 @@ Proof.
     eapply incl_app_app. eapply incl_refl.
     eapply incl_app_app. eapply incl_refl.
     eapply incl_appr. eapply incl_refl.
-    econstructor. econstructor. congruence.
+    econstructor. 
     (* wt_state *)
     admit.
   - inv SOUND. inv SDP.
@@ -9008,8 +9035,6 @@ Proof.
     eapply split_sound; eauto. eapply in_map_iff. exists (p0, full). eauto.
     (* wf_env *)
     auto.
-    (* wt_footprint of the rfp: so adhoc we just instantiate it with unit... *)
-    instantiate (1 := Tunit). econstructor. congruence.
     eauto. auto. auto.
     (* wt_state *)
     admit.
