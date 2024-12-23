@@ -1811,14 +1811,38 @@ Proof.
   eapply in_footprint_flat_fp_map; eauto. auto.
 Qed.  
 
-Lemma set_footprint_incl: forall fp1 fp2 fp  phl b,
+Lemma set_footprint_incl: forall phl fp1 fp2 fp b,
     set_footprint phl fp fp1 = Some fp2 ->
     In b (footprint_flat fp2) ->
     In b (footprint_flat fp1)
     \/ In b (footprint_flat fp).
-Admitted.
-
-
+Proof.
+  induction phl; simpl; intros.
+  - inv H. auto.
+  - destruct a.
+    + destruct fp1; try congruence. 
+      destruct (set_footprint phl fp fp1) eqn: A; try congruence.
+      inv H. simpl in *. destruct H0; eauto.
+      exploit IHphl; eauto. intros [E1|E2]; eauto.
+    + destruct fp1; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      exploit find_fields_some; eauto. intros (A1 & A2). subst.
+      destruct (set_footprint phl fp f) eqn: A; try congruence.
+      inv H. simpl in *.
+      exploit find_fields_split; eauto.
+      intros (l1 & l2 & B1 & B2). subst.
+      erewrite set_fields_split in H0; eauto. rewrite flat_map_app in *.
+      simpl in *.      
+      rewrite !in_app in H0.
+      rewrite !in_app. destruct H0; auto.
+      destruct H; auto.
+      exploit IHphl; eauto. intros [E1|E2]; eauto.
+    + destr_fp_enum fp1 ty.
+      destruct (set_footprint phl fp fp1) eqn: A; try congruence.
+      inv H. simpl in *. eauto.
+Qed.
+      
 Lemma set_footprint_norepet: forall phl fp1 fp2 vfp,
     set_footprint phl vfp fp1 = Some fp2 ->
     list_norepet (footprint_flat fp1) ->
@@ -1849,8 +1873,25 @@ Proof.
       red. intros. eapply DIS; eauto.
       eapply in_flat_map; eauto.
       intros NF.
-      (*** Big problem: what if i has repetition in fpl??? The conclusion can not be proved! *)
-Admitted.
+      exploit find_fields_split; eauto.
+      intros (l1 & l2 & B1 & B2). subst.
+      erewrite set_fields_split; eauto. rewrite flat_map_app in *.
+      simpl in *.
+      eapply list_norepet_append_commut2.
+      eapply list_norepet_append_commut2 in N1.
+      rewrite app_assoc in *. eapply list_norepet_app.
+      eapply list_norepet_app in N1 as (N3 & N4 & N5).
+      repeat apply conj; auto.
+      red. intros.
+      exploit set_footprint_incl; eauto. intros [E1|E2].
+      eapply N5; eauto.
+      eapply DIS; eauto.
+      rewrite in_app in H.
+      rewrite !in_app. destruct H; auto.
+    + destr_fp_enum fp1 ty.
+      destruct (set_footprint phl vfp fp1) eqn: A; try congruence.
+      inv SET. simpl in *. eauto.
+Qed.
 
       
 (* Key lemma to simplify the proof of set_disjoint_footprint_norepet *)
@@ -1973,14 +2014,38 @@ Proof.
   eapply PTree.elements_correct. auto.
 Qed.
 
-(* TODO *)
+Lemma in_app_commut {A: Type} : forall (l1 l2 l3: list A) a,
+      In a (l1 ++ l2 ++ l3) <-> In a (l1 ++ l3 ++ l2).
+Proof.
+  intros. split; intros.
+  - rewrite !in_app in *.
+    repeat destruct H; auto.
+  - rewrite !in_app in *.
+    repeat destruct H; auto.
+Qed.
+
 Lemma set_footprint_map_incl: forall fpm1 fpm2 fp id phl b,
     set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
     In b (flat_fp_map fpm2) ->
     In b (flat_fp_map fpm1) \/ In b (footprint_flat fp).
-Admitted.
-
-
+Proof.
+  intros.
+  simpl in *. destruct (fpm1!id) eqn: A; try congruence.
+  destruct (set_footprint phl fp f) eqn: B; try congruence.
+  inv H. 
+  unfold flat_fp_map in *.
+  exploit PTree.elements_remove. eauto. intros (l1 & l2 & A1 & A2).
+  exploit PTree.elements_remove. instantiate (3 := (PTree.set id f0 fpm1)).
+  eapply PTree.gss; eauto. intros (l3 & l4 & A3 & A4).
+  erewrite <- PTree_remove_elements_eq in A4. rewrite A2 in A4.
+  rewrite A1 in *. rewrite A3 in *.  
+  rewrite flat_map_app in *. simpl in *.
+  erewrite in_app_commut in *. rewrite app_assoc in *.
+  rewrite <- flat_map_app in *. rewrite A4 in *.
+  rewrite in_app in *. destruct H0; auto.
+  exploit set_footprint_incl; eauto. intros [E1|E2]; auto.
+Qed.
+  
 Lemma get_set_disjoint_footprint: forall phl fp fp' fp1 fp2,
     get_footprint phl fp = Some fp1 ->
     set_footprint phl fp2 fp = Some fp' ->
@@ -2071,13 +2136,6 @@ Proof.
  rewrite empty_footprint_flat in B. inv B.
 Qed.
 
-(* May be with the new version of set_field, we do not need this lemma? *)
-Lemma in_norepet_footprint_list: forall fpl id fofs1 fofs2 ffp1 ffp2,
-    In (id, fofs1, ffp1) fpl ->
-    In (id, fofs2, ffp2) fpl ->
-    list_norepet (name_footprints fpl) ->
-    fofs1 = fofs2 /\ ffp1 = ffp2.
-Admitted.
 
 Lemma get_clear_footprint_incl2: forall phl fp1 fp2 fp3,
     get_footprint phl fp1 = Some fp2 ->
@@ -2287,7 +2345,7 @@ Section FPM.
 Variable fpm : fp_map.
   
 Definition mmatch ce (m: mem) (e: env) (own: own_env): Prop :=
-  forall p b ofs fp,
+  forall p b ofs fp (WTPL: wt_place e ce p),
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     is_init own p = true ->
     bmatch ce m b ofs fp
@@ -2355,7 +2413,12 @@ Definition ce_extends (env env': composite_env) : Prop := forall id co, env!id =
 Lemma ce_extends_remove: forall ce1 ce2 id,
     ce_extends ce1 ce2 ->
     ce_extends (PTree.remove id ce1) ce2.
-Admitted.
+Proof.
+  intros. red.  
+  intros. destruct (ident_eq id id0). subst.
+  rewrite PTree.grs in H0. inv H0.
+  rewrite PTree.gro in H0; eauto.
+Qed.
 
 (* Some useful invariant of the own_env in the move checking, such as
 if a place p is init, then all its dominators is init. Those
@@ -2682,7 +2745,7 @@ Proof.
       eapply in_app. eauto. }
     exploit IHp; eauto.
     intros (b & ofs & fp & PFP & WTFP).
-    exploit MM. eauto. eauto.
+    exploit MM; eauto. 
     intros (BM & FULL).
     destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
     inv WT2.
@@ -2726,6 +2789,7 @@ splitting! *)
 Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit universe
     (MM: mmatch fpm ce m e own)
     (POWN: must_movable ce1 init uninit universe p = true)
+    (WTP: wt_place e ce p)
     (SOUND: sound_own own init uninit universe)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
     (WTFP: wt_footprint ce (typeof_place p) fp)
@@ -2737,96 +2801,110 @@ Proof.
   intros ce1 IH. intros. unfold must_movable, must_movable_fix in *.
   erewrite unroll_Fix in *.
   destruct (typeof_place p) eqn: PTY; simpl in POWN; try congruence.
-  - exploit MM. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
   (* Tbox *)
   - destruct (must_init init uninit universe p) eqn: INIT; try congruence.
     destruct (is_full universe p) eqn: PFULL.
     (* p is full: it must be sem_wt *)
-    eapply MM. eauto. eapply must_init_sound; eauto.
+    eapply MM. eauto. eauto. eapply must_init_sound; eauto.
     erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.    
     (* adhoc generalization *)
     clear PFULL.
     generalize dependent p. generalize dependent b.
     generalize dependent fp. generalize dependent ofs.
     induction t; intros; simpl in *; try congruence.
-    + exploit MM. eauto. eapply must_init_sound; eauto.
+    + exploit MM. eauto. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p Tunit)) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto. econstructor; eauto.
+      rewrite PTY. auto.
+      eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
     (* The same as Tunit case (just copying) *)
-    + exploit MM. eauto. eapply must_init_sound; eauto.
+    + exploit MM. 2: eauto. eauto.
+      eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tint i s))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto.
+      econstructor; eauto.
+      rewrite PTY. auto.
+      eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
-    + exploit MM. eauto. eapply must_init_sound; eauto.
+    + exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tlong s))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto.
+      econstructor; eauto.
+      rewrite PTY. auto.
+      eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
-    + exploit MM. eauto. eapply must_init_sound; eauto.
+    + exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tfloat f))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto.
+      econstructor; eauto.
+      rewrite PTY. auto.
+      eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
     (* Induction case *)
     + destruct (must_init init uninit universe (Pderef p (Tbox t))) eqn: INIT2; try congruence.
       destruct (is_full universe (Pderef p (Tbox t))) eqn: PFULL1.
       (* case1: deref p is full: it must be sem_wt *)
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & FULL). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor; eauto. econstructor; eauto.
       destruct (path_of_place p) eqn: POP.
       eapply MM. instantiate (1 := Pderef p (Tbox t)).
+      econstructor. auto. rewrite PTY. auto. 
       simpl. rewrite POP. erewrite get_loc_footprint_map_app. eauto.
       eauto. simpl. auto.
       eapply must_init_sound; eauto.
       erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.
       (* case2: deref p is not full *)      
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & FULL). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. simpl. eauto. eauto.
       econstructor; eauto.
       eapply IHt; eauto. simpl. auto.
+      econstructor. auto. rewrite PTY. auto.
       (* get_loc_footprint_map *)
       simpl. destruct (path_of_place p) eqn: POP.
       eapply get_loc_footprint_map_app; eauto.
     (* Tstruct *)
     + destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
       (* fp is not empty *)
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       clear GCO. generalize P as P1. intros P1. eapply EXTEND in P. rewrite P in *.
       econstructor. simpl. eauto. eauto. econstructor; eauto.
@@ -2838,7 +2916,10 @@ Proof.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tstruct l id1))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto.
+      econstructor; eauto.
+      rewrite PTY. auto.
+      eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). simpl in *.
       (* prove sem_wt_loc: first eliminate Tbox *)
       eapply WTLOC1.
@@ -2864,6 +2945,7 @@ Proof.
       generalize (POWN (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) INMEM).
       instantiate (1 := Pfield (Pderef p (Tstruct l id1)) fid fty).
       eauto.
+      econstructor; simpl; eauto. econstructor. auto. rewrite PTY. auto.
       auto.
       (* get_loc_footprint_map *)
       simpl. destruct (path_of_place p) eqn: POP.
@@ -2877,14 +2959,14 @@ Proof.
     (* Tvariant *)
     + destruct (ce1 ! i) eqn: CO; try congruence.      
       eapply andb_true_iff in POWN. destruct POWN as (INIT1 & FULL).
-      exploit MM. eauto. eapply must_init_sound; eauto.
+      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). (* rewrite PTY in *. *)
       inv WTFP; inv BM; simpl in *; try congruence.
       eapply EXTEND in CO. rewrite CO in *.      
       econstructor; eauto. 
       econstructor; eauto.
       cut (is_full own.(own_universe) (Pderef p (Tvariant l i)) = true).
-      eapply MM.
+      eapply MM. econstructor. auto. rewrite PTY. auto.
       simpl. destruct (path_of_place p) eqn: POP.
       eapply get_loc_footprint_map_app; eauto.      
       eapply must_init_sound; eauto.
@@ -2895,7 +2977,7 @@ Proof.
     destruct (must_init init uninit universe p) eqn: INIT; try congruence.
     (** Case1 check that p is full so we can derive sem_wt_loc by mmatch *)
     destruct (is_full universe p) eqn: FULL; try congruence.
-    exploit MM. eauto. eapply must_init_sound; eauto.
+    exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
     intros (BM & WTLOC).  eapply WTLOC.
     erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
     (** Case2: p is not in the universe *)
@@ -2916,7 +2998,8 @@ Proof.
       rewrite P1 in CO. inv CO.
       split; eauto. }    
     generalize (POWN (Pfield p fid fty, fty) INMEM).
-    instantiate (1 := (Pfield p fid fty)). eauto.    
+    instantiate (1 := (Pfield p fid fty)). eauto.
+    econstructor; eauto.
     auto.
     (* place_footprint *)
     simpl. destruct (path_of_place p) eqn: POP.
@@ -2929,7 +3012,7 @@ Proof.
   (* Tvariant *)
   - destruct (ce1 ! i) eqn: CO; try congruence.
     eapply andb_true_iff in POWN. destruct POWN as (INIT & FULL).
-    exploit MM. eauto. eapply must_init_sound; eauto.
+    exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
     intros (BM & WTLOC). 
     inv WTFP; inv BM; simpl in *; try congruence. 
     eapply WTLOC.
