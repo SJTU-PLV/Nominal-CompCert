@@ -1050,37 +1050,19 @@ Proof.
   induction p; simpl; auto; destruct (path_of_place p); auto.
 Qed.
 
-(** Relation between is_prefix and paths inclusion *)
 
-Lemma is_prefix_paths_app: forall p1 p2,
-    is_prefix p1 p2 = true ->
-    fst (path_of_place p1) = fst (path_of_place p2)
-    /\ exists phl, snd (path_of_place p2) = snd (path_of_place p1) ++ phl.
+Lemma paths_not_contain_disjoint: forall l1 l2,
+    paths_contain l1 l2 = false ->
+    paths_contain l2 l1 = false ->
+    paths_disjoint l1 l2.
 Proof.
-  Admitted.
-
-Lemma is_prefix_paths_app_inv: forall p1 p2 phl,
-    fst (path_of_place p1) = fst (path_of_place p2) ->
-    snd (path_of_place p2) = snd (path_of_place p1) ++ phl ->
-    is_prefix p1 p2 = true
-    /\ (phl <> nil -> is_prefix_strict p1 p2 = true).
-Proof.
-  induction p1; intros p2 phl A1 A2; simpl in *.
-  - unfold is_prefix.
-    generalize dependent phl.
-    induction p2; simpl in *; subst; intros.
-    +                           (* require wt_place *)
-      admit.
-    + destruct (path_of_place p2) eqn: POP2. simpl in *.
-      admit.
-    + admit.
-    + admit.
-  - destruct (path_of_place p1) eqn: POP1. simpl in *.
-    exploit IHp1. eauto. rewrite A2.
-    rewrite <- app_assoc. eauto.
-    intros (B1 & B2). exploit B2. simpl. congruence.
-    intros PRES.
-Admitted.
+  induction l1; intros; simpl in *.
+  - congruence.
+  - destruct l2; simpl in *; try congruence.
+    destruct path_eq; subst; destruct path_eq; try congruence.
+    eapply phs_disjoint2. auto.
+    eapply phs_disjoint1; auto.
+Qed.
 
 Lemma is_not_prefix_disjoint: forall p1 p2,
     is_prefix p1 p2 = false ->
@@ -1088,11 +1070,33 @@ Lemma is_not_prefix_disjoint: forall p1 p2,
     fst (path_of_place p1) <> fst (path_of_place p2) \/
       paths_disjoint (snd (path_of_place p1)) (snd (path_of_place p2)).
 Proof.
-  induction p1; intros; destruct (path_of_place p2) eqn: POP2; simpl in *.
-  - unfold is_prefix in *.
-    simpl in *.
-Admitted.
-  
+  intros. unfold is_prefix in *.
+  destruct (path_of_place p1) eqn: POP1.
+  destruct (path_of_place p2) eqn: POP2.  
+  simpl.
+  destruct ident_eq in H; destruct ident_eq in H0; subst;  simpl in *; try congruence; auto.
+  right. eapply paths_not_contain_disjoint; auto.
+Qed.  
+
+Lemma paths_contain_app_inv: forall l1 l2,
+    paths_contain l1 l2 = true ->
+    exists l3, l2 = l1 ++ l3.
+Proof.
+  induction l1; intros; simpl in *; eauto.
+  destruct l2; try congruence; eauto.
+  destruct path_eq; subst; try congruence; eauto.
+  exploit IHl1; eauto. intros (l3 & A1). subst. eauto.
+Qed.
+
+Lemma is_prefix_paths_app: forall p1 p2,
+    is_prefix p1 p2 = true ->
+    fst (path_of_place p1) = fst (path_of_place p2)
+    /\ exists phl, snd (path_of_place p2) = snd (path_of_place p1) ++ phl.
+Proof.
+  intros. destr_prefix.
+  split. auto.
+  eapply paths_contain_app_inv. eauto.
+Qed.
 
 (** Prove some properties w.r.t list_nth_z  *)
 Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
@@ -1269,6 +1273,14 @@ Ltac destr_fp_enum fp ty :=
   destruct list_eq_dec; try congruence;
   destruct ident_eq; try congruence; subst.
 
+Ltac destr_fp_field fp H :=
+  let A1 := fresh "A" in
+  let A2 := fresh "A" in
+  let FIND := fresh "FIND" in
+  destruct fp; try congruence;
+  destruct find_fields as [p|] eqn: FIND; try congruence;
+  repeat destruct p; simpl in H;
+exploit find_fields_some; eauto; intros (A1 & A2); subst.
 
 
 Lemma get_loc_footprint_app: forall phl1 phl2 fp fp1 b ofs b1 ofs1 b2 ofs2 fp2,
@@ -1281,10 +1293,7 @@ Proof.
   - destruct a.
     + destruct fp; try congruence.
       eauto.
-    + destruct fp; try congruence.
-      destruct (find_fields fid fpl) eqn: FIND; try congruence.
-      repeat destruct p.
-      eauto.
+    + destr_fp_field fp H.
     + destr_fp_enum fp ty.
       eauto.
 Qed.
@@ -1696,7 +1705,53 @@ Proof.
   - eauto.
 Qed.
 
-    
+Lemma app_norepet_inv_tail: forall (l1 l2 l3 l4: list (positive * (block * type))) (id1: ident) (b: block) (ty1: type) id2 ty2,
+    l1 ++ (id1, (b, ty1)) :: l2 = l3 ++ (id2, (b, ty2)) :: l4 ->
+    ~ In b (map (fun elt : positive * (block * type) => fst (snd elt)) l1) ->
+    ~ In b (map (fun elt : positive * (block * type) => fst (snd elt)) l2) ->
+    ~ In b (map (fun elt : positive * (block * type) => fst (snd elt)) l3) ->
+    ~ In b (map (fun elt : positive * (block * type) => fst (snd elt)) l4) ->
+    id1 = id2.
+Proof.
+  induction l1; simpl; intros; auto.
+  - destruct l3; simpl in *.
+    + inv H. auto.
+    + destruct p. destruct p0.
+      inv H. simpl in *. eapply Decidable.not_or in H2.
+      destruct H2. congruence.
+  - destruct a. destruct p0.
+    destruct l3; simpl in *.
+    + inv H. eapply Decidable.not_or in H0.
+      destruct H0. congruence.
+    + inv H. simpl in *.
+      eapply IHl1; eauto.
+Qed.
+
+      
+Lemma footprint_norepet_env_disjoint: forall e id1 id2 b1 b2 ty1 ty2,
+    list_norepet (footprint_of_env e) ->
+    e ! id1 = Some (b1, ty1) ->
+    e ! id2 = Some (b2, ty2) ->
+    id1 <> id2 ->
+    b1 <> b2.
+Proof.
+  intros until ty2. intros NOREP E1 E2 NEQ.
+  intro. eapply NEQ. subst.
+  unfold footprint_of_env in NOREP.
+  generalize NOREP as NOREP1. intros.
+  exploit PTree.elements_remove. eapply E1. intros (l1 & l2 & A1 & A2).  
+  rewrite A1 in NOREP. rewrite map_app in NOREP. simpl in NOREP.
+  exploit PTree.elements_remove. eapply E2. intros (l3 & l4 & A3 & A4).
+  rewrite A3 in NOREP1. rewrite map_app in NOREP1. simpl in NOREP1.
+  rewrite A1 in A3.
+  eapply list_norepet_app in NOREP as (N1 & N2 & N3). inv N2.
+  eapply list_norepet_app in NOREP1 as (N4 & N5 & N6). inv N5.  
+  eapply app_norepet_inv_tail; eauto.
+  intro. eapply N3; eauto. simpl. auto.
+  intro. eapply N6; eauto. simpl. auto.
+Qed.
+
+  
 Lemma footprint_norepet_fields_norepet: forall (fpl: list (ident * Z * footprint)) id fofs fp,
     list_norepet (flat_map (fun '(_, _, fp) => footprint_flat fp) fpl) ->
     In (id, fofs, fp) fpl ->
@@ -2782,12 +2837,6 @@ Proof.
     right. econstructor. eauto.
 Qed.
 
-(* Lemma wt_footprint_extend_ce: forall ce1 ce2 ty fp, *)
-(*     wt_footprint ce ce1 ty fp -> *)
-(*     ce_extends ce1 ce2 -> *)
-(*     wt_footprint ce ce2 ty fp. *)
-(* Admitted. *)
-
 
 End COMP_ENV.
 
@@ -3759,15 +3808,50 @@ Proof.
     eapply Mem.load_valid_access; eauto.
 Qed.
 
+Lemma get_loc_footprint_in: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
+    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
+    In b2 (b1 :: footprint_flat fp1).
+Proof.
+  induction phl; intros.
+  - simpl in H. inv H. econstructor; auto.
+  - simpl in H. destruct a.
+    + destruct fp1; try congruence.
+      exploit IHphl; eauto. intros IN. inv IN.
+      eapply in_cons. simpl. auto.
+      eapply in_cons. simpl. auto.
+    + destruct fp1; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      exploit find_fields_some; eauto. intros (A1 & A2). subst.
+      exploit IHphl; eauto. intros IN. inv IN.
+      econstructor. auto.
+      eapply in_cons. simpl. eapply in_flat_map; eauto.
+    + destr_fp_enum fp1 ty.
+      exploit IHphl; eauto.
+Qed.
+        
 (* The location from a not_shallow_prefix path must be in the
         footprint being gotten *)
 Lemma get_loc_footprint_not_shallow_path: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
     not_shallow_prefix_paths phl ->
     get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
     In b2 (footprint_flat fp1).
-Admitted.
-
-
+Proof.
+  induction phl; intros until fp2; intros SHA GFP; simpl in *.
+  - inv SHA.
+  - inv SHA.
+    + destruct fp1; try congruence.
+      exploit get_loc_footprint_in; eauto.
+    + destruct a.
+      * destruct fp1; try congruence.
+        simpl. right. eauto.
+      * destr_fp_field fp1 GFP.        
+        exploit IHphl; eauto. intros.
+        eapply in_flat_map; eauto.
+      * destr_fp_enum fp1 ty.
+        simpl in *. eauto.
+Qed.                                               
+                                               
 (** IMPORTANT TODO: if (own_env, fpm (or abstract memory), mem)
 satisfies mmatch, then moving out the valid_owner of a place [p]
 preserves mmatch properties. *)
@@ -5230,13 +5314,33 @@ Lemma get_footprint_shallow_path_incl: forall phl fp1 fp2,
     get_footprint phl fp1 = Some fp2 ->
     ~ not_shallow_prefix_paths phl ->
     incl (blocks_of_fp_box fp2) (blocks_of_fp_box fp1).
-Admitted.
+Proof.
+  induction phl; intros until fp2; intros GFP NSHA; simpl in *.
+  - inv GFP. eapply incl_refl.
+  - destruct a.
+    + destruct fp1; try congruence.
+      unfold not_shallow_prefix_paths in NSHA. simpl in NSHA.
+      eapply Decidable.not_or in NSHA. destruct NSHA. congruence.
+    + destr_fp_field fp1 GFP.
+      unfold not_shallow_prefix_paths in NSHA. simpl in NSHA.
+      eapply Decidable.not_or in NSHA. destruct NSHA.
+      red. intros.
+      exploit IHphl; eauto. intros.
+      simpl. eapply in_flat_map; eauto.
+    + destr_fp_enum fp1 ty. simpl in *.
+      unfold not_shallow_prefix_paths in NSHA. simpl in NSHA.
+      eapply Decidable.not_or in NSHA. destruct NSHA.
+      red. intros. eapply IHphl; eauto.
+Qed.      
 
 Lemma blocks_perm_unchanged_fp_incl: forall fp1 fp2 m1 m2,
     incl (blocks_of_fp_box fp2) (blocks_of_fp_box fp1) ->
     blocks_perm_unchanged_fp fp1 m1 m2 ->
     blocks_perm_unchanged_fp fp2 m1 m2.
-Admitted.
+Proof.
+  intros. red. red. intros.
+  eapply H0; eauto.
+Qed.
 
 (* If we only update the contents of the memory, the permission is
 unchanged *)
@@ -5256,15 +5360,34 @@ Lemma get_loc_footprint_pos: forall phl fp1 b1 ofs1 b2 ofs2 fp2 ce ty,
     wt_footprint ce ty fp1 ->
     ofs2 >= 0.
 Proof.
-Admitted.
-
-
+  induction phl; intros; simpl in *. inv H0. auto.
+  destruct a.
+  - destruct fp1; try congruence.
+    inv H1. eapply IHphl. 2: eauto. lia. eauto.
+  - destr_fp_field fp1 H0.
+    inv H1. exploit WT2; eauto.
+    intros (fty & FTY & FOFS & WTFP).
+    exploit field_offset_in_range; eauto. intros (A1 & A2).
+    eapply IHphl. 2: eauto. lia. eauto.
+  - destr_fp_enum fp1 ty0.
+    inv H1.
+    exploit variant_field_offset_in_range; eauto. intros (A1 & A2).
+    eapply IHphl. 2: eauto. lia. eauto.
+Qed.
+    
 Lemma get_loc_footprint_map_pos: forall phl id b ofs fp fpm e ce,
     get_loc_footprint_map e (id, phl) fpm = Some (b, ofs, fp) ->
     wf_env fpm ce e ->
     ofs >= 0.
-Admitted.
-
+Proof.
+  intros. simpl in *.
+  destruct (e!id) eqn: A; try congruence. destruct p.
+  destruct (fpm ! id) eqn: B; try congruence.
+  exploit wf_env_footprint; eauto.
+  intros (fp1 & A1 & A2). rewrite B in A1. inv A1.
+  eapply get_loc_footprint_pos; eauto.
+  lia. 
+Qed.
 
 (* The memory is only changed in (b1, ofs1), the changed location is
 sem_wt. The memory is still bmatch *)
@@ -5482,28 +5605,6 @@ Proof.
         simpl. rewrite CO. lia.
 Qed.
 
-
-Lemma get_loc_footprint_in: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
-    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
-    In b2 (b1 :: footprint_flat fp1).
-Proof.
-  induction phl; intros.
-  - simpl in H. inv H. econstructor; auto.
-  - simpl in H. destruct a.
-    + destruct fp1; try congruence.
-      exploit IHphl; eauto. intros IN. inv IN.
-      eapply in_cons. simpl. auto.
-      eapply in_cons. simpl. auto.
-    + destruct fp1; try congruence.
-      destruct (find_fields fid fpl) eqn: FIND; try congruence.
-      repeat destruct p.
-      exploit find_fields_some; eauto. intros (A1 & A2). subst.
-      exploit IHphl; eauto. intros IN. inv IN.
-      econstructor. auto.
-      eapply in_cons. simpl. eapply in_flat_map; eauto.
-    + destr_fp_enum fp1 ty.
-      exploit IHphl; eauto.
-Qed.
 
             
 (* The location in (b, ofs) or in the footprint fp *)
@@ -5833,14 +5934,70 @@ Qed.
 
       
 Lemma get_loc_footprint_map_different_local: forall id1 id2 phl1 phl2 fpm e b1 b2 ofs1 ofs2 fp1 fp2,
-    list_norepet (flat_fp_map fpm) ->
+    list_norepet (footprint_of_env e ++ flat_fp_map fpm) ->
     id1 <> id2 ->
     get_loc_footprint_map e (id1, phl1) fpm = Some (b1, ofs1, fp1) ->
     get_loc_footprint_map e (id2, phl2) fpm = Some (b2, ofs2, fp2) ->
     b1 <> b2 /\ ~ In b1 (footprint_flat fp2) /\ ~ In b2 (footprint_flat fp1).
-Admitted.
-
-
+Proof.
+  intros until fp2. intros NOREP NEQ GFP1 GFP2.
+  simpl in *.
+  destruct (e!id1) eqn: A1; try congruence. destruct p.
+  destruct (e!id2) eqn: A2; try congruence. destruct p.
+  destruct (fpm!id1) eqn: B1; try congruence. 
+  destruct (fpm!id2) eqn: B2; try congruence.
+  exploit get_loc_footprint_in. eapply GFP1. intros IN1.
+  exploit get_loc_footprint_in. eapply GFP2. intros IN2.
+  eapply list_norepet_app in NOREP as (N1 & N2 & N3).
+  inv IN1; inv IN2.  
+  - repeat apply conj.
+    + eapply footprint_norepet_env_disjoint; eauto.
+    + intro. eapply N3.
+      eapply in_footprint_of_env. eapply A1.
+      eapply in_footprint_flat_fp_map. eapply B2.
+      eapply get_loc_footprint_incl. eapply GFP2. eapply H. auto.
+    + intro. eapply N3.
+      eapply in_footprint_of_env. eapply A2.
+      eapply in_footprint_flat_fp_map. eapply B1.
+      eapply get_loc_footprint_incl. eauto. eauto. auto.
+  - repeat apply conj.
+    + eapply N3.
+      eapply in_footprint_of_env. eauto.
+      eapply in_footprint_flat_fp_map. eapply B2. auto.
+    + intro. eapply N3.
+      eapply in_footprint_of_env. eapply A1.
+      eapply in_footprint_flat_fp_map. eapply B2.
+      eapply get_loc_footprint_incl. eauto. eauto. auto.
+    + intro.
+      eapply norepet_flat_fp_map_element_disjoint.
+      eapply B1. eapply B2. eauto. auto.
+      eapply get_loc_footprint_incl; eauto. eauto. auto.
+  - repeat apply conj.
+    + intro. subst. eapply N3.
+      eapply in_footprint_of_env. eapply A2.
+      eapply in_footprint_flat_fp_map. eapply B1. eauto. auto.
+    + intro. eapply norepet_flat_fp_map_element_disjoint.      
+      eapply B1. eapply B2. eauto. auto. eauto.
+      eapply get_loc_footprint_incl; eauto. eauto. 
+    + intro.
+      eapply N3.
+      eapply in_footprint_of_env. eapply A2.
+      eapply in_footprint_flat_fp_map. eapply B1.
+      eapply get_loc_footprint_incl. eauto. eauto. auto.
+  - repeat apply conj.
+    + intro. subst.
+      eapply norepet_flat_fp_map_element_disjoint.      
+      eapply B1. eapply B2. eauto. auto. eauto. eauto. auto.
+    + intro.
+      eapply norepet_flat_fp_map_element_disjoint.      
+      eapply B1. eapply B2. eauto. auto. eauto.
+      eapply get_loc_footprint_incl. eauto. eauto. auto.
+    + intro.
+      eapply norepet_flat_fp_map_element_disjoint.      
+      eapply B1. eapply B2. eauto. auto.
+      eapply get_loc_footprint_incl. eauto. eauto. eauto. auto.
+Qed.
+      
 (* Two memory location (b1, ofs1) and (b2, ofs2) which have type ty1
 and ty2 are non-overlap *)
 Definition loc_disjoint (b1 b2: block) (ty1 ty2: type) (ofs1 ofs2: Z) : Prop :=
@@ -6425,7 +6582,7 @@ Proof.
                 destruct H0; try congruence.
                 (** prove b must be not in fp: use the fact that
                 "disjoint locations have disjoint footprints" *)                
-        -- exploit get_loc_footprint_map_different_local. eauto. 
+        -- exploit get_loc_footprint_map_different_local. eapply NOREP3.
            2: eapply B. eauto. eauto. intros (N1 & N2 & N3).
            intros. clear H.
            erewrite <- get_set_different_local in GFP; eauto. 
