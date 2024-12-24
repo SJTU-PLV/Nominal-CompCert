@@ -191,30 +191,11 @@ Section Initial.
     rewrite SUP. eauto.
   Qed.
 
-End Initial.
-
-Let LTS_asm := L_asm tse.
-
-(** not sure about safe *)
-Lemma closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
-Proof. Admitted.
-
-(** seems to be unprovable for any given LTS where the [final_state] is opaque *)
-Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
-Proof. Admitted.
-
-Lemma match_initial_backward_ca1 : forall q1,
-    initial_c q1 -> exists wB q2,
-      match_query cc_compcert wB q1 q2 /\
-        match_senv cc_compcert wB se tse /\
-        initial_asm q2 /\ valid_world_cc_compcert wB.
-Proof.
-  intros. inv H. rename m into m0.
-  caseEq (Mem.alloc m0 0 0). intros m bsp Hdummy.
-  set (wB:= init_w m0 main_b m bsp H0 Hdummy).
-  set (rs := rs0 main_b bsp).
-  exists wB. exists (rs,m). repeat apply conj.
-  - (*mq*)
+  Lemma Hmatch_query : match_query cc_compcert init_w
+    {| cq_vf := Vptr main_b Ptrofs.zero; cq_sg := main_sg; cq_args := nil; cq_mem := m0 |}
+    (initial_regset (Vptr main_b Ptrofs.zero) (Vptr bsp Ptrofs.zero), tm).
+  Proof.
+    set (rs := initial_regset (Vptr main_b Ptrofs.zero) (Vptr bsp Ptrofs.zero)).
     assert (rsPC : rs # PC = Vptr main_b Ptrofs.zero).
     unfold rs,rs0, initial_regset.
     rewrite Pregmap.gso; try congruence.
@@ -226,7 +207,7 @@ Proof.
     rewrite Pregmap.gss. reflexivity.
     econstructor. split. constructor. simpl. constructor. apply sound_ro. eauto.
     econstructor. split. constructor. simpl. eauto.
-    exists (rs,m). split.
+    exists (rs,tm). split.
     +
     econstructor; simpl; eauto. rewrite main_sg_locs. simpl. constructor.
     rewrite rsPC. econstructor; eauto. apply j_main; eauto.  rewrite Ptrofs.add_zero. reflexivity.
@@ -239,16 +220,47 @@ Proof.
     econstructor; simpl; eauto. intros.
     unfold rs, rs0, initial_regset.
     setoid_rewrite Pregmap.gsspec. destr; eauto.
-    econstructor. rewrite pred_dec_true; eauto.
+    econstructor.  unfold j'. rewrite pred_dec_true; eauto.
     rewrite Ptrofs.add_zero. reflexivity.
     setoid_rewrite Pregmap.gsspec. destr; eauto. constructor.
     setoid_rewrite Pregmap.gsspec. destr; eauto. 
-    econstructor. rewrite pred_dec_false; eauto.
+    econstructor. unfold j'. rewrite pred_dec_false; eauto.
     apply j_main; eauto. eapply main_sp_neq; eauto.
     rewrite Ptrofs.add_zero. reflexivity.
     split. unfold rs, rs0, initial_regset.
     rewrite Pregmap.gso; try congruence. rewrite Pregmap.gso; try congruence.
     rewrite Pregmap.gss. congruence. constructor.
+  Qed.
+    
+End Initial.
+
+Let LTS_asm := L_asm tse.
+
+(** not sure about safe *)
+(** S1: make close into a semantics -> option closed_semantics *)
+(** S2: why we need this in the proof from SmallstepClosed? *)
+Lemma closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
+Proof.
+Admitted.
+
+(** seems to be unprovable for any given LTS where the [final_state] is opaque *)
+Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
+Proof.
+  intros.
+Admitted.
+
+Lemma match_initial_backward_ca1 : forall q1,
+    initial_c q1 -> exists wB q2,
+      match_query cc_compcert wB q1 q2 /\
+        match_senv cc_compcert wB se tse /\
+        initial_asm q2 /\ valid_world_cc_compcert wB.
+Proof.
+  intros. inv H. rename m into m0.
+  caseEq (Mem.alloc m0 0 0). intros m bsp Hdummy.
+  set (wB:= init_w m0 main_b m bsp H0 Hdummy).
+  set (rs := rs0 main_b bsp).
+  exists wB. exists (rs,m). repeat apply conj.
+  - eapply Hmatch_query; eauto.
   - (*ms*)
     rewrite symtbl_eq. eapply Hmatch_senv.
   - (*init_asm*)
@@ -262,13 +274,28 @@ Lemma match_initial_backward_ca2 : forall q1 q2,
     initial_c q1 -> initial_asm q2 -> exists wB,
         match_query cc_compcert wB q1 q2 /\ match_senv cc_compcert wB se tse /\ valid_world_cc_compcert wB.
 Proof.
-Admitted.
+  intros. inv H. inv H0. rewrite skel_eq in H.
+  rewrite H1 in H. inv H.
+  rewrite main_id_eq in H4. rewrite symtbl_eq in H4. rewrite H2 in H4. inv H4.
+  set (wB:= init_w m0 main_b0 m1 bsp H1 H3).
+  exists wB. split.
+  eapply Hmatch_query; eauto. split.
+  rewrite symtbl_eq.
+  eapply Hmatch_senv; eauto. constructor.
+Qed.
 
 (** seems we have to deal with the Vundef issue *)
 Lemma match_final_backward_ca : forall r r1 r2 wB,
     match_reply cc_compcert wB r1 r2 -> valid_world_cc_compcert wB ->
     final_asm r r2 -> final_c r r1.
 Proof.
+  intros. inv H0. destruct H as [rx [Hr1 [ry [Hr2 [rz [Hr3 Hr4]]]]]].
+  inv Hr1. inv Hr2. inv H. simpl in H0. inv Hr3. inv Hr4. destruct H as [Hw Hj].
+  destruct r2. inv Hj. inv H3. rename m into ttm'.
+  simpl in H. inv H1. unfold main_sg in H0.
+  unfold proj_sig_res in H0. simpl in H0.
+  (** maybe we should allow [Vundef] in both final_c and final_asm, let [Vundef] corresponds to 
+int value [1] *)
 Admitted.
 
 Definition close_c := close_semantics L_c initial_c final_c.
