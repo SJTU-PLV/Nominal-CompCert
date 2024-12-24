@@ -504,7 +504,8 @@ Inductive move_ordered_split_places_spec : own_env -> list place -> Prop :=
 | ordered_in_own_nil: forall own,
     move_ordered_split_places_spec own nil
 | ordered_in_own_cons: forall p l own
-    (PRES: forall p', is_prefix_strict p p' = true -> is_init own p' = false)
+    (* (PRES: forall p', is_prefix_strict p p' = true -> is_init own p' = false) *)
+    (PRES: forall p', is_prefix p p' = true -> p <> p' -> is_init own p' = false)
     (MORD: move_ordered_split_places_spec (if is_init own p then move_place own p else own) l),
     move_ordered_split_places_spec own (p :: l).
 
@@ -516,19 +517,20 @@ Proof.
   induction drops; simpl; intros.
   constructor.
   econstructor.
-  - intros.
+  - intros p' PRES NEQ.
     destruct (Paths.mem p' (PathsMap.get (local_of_place a) (own_universe own))) eqn: UNI.
-    + eapply Paths.mem_2 in UNI.      
+    + eapply Paths.mem_2 in UNI.
       (* p' must be equal to a? *)
       exploit COMPLETE. left. eauto.
-      instantiate (1 := p'). eapply is_prefix_strict_implies; auto.
-      eauto. erewrite <- is_prefix_same_local. eauto.
-      eapply is_prefix_strict_implies; auto.
+      instantiate (1 := p'). auto. (* eapply is_prefix_strict_implies; auto. *)
+      (* eauto. *) erewrite <- is_prefix_same_local. eauto. auto.
+      
+      (* eapply is_prefix_strict_implies; auto. *)
       auto. intros [[A|B]|C].
-      * subst. erewrite is_prefix_strict_not_refl in H.
+      * (* subst. erewrite is_prefix_strict_not_refl in H. *)
         congruence.
-      * inv ORDER. eapply Forall_forall with (x:=p') in H2.
-        eapply is_prefix_strict_iff in H. destruct H.
+      * inv ORDER. eapply Forall_forall with (x:=p') in H1.
+        (* eapply is_prefix_strict_implies in H1. destruct H. *)
         congruence.
         auto.
       * auto. (* destruct (is_init own a); auto. *)
@@ -538,8 +540,8 @@ Proof.
       intro. eapply not_true_iff_false in UNI.
       apply UNI.
       erewrite is_prefix_same_local.
-      eapply is_init_in_universe. auto.
-      eapply is_prefix_strict_implies. auto.
+      eapply is_init_in_universe. auto. auto.
+      (* eapply is_prefix_strict_implies. auto. *)
   - inv ORDER. eapply IHdrops; eauto.
     assert (UNIEQ: PathsMap.eq (own_universe (if is_init own a then move_place own a else own)) (own_universe own)).
     { destruct is_init.
@@ -608,7 +610,7 @@ Proof.
           (* key to prove: a is not a child of p. From opposite side, *)
           (* if a is a strict children of p or p is equal to a, then
           is_init own a = false which is a contradiction of IN or
-          OWN *)
+          OWN *)          
           destruct (place_eq p a). subst.
           * rewrite is_prefix_refl. simpl.
             erewrite <- OWN.            
@@ -617,8 +619,8 @@ Proof.
           * apply Is_true_eq_true.
             apply negb_prop_intro.
             intro PRE. apply Is_true_eq_true in PRE.
-            assert (PRES1: is_prefix_strict p a = true).
-            { eapply is_prefix_strict_iff. auto. }
+            (* assert (PRES1: is_prefix_strict p a = true). *)
+            (* { eapply is_prefix_strict_implies. auto. } *)
             exploit PRES; eauto.
             unfold is_init. intros INIT.
             eapply Paths.mem_1 in IN.
@@ -1292,4 +1294,5 @@ Qed.
 
 
 End SOUNDNESS.
+
 

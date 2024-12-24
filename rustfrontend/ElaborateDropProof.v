@@ -2634,8 +2634,7 @@ Lemma match_envs_flagm_sync_step: forall j own le m lo hi te flagm tm tm1 tlo th
   (LE: le ! id = None)
   (UNC: Mem.unchanged_on (fun b _ => b <> tb) tm tm1)
   (LOAD: Mem.load Mint8unsigned tm1 tb 0 = Some (Vint Int.zero))
-  (ORDERED: (forall p', is_prefix_strict p p' = true ->
-                   is_init own p' = false))
+  (ORDERED:  forall p', is_prefix p p' = true -> p <> p' -> is_init own p' = false)
   (PERM: Mem.range_perm tm1 tb 0 (size_chunk Mint8unsigned) Cur Freeable),
     match_envs_flagm j (move_place own p) le m lo hi te flagm tm1 tlo thi.
 Proof.
@@ -2657,16 +2656,16 @@ Proof.
     intros. simpl. eapply me_tinj. eapply me_envs; eauto.
     eauto. eauto.
     eapply me_flagm_inj; eauto.
-    destruct (is_prefix_strict p p0) eqn: PRE.
+    destruct (is_prefix p p0) eqn: PRE.
     -- eapply ORDERED in PRE. rewrite C4. rewrite PRE.
-       symmetry. eapply move_place_still_not_owned. auto.
+       symmetry. eapply move_place_still_not_owned. auto. auto.
     -- destruct (is_init own p0) eqn: OWNP.
        ++ rewrite C4. symmetry.
           eapply move_irrelavent_place_still_owned. auto.
           (** IMPORTANT TODO: is_prefix_strict false and neq imply is_prefix false *)
           eapply not_true_iff_false. intro.
           eapply not_true_iff_false in PRE. apply PRE.
-          eapply is_prefix_strict_iff; auto.
+          eapply is_prefix_strict_implies; auto.
        ++ rewrite C4. symmetry.
           eapply move_place_still_not_owned. auto.
   * eapply me_flagm_inj. eauto.
@@ -2685,8 +2684,7 @@ Qed.
 Lemma match_envs_flagm_move_no_flag_place: forall j own le m lo hi te flagm tm tlo thi p
   (MENV: match_envs_flagm j own le m lo hi te flagm tm tlo thi)
   (FLAG: get_dropflag_temp flagm p = None)
-  (ORDERED: (forall p', is_prefix_strict p p' = true ->
-                   is_init own p' = false)),
+(ORDERED:  forall p', is_prefix p p' = true -> p <> p' -> is_init own p' = false),
     match_envs_flagm j (move_place own p) le m lo hi te flagm tm tlo thi.
 Proof.
   intros. econstructor.
@@ -2698,16 +2696,16 @@ Proof.
   * exploit me_wf_flagm; eauto.
     intros (tb0 & v0 & C1 & C2 & C3 & C4).
     exists tb0, v0. repeat apply conj; auto.
-    destruct (is_prefix_strict p p0) eqn: PRE.
+    destruct (is_prefix p p0) eqn: PRE.
     -- eapply ORDERED in PRE. rewrite C4. rewrite PRE.
-       symmetry. eapply move_place_still_not_owned. auto.
+       symmetry. eapply move_place_still_not_owned. auto. auto.
     -- destruct (is_init own p0) eqn: OWNP.
        ++ rewrite C4. symmetry.
           eapply move_irrelavent_place_still_owned. auto.
           (** IMPORTANT TODO: is_prefix_strict false and neq imply is_prefix false *)
           eapply not_true_iff_false. intro.
           eapply not_true_iff_false in PRE. apply PRE.
-          eapply is_prefix_strict_iff; auto.
+          eapply is_prefix_strict_implies; auto.
        ++ rewrite C4. symmetry.
           eapply move_place_still_not_owned. auto.
   * eapply me_flagm_inj. eauto.

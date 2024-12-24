@@ -7,6 +7,8 @@ Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 
+Import ListNotations.
+
 Local Open Scope error_monad_scope.
 
 (** * High-level Rust-like language  *)
@@ -213,6 +215,550 @@ Fixpoint support_parent_paths (p: place) : list place :=
   end.
 
 
+(* Similar to ProjectElem in rustc *)
+Variant path : Type :=
+  | ph_deref
+  | ph_field (fid: ident)
+  (* type of the variant here is used in valid_owner proof !! *)
+  | ph_downcast (ty: type) (fid: ident) (* (fty: type) *).
+
+Lemma path_eq: forall (p1 p2: path), {p1 = p2} + {p1 <> p2}.
+Proof.
+  generalize ident_eq type_eq. intros.
+  destruct p1; destruct p2; auto; try (right; congruence).
+  destruct (ident_eq fid fid0); subst. auto. right. congruence.
+  destruct (ident_eq fid fid0); destruct (type_eq ty ty0); subst; auto.
+  1-3: right; congruence.
+Qed.
+
+Definition paths : Type := (ident * list path).
+
+(* relate place and path *)
+Fixpoint path_of_place (p: place) : paths :=
+  match p with
+  | Plocal id _ =>
+      (id, nil)
+  | Pderef p1 _ =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_deref])
+  | Pfield p1 fid _ =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_field fid])
+  | Pdowncast p1 fid fty =>
+      let (id, phl) := path_of_place p1 in
+      (id, phl ++ [ph_downcast (typeof_place p1) fid (* fty *)])
+  end.
+
+(* If ph1 is a prefix of phl2, return trues *)
+Fixpoint paths_contain (phl1 phl2: list path) : bool :=
+  match phl1, phl2 with
+  | nil, _ => true
+  | ph1 :: phl1', ph2 :: phl2' =>
+      if path_eq ph1 ph2 then
+        paths_contain phl1' phl2'
+      else false
+  | _, _ => false
+  end.
+
+Fixpoint paths_contain_strict (phl1 phl2: list path) : bool :=
+  match phl1, phl2 with
+  | nil, nil => false
+  | nil, _ => true
+  | ph1 :: phl1', ph2 :: phl2' =>
+      if path_eq ph1 ph2 then
+        paths_contain_strict phl1' phl2'
+      else false
+  | _, _ => false
+  end.
+
+
+Definition is_shallow_prefix_paths (phl: list path) : bool :=
+  negb (in_dec path_eq ph_deref phl).
+
+Fixpoint paths_shallow_contain (phl1 phl2: list path) : bool :=
+  match phl1, phl2 with
+  | nil, _ => is_shallow_prefix_paths phl2
+  | ph1 :: phl1', ph2 :: phl2' =>
+      if path_eq ph1 ph2 then
+        paths_shallow_contain phl1' phl2'
+      else false
+  | _, _ => false
+  end.
+
+(** Experiment code for new is_prefix  *)
+
+(* The definition of is_prefix does not consider the type information
+of the places. For example, (Plocal id int) is a prefix of (Pderef
+(Plocal id int) int) *)
+Definition is_prefix (p1 p2: place) : bool :=
+  let (id1, phl1) := path_of_place p1 in
+  let (id2, phl2) := path_of_place p2 in
+  ident_eq id1 id2 && paths_contain phl1 phl2.
+
+Definition is_shallow_prefix (p1 p2: place) : bool :=
+  let (id1, phl1) := path_of_place p1 in
+  let (id2, phl2) := path_of_place p2 in
+  ident_eq id1 id2 && paths_shallow_contain phl1 phl2.
+
+(** TODO: change this definition *)
+Definition is_support_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (support_parent_paths p2).
+
+Definition is_prefix_strict (p1 p2: place) : bool :=
+  let (id1, phl1) := path_of_place p1 in
+  let (id2, phl2) := path_of_place p2 in
+  ident_eq id1 id2 && paths_contain_strict phl1 phl2.
+
+Fixpoint local_of_place (p: place) :=
+  match p with
+  | Plocal id _ => id
+  | Pfield p' _ _ => local_of_place p'
+  | Pderef p' _ => local_of_place p'
+  | Pdowncast p' _ _ => local_of_place p'
+  end.
+
+Lemma paths_contain_refl: forall l,
+    paths_contain l l = true.
+Proof.
+  induction l; simpl; eauto.
+  destruct path_eq; try congruence; auto.
+Qed.
+
+
+Lemma paths_shallow_contain_refl: forall l,
+    paths_shallow_contain l l = true.
+Proof.
+  induction l; simpl; eauto.
+  destruct path_eq; try congruence; auto.
+Qed.
+
+
+Lemma paths_contain_strict_not_refl: forall l,
+    paths_contain_strict l l = false.
+Proof.
+  induction l; simpl; eauto.
+  destruct path_eq; try congruence; auto.
+Qed.
+
+Lemma paths_contain_trans: forall l1 l2 l3,
+    paths_contain l1 l2 = true ->
+    paths_contain l2 l3 = true ->
+    paths_contain l1 l3 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - destruct l2; simpl in *; auto.
+  - destruct l2; simpl in *; auto.
+    congruence.
+    destruct path_eq; try congruence. subst.
+    destruct l3; try congruence.
+    destruct path_eq; eauto.
+Qed.
+
+Lemma paths_shallow_contain_is_shallow: forall l1 l2,
+    paths_shallow_contain l1 l2 = true ->
+    is_shallow_prefix_paths l1 = true ->
+    is_shallow_prefix_paths l2 = true.
+Proof.
+  induction l1; intros; simpl in *; auto.
+  destruct l2; try congruence.
+  destruct path_eq; subst; try congruence; auto.
+  unfold is_shallow_prefix_paths in *.
+  eapply negb_true_iff in H0.
+  destruct (in_dec path_eq ph_deref (p :: l1)); simpl in *; try congruence.
+  eapply Decidable.not_or in n. destruct n.
+  destruct path_eq; try congruence.
+  exploit (IHl1 l2).  auto.
+  eapply negb_true_iff. destruct (in_dec path_eq ph_deref l1); simpl; try congruence; auto.
+  intros A. eapply negb_true_iff in A.
+  destruct (in_dec path_eq ph_deref l2); simpl in *; try congruence; auto.
+Qed.
+
+Lemma paths_shallow_contain_trans: forall l1 l2 l3,
+    paths_shallow_contain l1 l2 = true ->
+    paths_shallow_contain l2 l3 = true ->
+    paths_shallow_contain l1 l3 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - eapply paths_shallow_contain_is_shallow; eauto.
+  - destruct l2; simpl in *; auto.
+    congruence.
+    destruct path_eq; try congruence. subst.
+    destruct l3; try congruence.
+    destruct path_eq; eauto.
+Qed.
+
+Lemma paths_contain_strict_trans: forall l1 l2 l3,
+    paths_contain_strict l1 l2 = true ->
+    paths_contain_strict l2 l3 = true ->
+    paths_contain_strict l1 l3 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - destruct l2; simpl in *; auto.
+    destruct l3; try congruence.
+  - destruct l2; simpl in *; auto.
+    congruence.
+    destruct path_eq; try congruence. subst.
+    destruct l3; try congruence.
+    destruct path_eq; eauto.
+Qed.
+
+    
+Ltac destr_prefix :=
+  let POP1 := fresh "POP" in
+  let POP2 := fresh "POP" in
+  let PRE1 := fresh "PRE" in
+  let PRE2 := fresh "PRE" in
+  match goal with    
+  | [H: is_prefix ?p1 ?p2 = true |- _ ] =>
+      unfold is_prefix in H;
+      destruct (path_of_place p1) eqn: POP1; try rewrite POP1 in *;
+      destruct (path_of_place p2) eqn: POP2; try rewrite POP2 in *;
+      erewrite andb_true_iff in H;
+      destruct H as (PRE1 & PRE2);
+      destruct ident_eq in PRE1; subst; simpl in *; try congruence
+  | [H: is_prefix_strict ?p1 ?p2 = true |- _ ] =>
+      unfold is_prefix_strict in H;
+      destruct (path_of_place p1) eqn: POP1; try rewrite POP1 in *;
+      destruct (path_of_place p2) eqn: POP2; try rewrite POP2 in *;
+      erewrite andb_true_iff in H;
+      destruct H as (PRE1 & PRE2);
+      destruct ident_eq in PRE1; subst; simpl in *; try congruence
+  | [H: is_shallow_prefix ?p1 ?p2 = true |- _ ] =>
+      unfold is_shallow_prefix in H;
+      destruct (path_of_place p1) eqn: POP1; try rewrite POP1 in *;
+      destruct (path_of_place p2) eqn: POP2; try rewrite POP2 in *;
+      erewrite andb_true_iff in H;
+      destruct H as (PRE1 & PRE2);
+      destruct ident_eq in PRE1; subst; simpl in *; try congruence
+  end.
+
+Lemma local_of_paths_of_place: forall p,
+    local_of_place p = fst (path_of_place p).
+Proof.
+  induction p; simpl; auto; destruct (path_of_place p); auto.
+Qed.
+
+Lemma is_prefix_same_local: forall p1 p2,
+    is_prefix p1 p2 = true ->
+    local_of_place p1 = local_of_place p2.
+Proof.
+  intros. 
+  rewrite !local_of_paths_of_place. destr_prefix.
+Qed.  
+
+
+Lemma is_prefix_strict_trans p1 p2 p3:
+  is_prefix_strict p1 p2 = true ->
+  is_prefix_strict p2 p3 = true ->
+  is_prefix_strict p1 p3 = true.
+Proof.
+  intros. unfold is_prefix_strict.
+  repeat destr_prefix. inv POP.
+  eapply andb_true_iff. split; auto.
+  destruct ident_eq; try congruence; auto.
+  eapply paths_contain_strict_trans; eauto.
+Qed.
+
+Lemma is_prefix_refl: forall p, is_prefix p p = true.
+Proof.
+  intros. unfold is_prefix.
+  destruct (path_of_place p) eqn: POP.
+  eapply andb_true_iff. split. destruct ident_eq; try congruence; auto.
+  eapply paths_contain_refl.
+Qed.
+
+Lemma is_prefix_trans: forall p1 p2 p3,
+    is_prefix p1 p2 = true -> 
+    is_prefix p2 p3 = true ->
+    is_prefix p1 p3 = true.
+Proof.
+  intros. unfold is_prefix. repeat destr_prefix. inv POP.
+  eapply andb_true_iff. split.
+  destruct ident_eq; try congruence; auto.
+  eapply paths_contain_trans; eauto.
+Qed.
+
+Lemma paths_contain_antisym: forall l1 l2,
+    paths_contain_strict l1 l2 = true ->
+    paths_contain l2 l1 = false.
+Proof.
+  induction l1; intros; simpl in *; auto.
+  - destruct l2; try congruence. auto.
+  - destruct l2; try congruence. auto.
+    simpl. destruct path_eq; subst; try destruct path_eq; try congruence.
+    auto.
+Qed.
+        
+Lemma is_prefix_antisym: forall p1 p2,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p2 p1 = false.
+Proof.
+  intros. unfold is_prefix.
+  destr_prefix. eapply andb_false_iff. right.
+  eapply paths_contain_antisym. eauto.  
+Qed.
+
+Lemma paths_contain_app: forall l1 l2,
+    paths_contain l1 (l1 ++ l2) = true.
+Proof.
+  induction l1; simpl; intros; auto.
+  destruct path_eq; try congruence.
+Qed.
+
+Lemma paths_contain_strict_app: forall l1 l2,
+    l2 <> nil ->
+    paths_contain_strict l1 (l1 ++ l2) = true.
+Proof.
+  induction l1; simpl; intros; auto.
+  destruct l2; try congruence.
+  destruct path_eq; try congruence.
+  eapply IHl1. auto.
+Qed.
+
+Lemma is_prefix_valid_owner: forall p,
+    is_prefix (valid_owner p) p = true.
+Proof.
+  induction p.
+  - simpl. eapply is_prefix_refl.
+  - simpl. eapply is_prefix_refl.
+  - simpl. eapply is_prefix_refl.
+  - simpl. eapply is_prefix_trans; eauto.
+    unfold is_prefix. simpl.
+    destruct (path_of_place p) eqn: POP.
+    eapply andb_true_iff.
+    split.
+    destruct ident_eq; try congruence; auto.
+    eapply paths_contain_app; eauto.
+Qed.
+
+Ltac solve_prefix_left :=
+  try (eapply andb_true_iff; split;
+       [destruct ident_eq; try congruence; auto|]).
+
+Lemma paths_contain_strict_trans2: forall l1 l2 l3,
+    paths_contain l1 l2 = true ->
+    paths_contain_strict l2 l3 = true ->
+    paths_contain_strict l1 l3 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - destruct l2; simpl in *; auto.
+    destruct l3; try congruence.
+  - destruct l2; simpl in *; auto.
+    congruence.
+    destruct path_eq; try congruence. subst.
+    destruct l3; try congruence.
+    destruct path_eq; eauto.
+Qed.
+
+Lemma paths_contain_strict_trans3: forall l1 l2 l3,
+    paths_contain_strict l1 l2 = true ->
+    paths_contain l2 l3 = true ->        
+    paths_contain_strict l1 l3 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - destruct l2; simpl in *; auto. congruence.
+    destruct l3; try congruence.
+  - destruct l2; simpl in *; auto.
+    congruence.
+    destruct path_eq; try congruence. subst.
+    destruct l3; try congruence.
+    destruct path_eq; eauto.
+Qed.
+
+
+(* similar to is_prefix_strict_trans_prefix *)
+Lemma is_prefix_strict_trans_prefix2: forall p1 p2 p3,
+    is_prefix p1 p2 = true ->
+    is_prefix_strict p2 p3 = true ->
+    is_prefix_strict p1 p3 = true.
+Proof.
+  intros. unfold is_prefix_strict.
+  repeat destr_prefix. inv POP0.
+  solve_prefix_left.
+  eapply paths_contain_strict_trans2; eauto.
+Qed.
+
+Lemma paths_contain_strict_implies: forall l1 l2,
+    paths_contain_strict l1 l2 = true ->
+    paths_contain l1 l2 = true.
+Proof.
+  induction l1; simpl; intros; auto.
+  destruct l2; try congruence.
+  destruct path_eq; subst; auto.
+Qed.
+
+  
+Lemma is_prefix_strict_implies: forall p1 p2,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p1 p2 = true.
+Proof.
+  intros. unfold is_prefix. destr_prefix.
+  solve_prefix_left.
+  eapply paths_contain_strict_implies. auto.
+Qed.
+
+Lemma is_prefix_strict_not_refl: forall p,
+    is_prefix_strict p p = false.
+Proof.
+  intros. unfold is_prefix_strict.
+  destruct (path_of_place p).
+  eapply andb_false_iff. right.
+  eapply paths_contain_strict_not_refl.
+Qed.
+
+
+Lemma paths_shallow_contain_implies: forall l1 l2,
+    paths_shallow_contain l1 l2 = true ->
+    paths_contain l1 l2 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  - auto.
+  - destruct l2; simpl in *; auto.
+    destruct path_eq; try congruence. subst. auto.
+Qed.
+    
+  
+Lemma is_shallow_prefix_is_prefix: forall p1 p2,
+    is_shallow_prefix p1 p2 = true ->
+    is_prefix p1 p2 = true.
+Proof.
+  intros. unfold is_prefix.
+  destr_prefix. solve_prefix_left.
+  eapply paths_shallow_contain_implies; auto.
+Qed.
+
+Lemma is_prefix_strict_trans_prefix: forall p1 p2 p3,
+    is_prefix_strict p1 p2 = true ->
+    is_prefix p2 p3 = true ->
+    is_prefix_strict p1 p3 = true.
+Proof.
+  intros. unfold is_prefix_strict.
+  repeat destr_prefix. inv POP.
+  solve_prefix_left.
+  eapply paths_contain_strict_trans3; eauto.
+Qed.
+  
+Lemma is_shallow_prefix_refl: forall p,
+    is_shallow_prefix p p = true.
+Proof.
+  intros. unfold is_shallow_prefix.
+  destruct (path_of_place p).
+  solve_prefix_left.
+  eapply paths_shallow_contain_refl.
+Qed.
+
+Lemma is_shallow_prefix_trans: forall p1 p2 p3,
+    is_shallow_prefix p1 p2 = true ->
+    is_shallow_prefix p2 p3 = true ->
+    is_shallow_prefix p1 p3 = true.
+Proof.
+  intros. unfold is_shallow_prefix. repeat destr_prefix.
+  inv POP. solve_prefix_left.
+  eapply paths_shallow_contain_trans; eauto.
+Qed.
+
+Lemma is_shallow_prefix_same_local: forall p1 p2,
+    is_shallow_prefix p1 p2 = true ->
+    local_of_place p1 = local_of_place p2.
+Proof.
+  intros. apply is_shallow_prefix_is_prefix in H.
+  eapply is_prefix_same_local; eauto.
+Qed.
+
+Lemma valid_owner_same_local: forall p,
+    local_of_place (valid_owner p) = local_of_place p.
+Proof.
+  induction p; simpl; auto.
+Qed.
+
+Lemma paths_not_contain_strict: forall l1 l2,
+    paths_contain l1 l2 = false ->
+    paths_contain l2 l1 = true ->
+    paths_contain_strict l2 l1 = true.
+Proof.
+  induction l1; intros; simpl in *.
+  congruence.
+  destruct l2; simpl in *. auto.
+  destruct path_eq; subst; try destruct path_eq in *; try congruence.
+  eauto.
+Qed.
+
+Lemma is_not_prefix_strict: forall p1 p2,
+    is_prefix p1 p2 = false ->
+    is_prefix p2 p1 = true ->
+    is_prefix_strict p2 p1 = true.
+Proof.
+  intros. unfold is_prefix_strict.
+  repeat destr_prefix.
+  solve_prefix_left.
+  unfold is_prefix in H. rewrite POP in H. rewrite POP0 in H.
+  destruct ident_eq in H; simpl in *; try congruence.
+  eapply paths_not_contain_strict; auto.
+Qed.                                    
+  
+(** Some trivial is_prefix lemma  *)
+
+Lemma is_prefix_field: forall p1 fid fty,
+    is_prefix p1 (Pfield p1 fid fty) = true.
+Proof.
+  intros. unfold is_prefix. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_app.
+Qed.
+
+Lemma is_prefix_strict_field: forall p1 fid fty,
+    is_prefix_strict p1 (Pfield p1 fid fty) = true.
+Proof.
+  intros. unfold is_prefix_strict. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_strict_app.
+  congruence.
+Qed.
+
+Lemma is_prefix_downcast: forall p1 fid fty,
+    is_prefix p1 (Pdowncast p1 fid fty) = true.
+Proof.
+  intros. unfold is_prefix. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_app.
+Qed.
+
+Lemma is_prefix_strict_downcast: forall p1 fid fty,
+    is_prefix_strict p1 (Pdowncast p1 fid fty) = true.
+Proof.
+  intros. unfold is_prefix_strict. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_strict_app.
+  congruence.
+Qed.
+
+
+Lemma is_prefix_deref: forall p1 ty,
+    is_prefix p1 (Pderef p1 ty) = true.
+Proof.
+  intros. unfold is_prefix. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_app.
+Qed.
+
+Lemma is_prefix_strict_deref: forall p1 ty,
+    is_prefix_strict p1 (Pderef p1 ty) = true.
+Proof.
+  intros. unfold is_prefix_strict. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_contain_strict_app.
+  congruence.
+Qed.
+
+  
+(*
+
 Definition is_prefix (p1 p2: place) : bool :=
   place_eq p1 p2 || in_dec place_eq p1 (parent_paths p2).
 
@@ -393,35 +939,6 @@ Proof.
     + auto.
 Qed.
 
-Fixpoint local_of_place (p: place) :=
-  match p with
-  | Plocal id _ => id
-  | Pfield p' _ _ => local_of_place p'
-  | Pderef p' _ => local_of_place p'
-  | Pdowncast p' _ _ => local_of_place p'
-  end.
-
-Lemma is_prefix_same_local: forall p1 p2,
-    is_prefix p1 p2 = true ->
-    local_of_place p1 = local_of_place p2.
-Proof.
-  intros. unfold is_prefix in H.
-  unfold orb in H. destruct (place_eq p1 p2); simpl in *.
-  - subst. reflexivity.
-  - destruct in_dec in H; cbn in *.
-    + induction p2. 
-      * simpl in i. contradiction.
-      * simpl in *. destruct i.
-        subst. reflexivity.
-        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.
-      * simpl in *. destruct i.
-        subst. reflexivity.
-        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.
-      * simpl in *. destruct i.
-        subst. reflexivity.
-        apply IHp2. apply In_place_no_eql in H0. apply H0. apply H0.  
-    + discriminate.
-Qed.
 
 Lemma is_shallow_prefix_is_prefix: forall p1 p2,
     is_shallow_prefix p1 p2 = true ->
@@ -508,6 +1025,7 @@ Proof.
   induction p; simpl; auto.
 Qed.
 
+*)
 
 Definition is_sibling (p1 p2: place) : bool :=
   Pos.eqb (local_of_place p1) (local_of_place p2)

@@ -157,31 +157,8 @@ Lemma wt_place_prefix: forall p2 p1 ce e,
     wt_place e ce p1.
 Proof.
   induction p2; intros; unfold is_prefix in H at 1; simpl in *.
-  - inv H0. destruct place_eq; subst; simpl in *; try congruence.
-    constructor. auto. auto.
-  - inv H0. destruct place_eq; simpl in H; try congruence.
-    + subst. econstructor; eauto.
-    + destruct place_eq in H; simpl in H; try congruence.
-      destruct in_dec in H; simpl in H; try congruence.
-      eapply IHp2. unfold is_prefix.
-      destruct in_dec; simpl; try congruence. eapply orb_true_r.
-      auto.
-  - inv H0. destruct place_eq; simpl in H; try congruence.
-    + subst. econstructor; eauto.
-    + destruct place_eq in H; simpl in H; try congruence.
-      destruct in_dec in H; simpl in H; try congruence.
-      eapply IHp2. unfold is_prefix.
-      destruct in_dec; simpl; try congruence. eapply orb_true_r.
-      auto.
-  - inv H0. destruct place_eq; simpl in H; try congruence.
-    + subst. econstructor; eauto.
-    + destruct place_eq in H; simpl in H; try congruence.
-      destruct in_dec in H; simpl in H; try congruence.
-      eapply IHp2. unfold is_prefix.
-      destruct in_dec; simpl; try congruence. eapply orb_true_r.
-      auto.
-Qed.      
-    
+Admitted.
+
 Lemma get_tenv_some: forall e id ty,
     (env_to_tenv e) ! id = Some ty ->
     exists b, e ! id = Some (b, ty).
@@ -841,38 +818,38 @@ Global Hint Constructors sem_wt_val sem_wt_loc: sem_ty.
 (* Getter and Setter of footprint map  *)
 
 (* Similar to ProjectElem in rustc *)
-Variant path : Type :=
-  | ph_deref
-  | ph_field (fid: ident)
-  (* type of the variant here is used in valid_owner proof !! *)
-  | ph_downcast (ty: type) (fid: ident) (* (fty: type) *).
+(* Variant path : Type := *)
+(*   | ph_deref *)
+(*   | ph_field (fid: ident) *)
+(*   (* type of the variant here is used in valid_owner proof !! *) *)
+(*   | ph_downcast (ty: type) (fid: ident) (* (fty: type) *). *)
 
-Lemma path_eq: forall (p1 p2: path), {p1 = p2} + {p1 <> p2}.
-Proof.
-  generalize ident_eq type_eq. intros.
-  destruct p1; destruct p2; auto; try (right; congruence).
-  destruct (ident_eq fid fid0); subst. auto. right. congruence.
-  destruct (ident_eq fid fid0); destruct (type_eq ty ty0); subst; auto.
-  1-3: right; congruence.
-Qed.
+(* Lemma path_eq: forall (p1 p2: path), {p1 = p2} + {p1 <> p2}. *)
+(* Proof. *)
+(*   generalize ident_eq type_eq. intros. *)
+(*   destruct p1; destruct p2; auto; try (right; congruence). *)
+(*   destruct (ident_eq fid fid0); subst. auto. right. congruence. *)
+(*   destruct (ident_eq fid fid0); destruct (type_eq ty ty0); subst; auto. *)
+(*   1-3: right; congruence. *)
+(* Qed. *)
 
-Definition paths : Type := (ident * list path).
+(* Definition paths : Type := (ident * list path). *)
 
 (* relate place and path *)
-Fixpoint path_of_place (p: place) : paths :=
-  match p with
-  | Plocal id _ =>
-      (id, nil)
-  | Pderef p1 _ =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_deref])
-  | Pfield p1 fid _ =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_field fid])
-  | Pdowncast p1 fid fty =>
-      let (id, phl) := path_of_place p1 in
-      (id, phl ++ [ph_downcast (typeof_place p1) fid (* fty *)])
-  end.
+(* Fixpoint path_of_place (p: place) : paths := *)
+(*   match p with *)
+(*   | Plocal id _ => *)
+(*       (id, nil) *)
+(*   | Pderef p1 _ => *)
+(*       let (id, phl) := path_of_place p1 in *)
+(*       (id, phl ++ [ph_deref]) *)
+(*   | Pfield p1 fid _ => *)
+(*       let (id, phl) := path_of_place p1 in *)
+(*       (id, phl ++ [ph_field fid]) *)
+(*   | Pdowncast p1 fid fty => *)
+(*       let (id, phl) := path_of_place p1 in *)
+(*       (id, phl ++ [ph_downcast (typeof_place p1) fid (* fty *)]) *)
+(*   end. *)
 
 Inductive paths_disjoint : list path -> list path -> Prop :=
 | phs_disjoint1: forall p1 p2 l1 l2,
@@ -892,6 +869,8 @@ Proof.
   eapply phs_disjoint2; auto.
 Qed.
 
+(* The definition of wt_path should be a function instead of a
+relation. *)
 Inductive wt_path ce (ty: type) : list path -> type -> Prop :=
 | wt_path_nil: wt_path ce ty nil ty
 | wt_path_deref: forall phl ty1 ty2
@@ -1080,6 +1059,50 @@ Lemma local_of_paths_of_place: forall p,
 Proof.
   induction p; simpl; auto; destruct (path_of_place p); auto.
 Qed.
+
+(** Relation between is_prefix and paths inclusion *)
+
+Lemma is_prefix_paths_app: forall p1 p2,
+    is_prefix p1 p2 = true ->
+    fst (path_of_place p1) = fst (path_of_place p2)
+    /\ exists phl, snd (path_of_place p2) = snd (path_of_place p1) ++ phl.
+Proof.
+  Admitted.
+
+Lemma is_prefix_paths_app_inv: forall p1 p2 phl,
+    fst (path_of_place p1) = fst (path_of_place p2) ->
+    snd (path_of_place p2) = snd (path_of_place p1) ++ phl ->
+    is_prefix p1 p2 = true
+    /\ (phl <> nil -> is_prefix_strict p1 p2 = true).
+Proof.
+  induction p1; intros p2 phl A1 A2; simpl in *.
+  - unfold is_prefix.
+    generalize dependent phl.
+    induction p2; simpl in *; subst; intros.
+    +                           (* require wt_place *)
+      admit.
+    + destruct (path_of_place p2) eqn: POP2. simpl in *.
+      admit.
+    + admit.
+    + admit.
+  - destruct (path_of_place p1) eqn: POP1. simpl in *.
+    exploit IHp1. eauto. rewrite A2.
+    rewrite <- app_assoc. eauto.
+    intros (B1 & B2). exploit B2. simpl. congruence.
+    intros PRES.
+Admitted.
+
+Lemma is_not_prefix_disjoint: forall p1 p2,
+    is_prefix p1 p2 = false ->
+    is_prefix p2 p1 = false ->
+    fst (path_of_place p1) <> fst (path_of_place p2) \/
+      paths_disjoint (snd (path_of_place p1)) (snd (path_of_place p2)).
+Proof.
+  induction p1; intros; destruct (path_of_place p2) eqn: POP2; simpl in *.
+  - unfold is_prefix in *.
+    simpl in *.
+Admitted.
+  
 
 (** Prove some properties w.r.t list_nth_z  *)
 Fixpoint list_set_nth_z {A: Type} (l: list A) (n: Z) (v: A)  {struct l}: list A :=
@@ -2345,7 +2368,7 @@ Section FPM.
 Variable fpm : fp_map.
   
 Definition mmatch ce (m: mem) (e: env) (own: own_env): Prop :=
-  forall p b ofs fp (WTPL: wt_place e ce p),
+  forall p b ofs fp,
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     is_init own p = true ->
     bmatch ce m b ofs fp
@@ -2786,10 +2809,10 @@ place is sem_wt_loc. wt_footprint here is used to make sure that the
 footprint of this place (obtained by get_loc_footprint_map) has the
 same structure as its type, which is used to prevent dynamic footprint
 splitting! *)
+
 Lemma movable_place_sem_wt: forall ce ce1 fp fpm m e own p b ofs init uninit universe
     (MM: mmatch fpm ce m e own)
     (POWN: must_movable ce1 init uninit universe p = true)
-    (WTP: wt_place e ce p)
     (SOUND: sound_own own init uninit universe)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp))
     (WTFP: wt_footprint ce (typeof_place p) fp)
@@ -2801,110 +2824,96 @@ Proof.
   intros ce1 IH. intros. unfold must_movable, must_movable_fix in *.
   erewrite unroll_Fix in *.
   destruct (typeof_place p) eqn: PTY; simpl in POWN; try congruence.
-  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
-  - exploit MM. eauto. eauto. eapply must_init_sound; eauto.
+  - exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & FULL). inv WTFP; inv BM.
     econstructor; eauto.
   (* Tbox *)
   - destruct (must_init init uninit universe p) eqn: INIT; try congruence.
     destruct (is_full universe p) eqn: PFULL.
     (* p is full: it must be sem_wt *)
-    eapply MM. eauto. eauto. eapply must_init_sound; eauto.
+    eapply MM. eauto. eapply must_init_sound; eauto.
     erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.    
     (* adhoc generalization *)
     clear PFULL.
     generalize dependent p. generalize dependent b.
     generalize dependent fp. generalize dependent ofs.
     induction t; intros; simpl in *; try congruence.
-    + exploit MM. eauto. eauto. eapply must_init_sound; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p Tunit)) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. 2: eauto. econstructor; eauto.
-      rewrite PTY. auto.
-      eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
     (* The same as Tunit case (just copying) *)
-    + exploit MM. 2: eauto. eauto.
-      eapply must_init_sound; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tint i s))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. 2: eauto.
-      econstructor; eauto.
-      rewrite PTY. auto.
-      eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
-    + exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tlong s))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. 2: eauto.
-      econstructor; eauto.
-      rewrite PTY. auto.
-      eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
-    + exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+    + exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. eauto.
       econstructor; eauto.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tfloat f))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. 2: eauto.
-      econstructor; eauto.
-      rewrite PTY. auto.
-      eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). inv WT; inv BM1; simpl in *; try congruence.
       econstructor; simpl; eauto.
     (* Induction case *)
     + destruct (must_init init uninit universe (Pderef p (Tbox t))) eqn: INIT2; try congruence.
       destruct (is_full universe (Pderef p (Tbox t))) eqn: PFULL1.
       (* case1: deref p is full: it must be sem_wt *)
-      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & FULL). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor; eauto. econstructor; eauto.
       destruct (path_of_place p) eqn: POP.
       eapply MM. instantiate (1 := Pderef p (Tbox t)).
-      econstructor. auto. rewrite PTY. auto. 
       simpl. rewrite POP. erewrite get_loc_footprint_map_app. eauto.
       eauto. simpl. auto.
       eapply must_init_sound; eauto.
       erewrite <- is_full_same; eauto. eapply sound_own_universe. eauto.
       (* case2: deref p is not full *)      
-      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & FULL). inv WTFP; inv BM; simpl in *; try congruence.
       econstructor. simpl. eauto. eauto.
       econstructor; eauto.
       eapply IHt; eauto. simpl. auto.
-      econstructor. auto. rewrite PTY. auto.
       (* get_loc_footprint_map *)
       simpl. destruct (path_of_place p) eqn: POP.
       eapply get_loc_footprint_map_app; eauto.
     (* Tstruct *)
     + destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
       (* fp is not empty *)
-      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). inv WTFP; inv BM; simpl in *; try congruence.
       clear GCO. generalize P as P1. intros P1. eapply EXTEND in P. rewrite P in *.
       econstructor. simpl. eauto. eauto. econstructor; eauto.
@@ -2916,10 +2925,7 @@ Proof.
       assert (PFP1: get_loc_footprint_map e (path_of_place (Pderef p (Tstruct l id1))) fpm = Some (b0, 0, fp0)).
       { simpl. destruct (path_of_place p) eqn: POP.
         eapply get_loc_footprint_map_app; eauto. }
-      exploit MM. 2: eauto.
-      econstructor; eauto.
-      rewrite PTY. auto.
-      eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM1 & WTLOC1). simpl in *.
       (* prove sem_wt_loc: first eliminate Tbox *)
       eapply WTLOC1.
@@ -2945,7 +2951,6 @@ Proof.
       generalize (POWN (Pfield (Pderef p (Tstruct l id1)) fid fty, fty) INMEM).
       instantiate (1 := Pfield (Pderef p (Tstruct l id1)) fid fty).
       eauto.
-      econstructor; simpl; eauto. econstructor. auto. rewrite PTY. auto.
       auto.
       (* get_loc_footprint_map *)
       simpl. destruct (path_of_place p) eqn: POP.
@@ -2959,14 +2964,14 @@ Proof.
     (* Tvariant *)
     + destruct (ce1 ! i) eqn: CO; try congruence.      
       eapply andb_true_iff in POWN. destruct POWN as (INIT1 & FULL).
-      exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+      exploit MM. eauto. eapply must_init_sound; eauto.
       intros (BM & WTLOC). (* rewrite PTY in *. *)
       inv WTFP; inv BM; simpl in *; try congruence.
       eapply EXTEND in CO. rewrite CO in *.      
       econstructor; eauto. 
       econstructor; eauto.
       cut (is_full own.(own_universe) (Pderef p (Tvariant l i)) = true).
-      eapply MM. econstructor. auto. rewrite PTY. auto.
+      eapply MM.
       simpl. destruct (path_of_place p) eqn: POP.
       eapply get_loc_footprint_map_app; eauto.      
       eapply must_init_sound; eauto.
@@ -2977,7 +2982,7 @@ Proof.
     destruct (must_init init uninit universe p) eqn: INIT; try congruence.
     (** Case1 check that p is full so we can derive sem_wt_loc by mmatch *)
     destruct (is_full universe p) eqn: FULL; try congruence.
-    exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+    exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & WTLOC).  eapply WTLOC.
     erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
     (** Case2: p is not in the universe *)
@@ -2998,8 +3003,7 @@ Proof.
       rewrite P1 in CO. inv CO.
       split; eauto. }    
     generalize (POWN (Pfield p fid fty, fty) INMEM).
-    instantiate (1 := (Pfield p fid fty)). eauto.
-    econstructor; eauto.
+    instantiate (1 := (Pfield p fid fty)). eauto.    
     auto.
     (* place_footprint *)
     simpl. destruct (path_of_place p) eqn: POP.
@@ -3012,7 +3016,7 @@ Proof.
   (* Tvariant *)
   - destruct (ce1 ! i) eqn: CO; try congruence.
     eapply andb_true_iff in POWN. destruct POWN as (INIT & FULL).
-    exploit MM. 2: eauto. auto. eapply must_init_sound; eauto.
+    exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & WTLOC). 
     inv WTFP; inv BM; simpl in *; try congruence. 
     eapply WTLOC.
@@ -3020,7 +3024,6 @@ Proof.
     eapply sound_own_universe; eauto.
 Qed.
 
-   
 (* properties of place_dominator *)
 
 Lemma place_dominator_local: forall p p',
@@ -3039,11 +3042,9 @@ Lemma place_dominator_strict_prefix: forall p p',
 Proof.
   induction p; simpl; auto; try congruence; intros.
   - exploit IHp. eauto. intros A. eapply is_prefix_strict_trans. eauto.
-    unfold is_prefix_strict. simpl. destruct (place_eq p p). auto. congruence.
-  - inv H.
-    unfold is_prefix_strict. simpl. destruct (place_eq p' p'). auto. congruence.
-  - inv H.
-    unfold is_prefix_strict. simpl. destruct (place_eq p' p'). auto. congruence.
+    eapply is_prefix_strict_field.
+  - inv H. eapply is_prefix_strict_deref.
+  - inv H. eapply is_prefix_strict_downcast.
 Qed.
 
 
@@ -3070,12 +3071,6 @@ Hypothesis COMP_LEN: forall id co, ce ! id = Some co -> list_length_z (co_member
 Hypothesis COMP_NOREP: forall id co, ce ! id = Some co -> list_norepet (name_members (co_members co)).
 
 (** Try to prove eval_expr_sem_wt  *)
-
-Lemma is_prefix_paths_app: forall p1 p2,
-    is_prefix p1 p2 = true ->
-    fst (path_of_place p1) = fst (path_of_place p2)
-    /\ exists phl, snd (path_of_place p2) = snd (path_of_place p1) ++ phl.
-Admitted.
 
 Lemma move_place_init_is_init: forall p p1 own,
     is_init (move_place own p1) p = true ->
@@ -3117,8 +3112,7 @@ Proof.
     eapply forallb_forall. intros.
     eapply forallb_forall in H0. 2: eauto.
     eapply move_children_still_init. eauto.
-    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
-    eapply orb_true_r.
+    eapply is_prefix_field.
   - simpl in H.
     eapply andb_true_iff in H. destruct H.
     exploit IHp.
@@ -3127,13 +3121,11 @@ Proof.
     simpl in H2. destruct H2; subst.
     (* case1 *)
     eapply move_irrelavent_place_still_owned. auto.
-    eapply is_prefix_antisym. unfold is_prefix_strict. simpl.
-    destruct place_eq. auto. congruence.
+    eapply is_prefix_antisym. eapply is_prefix_strict_deref.
     (* case2 *)
     eapply forallb_forall in H1. 2: eauto.
     eapply move_children_still_init. eauto.
-    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
-    eapply orb_true_r.
+    eapply is_prefix_deref.
   - exploit IHp. 
     (* H can imply the premise of IHp *)
     eapply forallb_forall. intros.
@@ -3145,55 +3137,13 @@ Proof.
     eapply move_irrelavent_place_still_owned. eauto.
     eapply is_prefix_antisym.
     eapply is_prefix_strict_trans_prefix2. eapply is_prefix_valid_owner.
-    unfold is_prefix_strict. simpl.
-    destruct (place_eq p p); try congruence. auto.    
+    eapply is_prefix_strict_downcast.
     (* p's dominators are init so the dominators of (valid_owner p) are init *)
     eapply forallb_forall. intros.
     eapply forallb_forall in A. eapply move_children_still_init. eauto.
-    unfold is_prefix. simpl. destruct (place_eq p p); try congruence.
-    simpl. eapply orb_true_r.
+    eapply is_prefix_downcast.
     eapply place_dominators_valid_owner_incl. auto.
 Qed.
-
-
-Lemma is_not_prefix_disjoint: forall p1 p2,
-    is_prefix p1 p2 = false ->
-    is_prefix p2 p1 = false ->
-    fst (path_of_place p1) <> fst (path_of_place p2) \/
-      paths_disjoint (snd (path_of_place p1)) (snd (path_of_place p2)).
-Proof.
-  induction p1; intros; destruct (path_of_place p2) eqn: POP2; simpl in *.
-  - unfold is_prefix in *.
-    simpl in *.
-    admit.
-  - destruct (path_of_place p1) eqn: POP1.
-    unfold is_prefix in *.
-    simpl in *.
-    destruct (place_eq p1 p2) in H0; simpl in H0; try congruence. subst.
-    erewrite orb_true_r in H0. congruence.
-    destruct in_dec in H0; simpl in H0.
-    erewrite orb_true_r in H0. congruence.
-    (** p2 may be a children of p1 but p2 is not a children of p1.i  *)
-    destruct (in_dec place_eq p1 (parent_paths p2)); simpl in *.
-    (** IMPORTANT TODO: we need to say that paths of p2 is (l0 ++
-    [ph_field j] ++ ...)  where j is not equal to i *)
-    * admit.
-    * (* use I.H. *)
-      exploit IHp1. instantiate (1 := p2).
-      eapply orb_false_iff. split. destruct (place_eq p1 p2); try congruence; auto.
-      eapply not_true_iff_false. intro. eapply n1. eapply proj_sumbool_true. eauto.
-      eapply orb_false_iff. split. destruct (place_eq p1 p2); try congruence; auto.     
-      eapply not_true_iff_false. intro. eapply n2. symmetry. eapply proj_sumbool_true.
-      eauto.
-      eapply not_true_iff_false. intro. eapply n0. eapply proj_sumbool_true. eauto.  
-      intros [A|B].
-    + rewrite POP2 in A. simpl in *. auto.
-    + right. rewrite POP2 in B. simpl in *.
-      (** TODO: paths_disjoint_app *)
-      admit.
-  - admit.
-  - admit.
-Admitted.      
 
   
 (* Inductive not_shallow_prefix_paths: list path -> Prop := *)
@@ -3346,6 +3296,15 @@ Proof.
     red. eapply in_app. eauto.
 Qed.
 
+Lemma paths_contain_is_shallow: forall l1 l2,
+    paths_contain l1 (l1 ++ l2) = true ->
+    is_shallow_prefix_paths l2 = true ->
+    paths_shallow_contain l1 (l1 ++ l2) = true.
+Proof.
+  induction l1; intros; simpl in *. auto.
+  destruct path_eq; try congruence. eauto.
+Qed.
+  
 Lemma path_of_not_shallow_prefix: forall p1 p2 l1 l2 id
     (NSHA: is_shallow_prefix p1 p2 = false)
     (* is_prefix here is used to avoid syntatic well-typedness *)
@@ -3355,58 +3314,33 @@ Lemma path_of_not_shallow_prefix: forall p1 p2 l1 l2 id
     not_shallow_prefix_paths l2.
 Proof.
   intros.
-  unfold is_shallow_prefix in NSHA.
+  unfold is_shallow_prefix in NSHA. 
   unfold is_prefix in PRE.
-  destruct place_eq; simpl in *; try congruence.
-  destruct in_dec in *; simpl in *; try congruence.
-  destruct in_dec in *; simpl in *; try congruence.
-  exploit in_parent_paths_not_empty_sufix; eauto.
-  intros (l3 & A1 & A2). rewrite POP2 in A1. inv A1.
-  eapply app_inv_head in H0. subst.
-  eapply path_of_not_shallow_prefix_aux; eauto.
+  rewrite POP1 in *. rewrite POP2 in *.
+  destruct ident_eq in *; try congruence; simpl in *.
+  destruct (is_shallow_prefix_paths l2) eqn: A.
+  exploit paths_contain_is_shallow; eauto. congruence.
+  eapply negb_false_iff in A.
+  destruct in_dec in A; simpl in *; try congruence. auto.
 Qed.
 
-Lemma path_of_not_shallow_prefix_reverse_aux: forall p2 p1 l1 l2 id
-    (NSHA: In p1 (shallow_parent_paths p2))   
-    (POP1: path_of_place p1 = (id, l1))
-    (POP2: path_of_place p2 = (id, l1 ++ l2)),
-    ~ not_shallow_prefix_paths l2.
+Lemma paths_shallow_contain_true_implies: forall l1 l2,
+    paths_shallow_contain l1 (l1 ++ l2) = true ->
+    is_shallow_prefix_paths l2 = true.
 Proof.
-    induction p2; simpl; intros.
-  - inv POP2. symmetry in H1. eapply app_eq_nil in H1. destruct H1.
-    subst. destruct p1; simpl in POP1; inv POP1; try contradiction.    
-  - destruct NSHA as [A1 | A2]; subst; try congruence.
-    + rewrite POP1 in POP2. inv POP2.
-      eapply app_inv_head in H0. subst.
-      intro. red in H. inv H; try congruence. inv H0.
-    + destruct (path_of_place p2) eqn: POP3. inv POP2.
-      destruct (length l2) eqn: LEN.
-      * eapply length_zero_iff_nil in LEN. subst.
-        intro. inv H.
-      * eapply length_S_inv in LEN.
-        destruct LEN as (l' & a & B1 & B2). subst.
-        rewrite app_assoc in H1. eapply app_inj_tail in H1.
-        destruct H1. subst.
-        intro. red in H. eapply in_app in H. destruct H.
-        eapply IHp2; eauto. inv H; try congruence. inv H0.
-  - contradiction.
-  - destruct NSHA as [A1 | A2]; subst; try congruence.
-    + rewrite POP1 in POP2. inv POP2.
-      eapply app_inv_head in H0. subst.
-      intro. red in H. inv H; try congruence. inv H0.
-    + destruct (path_of_place p2) eqn: POP3. inv POP2.
-      destruct (length l2) eqn: LEN.
-      * eapply length_zero_iff_nil in LEN. subst.
-        intro. inv H.
-      * eapply length_S_inv in LEN.
-        destruct LEN as (l' & a & B1 & B2). subst.
-        rewrite app_assoc in H1. eapply app_inj_tail in H1.
-        destruct H1. subst.
-        intro. red in H. eapply in_app in H. destruct H.
-        eapply IHp2; eauto. inv H; try congruence. inv H0.
+  induction l1; intros; simpl in *. auto.
+  destruct path_eq; try congruence; auto.
 Qed.
 
-    
+Lemma is_shallow_prefix_paths_true: forall l,
+    is_shallow_prefix_paths l = true ->
+    ~ not_shallow_prefix_paths l.
+Proof.
+  intros. unfold is_shallow_prefix_paths in H.
+  eapply negb_true_iff in H. destruct in_dec in H; simpl in *; auto.
+  congruence.
+Qed.
+
 (* If the path contains no deref, then p1 must be shallow prefix of
 p2. This lemma is unused *)
 Lemma path_of_not_shallow_prefix_reverse: forall p1 p2 l1 l2 id
@@ -3417,14 +3351,11 @@ Lemma path_of_not_shallow_prefix_reverse: forall p1 p2 l1 l2 id
 Proof.
   intros.
   unfold is_shallow_prefix.
-  destruct place_eq; simpl in *; try congruence.
-  (* p1 = p2 *)
-  subst. rewrite POP1 in POP2. inv POP2.
-  rewrite (app_nil_end l1) in H0 at 1. eapply app_inv_head in H0.
-  subst. inv NSHA.
-  (* p1 <> p2 *)    
-  destruct in_dec in *; simpl in *; try congruence.
-  exfalso. eapply path_of_not_shallow_prefix_reverse_aux; eauto.
+  rewrite POP1. rewrite POP2.
+  eapply andb_false_iff. right.
+  destruct (paths_shallow_contain l1 (l1 ++ l2)) eqn: A; auto.
+  exploit paths_shallow_contain_true_implies. eauto. intros.
+  exploit is_shallow_prefix_paths_true.  eauto. auto. contradiction.
 Qed.  
 
 (** Properties of evaluation of place  *)
@@ -3932,12 +3863,7 @@ Proof.
       unfold p1. erewrite valid_owner_same_local. eauto.
       intros NPRE.
       assert (PRE01: is_prefix_strict p0 p1 = true).
-      { unfold is_prefix_strict. unfold is_prefix in PRE, PRE1.
-        eapply orb_true_iff in PRE1. destruct PRE1.
-        destruct (place_eq p0 p1); try congruence. subst.
-        destruct (place_eq p1 p1) in PRE; simpl in PRE; try congruence.
-        destruct (place_eq p1 p0); simpl in * ;try congruence.
-        auto. }
+      { eapply is_not_prefix_strict; auto. }
       assert (PRE02: is_prefix_strict p0 p2 = true).
       { eapply is_prefix_strict_trans_prefix. eauto.
         eapply is_shallow_prefix_is_prefix. eauto. }
@@ -6642,7 +6568,7 @@ Inductive drop_member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp
            end = OK fofs)
     (FTY: field_type fid co.(co_members) = OK fty)    
     (* used to guarantee that fp is well founded (e.g., no repeated field names) *)
-    (WTFFP: wt_footprint ce fty fp)    
+    (* (WTFFP: wt_footprint ce fty fp)     *)
     (FFP: deref_loc_rec_footprint m b (ofs + fofs) fty fp tyl b1 ofs1 ty fp1),
     drop_member_footprint m co b ofs fp (Some (drop_member_box fid fty tyl))
 (* | drop_member_fp_box_enum: forall fid fofs fty tyl b1 ofs1 ty fp1 *)
