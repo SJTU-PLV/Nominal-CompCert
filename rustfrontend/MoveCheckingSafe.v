@@ -149,16 +149,6 @@ Inductive wt_state (ce: composite_env) : state -> Prop :=
 .
 
 
-(* The prefix of a well typed place is also well typed  *)
-
-Lemma wt_place_prefix: forall p2 p1 ce e,
-    is_prefix p1 p2 = true ->
-    wt_place e ce p2 ->
-    wt_place e ce p1.
-Proof.
-  induction p2; intros; unfold is_prefix in H at 1; simpl in *.
-Admitted.
-
 Lemma get_tenv_some: forall e id ty,
     (env_to_tenv e) ! id = Some ty ->
     exists b, e ! id = Some (b, ty).
@@ -2450,7 +2440,7 @@ prove it in the semantics. One problem is how to establish and
 preserve this invariant in the function entry and every step. May be
 we should do some checking for each function *)
 
-Record wf_own_env (own: own_env) : Prop := {
+Record wf_own_env le ce (own: own_env) : Prop := {
     wf_own_dominators: forall p,
       is_init own p = true ->
       dominators_is_init own p = true;
@@ -2473,19 +2463,24 @@ Record wf_own_env (own: own_env) : Prop := {
       in_universe own p = true ->
       is_full (own_universe own) p = false ->
       exists ty, typeof_place p = Tbox ty;
+
+    (* all the places in the universe is wt_place *)
+    wf_own_wt_place: forall p,
+      in_universe own p = true ->
+      wt_place le ce p;
   }.
 
 (* easy because none of the property in wf_own_env rely on some place
 in init set *)
-Lemma wf_own_env_move_place: forall own p,
-    wf_own_env own ->
-    wf_own_env (move_place own p).
+Lemma wf_own_env_move_place: forall own p le ce,
+    wf_own_env le ce own ->
+    wf_own_env le ce (move_place own p).
 Admitted.
 
-Lemma wf_own_env_init_place: forall own p,
+Lemma wf_own_env_init_place: forall own p le ce,
     dominators_is_init own p = true ->
-    wf_own_env own ->
-    wf_own_env (init_place own p).
+    wf_own_env le ce own ->
+    wf_own_env le ce (init_place own p).
 Admitted.
 
 Lemma dominators_is_init_field: forall own p fid fty,
@@ -3778,7 +3773,7 @@ satisfies mmatch, then moving out the valid_owner of a place [p]
 preserves mmatch properties. *)
 Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
     (MM: mmatch fpm1 ce m le own)
-    (WF: wf_own_env own)
+    (WF: wf_own_env le ce own)
     (* This property ensure that the place to be moved out has shallow
     prefix (its location) in the universe. This property is ensured by
     must_movable *)
@@ -4329,7 +4324,7 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (OWN: move_place_option own1 (moved_place e) = own2)
     (WFENV: wf_env fpm1 ce le)
     (WT: wt_expr le ce e)
-    (WFOWN: wf_own_env own1),
+    (WFOWN: wf_own_env le ce own1),
   (** TODO: how to relate fp and fpm2 ? We should show that they are disjoint *)
   exists fp fpm2,
     sem_wt_val ce m fp v
@@ -4347,7 +4342,7 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     list_equiv to relate fpm1 and fpm2 *)
     /\ list_equiv (footprint_flat fp ++ flat_fp_map fpm2) (flat_fp_map fpm1)
     (* it is satisfied trivially because we just move out a place *)
-    /\ wf_own_env own2.
+    /\ wf_own_env le ce own2.
 Proof.
   intros. destruct e.
   (* Emoveplace *)
@@ -6186,7 +6181,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (NOREP: list_norepet (footprint_of_env e ++ (flat_fp_map fpm1)))
     (* vfp and fpm1 are disjoint so that their combination is separated *)
     (DIS1: list_disjoint (footprint_flat vfp) (footprint_of_env e ++ (flat_fp_map fpm1)))
-    (WFOWN: wf_own_env own1),
+    (WFOWN: wf_own_env e ce own1),
   exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
           /\ mmatch fpm2 ce m2 e own2
           /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
@@ -6266,7 +6261,8 @@ Proof.
         rewrite GFP in G1. inv G1.
         exploit MM. erewrite POP2. eauto. eauto.
         intros (BM1 & FULL1).
-        exploit wt_place_prefix. eauto. eauto. intros WTP0.        
+        exploit wf_own_wt_place. eauto.
+        eapply is_init_in_universe. eapply INIT1. intros WTP0.
         assert (WTPH: wt_path ce (typeof_place p0) phl (typeof_place p)).
         { exploit wt_place_wt_local. eapply WTP.
           intros (b1 & ty1 & ETY). rewrite local_of_paths_of_place in ETY.
@@ -6294,8 +6290,7 @@ Proof.
         eapply A2. eauto.
         (* wt_footprint *)
         instantiate (1 := typeof_place p0).
-        eapply get_wt_place_footprint_wt. eapply WFENV.
-        eapply wt_place_prefix; eauto.
+        eapply get_wt_place_footprint_wt. eapply WFENV. auto.
         rewrite POP2. eauto.
         (* wt_path *)
         eauto.
@@ -6321,8 +6316,7 @@ Proof.
         (* perm unchanged *) 
         intros. erewrite <- assign_loc_perm_unchanged; eauto.
         (* wt_footprint *)
-        eapply get_wt_place_footprint_wt. eapply WFENV.
-        eapply wt_place_prefix; eauto.
+        eapply get_wt_place_footprint_wt. eapply WFENV. auto.
         rewrite POP2. eauto.
         (* disjointness of fp3 and vfp *)
         intros. eapply list_disjoint_sym in DIS4.
@@ -7075,7 +7069,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
 | sound_Kcall: forall an body cfg k nret f e own p m fpf
     (MSTK: sound_stacks (Kcall p f e own k) m fpf)
     (RET: cfg ! nret = Some Iend)
-    (WFOWN: wf_own_env own),
+    (WFOWN: wf_own_env e ce own),
     sound_cont an body cfg (Kcall p f e own k) nret None None nret m fpf
 | sound_Kdropplace: forall f st ps nret cfg pc cont brk k own1 own2 e m maybeInit maybeUninit universe entry fpm fpf mayinit mayuninit rfp (* rfpty *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
@@ -7090,7 +7084,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (ORDERED: move_ordered_split_places_spec own1 (map fst ps))
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
     (OWN: sound_own own2 mayinit mayuninit universe)
-    (WFOWN: wf_own_env own1)
+    (WFOWN: wf_own_env e ce own1)
     (FULL: (forall p full, In (p, full) ps -> is_full (own_universe own1) p = full))
     (* (WTRFP: wt_footprint ce rfpty rfp) *),
     sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg (Kdropplace f st ps e own1 k) pc cont brk nret m (fpf_dropplace e fpm rfp fpf)
@@ -7117,7 +7111,7 @@ with sound_stacks : cont -> mem -> fp_frame -> Prop :=
     (AFTER: own2 = init_place own1 p)
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
     (OWN: sound_own own2 mayinit mayuninit universe)
-    (WFOWN: wf_own_env own1),
+    (WFOWN: wf_own_env e ce own1),
     sound_stacks (Kcall p f e own1 k) m (fpf_func e fpm fpf).
     
 
@@ -7138,7 +7132,7 @@ Inductive sound_state: state -> Prop :=
     (* we need to maintain the well-formed invariant of own_env *)
     (WFENV: wf_env fpm ce e)
     (* invariant of the own_env *)
-    (WFOWN: wf_own_env own),
+    (WFOWN: wf_own_env e ce own),
     sound_state (State f s k e own m)
 | sound_dropplace: forall f cfg entry maybeInit maybeUninit universe next cont brk nret st drops k e own1 own2 m fpm fpf flat_fp sg mayinit mayuninit rfp (* rfpty  *)
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
@@ -7163,7 +7157,7 @@ Inductive sound_state: state -> Prop :=
     (IM: get_IM_state maybeInit!!next maybeUninit!!next (Some (mayinit, mayuninit)))
     (* Why sound_own own2 here not own1? because the analysis result is about the next node *)
     (OWN: sound_own own2 mayinit mayuninit universe)
-    (WFOWN: wf_own_env own1),
+    (WFOWN: wf_own_env e ce own1),
     (* no need to maintain borrow check domain in dropplace? But how
     to record the pc and next statement? *)
     sound_state (Dropplace f st drops k e own1 m)
