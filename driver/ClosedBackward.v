@@ -50,8 +50,10 @@ Inductive initial_c : query li_c -> Prop :=
 
 (*maybe we need to change this for backward*)
 Inductive final_c : int -> reply li_c -> Prop :=
-|final_c_intro : forall r m,
-    final_c r (cr (Vint r) m).
+|final_c_int : forall r m,
+    final_c r (cr (Vint r) m)
+|final_c_undef : forall r m,
+    final_c r (cr Vundef m).
 
 Definition initial_regset (pc : val) (sp: val):=
     (Pregmap.init Vundef) # PC <- pc
@@ -67,9 +69,11 @@ Inductive initial_asm : query li_asm -> Prop :=
     initial_asm (rs,m).
 
 Inductive final_asm : int -> reply li_asm -> Prop :=
-|final_asm_intro : forall r (rs : regset) m,
-     (* rs # PC = Vnullptr -> *)
+|final_asm_int : forall r (rs : regset) m,
      rs # RAX = Vint r ->
+     final_asm r (rs,m)
+|final_asm_undef : forall r (rs: regset) m,
+    rs # RAX = Vundef ->
     final_asm r (rs,m).
 
 Inductive valid_world_cc_compcert : ccworld cc_compcert -> Prop :=
@@ -239,15 +243,16 @@ Let LTS_asm := L_asm tse.
 (** not sure about safe *)
 (** S1: make close into a semantics -> option closed_semantics *)
 (** S2: why we need this in the proof from SmallstepClosed? *)
-Lemma closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
-Proof.
-Admitted.
+Hypothesis closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
 
 (** seems to be unprovable for any given LTS where the [final_state] is opaque *)
 Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
 Proof.
-  intros.
-Admitted.
+  intros. destruct r. 
+  destruct (r # RAX) eqn: rRAX; eexists;
+    try (eapply final_asm_other; congruence).
+  econstructor; eauto.
+Qed.
 
 Lemma match_initial_backward_ca1 : forall q1,
     initial_c q1 -> exists wB q2,
@@ -292,8 +297,13 @@ Proof.
   intros. inv H0. destruct H as [rx [Hr1 [ry [Hr2 [rz [Hr3 Hr4]]]]]].
   inv Hr1. inv Hr2. inv H. simpl in H0. inv Hr3. inv Hr4. destruct H as [Hw Hj].
   destruct r2. inv Hj. inv H3. rename m into ttm'.
-  simpl in H. inv H1. unfold main_sg in H0.
-  unfold proj_sig_res in H0. simpl in H0.
+  simpl in H.
+  subst tres. unfold main_sg in H9. simpl in H9. unfold Conventions1.loc_result in H9.
+  replace Archi.ptr64 with true in H9 by reflexivity. simpl in H9.
+  specialize (H RAX). 
+  inv H1.
+  - rewrite H5 in H. inv H. rewrite <- H3 in H9. inv H9.
+    econstructor; eauto. eapply final_c_others. congruence.
   (** maybe we should allow [Vundef] in both final_c and final_asm, let [Vundef] corresponds to 
 int value [1] *)
 Admitted.
