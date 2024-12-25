@@ -362,6 +362,8 @@ Section BSIM.
          econstructor; eauto. econstructor; eauto.
   Admitted.
 
+  Hypothesis determinate_L1: forall i, determinate (L1 i).
+  
   Lemma progress_simulation :
     forall idx s1 s2, match_states idx s1 s2 -> safe L1 se1 s1 ->
                   (exists r, final_state L2 se2 s2 r) \/
@@ -369,8 +371,7 @@ Section BSIM.
                     (exists t s2', step L2 se2 s2 t s2').
   Proof.
     intros. inv H. inv H1.
-    pose proof (bsim_lts (HL i) _ _ H (Hse1 i)).
-    exploit @bsim_progress; eauto.
+    assert (SAFE_L1i: Smallstep.safe (L1 i se1) s1).
     { (** Why the inverion of H1 works here but fails in the previous lemmas *)
       clear - H0. red. intros.
       red in H0. exploit H0. eapply star_internal; eauto.
@@ -381,9 +382,24 @@ Section BSIM.
         subst_dep. right. left. eauto.
         subst_dep. left. eauto.
     }
-    red in H0. exploit H0. eapply star_refl.
+    pose proof (bsim_lts (HL i) _ _ H (Hse1 i)).
+    exploit @bsim_progress; eauto.
+    pose proof (determinate_L1 i).
+    intros [[r Final2i] | [[q Ext2i] | [t [s2' Step2i]]]].
+    - exploit @bsim_match_final_states; eauto.
+      intros (s1' & r1 & Star1 & Final1i & MR).
+      exploit H0. eapply star_internal; eauto.
+      intros [[r1' Final1] | [[q Ext1] | [t [s2' Step1]]]].
+      + inv Final1. subst_dep. left. inv H2. econstructor; eauto.
+        econstructor; eauto.
+      + inv Ext1. subst_dep.
+
+    (* red in H0. exploit H0. eapply star_refl.
     intros HP_L1. intros HP_L2i.
-    (* intros [[r A] | [[q B] | [t [s2' C]]]]. *)
+    destruct HP_L1 as [[r FINAL] | [[q EXT] | [t [s2' STEP]]]].
+    - (* source final *)
+      left. inv FINAL. subst_dep. *)
+
     (** TODO*)
   Admitted.
   
