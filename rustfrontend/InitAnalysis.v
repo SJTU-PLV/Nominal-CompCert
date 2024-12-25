@@ -1039,8 +1039,17 @@ Proof.
   - simpl. eapply sound_own_universe0.
 Qed.
 
-
-      
+Lemma dominators_must_init_sound: forall p init uninit universe own,
+    sound_own own init uninit universe ->
+    dominators_must_init init uninit universe p = true ->
+    dominators_is_init own p = true.
+Proof.
+  intros. unfold dominators_must_init in H0. unfold dominators_is_init.
+  eapply forallb_forall. intros.
+  eapply forallb_forall in H0. 2: eauto.
+  eapply must_init_sound; eauto.
+Qed.  
+    
 (** ** Semantic invariant *)
 
 

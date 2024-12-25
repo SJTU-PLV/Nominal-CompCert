@@ -123,7 +123,15 @@ Inductive wt_stmt: statement -> Prop :=
     (WT1: wt_place p)
     (WT2: wt_expr e),
     (* Require the type of p equal to the type of e? *)
-    wt_stmt (Sassign p e).
+    wt_stmt (Sassign p e)
+| wt_Sassign_variant: forall p id fid e co
+    (WT1: wt_place p)
+    (WT2: wt_expr e)
+    (WT3: ce ! id = Some co)
+    (* used to prove assign_loc_variant_sound *)
+    (WT4: co.(co_sv) = TaggedUnion),
+    wt_stmt (Sassign_variant p id fid e)
+.
     
 (* Well-typed continuation and state *)
 
@@ -1276,6 +1284,7 @@ Ltac destr_fp_enum fp ty :=
 Ltac destr_fp_field fp H :=
   let A1 := fresh "A" in
   let A2 := fresh "A" in
+  let p := fresh "p" in
   let FIND := fresh "FIND" in
   destruct fp; try congruence;
   destruct find_fields as [p|] eqn: FIND; try congruence;
@@ -2080,6 +2089,45 @@ Proof.
   eapply in_flat_map; eauto.
   exists (id, f). simpl. split; auto.
   eapply PTree.elements_correct. auto.
+Qed.
+
+
+Lemma get_loc_footprint_in: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
+    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
+    In b2 (b1 :: footprint_flat fp1).
+Proof.
+  induction phl; intros.
+  - simpl in H. inv H. econstructor; auto.
+  - simpl in H. destruct a.
+    + destruct fp1; try congruence.
+      exploit IHphl; eauto. intros IN. inv IN.
+      eapply in_cons. simpl. auto.
+      eapply in_cons. simpl. auto.
+    + destruct fp1; try congruence.
+      destruct (find_fields fid fpl) eqn: FIND; try congruence.
+      repeat destruct p.
+      exploit find_fields_some; eauto. intros (A1 & A2). subst.
+      exploit IHphl; eauto. intros IN. inv IN.
+      econstructor. auto.
+      eapply in_cons. simpl. eapply in_flat_map; eauto.
+    + destr_fp_enum fp1 ty.
+      exploit IHphl; eauto.
+Qed.
+
+(* The block obtained from get_loc_footprint_map comes from
+   stack or the footprint map *)
+Lemma get_loc_footprint_map_in_range: forall phl id fpm le b ofs fp,
+    get_loc_footprint_map le (id, phl) fpm = Some (b, ofs, fp) ->
+    In b (footprint_of_env le ++ flat_fp_map fpm).
+Proof.
+  intros. simpl in *.
+  destruct (le!id) eqn: A; try congruence.
+  destruct p.
+  destruct (fpm!id) eqn: B; try congruence.
+  exploit get_loc_footprint_in; eauto.
+  intros IN. inv IN.
+  eapply in_app_iff. left. eapply in_footprint_of_env; eauto.
+  eapply in_app_iff. right. eapply in_footprint_flat_fp_map; eauto.
 Qed.
 
 Lemma in_app_commut {A: Type} : forall (l1 l2 l3: list A) a,
@@ -3592,6 +3640,134 @@ Proof.
     auto.
 Qed.
 
+
+Lemma eval_place_footprint_unchanged: forall p m b1 b2 ofs1 ofs2 fpm own le fp,
+    get_loc_footprint_map le (path_of_place p) fpm = Some (b1, ofs1, fp) ->
+    eval_place ce le m p b2 ofs2 ->
+    mmatch fpm ce m le own ->
+    dominators_is_init own p = true ->
+    list_norepet (footprint_of_env le ++ flat_fp_map fpm) ->
+    (* These premises are used to reuse eval_place_get_loc_footprint_map_equal *)
+    wf_env fpm ce le ->
+    wt_place le ce p ->
+    exists bs,
+      (* We have to consider that we cannot change the location of the
+      tag field if p is an enum, very difficult. But we can just
+      ignore the changing in b2 because changing the tag does not
+      affect the field offset *)
+      (forall m' b3 ofs3, Mem.unchanged_on (fun b' ofs' => In b' bs) m m' ->
+                     eval_place ce le m' p b3 ofs3 ->
+                     b2 = b3 /\ ofs2 = ofs3)
+      /\ list_norepet bs
+      /\ incl bs (footprint_of_env le ++ flat_fp_map fpm)
+      /\ list_disjoint bs (b2 :: footprint_flat fp).
+      (* /\ Ptrofs.unsigned ofs + sizeof ce (typeof_place p) <= Ptrofs.max_unsigned. *)
+Proof.
+  induction p; intros until fp; intros GFP PADDR MM DOM NOREP WFENV WTP.
+  - inv PADDR. simpl in *.
+    rewrite H3 in GFP.
+    destruct (fpm!i) eqn: A; try congruence.
+    inv GFP.
+    exists nil. repeat apply conj.
+    + intros. inv H0. rewrite H3 in H6. inv H6.
+      auto.
+    + constructor.
+    + eapply incl_nil_l.
+    + red. intros. inv H.
+  - exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    inv PADDR. simpl in *.
+    destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b1 & ofs1 & fp1 & GFP1 & GFP2). simpl in GFP2.
+    destr_fp_field fp1 GFP2. inv GFP2.
+    inv WTP.
+    (* some rewrite *)
+    rewrite H3 in WT2. inv WT2.
+    rewrite H6 in WT3. inv WT3.
+    exploit IHp; eauto.
+    intros (bs & UNC & NOREP1 & INCL & DIS).
+    exists bs. repeat apply conj; eauto.
+    + intros. inv H0.
+      rewrite H3 in H10. inv H10. rewrite H6 in H13. inv H13.
+      rewrite H7 in H14. inv H14.
+      exploit UNC; eauto.
+      intros (A1 & A2). subst. eauto.
+    + red. intros. eapply DIS; auto.
+      inv H0. simpl. auto.
+      eapply in_cons. simpl. eapply in_flat_map; eauto.
+  - exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    inv PADDR. simpl in *.
+    destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b1 & ofs1 & fp1 & GFP1 & GFP2). simpl in GFP2.
+    destruct fp1; try congruence. inv GFP2.
+    assert (DOM1: dominators_is_init own p = true).
+    { unfold dominators_is_init in DOM. simpl in DOM.
+      eapply andb_true_iff in DOM. destruct DOM. auto. }
+    inv WTP.
+    exploit IHp; eauto.
+    intros (bs & UNC & NOREP1 & INCL & DIS).
+    exists (l :: bs).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    rewrite POP. eauto.
+    intros (D1 & D2 & D3 & D4). subst.
+    repeat apply conj; eauto.
+    + intros. inv H0.
+      exploit type_deref_some; eauto. intros PTY.
+      rewrite PTY in *.
+      inv H4; simpl in *; try congruence. inv H0.
+      inv H9; simpl in *; try congruence. inv H0.
+      exploit UNC; eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros. auto.
+      intros (S1 & S2). subst.
+      eapply Mem.load_unchanged_on in H3; eauto.
+      rewrite H4 in H3. inv H3. auto.
+      simpl. auto.
+    + econstructor; auto.
+      intro. eapply DIS; eauto. simpl. auto.
+    + eapply incl_cons; auto.
+      eapply get_loc_footprint_map_in_range; eauto.
+    + red. intros.
+      eapply list_norepet_app in NOREP as (N1 & N2 & N3).
+      inv H.
+      * exploit get_loc_footprint_map_norepet; eauto.
+        intros (E1 & E2). simpl in *.
+        inv H0.
+        -- intro. eapply E2. auto.
+        -- intro. eapply E2. subst. auto.
+      * intro. subst. eapply DIS; eauto.
+        simpl. eauto.
+  - exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (A1 & A2 & A3 & A4). subst.
+    inv PADDR. simpl in *.
+    destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_app_inv; eauto.
+    intros (b1 & ofs1 & fp1 & GFP1 & GFP2). simpl in GFP2.
+    rewrite H3 in GFP2.
+    destruct fp1; try congruence.
+    destruct ident_eq; try congruence; destruct list_eq_dec; try congruence; destruct ident_eq;  try congruence; subst. inv GFP2.
+    inv WTP.
+    (* some rewrite *)
+    rewrite H3 in WT2. inv WT2.
+    rewrite H4 in WT3. inv WT3.
+    assert (DOM1: dominators_is_init own p = true).
+    { unfold dominators_is_init in *. simpl in DOM.
+      eapply andb_true_iff in DOM. destruct DOM as (A & B).
+      destruct p; simpl in *; auto.
+      eapply andb_true_iff. auto. }
+    exploit IHp; eauto.
+    intros (bs & UNC & NOREP1 & INCL & DIS).
+    exists bs. repeat apply conj; eauto.
+    + intros. inv H0.
+      rewrite H3 in H12. inv H12. rewrite H4 in H13. inv H13.
+      rewrite H9 in H18. inv H18.
+      exploit UNC; eauto.
+      intros (A1 & A2). subst. eauto.
+Qed.
+
 (* The footprint contained in the location of a place *)
 Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (EVAL: eval_place ce e m p b ofs)
@@ -3806,28 +3982,6 @@ Proof.
     simpl in *; try congruence. inv BM1.
     eapply H3. rewrite EQ.
     eapply Mem.load_valid_access; eauto.
-Qed.
-
-Lemma get_loc_footprint_in: forall phl fp1 b1 ofs1 b2 ofs2 fp2,
-    get_loc_footprint phl fp1 b1 ofs1 = Some (b2, ofs2, fp2) ->
-    In b2 (b1 :: footprint_flat fp1).
-Proof.
-  induction phl; intros.
-  - simpl in H. inv H. econstructor; auto.
-  - simpl in H. destruct a.
-    + destruct fp1; try congruence.
-      exploit IHphl; eauto. intros IN. inv IN.
-      eapply in_cons. simpl. auto.
-      eapply in_cons. simpl. auto.
-    + destruct fp1; try congruence.
-      destruct (find_fields fid fpl) eqn: FIND; try congruence.
-      repeat destruct p.
-      exploit find_fields_some; eauto. intros (A1 & A2). subst.
-      exploit IHphl; eauto. intros IN. inv IN.
-      econstructor. auto.
-      eapply in_cons. simpl. eapply in_flat_map; eauto.
-    + destr_fp_enum fp1 ty.
-      exploit IHphl; eauto.
 Qed.
         
 (* The location from a not_shallow_prefix path must be in the
@@ -6003,15 +6157,6 @@ and ty2 are non-overlap *)
 Definition loc_disjoint (b1 b2: block) (ty1 ty2: type) (ofs1 ofs2: Z) : Prop :=
   b1 <> b2 \/ ofs2 + sizeof ce ty2 <= ofs1 \/ ofs1 + sizeof ce ty1 <= ofs2.
 
-(** This lemma is wrong: considet fp is fp_emp !!! *)
-(* Lemma wt_footprint_same_size: forall fp ty1 ty2, *)
-(*     wt_footprint ce ty1 fp -> *)
-(*     wt_footprint ce ty2 fp -> *)
-(*     sizeof ce ty1 = sizeof ce ty2. *)
-(* Proof. *)
-(*   induction fp using strong_footprint_ind; intros; simpl in *. *)
-(*   - inv H. inv H0.  *)
-(* Admitted. *)
 
 (** The memory location obtained from get_loc_footprint is either in
     the range of [(b, ofs), (b, ofs+ sizeof ty)] or in the footprint
@@ -6292,12 +6437,6 @@ Lemma init_place_full_unchanged: forall own p p1,
     is_full (own_universe own) p = is_full (own_universe (init_place own p1)) p.
 Admitted.
 
-(* The block obtained from get_loc_footprint_map comes from
-   stack or the footprint map *)
-Lemma get_loc_footprint_map_in_range: forall phl id fpm le b ofs fp,
-    get_loc_footprint_map le (id, phl) fpm = Some (b, ofs, fp) ->
-    In b (footprint_of_env le ++ flat_fp_map fpm).
-Admitted.
 
 Lemma list_disjoint_app_r {A: Type}: forall (l1 l2 l3: list A),
     list_disjoint l1 (l2 ++ l3) ->
@@ -6316,18 +6455,23 @@ Proof.
   eapply list_disjoint_app_r in H. destruct H.
   split; apply list_disjoint_sym; auto.
 Qed.
-  
-(** Important Lemma: we need to say that the footprint inside a struct
-is also disjoint !!! *)
-(* Consider assign to a variant? *)
-Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
+
+(* Because we have normal assignment and enum assignment, to reuse the
+proof, we write this assign_loc_sound_gen lemma. It uses UNC1, UNC2
+and WTLOC to replace the assign_loc premise to simulate the actual
+assignment process. This generalization can handle both normal
+assginment and enum assignment. *)
+Lemma assign_loc_sound_gen: forall fpm1 m1 m2 own1 own2 b ofs p vfp pfp e ty
     (MM: mmatch fpm1 ce m1 e own1)
-    (TY: ty = typeof_place p)
-    (AS: assign_loc ce ty m1 b ofs v m2)
-    (AL: (alignof ce ty | Ptrofs.unsigned ofs))
-    (CAST: val_casted v ty)
+    (TY: ty = typeof_place p)    
+    (* (AS: assign_loc ce ty m1 b ofs v m2) *)
+    (UNC1: Mem.unchanged_on (fun b1 ofs1 => ~ (b1 = b /\ Ptrofs.unsigned ofs <= ofs1 < Ptrofs.unsigned ofs + sizeof ce ty)) m1 m2)
+    (UNC2: forall b1 ofs1 k p, Mem.perm m1 b1 ofs1 k p <-> Mem.perm m2 b1 ofs1 k p)
+    (WTLOC: sem_wt_loc ce m2 vfp b (Ptrofs.unsigned ofs))
+    (* (AL: (alignof ce ty | Ptrofs.unsigned ofs)) *)
+    (* (CAST: val_casted v ty) *)
     (NOREPVFP: list_norepet (footprint_flat vfp))
-    (WT: sem_wt_val ce m1 vfp v)
+    (* (WT: sem_wt_val ce m1 vfp v) *)
     (WFENV: wf_env fpm1 ce e)
     (WTFP: wt_footprint ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
@@ -6390,12 +6534,12 @@ Proof.
       intros (b1 & ofs1 & fp1 & D & E). rewrite B in D. inv D.
       (* prove that assign_loc assigns a sem_wt_val then the location
       is sem_wt_loc *)
-      exploit assign_loc_sem_wt; eauto.      
+      (* exploit assign_loc_sem_wt; eauto.       *)
       (** b1 is not in fp1. Use B to show that location and its
       footprint are disjoint *)
-      exploit get_loc_footprint_map_norepet. eapply NOREP2. eapply B. eauto. eauto.
-      intuition.      
-      intros WTLOC.
+      (* exploit get_loc_footprint_map_norepet. eapply NOREP2. eapply B. eauto. eauto. *)
+      (* intuition.       *)
+      (* intros WTLOC. *)
       exploit sem_wt_subpath; eauto.
       intros WTLOC1.
       (* sem_wt_loc implies bmatch *)
@@ -6403,7 +6547,7 @@ Proof.
     (** Case 2: p0 is not children of p1 *)
     + assert (INIT1: is_init own1 p0 = true).
       { subst. destruct (is_init own1 p0) eqn: I; auto.
-        exploit init_irrelavent_place_still_not_owned; eauto. }                
+        exploit init_irrelavent_place_still_not_owned; eauto. }
       destruct (is_prefix p0 p) eqn: PRE1.
       (* p0 is prefix of p. It is possible that p0 is a shallow prefix
       of p !!! It is the situation where overriding a field of an
@@ -6433,18 +6577,11 @@ Proof.
         (** task1: prove bmatch m2 b2 ofs2 fp4 using bmatch_set_subpath_wt_val *)
         eapply bmatch_set_subpath_wt_val. eauto.
         eapply get_loc_footprint_map_pos; eauto.        
-        eapply assign_loc_unchanged_on. eauto.
+        eauto.
         (* blocks_perm_unchanged_fp: the assignment does not change
         permission of memory *)
-        eapply blocks_perm_unchanged_normal.
-        eapply assign_loc_perm_unchanged; eauto.
-        eapply sem_wt_loc_implies_bmatch. eapply assign_loc_sem_wt; eauto. 
-        (* prove b not in vfp *)
-        exploit get_loc_footprint_map_in_range. eapply PFP.
-        intros IN. eapply in_app in IN. destruct IN.
-        intro. eapply DIS3; eauto.
-        intro. eapply DIS4; eauto.
-        eapply A2. eauto.
+        eapply blocks_perm_unchanged_normal. eauto.
+        eapply sem_wt_loc_implies_bmatch. eauto. eauto. auto.
         (* wt_footprint *)
         instantiate (1 := typeof_place p0).
         eapply get_wt_place_footprint_wt. eapply WFENV. auto.
@@ -6456,11 +6593,11 @@ Proof.
         (** Task2: prove sem_wt_loc of (b2,ofs2) *)
         (* full -> sem_wt_loc *)
         intros FULL2.
-        exploit assign_loc_sem_wt; eauto.
+        (* exploit assign_loc_sem_wt; eauto. *)
         (* b is not in vfp *)
-        exploit get_loc_footprint_map_norepet. eapply NOREP2. eapply B. eauto.
-        intuition.
-        intros WTLOC.
+        (* exploit get_loc_footprint_map_norepet. eapply NOREP2. eapply B. eauto. *)
+        (* intuition. *)
+        (* intros WTLOC. *)
         assert (FULL3: is_full (own_universe own1) p0 = true).
         { erewrite init_place_full_unchanged. eauto. }
         exploit FULL1. auto.
@@ -6468,10 +6605,10 @@ Proof.
         eapply set_wt_loc_set_subpath_wt_val; eauto.
         (* unchanged_on *)
         eapply Mem.unchanged_on_implies.
-        eapply assign_loc_unchanged_on. eauto. simpl. intros.
+        eauto. simpl. intros.
         intro. eapply H. destruct H1. subst. red. left; auto.
         (* perm unchanged *) 
-        intros. erewrite <- assign_loc_perm_unchanged; eauto.
+        intros. erewrite <- UNC2; eauto.
         (* wt_footprint *)
         eapply get_wt_place_footprint_wt. eapply WFENV. auto.
         rewrite POP2. eauto.
@@ -6494,7 +6631,6 @@ Proof.
         intros [P1|P2]; try congruence.
         (** DIFFICULT: two locals are equal but their paths are disjoint *)
         --   (** How to know p0 is well-typed or not? *)
-          exploit assign_loc_unchanged_on; eauto. intros UNC.
           erewrite <- get_set_disjoint_paths in GFP; eauto.
           (* bmatch m1 b0 ofs0 fp *)
           exploit MM. erewrite POP2. eauto. auto.
@@ -6530,11 +6666,11 @@ Proof.
                 intros. simpl. destruct H; try lia.
                 eapply NSZREC. eauto.
                 eapply blocks_perm_unchanged_normal.
-                eapply assign_loc_perm_unchanged; eauto.
+                eauto.
                 (** sem_wt_loc *)
                 intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
-                intros WTLOC.
+                intros WTLOC1.
                 eapply sem_wt_loc_unchanged_loc. eauto. eauto.                
                 eapply Mem.unchanged_on_implies. eauto.
                 intros. simpl.
@@ -6550,11 +6686,11 @@ Proof.
                 intros. simpl. destruct H; try lia.
                 eapply NSZREC. eauto.
                 eapply blocks_perm_unchanged_normal.
-                eapply assign_loc_perm_unchanged; eauto.
+                eauto.
                 (** sem_wt_loc *)
                 intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
-                intros WTLOC.
+                intros WTLOC1.
                 eapply sem_wt_loc_unchanged_loc. eauto.
                 eauto.
                 eapply Mem.unchanged_on_implies. eauto.
@@ -6571,11 +6707,11 @@ Proof.
                 intros. simpl. destruct H; try lia.
                 eapply NSZREC. eauto.
                 eapply blocks_perm_unchanged_normal.
-                eapply assign_loc_perm_unchanged; eauto.
+                eauto.
              (** sem_wt_loc  *)
              ** intros. exploit FULL0.
                 erewrite init_place_full_unchanged. eauto.
-                intros WTLOC.
+                intros WTLOC1.
                 eapply sem_wt_loc_unchanged_blocks. eauto.
                 eapply Mem.unchanged_on_implies. eauto.
                 intros. simpl. intro. destruct H2. subst.
@@ -6588,14 +6724,13 @@ Proof.
            erewrite <- get_set_different_local in GFP; eauto. 
            exploit MM. erewrite POP2. eauto. auto.           
            intros (BM1 & FULL1).
-           exploit assign_loc_unchanged_on; eauto. intros UNC.
            split.
            eapply bmatch_unchanged_on_block. eauto.
            eapply Mem.unchanged_on_implies. eauto.
            intros. simpl. destruct H; try lia.
            eapply NSZREC. eauto.
            eapply blocks_perm_unchanged_normal.
-           eapply assign_loc_perm_unchanged; eauto.
+           eauto.
            (** sem_wt_loc *)
            intros FULL2.
            subst.
@@ -6609,7 +6744,157 @@ Proof.
            subst. intro. destruct H. subst. congruence.
 Qed.
 
-Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
+
+(** Important Lemma: we need to say that the footprint inside a struct
+is also disjoint !!! *)
+(* Consider assign to a variant? *)
+Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
+    (MM: mmatch fpm1 ce m1 e own1)
+    (TY: ty = typeof_place p)
+    (AS: assign_loc ce ty m1 b ofs v m2)
+    (AL: (alignof ce ty | Ptrofs.unsigned ofs))
+    (CAST: val_casted v ty)
+    (NOREPVFP: list_norepet (footprint_flat vfp))
+    (WT: sem_wt_val ce m1 vfp v)
+    (WFENV: wf_env fpm1 ce e)
+    (WTFP: wt_footprint ce ty vfp)
+    (* The path of this place and the path of the footprint fo p (which is not used) *)
+    (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
+    (* ownership transfer *)
+    (CKAS: own_transfer_assign own1 p = own2)
+    (WTP: wt_place (env_to_tenv e) ce p)
+    (NOREP: list_norepet (footprint_of_env e ++ (flat_fp_map fpm1)))
+    (* vfp and fpm1 are disjoint so that their combination is separated *)
+    (DIS1: list_disjoint (footprint_flat vfp) (footprint_of_env e ++ (flat_fp_map fpm1)))
+    (WFOWN: wf_own_env e ce own1),
+  exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
+          /\ mmatch fpm2 ce m2 e own2
+          /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
+          /\ wf_env fpm2 ce e.
+Proof.
+  intros. eapply assign_loc_sound_gen; eauto.
+  eapply assign_loc_unchanged_on; eauto.
+  eapply assign_loc_perm_unchanged; eauto.
+  eapply assign_loc_sem_wt; eauto.
+  destruct (path_of_place p) eqn: POP.
+  exploit get_loc_footprint_map_in_range; eauto.
+  intros IN. intro. eapply DIS1; eauto.
+Qed.
+
+Lemma sizeof_variant_ge4_complete: forall ce co,
+    composite_consistent ce co ->
+    co_sv co = TaggedUnion ->
+    4 <= co_sizeof co.
+Proof.
+  intros. erewrite co_consistent_sizeof; eauto.
+  rewrite H0. simpl.
+  generalize (co_alignof_pos co). intros A1.
+  generalize (align_le (sizeof_variant ce0 (co_members co)) (co_alignof co) A1).
+  intros.
+ generalize (sizeof_variant_ge4 ce0 (co_members co)). lia.
+Qed.
+
+(* Enum assignment preserves the invariant *)
+Lemma assign_loc_variant_sound: forall fpm1 m1 m2 m3 own1 own2 b ofs v p vfp pfp e ty id fty fid fofs orgs co tag
+    (MM: mmatch fpm1 ce m1 e own1)
+    (TY: ty = typeof_place p)
+    (PTY: typeof_place p = Tvariant orgs id)
+    (CO: ce ! id = Some co)
+    (ENUM: co.(co_sv) = TaggedUnion)
+    (AS: assign_loc ce fty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v m2)
+    (STAG: Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3)
+    (FOFS: variant_field_offset ce fid (co_members co) = OK fofs)
+    (FTY: field_type fid (co_members co) = OK fty)
+    (FTAG: field_tag fid co.(co_members) = Some tag)
+    (AL: (alignof ce ty | Ptrofs.unsigned ofs))
+    (RANGE: Ptrofs.unsigned ofs + sizeof ce ty <= Ptrofs.max_unsigned)
+    (CAST: val_casted v fty)
+    (NOREPVFP: list_norepet (footprint_flat vfp))
+    (WT: sem_wt_val ce m1 vfp v)
+    (WFENV: wf_env fpm1 ce e)
+    (WTFP: wt_footprint ce fty vfp)
+    (* The path of this place and the path of the footprint fo p (which is not used) *)
+    (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
+    (* ownership transfer *)
+    (CKAS: own_transfer_assign own1 p = own2)
+    (WTP: wt_place (env_to_tenv e) ce p)
+    (NOREP: list_norepet (footprint_of_env e ++ (flat_fp_map fpm1)))
+    (* vfp and fpm1 are disjoint so that their combination is separated *)
+    (DIS1: list_disjoint (footprint_flat vfp) (footprint_of_env e ++ (flat_fp_map fpm1)))
+    (WFOWN: wf_own_env e ce own1),
+  (* The footprint to be set must be fp_enum *)
+  exists fpm2, set_footprint_map (path_of_place p) (fp_enum id orgs tag fid fofs vfp) fpm1 = Some fpm2
+          /\ mmatch fpm2 ce m3 e own2
+          /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
+          /\ wf_env fpm2 ce e.
+Proof.
+  intros.
+  assert (WTFP1: wt_footprint ce ty (fp_enum id orgs tag fid fofs vfp)).
+  { subst. rewrite PTY.
+    exploit field_type_implies_field_tag; eauto.
+    intros (tag1 & A1 & A2). rewrite FTAG in A1. inv A1.
+    econstructor; eauto. }
+  exploit variant_field_offset_in_range_complete; eauto.
+  intros (F1 & F2).
+  assert (SZEQ: sizeof ce (typeof_place p) = co_sizeof co).
+  { rewrite PTY. simpl. rewrite CO. auto. }
+  assert (OFSEQ: Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr fofs)) =
+                   Ptrofs.unsigned ofs + fofs).
+  { generalize (sizeof_pos ce fty). intros F3.
+    generalize (Ptrofs.unsigned_range ofs). intros F4.
+    subst. rewrite SZEQ in *.
+    erewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr; auto.
+    lia. lia. lia. }
+  assert (NIN: ~ In b (footprint_flat vfp)).
+  { destruct (path_of_place p) eqn: POP.
+    exploit get_loc_footprint_map_in_range; eauto.
+    intros IN. intro. eapply DIS1; eauto. }
+  eapply assign_loc_sound_gen; eauto.
+  (* unchanged_on *)
+  eapply Mem.unchanged_on_trans.
+  eapply Mem.unchanged_on_implies.
+  eapply assign_loc_unchanged_on; eauto. simpl.
+  intros. intro. eapply H. destruct H1; subst. clear H.
+  split; auto.
+  rewrite OFSEQ in *. rewrite SZEQ. lia.  
+  eapply Mem.store_unchanged_on; eauto.
+  intros. intro. eapply H0.
+  split; auto.      
+  subst. rewrite PTY. simpl. rewrite CO.
+  simpl in H.
+  exploit CONSISTENT; eauto. intros.
+  generalize (sizeof_variant_ge4_complete ce co H1 ENUM); eauto. lia.
+  (* permission unchanged *)
+  intros. split.
+  intros. eapply Mem.perm_store_1. eauto.
+  erewrite <- assign_loc_perm_unchanged; eauto.
+  intros. eapply assign_loc_perm_unchanged; eauto.
+  eapply Mem.perm_store_2; eauto. 
+  (* sem_wt_loc *)
+  econstructor.
+  erewrite Mem.load_store_same; eauto.
+  auto.
+  eapply sem_wt_loc_unchanged_loc; eauto.  
+  rewrite <- OFSEQ.
+  eapply assign_loc_sem_wt; eauto.
+  (* alingment *)
+  rewrite OFSEQ.
+  eapply Z.divide_add_r.
+  eapply Z.divide_trans; eauto.
+  subst. rewrite PTY. simpl. rewrite CO.
+  erewrite co_consistent_alignof; eauto. 
+  eapply field_alignof_divide_composite; eauto.
+  eapply variant_field_offset_aligned; eauto.  
+  (* unchanged on location *)
+  eapply Mem.store_unchanged_on; eauto.
+  simpl. intros. intro. destruct H0. congruence.
+  destruct H0.
+  exploit variant_field_offset_in_range_complete; eauto. lia.
+Qed.  
+  
+  
+ Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
     sem_wt_val ce m fp v1 ->
     wt_footprint ce ty1 fp ->
     RustOp.sem_cast v1 ty1 ty2 = Some v2 ->
@@ -6654,22 +6939,6 @@ Inductive deref_loc_rec_footprint (m: mem) (b: block) (ofs: Z) (fty: type) (fp: 
     deref_loc_rec_footprint m b ofs fty fp ((Tbox ty) :: tys) b2 0 ty fp2.
 
 (* Invariant of deref_loc_rec_footprint *)
-
-(* Lemma deref_loc_rec_footprint_inv: forall m b1 b2 ofs1 ofs2 fp1 fp2 tyl phl, *)
-(*     deref_loc_rec_footprint m b1 ofs1 fp1 tyl b2 ofs2 phl fp2 -> *)
-(*     exists fp3, clear_footprint phl fp1 = Some fp3 /\ *)
-(*              (* store fp2 to fp3 *) *)
-(*              set_footprint phl fp2 fp3 = Some fp1 /\ *)
-(*              deref_loc_rec_footprint m b1 ofs1 fp3 tyl b2 ofs2 phl fp_emp *)
-(* . *)
-(* Admitted. *)
-
-(* the location computed by deref_loc_rec_footprint is the same as that computed by deref_loc_rec *)
-(* Lemma deref_loc_rec_footprint_eq: forall m b ofs tys b1 ofs1 b2 ofs2 fp1 fp2 phl, *)
-(*           deref_loc_rec m b (Ptrofs.repr ofs) tys (Vptr b1 ofs1) -> *)
-(*           deref_loc_rec_footprint m b ofs fp1 tys b2 ofs2 phl fp2 -> *)
-(*           b1 = b2 /\ ofs1 = Ptrofs.repr ofs2. *)
-(* Admitted. *)
 
 (* This definition is about the invariant of the drop_member_state
 used in the evaluation of Dropstate (i.e., the evaluation of the drop
@@ -6833,13 +7102,6 @@ Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
   | Kdropcall _ _ _ _ k => typeof_cont_call ttop k
   end.
 
-
-(* Lemma split_drop_place_sound: forall ce own p universe drops *)
-(*     (WF: wf_own_env own) *)
-(*     (UNI: (own_universe own) ! (local_of_place p) = Some universe) *)
-(*     (SPLIT: split_drop_place ce universe p (typeof_place p) = OK drops), *)
-(*   sound_split_drop_place own drops. *)
-(* Admitted. *)
 
 (** Some thoughts about how to define sound_drop_place_state  *)
 (** How to prove eval_place can get the footprint of p in
@@ -7547,11 +7809,16 @@ Lemma initial_state_sound: forall q s,
 Admitted.
 
 
-Lemma valid_owner_same: forall p ty fid,
-    ~ In (ph_downcast ty fid) (snd (path_of_place p)) ->
+Lemma valid_owner_same: forall p,
+    (forall (ty : type) (fid : ident), ~ In (ph_downcast ty fid) (snd (path_of_place p))) ->
     valid_owner p = p.
-Admitted.
-
+Proof.
+  induction p; intros; simpl in *; auto.
+  destruct (path_of_place p). simpl in H.
+  generalize (H (typeof_place p) i).
+  intros. exfalso. eapply H0.
+  eapply in_app. right. simpl. auto.
+Qed.
 
 Lemma sound_split_fully_own_place_app: forall l1 l2 m p1 p2 p3 b1 b2 b3 ofs1 ofs2 ofs3 fp1 fp2 fp3 ty2 ty3,
     sound_split_fully_own_place m p1 b1 ofs1 fp1 l1 p2 b2 ofs2 ty2 fp2 ->
@@ -7657,21 +7924,7 @@ Proof.
       econstructor; eauto.
       econstructor; eauto.
 Qed.
-
-(* Set a wt footprint in the footprint map remains wf_env *)
-Lemma set_footprint_map_wf_env: forall phl id fpm1 fpm2 ce le fp ty,
-    wt_footprint ce ty fp ->
-    set_footprint_map (id, phl) fp fpm1 = Some fpm2 ->
-    wf_env fpm1 ce le ->
-    wf_env fpm2 ce le.
-Admitted.
-
-(* The empty footprint is well-typed *)
-Lemma clear_wt_footprint_wt: forall fp ty,
-    wt_footprint ce ty fp ->
-    wt_footprint ce ty (clear_footprint_rec fp).
-Admitted.
-
+          
 (* Extract useful properties if only the fpm is changed *)
 Lemma list_norepet3_fpm_changed {A: Type} : forall (le fpm fpf: list A),
     list_norepet (le ++ fpm ++ fpf) ->
@@ -7685,7 +7938,15 @@ Lemma list_norepet3_fpm_changed {A: Type} : forall (le fpm fpf: list A),
     (* used to prove that block changed in le ++ fpm must be not in
     fpf, which is used to prove sound_cont *)
     /\ list_disjoint (le ++ fpm) fpf.
-Admitted.
+Proof.
+  intros until fpf. intros N1.
+  generalize N1 as N2. intros.
+  eapply list_norepet_append_commut2 in N1.
+  rewrite app_assoc in N1. eapply list_norepet_app in N1 as (N3 & N4 & N5).
+  rewrite app_assoc in N2. eapply list_norepet_app in N2 as (A1 & A2 & A3).
+  repeat apply conj; auto.
+  eapply list_norepet_app in A1 as (B1 & B2 & B3). auto.
+Qed.
 
 Definition flat_fp_struct (fpl: list (ident * Z * footprint)) :=
   map (fun '(_, _, fp) => fp) fpl.
@@ -7797,11 +8058,19 @@ Lemma list_equiv_norepet2 {A: Type}: forall (l1 l2 l3 l4: list A),
     list_equiv (l3 ++ l4) l2 ->
     list_norepet (l3 ++ l4) ->
     list_norepet (l1 ++ l3 ++ l4).
-  Admitted.
+Proof.
+  intros until l4. intros A1 A2 A3.
+  eapply list_norepet_app.
+  eapply list_norepet_app in A1 as (N1 & N2 & N3).
+  repeat apply conj; auto.
+  red. intros.
+  eapply A2 in H0. eauto.
+Qed.
 
 (* The footprint constructed by extracting fp from l2 is still
 norepet *)
 Lemma dropplace_to_dropstate_footprint_norepet: forall (l0 l1 l2 l3 l2' fp: flat_footprint)
+
     (EQUIV: list_equiv (fp ++ l2') l2)
     (NOREP: list_norepet (l0 ++ l1 ++ l2 ++ l3))
     (NOREP1: list_norepet (fp ++ l2')),
@@ -7826,21 +8095,15 @@ Lemma dropstate_to_dropstate_footprint_norepet: forall (l1 l2 l3 l1' fp: flat_fo
     (NOREP: list_norepet (l1 ++ l2 ++ l3))
     (NOREP1: list_norepet (fp ++ l1')),
     list_norepet (fp ++ l1' ++ l2 ++ l3).
-(* Proof. *)
-(*   intros. *)
-(*   eapply list_norepet_append_commut. *)
-(*   rewrite !app_assoc. *)
-(*   rewrite <- (app_assoc _ _ fp). *)
-(*   rewrite <- (app_assoc _ l2' _). *)
-(*   rewrite app_assoc in NOREP.         *)
-(*   eapply list_norepet_append_commut2. *)
-(*   rewrite <- !app_assoc. *)
-(*   do 2 rewrite app_assoc. *)
-(*   eapply list_norepet_append_commut2 in NOREP. *)
-(*   rewrite app_assoc in NOREP. *)
-(*   eapply list_equiv_norepet2; eauto. *)
-(* Qed. *)
-Admitted.
+Proof.
+  intros.
+  rewrite app_assoc.
+  eapply list_norepet_append_commut.
+  eapply list_equiv_norepet2.
+  eapply list_norepet_append_commut. eauto.
+  auto. auto.
+Qed.
+
 
 Lemma footprint_flat_fp_struct_eq: forall id fpl,
     footprint_flat (fp_struct id fpl) = flat_map footprint_flat (flat_fp_struct fpl).
@@ -8561,9 +8824,10 @@ Proof.
       econstructor. erewrite <- B3. eapply sound_split_nil; eauto.
       all: eauto. inv WTST. inv WT1. auto. }
     (* wf_env *)
-    eapply set_footprint_map_wf_env. 
-    eapply clear_wt_footprint_wt. eauto.
-    eauto. auto.    
+    eapply wf_env_set_wt_footprint with (fp:= clear_footprint_rec fp). eauto.
+    eapply wt_footprint_clear. eauto. 
+    eapply wf_own_wt_place. eauto. eapply is_init_in_universe. auto.
+    rewrite POP. auto.
     (* wf_own_env *)
     eapply wf_own_env_move_place. auto.
     (* wt_state *)
@@ -8627,9 +8891,10 @@ Proof.
     (* move_ordered_split_places_spec *)
     inv ORDERED. rewrite OWN in *. auto.
     (* wf_env *)
-    eapply set_footprint_map_wf_env. 
-    eapply clear_wt_footprint_wt. eauto.
-    eauto. auto.    
+    eapply wf_env_set_wt_footprint with (fp:= clear_footprint_rec fp). eauto.
+    eapply wt_footprint_clear. eauto. 
+    eapply wf_own_wt_place. eauto. eapply is_init_in_universe. auto.
+    rewrite POP. auto.   
     (* wf_own_env *)
     eapply wf_own_env_move_place. auto.
     (* wt_state *)
@@ -8933,29 +9198,6 @@ Proof.
 Admitted.
 
     
-Lemma norepet_fpf_func_internal1: forall le fpm fpf,
-    list_norepet (flat_fp_frame (fpf_func le fpm fpf)) ->
-    list_norepet (flat_fp_map fpm).
-Admitted.
-
-Lemma norepet_fpf_func_internal2: forall le fpm fpf,
-    list_norepet (flat_fp_frame (fpf_func le fpm fpf)) ->
-    list_norepet (flat_fp_frame fpf).
-Admitted.
-
-Lemma flat_fp_frame_func1: forall le fpm fpf ty b id,
-    list_norepet (flat_fp_frame (fpf_func le fpm fpf)) ->
-    le ! id = Some (b, ty) ->
-    ~ In b (flat_fp_map fpm) /\ ~ In b (flat_fp_frame fpf).
-Admitted.
-
-Lemma flat_fp_frame_func2: forall le fpm fpf fp id,
-    list_norepet (flat_fp_frame (fpf_func le fpm fpf)) ->
-    fpm ! id = Some fp ->
-    list_disjoint (footprint_flat fp) (footprint_of_env le)
-    /\ list_disjoint (footprint_flat fp) (flat_fp_frame fpf).
-Admitted.
-
 (* To prove the norepet of footprint frame when only the footprint
     map is changed *)
 Lemma fp_frame_norepet_internal: forall le fpm1 fpm2 fpf,
@@ -9009,18 +9251,10 @@ Lemma rsw_acc_commut: forall l1 l2 l sg m1 m2,
 Admitted.
 
 
-Lemma in_flat_fp_map: forall b fp fpm id,
-    fpm ! id = Some fp ->
-    In b (footprint_flat fp) ->
-    In b (flat_fp_map fpm).
-Admitted.
-
-        
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
   inversion IM1 as [? | ? | ? ? GETINIT GETUNINIT]; subst;
   try rewrite <- GETINIT in *; try rewrite <- GETUNINIT in *.
-
 
 (* sound state and syntactic well-typed state is preserved in one
 step *)
@@ -9099,7 +9333,7 @@ Proof.
       (* case1: b is in the stack (i.e., in the le) *)
       eapply in_app. left. eapply in_footprint_of_env; eauto.    
       (* case2: b is in abstract value (i.e., in the heap) *)
-      eapply in_app. right. eapply in_flat_fp_map; eauto. }
+      eapply in_app. right. eapply in_footprint_flat_fp_map; eauto. }
     assert (RAN1: In b (footprint_of_env le ++ flat_fp_map fpm)).
     { eapply in_app in RAN. apply in_app. destruct RAN; auto.
       right. eapply EQUIV1. eapply in_app; eauto. }
@@ -9145,9 +9379,60 @@ Proof.
     admit.
     (* wt_state *)
     admit.
-
+    
   (* assign_variant sound *)
-  - admit.
+  - inv SOUND. inv STMT. simpl in TR.
+    simpl_getIM IM.
+    destruct (move_check_expr ce mayinit mayuninit universe e) eqn: MOVE1; try congruence.
+    unfold move_check_expr in MOVE1.
+    destruct (move_check_expr' ce mayinit mayuninit universe e) eqn: MOVECKE; try congruence.
+    destruct p0 as (mayinit' & mayuninit').
+    destruct (move_check_assign mayinit' mayuninit' universe p) eqn: MOVE2; try congruence.
+    inv TR.
+    (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct list_norepet *)
+    simpl in NOREP.
+    generalize NOREP as NOREP'. intros.
+    eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+    exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }      
+    exploit eval_place_sound. eapply PADDR1. all: eauto.
+    intros (pfp & GFP & WTFP3 & PRAN).
+    exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
+    intros (N6 & N7 & N8).
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+    exploit cast_val_is_casted; eauto. intros CASTED.
+    (* show that the address of p after assigning the enum body is unchanged *)
+    assert (PADDREQ: b = b1 /\ ofs = ofs1).
+    { exploit eval_place_footprint_unchanged.
+      2: eapply PADDR1. eauto. eauto.
+      eapply dominators_must_init_sound; eauto.
+      all: eauto.
+      intros (bs & UNC & NBS & INCL & DIS).
+      eapply UNC; eauto.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on. eauto.
+      simpl. intros. intro. destruct H1. subst. eapply DIS; eauto.
+      simpl. auto. }    
+    destruct PADDREQ; subst.
+    replace (genv_cenv (globalenv se prog)) with ce in * by auto.
+    rewrite CO in WT4. inv WT4.
+    exploit assign_loc_variant_sound; eauto.
+    instantiate (1 := fp'). eapply list_norepet_append_right; eauto.
+    instantiate (3 := pfp).
+    (* exploit cannot handle lemma with too much premises *)
+    intros TMP. exploit TMP; eauto. clear TMP.
+    intros (fpm3 & SFP & MM3 & NOREP3 & WFENV3).
+    
+    
+    
   (* step_box sound *)
   - admit.
   (** NOTEASY: step_to_dropplace sound *)
