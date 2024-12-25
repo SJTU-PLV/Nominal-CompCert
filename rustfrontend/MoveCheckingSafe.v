@@ -3640,7 +3640,11 @@ Proof.
     auto.
 Qed.
 
-
+(* This lemma is used to state that the location of a place is
+unchanged if we the memory location in [bs] is unchanged. [bs] is the
+location of the dominator of [p]. It is used to prove the soundness of
+enum assignment where we need to prove that the results of the
+evaluation of p are the same *)
 Lemma eval_place_footprint_unchanged: forall p m b1 b2 ofs1 ofs2 fpm own le fp,
     get_loc_footprint_map le (path_of_place p) fpm = Some (b1, ofs1, fp) ->
     eval_place ce le m p b2 ofs2 ->
@@ -9285,10 +9289,11 @@ Proof.
     intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
     exploit sem_cast_sem_wt; eauto.
     intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
-    exploit eval_place_sound; eauto.
     (** sound_own after moving the place in the expression *)
-    destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
-    eapply move_place_sound. auto.     
+    assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }      
+    exploit eval_place_sound; eauto.
     intros (pfp & GFP & WTFP3 & PRAN).
     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
@@ -9304,7 +9309,7 @@ Proof.
     unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT0. eauto.
     unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT0. eauto.
     instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
-    exploit move_option_place_sound; eauto.
+    exploit move_option_place_sound. eapply OWN.
     instantiate (1 := (moved_place e)). intros SOUND1.
     exploit init_place_sound; eauto.
     intros (mayinit3 & mayuninit3 & A & B).
@@ -9376,7 +9381,10 @@ Proof.
     eapply set_footprint_map_incl in H3; eauto. apply in_app. destruct H3; auto.
     (* end of rsw_acc *)
     (* wf_own_env preservation (write it in another lemma) *)
-    admit.
+    eapply wf_own_env_init_place.
+    eapply dominators_must_init_sound; eauto.    
+    destruct (moved_place e); simpl.
+    eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
     admit.
     
@@ -9430,8 +9438,92 @@ Proof.
     (* exploit cannot handle lemma with too much premises *)
     intros TMP. exploit TMP; eauto. clear TMP.
     intros (fpm3 & SFP & MM3 & NOREP3 & WFENV3).
-    
-    
+    (* construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT0. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT0. eauto.
+    instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
+    exploit move_option_place_sound. eapply OWN. 
+    instantiate (1 := (moved_place e)). intros SOUND1.
+    exploit init_place_sound; eauto.
+    intros (mayinit3 & mayuninit3 & A & B).
+    (* end of construct *)
+    split.
+    (* sound_state *)
+    (* key proof: figure out which location the changed block resides
+    in. The changed block is in the stack or in the footprint map
+    (maybe we can prove this using get_loc_footprint_map_in_range *)
+    assert (RAN: In b1 (footprint_of_env le ++ flat_fp_map fpm2)).
+    { destruct (path_of_place p) eqn: POP. simpl in GFP.
+      destruct (le ! i) eqn: LOC; try congruence. destruct p0.
+      destruct (fpm2 ! i) eqn: GFP1; try congruence.
+      exploit wf_env_footprint. eapply WFENV1. eauto.
+      intros (fp & A1 & A2). rewrite GFP1 in A1. inv A1.
+      exploit get_loc_footprint_in_range. 5: eapply GFP. eauto.
+      eapply wt_place_wt_path; eauto.
+      (* prove b0 not in fp *)
+      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
+      intro. eapply N11. eapply in_footprint_of_env; eauto.
+      eapply in_footprint_flat_fp_map; eauto. auto.
+      (* norepet of fp *)
+      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
+      eapply norepet_flat_fp_map_element; eauto.
+      intros [(B1 & B2 & B3) | (B1 & B2)]; subst.
+      (* case1: b is in the stack (i.e., in the le) *)
+      eapply in_app. left. eapply in_footprint_of_env; eauto.    
+      (* case2: b is in abstract value (i.e., in the heap) *)
+      eapply in_app. right. eapply in_footprint_flat_fp_map; eauto. }
+    assert (RAN1: In b1 (footprint_of_env le ++ flat_fp_map fpm)).
+    { eapply in_app in RAN. apply in_app. destruct RAN; auto.
+      right. eapply EQUIV1. eapply in_app; eauto. }
+    (* The enum assignment only changes b1 *)
+    assert (UNC: Mem.unchanged_on (fun b' _ => b' <> b1) m1 m3).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on; eauto. simpl. intros.
+      intro. eapply H. destruct H1. auto.
+      eapply Mem.store_unchanged_on; eauto. }      
+    econstructor; eauto.
+    econstructor.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro. subst.
+    (* show that block in le++fpm is not in fpf *)
+    eapply DIS1. eauto. eauto. auto.
+    (* end of the proof of sound_cont *)
+    (* norepet *)
+    eapply fp_frame_norepet_internal. eauto.
+    destruct (path_of_place p) eqn: POP.
+    red. intros. eapply set_footprint_map_incl in SFP; eauto.
+    eapply EQUIV1. eapply in_app. intuition.
+    eapply list_norepet_app. eauto.
+    (* accessibility *)
+    instantiate (1:= sg).
+    eapply rsw_acc_trans. eauto.
+    (** TODO: how to prove rsw_acc more generally? *)
+    simpl. do 2 rewrite app_assoc.
+    eapply rsw_acc_app. 
+    econstructor.
+    eapply Mem.unchanged_on_implies. eauto.
+    simpl. intros. intro. subst. eapply H. auto.
+    (* flat_footprint_separate: easy because support is unchanged *)
+    eapply flat_footprint_separated_shrink.
+    red. intros. apply in_app in H; apply in_app; destruct H; auto.
+    right. apply EQUIV1.
+    destruct (path_of_place p) eqn: POP.
+    eapply set_footprint_map_incl in H; eauto. apply in_app. destruct H; auto.
+    (* end of rsw_acc *)
+    (* wf_own_env preservation (write it in another lemma) *)
+    eapply wf_own_env_init_place.
+    eapply dominators_must_init_sound; eauto.    
+    destruct (moved_place e); simpl.
+    eapply wf_own_env_move_place. eauto. eauto.
+    (* wt_state *)
+    admit.
     
   (* step_box sound *)
   - admit.

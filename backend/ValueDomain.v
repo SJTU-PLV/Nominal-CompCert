@@ -114,7 +114,7 @@ Proof.
   destruct 1; constructor.
 Qed.
 
-(** * Abstracting pointers *)
+(** * Abstracting pointers *) 
 
 Inductive aptr : Type :=
   | Pbot                         (**r bottom (empty set of pointers) *)
