@@ -807,7 +807,7 @@ Proof.
     eauto.
     auto.
     intros (tco & union_id & tag_fid & union_fid & union & A & B & C & D & E).
-    generalize (E _ _ H3). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.
+    generalize (E _ _ H1). intros (ofs1 & ofs2 & UNIONFOFS & MEMBFOFS & FEQ). subst.
     unfold tce in PEXPR. simpl in PEXPR.
     rewrite A in PEXPR.
     rewrite ENUM in PEXPR.
@@ -1172,6 +1172,7 @@ Ltac TrivialInject :=
   | [ H: Some _ = Some _ |- _ ] => inv H; TrivialInject
   | [ H: match ?x with Some _ => _ | None => _ end = Some _ |- _ ] => destruct x; TrivialInject
   | [ H: match ?x with true => _ | false => _ end = Some _ |- _ ] => destruct x eqn:?; TrivialInject
+  (* | [ H: match (match type_eq _ _ with true => _ | false =>  _ end) with _ => _ | _ => _ end = Some _ |- _ ] => destruct type_eq in H; TrivialInject *)
   | [ |- exists v2', Some ?v = Some v2' /\ _ ] => exists v; split; auto
   (* | [ H:  match match ?i0 with IBool  => _ | _ => _ end with ?v4 => ?v5 | _ => _ end = _ |- Some _ ] => destruct i0; simpl in *; TrivialInject *)
   | _ => idtac
@@ -1196,7 +1197,7 @@ Proof.
     try(destruct Archi.ptr64 );
     try (destruct f0; simpl in *);
     TrivialInject. 
-    econstructor. eauto. auto.    
+    (* econstructor. eauto. auto.     *)
   - destruct t2; inv H0; simpl in *;
     try (destruct f0);
     try (destruct i); 
@@ -1206,7 +1207,8 @@ Proof.
     try (destruct f0); TrivialInject. 
   - destruct t2; inv H0; simpl in *;
     try(destruct i; destruct (Archi.ptr64));
-    try (destruct f0); TrivialInject. 
+      try (destruct f0); try (destruct type_eq); TrivialInject.
+    econstructor. eauto. auto.
   - destruct t2; inv H0; simpl in *;
     try(destruct i; destruct (Archi.ptr64));
     try (destruct f0); TrivialInject. 

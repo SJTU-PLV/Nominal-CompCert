@@ -1754,9 +1754,9 @@ Proof.
     repeat rewrite Ptrofs.add_assoc. f_equal.  
     rewrite Ptrofs.add_commut. eauto. 
   - exploit IHeval_place; eauto. intros (b' & ofs' & EV & INJ). 
-    exploit Mem.loadv_inject; eauto. intros [v' [A B]]. inv B.
-    rewrite comp_env_preserved in *. 
-    eexists. eexists. split. econstructor; eauto. 
+    (* exploit Mem.loadv_inject; eauto. intros [v' [A B]]. inv B. *)
+    rewrite comp_env_preserved in *.
+    eexists. eexists. split. econstructor; eauto.
     inv INJ. econstructor; eauto. 
     repeat rewrite Ptrofs.add_assoc. f_equal.  
     rewrite Ptrofs.add_commut. eauto. 

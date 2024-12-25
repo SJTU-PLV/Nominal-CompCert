@@ -573,13 +573,13 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK delta ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
-| eval_Pdowncast: forall  p b ofs fofs id fid fty co orgs tag,
+| eval_Pdowncast: forall  p b ofs fofs id fid fty co orgs (* tag *),
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     (* check tag and fid *)
-    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
+    (* Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) -> *)
+    (* list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) -> *)
     variant_field_offset ce fid (co_members co) = OK fofs ->
     (* fty and ty must be equal? *)
     eval_place (Pdowncast p fid fty) b (Ptrofs.add ofs (Ptrofs.repr fofs))
