@@ -577,7 +577,7 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
-    (* check tag and fid *)
+    (* check tag and fid. If we want to remove this check, we need to show co_members are not repeated in MoveCheckingSafe to make sure wt_place and wt_footprint relate the same field ident *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
     variant_field_offset ce fid (co_members co) = OK fofs ->
