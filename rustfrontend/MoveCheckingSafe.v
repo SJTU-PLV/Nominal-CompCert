@@ -131,9 +131,13 @@ Inductive wt_stmt: statement -> Prop :=
     (* used to prove assign_loc_variant_sound *)
     (WT4: co.(co_sv) = TaggedUnion),
     wt_stmt (Sassign_variant p id fid e)
-| wt_Sbox: forall p e
+| wt_Sbox: forall p e ty
     (WT1: wt_place p)
-    (WT2: wt_expr e),
+    (WT2: wt_expr e)
+    (WT3: typeof_place p = Tbox ty)
+    (* used to prove wt_fooprint *)
+    (SZEQ: sizeof ce ty = sizeof ce (typeof e))
+    (SZCK: 0 < sizeof ce (typeof e) <= Ptrofs.max_unsigned),
     wt_stmt (Sbox p e)
 .
     
@@ -5207,6 +5211,15 @@ Proof.
     eapply Mem.perm_storebytes_2; eauto.
 Qed.
 
+Lemma assign_loc_sup_unchanged: forall ce ty m1 m2 b ofs v,
+    assign_loc ce ty m1 b ofs v m2 ->
+    Mem.support m1 = Mem.support m2.
+Proof.
+  intros until v. intros AS. inv AS.
+  - eapply Mem.support_storev; eauto.
+  - erewrite <- Mem.support_storebytes; eauto.
+Qed.
+
 (* It collects the blocks pointed by the box pointer in the footprint. It does not collect *)
 Fixpoint blocks_of_fp_box (fp: footprint) : list (block * Z) :=
   match fp with
@@ -9361,25 +9374,8 @@ Proof.
     in. The changed block is in the stack or in the footprint map
     (maybe we can prove this using get_loc_footprint_map_in_range *)
     assert (RAN: In b (footprint_of_env le ++ flat_fp_map fpm2)).
-    { destruct (path_of_place p) eqn: POP. simpl in GFP.
-      destruct (le ! i) eqn: LOC; try congruence. destruct p0.
-      destruct (fpm2 ! i) eqn: GFP1; try congruence.
-      exploit wf_env_footprint. eapply WFENV1. eauto.
-      intros (fp & A1 & A2). rewrite GFP1 in A1. inv A1.
-      exploit get_loc_footprint_in_range. 5: eapply GFP. eauto.
-      eapply wt_place_wt_path; eauto.
-      (* prove b0 not in fp *)
-      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
-      intro. eapply N11. eapply in_footprint_of_env; eauto.
-      eapply in_footprint_flat_fp_map; eauto. auto.
-      (* norepet of fp *)
-      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
-      eapply norepet_flat_fp_map_element; eauto.
-      intros [(B1 & B2 & B3) | (B1 & B2)]; subst.
-      (* case1: b is in the stack (i.e., in the le) *)
-      eapply in_app. left. eapply in_footprint_of_env; eauto.    
-      (* case2: b is in abstract value (i.e., in the heap) *)
-      eapply in_app. right. eapply in_footprint_flat_fp_map; eauto. }
+    { destruct (path_of_place p) eqn: POP. 
+      eapply get_loc_footprint_map_in_range. eapply GFP. }
     assert (RAN1: In b (footprint_of_env le ++ flat_fp_map fpm)).
     { eapply in_app in RAN. apply in_app. destruct RAN; auto.
       right. eapply EQUIV1. eapply in_app; eauto. }
@@ -9493,25 +9489,8 @@ Proof.
     in. The changed block is in the stack or in the footprint map
     (maybe we can prove this using get_loc_footprint_map_in_range *)
     assert (RAN: In b1 (footprint_of_env le ++ flat_fp_map fpm2)).
-    { destruct (path_of_place p) eqn: POP. simpl in GFP.
-      destruct (le ! i) eqn: LOC; try congruence. destruct p0.
-      destruct (fpm2 ! i) eqn: GFP1; try congruence.
-      exploit wf_env_footprint. eapply WFENV1. eauto.
-      intros (fp & A1 & A2). rewrite GFP1 in A1. inv A1.
-      exploit get_loc_footprint_in_range. 5: eapply GFP. eauto.
-      eapply wt_place_wt_path; eauto.
-      (* prove b0 not in fp *)
-      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
-      intro. eapply N11. eapply in_footprint_of_env; eauto.
-      eapply in_footprint_flat_fp_map; eauto. auto.
-      (* norepet of fp *)
-      eapply list_norepet_app in N7. destruct N7 as (N9 & N10 & N11).
-      eapply norepet_flat_fp_map_element; eauto.
-      intros [(B1 & B2 & B3) | (B1 & B2)]; subst.
-      (* case1: b is in the stack (i.e., in the le) *)
-      eapply in_app. left. eapply in_footprint_of_env; eauto.    
-      (* case2: b is in abstract value (i.e., in the heap) *)
-      eapply in_app. right. eapply in_footprint_flat_fp_map; eauto. }
+    { destruct (path_of_place p) eqn: POP.
+      eapply get_loc_footprint_map_in_range; eauto. }
     assert (RAN1: In b1 (footprint_of_env le ++ flat_fp_map fpm)).
     { eapply in_app in RAN. apply in_app. destruct RAN; auto.
       right. eapply EQUIV1. eapply in_app; eauto. }
@@ -9575,10 +9554,223 @@ Proof.
     simpl in NOREP.
     generalize NOREP as NOREP'. intros.
     eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+    (* show that b is not in (flat_fp_frame (fpf_func le fpm fpf)) *)
+    assert (BNIN: ~ In b (flat_fp_frame (fpf_func le fpm fpf))).
+    { intro. eapply Mem.fresh_block_alloc; eauto. eapply Hm. auto. }    
     (* show that m1 -> m3 unchanges the blocks in le and fpm *)
-    (* assert (UNC1: Mem.unchanged_on  *)
+    assert (UNC1: Mem.unchanged_on (fun b' _ => In b' (flat_fp_frame (fpf_func le fpm fpf))) m1 m3).
+    { simpl. eapply Mem.unchanged_on_trans.
+      eapply Mem.alloc_unchanged_on. eauto.
+      eapply Mem.store_unchanged_on; eauto. }
+    assert (UNC2: Mem.unchanged_on (fun b' _ => In b' (flat_fp_frame (fpf_func le fpm fpf))) m3 m4).
+    { eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on; eauto. simpl. intros. intro.
+      destruct H9. subst. eapply BNIN. eauto. }
+    assert (MM1: mmatch fpm ce m3 le own1).
+    { eapply mmatch_unchanged. eapply MM.
+      eapply Mem.unchanged_on_implies. eapply UNC1. simpl. intros.
+      rewrite app_assoc. eapply in_app; auto. }
+    (* show v is sem_wt_val *)
+    exploit eval_expr_sem_wt. eapply MM1. all: eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM2 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    exploit cast_val_is_casted; eauto. intros CASTED.
+    (* show (b,0) is sem_wt_loc in m4 *)
+    exploit assign_loc_sem_wt. eapply H4. eapply Z.divide_0_r.
+    all: eauto. intro.
+    eapply BNIN. simpl. rewrite !in_app.
+    right. left. eapply EQUIV1. eapply in_app; auto.
+    intros WTLOC1.
+    (* show Vptr(b, 0) is sem_wt_val in m4 *)
+    assert (WTVAL1: sem_wt_val ce m4 (fp_box b (sizeof (globalenv se prog) (typeof e)) fp') (Vptr b Ptrofs.zero)).
+    { econstructor. auto.
+      (* range_perm *)
+      red. intros.
+      erewrite <- assign_loc_perm_unchanged. 2: eauto.
+      eapply Mem.perm_store_1. eauto.
+      eapply Mem.perm_alloc_2; eauto.
+      (* load the size record *)
+      eapply Mem.load_unchanged_on.
+      eapply assign_loc_unchanged_on. eauto.
+      simpl. intros. intro. destruct H8.
+      generalize (size_chunk_pos Mptr).
+      generalize (sizeof_pos (prog_comp_env prog) ty). intros.
+      rewrite Ptrofs.unsigned_zero in *. lia.
+      (* load store same *)
+      erewrite Mem.load_store_same; eauto.
+      f_equal.
+      (* size checking: do it in syntactic type checking *)
+      auto. }
+    (* show m4 is sound in the new own_env *)
+    assert (MM3: mmatch fpm2 ce m4 le (move_place_option own1 (moved_place e))).
+    { eapply mmatch_unchanged. eapply MM2.
+      eapply Mem.unchanged_on_implies. eapply UNC2. simpl. intros.
+      rewrite !in_app in H7. rewrite !in_app.
+      destruct H7; auto. right. left. eapply EQUIV1. eapply in_app; auto. }
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }
+    (* eval_place_sound *)
+    exploit eval_place_sound; eauto. 
+    intros (pfp & GFP & WTFP3 & PRAN).
+    (* assign the box pointer to p *)
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
+    intros (N6 & N7 & N8).
+    exploit assign_loc_sound; eauto.
+    rewrite H. econstructor.
+    simpl. econstructor.
+    (* b not in fp' *)
+    intro. eapply BNIN. simpl. rewrite !in_app.
+    right. left. eapply EQUIV1. eapply in_app; auto.
+    eapply list_norepet_append_left; eauto.
+    (* wt_footprint *)
+    rewrite H. replace (genv_cenv (globalenv se prog)) with ce by auto.
+    rewrite H in WT4. inv WT4. 
+    rewrite <- SZEQ. econstructor; eauto.
+    (* disjointness *)
+    simpl. eapply list_disjoint_cons_l. eauto.
+    intro. eapply BNIN. simpl. rewrite !in_app. rewrite in_app in H7.
+    destruct H7; auto.
+    right. left. eapply EQUIV1. eapply in_app; auto.
+    intros (fpm3 & SFP & MM4 & NOREP3 & WFENV3).        
+    (* construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT0. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT0. eauto.
+    instantiate (1 := (init_place (move_place_option own1 (moved_place e)) p)).
+    exploit move_option_place_sound. eapply OWN.
+    instantiate (1 := (moved_place e)). intros SOUND1.
+    exploit init_place_sound; eauto.
+    intros (mayinit3 & mayuninit3 & A & B). 
+    (* end of construct *)
+    assert (RAN: In pb (footprint_of_env le ++ flat_fp_map fpm2)).
+    { destruct (path_of_place p) eqn: POP. 
+      eapply get_loc_footprint_map_in_range. eapply GFP. }
+    assert (RAN1: In pb (footprint_of_env le ++ flat_fp_map fpm)).
+    { eapply in_app in RAN. apply in_app. destruct RAN; auto.
+      right. eapply EQUIV1. eapply in_app; eauto. }
+    assert (Hm1: Mem.sup_include (flat_fp_frame (fpf_func le fpm3 fpf)) (Mem.support m5)).
+    { erewrite <- assign_loc_sup_unchanged. 2: eauto.
+      erewrite <- assign_loc_sup_unchanged. 2: eauto.
+      erewrite Mem.support_store. 2: eauto.
+      simpl.
+      erewrite Mem.support_alloc. 2: eauto.
+      red. intros.
+      eapply Mem.sup_incr_in.
+      red in H7. rewrite !in_app in H7.
+      repeat destruct H7.
+      - right. eapply Hm. simpl. eapply in_app. auto.
+      - destruct (path_of_place p) eqn: POP.
+        exploit set_footprint_map_incl; eauto. intros [E1 | E2].
+        + right. eapply Hm. simpl. eapply in_app. right.
+          eapply in_app. left. eapply EQUIV1. eapply in_app; auto.
+        + simpl in E2. destruct E2; subst.
+          * left. eapply Mem.alloc_result. eauto.
+          * right. eapply Hm. simpl. eapply in_app. right.
+            eapply in_app. left. eapply EQUIV1. eapply in_app; auto.
+      - right. eapply Hm. simpl. eapply in_app. right.
+        eapply in_app. auto. }
+    assert (UNC3: Mem.unchanged_on (fun b0 _ => b0 <> b) m2 m4).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.store_unchanged_on. eauto. congruence.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on. eauto. simpl.
+      intros. intro. eapply H7. destruct H9. auto. }
+    assert (UNC4: Mem.unchanged_on (fun b0 _ => ~ In b0 (flat_fp_frame (fpf_func le fpm fpf))) m1 m4).
+    { simpl. econstructor.
+      (* sup_include *)
+      eapply Mem.sup_include_trans.
+      eapply Mem.sup_include_incr. erewrite <- Mem.support_alloc.
+      2: eauto.
+      erewrite <- Mem.support_store. 2: eauto.
+      erewrite assign_loc_sup_unchanged. 2: eauto.
+      eapply Mem.sup_include_refl.
+      (* permission unchanged *)
+      intros. split; intros.
+      erewrite <- assign_loc_perm_unchanged. 2: eauto.
+      eapply Mem.perm_store_1. eauto.
+      eapply Mem.perm_alloc_1. eauto. auto.
+      erewrite <- assign_loc_perm_unchanged in H9. 2: eauto.
+      eapply Mem.perm_store_2 in H9. 2: eauto.
+      eapply Mem.perm_alloc_4; eauto. intro. subst.
+      eapply Mem.fresh_block_alloc. eauto. auto.
+      (* contents unchanged *)
+      intros.
+      etransitivity. eapply Mem.unchanged_on_contents.
+      eapply UNC3. simpl. intro. subst. eapply Mem.fresh_block_alloc. eauto.
+      eapply Mem.perm_valid_block. eauto.
+      eapply Mem.perm_alloc_1; eauto. 
+      eapply Mem.unchanged_on_contents.
+      eapply Mem.alloc_unchanged_on with (P := fun _ _ => True). eauto. simpl. auto.
+      auto. }      
+    assert (RACC: rsw_acc (rsw sg (flat_fp_frame (fpf_func le fpm fpf)) m1 Hm)
+                    (rsw sg (flat_fp_frame (fpf_func le fpm3 fpf)) m5 Hm1)).
+    { econstructor.
+      (* unchanged on *)
+      eapply Mem.unchanged_on_trans. eauto.      
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on; eauto. simpl. intros.
+      intro. eapply H7. destruct H9. subst.
+      rewrite app_assoc. eapply in_app; eauto.
+      (* flat_footprint_separated *)
+      simpl. red. intros.
+      rewrite !in_app in H8. intro. eapply H7.
+      rewrite !in_app. repeat destruct H8; auto.
+      destruct (path_of_place p) eqn: POP.
+      exploit set_footprint_map_incl; eauto. intros [E1 | E2].
+      - right. left. eapply EQUIV1. eapply in_app. auto.
+      - simpl in E2. destruct E2; subst.
+        + exfalso. eapply Mem.fresh_block_alloc; eauto.
+        + right. left. eapply EQUIV1. eapply in_app. auto. }
+    split.
+    econstructor; eauto.
+    econstructor.
+    (* sound_cont: show the unchanged m1 m2 *)
+    instantiate (1 := fpf).
+    eapply sound_cont_unchanged; eauto.
+    eapply Mem.unchanged_on_trans.
+    eapply Mem.unchanged_on_implies. eapply UNC1. simpl. intros.
+    rewrite !in_app. auto.
+    eapply Mem.unchanged_on_trans.
+    eapply Mem.unchanged_on_implies. eapply UNC2. simpl. intros.
+    rewrite !in_app. auto. 
+    eapply Mem.unchanged_on_implies; eauto.
+    eapply assign_loc_unchanged_on. eauto. 
+    simpl. intros. intro. destruct H9. subst.
+    (* show that block in le++fpm is not in fpf *)
+    eapply DIS1. eauto. eauto. auto.
+    (* end of the proof of sound_cont *)
+    (* norepet *)
+    simpl. eapply list_norepet_append_commut2. rewrite app_assoc.
+    eapply list_norepet_append_commut2 in NOREP'. rewrite app_assoc in NOREP'.
+    eapply list_norepet_app in NOREP' as (F1 & F2 & F3).
+    eapply list_norepet_app. repeat apply conj; auto.
+    eapply list_norepet_append_right. eauto.
+    red. intros.
+    destruct (path_of_place p) eqn: POP.
+    exploit set_footprint_map_incl; eauto. intros [E1 | E2].
+    eapply N3. eauto.
+    eapply EQUIV1. eapply in_app; auto.
+    simpl in E2. destruct E2; subst.
+    intro. subst. eapply BNIN. simpl. eapply in_app_commut.
+    rewrite app_assoc. eapply in_app; auto.
+    eapply N3. eauto.
+    eapply EQUIV1. eapply in_app; auto.
+    (* accessibility *)
+    eapply rsw_acc_trans. eauto. eauto.
+    (* wf_own_env preservation (write it in another lemma) *)
+    eapply wf_own_env_init_place.
+    eapply dominators_must_init_sound; eauto.    
+    destruct (moved_place e); simpl.
+    eapply wf_own_env_move_place. eauto. eauto.
+    (* wt_state *)
     admit.
-        
+    
   (** NOTEASY: step_to_dropplace sound *)
   - inv SOUND. inv STMT. simpl in TR.
     simpl_getIM IM.
