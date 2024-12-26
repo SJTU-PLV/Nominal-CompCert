@@ -188,7 +188,7 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
       | Scall p0 _ el =>
           match move_check_exprlist ce mayinit mayuninit universe el with
           | Some (mayinit', mayuninit') =>
-              if move_check_assign mayinit mayuninit universe p0
+              if move_check_assign mayinit' mayuninit' universe p0
               then OK stmt
               else Error (msg "move_check_assign error in Scall")
           | None => Error (msg "move_check_exprlist error in Scall")
