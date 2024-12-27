@@ -373,10 +373,14 @@ Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (* evaluating the address of p does not require that p is
     owned. Shallow own is used in bmatch *)
     (POWN: dominators_must_init init uninit universe p = true),
-  exists fp (* ce' *) (* phl *), get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
-                            /\ wt_footprint ce (typeof_place p) fp
-                            (* range *)
-                            /\ (Ptrofs.unsigned ofs) + (sizeof ce (typeof_place p)) <= Ptrofs.max_unsigned.
+  exists fp (* ce' *) (* phl *),
+    get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
+    /\ wt_footprint ce (typeof_place p) fp
+    (* range *)
+    /\ (Ptrofs.unsigned ofs) + (sizeof ce (typeof_place p)) <= Ptrofs.max_unsigned
+    (* we need to consider the assignment to this place *)
+    /\ Mem.range_perm m b (Ptrofs.unsigned ofs) (sizeof ce (typeof_place p)) Cur Freeable
+.
 Proof.
   induction 1; intros.
   (* Plocal *)
@@ -384,7 +388,8 @@ Proof.
     exploit wf_env_footprint; eauto. intros (fp & FP & WTFP).
     exists fp. repeat apply conj. simpl. rewrite H. rewrite FP. auto.
     simpl. auto.
-    simpl. eapply sizeof_in_range. inv WT. auto.    
+    simpl. eapply sizeof_in_range. inv WT. auto.
+  (*** TODO add properties to wf_env *)
   (* Pfield *)
   - inv WT.
     (* two type facts, reduce one *)
@@ -484,99 +489,6 @@ Proof.
     inv H; simpl in *; try congruence.
     inv H0. rewrite LOAD in H1. inv H1. rewrite Ptrofs.unsigned_zero.
     lia.
-Qed.
-
-(* Defererence of a location has no memory error *)
-Lemma deref_loc_no_mem_error: forall fp b ofs ty m
-        (WTFP: wt_footprint ce ty fp)
-        (BM: bmatch ce m b (Ptrofs.unsigned ofs) fp)
-        (ERR: deref_loc_mem_error ty m b ofs),
-        False.
-Proof.
-  intros. inv ERR.
-  destruct ty; intros; try (simpl in *; congruence).
-  - inv H. inv WTFP; inv BM. inv MODE.
-    eauto with mem.
-  - inv WTFP; inv BM.
-    rewrite H in MODE. inv MODE. eauto with mem.
-  - inv WTFP; inv BM.
-    rewrite H in MODE. inv MODE. eauto with mem.
-  - inv WTFP; inv BM.
-    rewrite H in MODE. inv MODE. eauto with mem.
-  - inv WTFP; inv BM; simpl in *; try congruence.
-    inv H. eauto with mem.
-  - inv WTFP; inv BM. simpl in *.
-    inv WT.
-Qed.
-    
-Lemma dominators_must_init_deref1: forall init uninit universe p ty,
-    dominators_must_init init uninit universe (Pderef p ty) = true ->
-    dominators_must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in H. simpl in H.
-  eapply andb_true_iff in H. destruct H. auto.
-Qed.
-
-Lemma dominators_must_init_deref2: forall init uninit universe p ty,
-    dominators_must_init init uninit universe (Pderef p ty) = true ->
-    must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in H. simpl in H.
-  eapply andb_true_iff in H. destruct H. auto.
-Qed.
-
-Lemma dominators_must_init_downcast: forall init uninit universe p fid fty,
-    dominators_must_init init uninit universe (Pdowncast p fid fty) = true ->
-    dominators_must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in *.
-  eapply forallb_forall. intros.
-  erewrite forallb_forall in H. eapply H.
-  eapply place_dominators_downcast_incl; auto.
-Qed.
-
-(** The evaluation of place has no memory error  *)
-
-(* This lemma requires eval_place_sound *)
-Lemma eval_place_no_mem_error: forall p m le own init uninit universe fpm
-    (MM: mmatch fpm ce m le own)
-    (ERR: eval_place_mem_error ce le m p)
-    (WFOWN: wf_env fpm ce le)
-    (WT: wt_place (env_to_tenv le) ce p)
-    (SOWN: sound_own own init uninit universe)
-    (POWN: dominators_must_init init uninit universe p = true),
-    False.
-Proof.
-  induction p; intros; inv ERR; inv WT.
-  - eapply IHp; eauto.
-  - eapply IHp. 1-5: eauto. 
-    eapply dominators_must_init_deref1. eauto.
-  - exploit dominators_must_init_deref1; eauto. intros DOM.
-    exploit eval_place_sound; eauto.
-    intros (fp & A1 & A2 & A3).
-    (* show that the location (l, ofs) is bmatch so
-    deref_loc_mem_error is impossible *)
-    exploit MM. eauto.
-    eapply must_init_sound. eauto. eapply dominators_must_init_deref2; eauto.
-    intros (BM & FULL).
-    eapply deref_loc_no_mem_error; eauto.
-  - exploit dominators_must_init_downcast; eauto.
-  - exploit dominators_must_init_downcast; eauto. intros DOM.
-    exploit eval_place_sound; eauto.
-    intros (fp & A1 & A2 & A3).
-    exploit valid_owner_place_footprint; eauto.
-    intros (fp' & ofs' & fofs & GFP & VOWN & EQ).
-    exploit MM. eapply GFP.
-    eapply must_init_sound. eauto.
-    unfold dominators_must_init in POWN. simpl in POWN.
-    eapply andb_true_iff in POWN. destruct POWN. auto.
-    intros (BM & FULL).
-    exploit valid_owner_bmatch; eauto.
-    intros BM1.
-    rewrite WT2 in *. inv A2. inv BM1.
-    simpl in *; try congruence. inv BM1.
-    eapply H3. rewrite EQ.
-    eapply Mem.load_valid_access; eauto.
 Qed.
         
 (* The location from a not_shallow_prefix path must be in the
@@ -3654,9 +3566,9 @@ Inductive sound_state: state -> Prop :=
     (WTVAL: list_forall2 (sem_wt_val ce m) fpl args)
     (WTFP: list_forall2 (wt_footprint ce) (type_list_of_typelist tyargs) fpl)
     (STK: sound_stacks k m fpf)
-    (FLAT: flat_fp = flat_fp_frame fpf)
+    (FLAT: flat_fp = flat_fp_frame fpf ++ flat_map footprint_flat fpl)
     (* also disjointness of fpl and fpf *)
-    (NOREP: list_norepet (flat_fp ++ flat_map footprint_flat fpl))
+    (NOREP: list_norepet flat_fp)
     (ACC: rsw_acc w (rsw sg flat_fp m Hm)),
     sound_state (Callstate vf args k m)
 | sound_returnstate: forall sg flat_fp m k retty rfp v Hm
@@ -4150,6 +4062,25 @@ Proof.
   eapply list_equiv_norepet2.
   eapply list_norepet_append_commut. eauto.
   auto. auto.
+Qed.
+
+
+Lemma state_to_callstate_footprint_norepet: forall (l1 l2 l3 fpl l2': flat_footprint)
+    (EQUIV: list_equiv (fpl ++ l2') l2)
+    (NOREP: list_norepet (l1 ++ l2 ++ l3))
+    (NOREP1: list_norepet (l2' ++ fpl)),
+    list_norepet (l1 ++ l2' ++ l3 ++ fpl).
+Proof.
+  intros.
+  eapply list_norepet_append_commut2.
+  eapply list_norepet_append_commut2 in NOREP.
+  rewrite <- app_assoc, app_assoc. rewrite app_assoc in NOREP.
+  eapply list_norepet_app in NOREP as (N1 & N2 & N3).
+  eapply list_norepet_app.
+  repeat apply conj; auto.
+  eapply list_norepet_append_commut. eauto.
+  red. intros. eapply N3; eauto.
+  eapply EQUIV. auto.
 Qed.
 
 
@@ -5890,9 +5821,52 @@ Proof.
     simpl in NOREP.
     generalize NOREP as NOREP'. intros.
     eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
-    Genv.find_funct
-    eval_exprlist_sem_wt
+    exploit eval_exprlist_sem_wt; eauto.
+    intros (vfpl & fpm2 & WTVALS & WTFPS & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    exploit move_place_list_sound. eauto.
+    instantiate (1 := (moved_place_list al)).
+    exploit move_check_exprlist_result. eauto. intros (R1 & R2). subst.
+    intros SOWN1.
+    exploit init_place_sound; eauto. instantiate (1 := p).
+    intros SOWN2.
+    (* construct get_IM and sound_own *)
+    exploit analyze_succ. 1-3: eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
+    simpl. auto.   
+    unfold transfer. rewrite <- GETINIT. rewrite SEL. rewrite STMT0. eauto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite SEL. rewrite STMT0. eauto.
+    eauto.
+    intros (mayinit3 & mayuninit3 & A & B).      
+    (* end of construct *)
+    (* sound_state *)
+    assert (RACC: exists Hm1, rsw_acc (rsw sg (flat_fp_frame (fpf_func le fpm fpf)) m Hm)
+                           (rsw sg ((flat_fp_frame (fpf_func le fpm2 fpf)) ++ flat_map footprint_flat vfpl) m Hm1)).
+    { eapply rsw_acc_shrink.
+      simpl. red. intros b IN. 
+      rewrite !in_app in IN. rewrite !in_app.
+      repeat destruct IN; auto.
+      do 2 (destruct H4; auto).
+      right. left. eapply EQUIV1. eapply in_app; auto.
+      right. left. eapply EQUIV1. eapply in_app; auto.
+      eapply Mem.unchanged_on_refl. }            
+    destruct RACC as (Hm1 & RACC).
+    split.
+    eapply sound_callstate with (fpf:= fpf_func le fpm2 fpf); eauto.
+    econstructor; eauto.
+    (* norepet *)
+    simpl. rewrite <- !app_assoc.
+    eapply state_to_callstate_footprint_norepet; eauto.
+    eapply list_norepet_append_commut; auto.
+    (* rsw_acc *)
+    eapply rsw_acc_trans; eauto.
+    (* wt_state *)
+    admit.
     
+  (* step_internal_function *)
+  - 
+Admitted.
+
 Lemma external_sound: forall s q,
     sound_state s ->
     wt_state ge s ->
@@ -5911,6 +5885,197 @@ Lemma final_sound: forall s r,
     reply_inv wt_rs (se, w) r.
 Admitted.
 
+
+(** Sound state must not be memory error state *)
+
+(* Defererence of a location has no memory error *)
+Lemma deref_loc_no_mem_error: forall fp b ofs ty m
+        (WTFP: wt_footprint ce ty fp)
+        (BM: bmatch ce m b (Ptrofs.unsigned ofs) fp)
+        (ERR: deref_loc_mem_error ty m b ofs),
+        False.
+Proof.
+  intros. inv ERR.
+  destruct ty; intros; try (simpl in *; congruence).
+  - inv H. inv WTFP; inv BM. inv MODE.
+    eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM.
+    rewrite H in MODE. inv MODE. eauto with mem.
+  - inv WTFP; inv BM; simpl in *; try congruence.
+    inv H. eauto with mem.
+  - inv WTFP; inv BM. simpl in *.
+    inv WT.
+Qed.
+    
+Lemma dominators_must_init_deref1: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_deref2: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_downcast: forall init uninit universe p fid fty,
+    dominators_must_init init uninit universe (Pdowncast p fid fty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in *.
+  eapply forallb_forall. intros.
+  erewrite forallb_forall in H. eapply H.
+  eapply place_dominators_downcast_incl; auto.
+Qed.
+
+(** The evaluation of place has no memory error  *)
+
+(* This lemma requires eval_place_sound *)
+Lemma eval_place_no_mem_error: forall p m le own init uninit universe fpm
+    (MM: mmatch fpm ce m le own)
+    (ERR: eval_place_mem_error ce le m p)
+    (WFOWN: wf_env fpm ce le)
+    (WT: wt_place (env_to_tenv le) ce p)
+    (SOWN: sound_own own init uninit universe)
+    (POWN: dominators_must_init init uninit universe p = true),
+    False.
+Proof.
+  induction p; intros; inv ERR; inv WT.
+  - eapply IHp; eauto.
+  - eapply IHp. 1-5: eauto. 
+    eapply dominators_must_init_deref1. eauto.
+  - exploit dominators_must_init_deref1; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    (* show that the location (l, ofs) is bmatch so
+    deref_loc_mem_error is impossible *)
+    exploit MM. eauto.
+    eapply must_init_sound. eauto. eapply dominators_must_init_deref2; eauto.
+    intros (BM & FULL).
+    eapply deref_loc_no_mem_error; eauto.
+  - exploit dominators_must_init_downcast; eauto.
+  - exploit dominators_must_init_downcast; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    exploit valid_owner_place_footprint; eauto.
+    intros (fp' & ofs' & fofs & GFP & VOWN & EQ).
+    exploit MM. eapply GFP.
+    eapply must_init_sound. eauto.
+    unfold dominators_must_init in POWN. simpl in POWN.
+    eapply andb_true_iff in POWN. destruct POWN. auto.
+    intros (BM & FULL).
+    exploit valid_owner_bmatch; eauto.
+    intros BM1.
+    rewrite WT2 in *. inv A2. inv BM1.
+    simpl in *; try congruence. inv BM1.
+    eapply H3. rewrite EQ.
+    eapply Mem.load_valid_access; eauto.
+Qed.
+
+Lemma eval_pexpr_no_mem_error: forall pe m le own init uninit universe fpm
+    (MM: mmatch fpm ce m le own)
+    (ERR: eval_pexpr_mem_error ce le m pe)
+    (WFOWN: wf_env fpm ce le)
+    (WT: wt_pexpr (env_to_tenv le) ce pe)
+    (SOWN: sound_own own init uninit universe)
+    (POWN: move_check_pexpr init uninit universe pe = true),
+    False.
+Proof.
+  induction pe; intros; try (inv ERR; inv WT); simpl in POWN; try congruence.
+  - destruct (scalar_type (typeof_place p)) eqn: TYP; try congruence.
+    eapply andb_true_iff in POWN as (A1 & A2).
+    eapply eval_place_no_mem_error; eauto.
+  - destruct (scalar_type (typeof_place p)) eqn: TYP; try congruence.
+    eapply andb_true_iff in POWN as (B1 & B2).
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    exploit MM. eauto.
+    eapply must_init_sound. eauto. eauto.
+    intros (BM & FULL).
+    eapply deref_loc_no_mem_error; eauto.
+  - destruct (typeof_place p) eqn: PTY; try congruence.
+    eapply andb_true_iff in POWN as (B1 & B2).
+    eapply eval_place_no_mem_error; eauto.
+  - destruct (typeof_place p) eqn: PTY; try congruence.
+    eapply andb_true_iff in POWN as (B1 & B2).
+    exploit eval_place_sound; eauto.
+    intros (fp & A1 & A2 & A3).
+    exploit MM. eauto.
+    eapply must_init_sound. eauto. eauto.
+    intros (BM & FULL).
+    rewrite PTY in *. inv WTP1.
+    inv A2; inv BM. simpl in MODE. try congruence.
+    eapply H2.
+    eapply Mem.load_valid_access. eauto.
+  - eapply IHpe; eauto.
+  - eapply andb_true_iff in POWN as (A1 & A2).
+    destruct H0.
+    eapply IHpe1; eauto.
+    eapply IHpe2; eauto.
+Qed.
+
+Lemma eval_expr_no_mem_error: forall e m le own init uninit universe fpm
+    (MM: mmatch fpm ce m le own)
+    (ERR: eval_expr_mem_error ce le m e)
+    (WFOWN: wf_env fpm ce le)
+    (WT: wt_expr (env_to_tenv le) ce e)
+    (SOWN: sound_own own init uninit universe)
+    (POWN: move_check_expr' ce init uninit universe e = true),
+    False.
+Proof.
+  intros. destruct e; inv ERR; inv WT.
+  - simpl in POWN.
+    destruct place_eq in POWN.
+    + eapply andb_true_iff in POWN as (A1 & A2).
+      inv H0.
+      * eapply eval_place_no_mem_error; eauto.
+      * exploit eval_place_sound; eauto.
+        intros (fp & B1 & B2 & B3).
+        (* show that (b, ofs) is sem_wt_loc *)
+        exploit movable_place_sem_wt; eauto.
+        red. auto. intros WTLOC.
+        eapply deref_loc_no_mem_error; eauto.
+        eapply sem_wt_loc_implies_bmatch. eauto.
+    + rewrite !andb_true_iff in POWN.
+      destruct POWN as ((A1 & A2) & A3). inv H0.      
+      * eapply eval_place_no_mem_error; eauto.
+      * exploit eval_place_sound. 1-5: eauto. eapply A1.
+        intros (fp & B1 & B2 & B3).
+        exploit valid_owner_place_footprint. eauto. eapply WT1.
+        intros (fp1 & ofs1 & fofs & C1 & C2 & C3).
+        (* show that (b, ofs) is sem_wt_loc using mmatch and is_full *)
+        exploit MM. eauto.
+        eapply must_init_sound. eauto. eauto.
+        intros (BM & FULL).
+        exploit FULL.
+        erewrite <- is_full_same. eauto.
+        eapply sound_own_universe. eauto.
+        intros WTLOC.
+        eapply deref_loc_no_mem_error; eauto.
+        eapply sem_wt_loc_implies_bmatch. rewrite C3.
+        eapply valid_owner_sem_wt_loc; eauto.
+  - inv POWN.
+    eapply eval_pexpr_no_mem_error; eauto.
+Qed.
+
+Lemma assign_loc_no_mem_error: forall fp ty m b ofs v
+    (ERR: assign_loc_mem_error ce ty m b ofs v)
+    (** TODO: we require that the address evaluated by eval_place must
+    contain valid permission so that later assignment of this location
+    does not cause memory error *)
+    eval_place_sound
+    assign_loc_sem_wt
+    eval_place_sound
+        
 End MOVE_CHECK.
 
 (** Specific definition of partial safe *)

@@ -1274,3 +1274,14 @@ Proof.
     exploit FWT; eauto.
   - inv H. econstructor; eauto.
 Qed.
+
+Lemma move_check_exprlist_result: forall al init uninit universe ce init1 uninit1,
+    move_check_exprlist ce init uninit universe al = Some (init1, uninit1) ->
+    init1 = remove_place_list (moved_place_list al) init /\
+      uninit1 = add_place_list universe (moved_place_list al) uninit.
+Proof.
+  induction al; intros until uninit1; intros A; simpl in *; try (inv A; eauto).
+  unfold move_check_expr in H0.
+  destruct (move_check_expr' ce init uninit universe a); try congruence.
+  destruct (moved_place a) eqn: MP; simpl; eauto.
+Qed.  

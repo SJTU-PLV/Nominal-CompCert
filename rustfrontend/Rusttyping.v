@@ -211,7 +211,8 @@ Inductive wt_pexpr: pexpr -> Prop :=
     (WTP1: wt_place p),
     wt_pexpr (Eplace p (typeof_place p))
 | wt_Ecktag: forall p fid orgs id
-    (WTP1: typeof_place p = Tvariant orgs id),
+    (WTP1: typeof_place p = Tvariant orgs id)
+    (WTP2: wt_place p),
     wt_pexpr (Ecktag p fid)
 | wt_Eref: forall p org mut
     (WTP1: wt_place p),
@@ -262,12 +263,14 @@ Inductive wt_stmt: statement -> Prop :=
     (SZEQ: sizeof ce ty = sizeof ce (typeof e))
     (SZCK: 0 < sizeof ce (typeof e) <= Ptrofs.max_unsigned),
     wt_stmt (Sbox p e)
-| wt_Scall: forall p e al
+| wt_Scall: forall p al id ty orgs rels tyl rty cc
     (WT1: wt_place p)
-    (WT2: wt_exprlist al),
-    wt_stmt (Scall p e al)
-              .
-    
+    (WT2: wt_exprlist al)
+    (WT3: ty = Tfunction orgs rels tyl rty cc),
+    (* We only support this kind of function call *)
+    wt_stmt (Scall p (Eglobal id ty) al)
+.
+
 (* Well-typed continuation and state *)
 
 Inductive wt_cont: cont -> Prop :=
