@@ -237,8 +237,20 @@ Section BSIM.
 
   (** semantics bsim_properties *)
 
-  (** ** Simulation properties *)
-
+  Lemma safe_internal : forall (i:I) s1 k1,
+      safe L1 se1 (st L1 i s1 :: k1) -> Smallstep.safe (L1 i se1) s1.
+  Proof.
+    intros.
+    red. intros.
+    red in H. exploit H. eapply star_internal; eauto.
+    intros [[r A] | [[q B] | [t [s2' C]]]].
+    - inv A. subst_dep. left. eauto.
+    - inv B. subst_dep. right. left. eauto.
+    - inv C. subst_dep. right. right. eauto.
+      subst_dep. right. left. eauto.
+      subst_dep. left. eauto.
+  Qed.
+    
   Lemma step_simulation:
     forall idx s1 s2 t s2', match_states idx s1 s2 -> step L2 se2 s2 t s2' -> safe L1 se1 s1 ->
     exists idx' s1',
@@ -252,17 +264,40 @@ Section BSIM.
       (* destruct f1. inversion H4.
       (** WHY???? s4 should be the same as s0! why they are different after inversoin? *)
       inv H4. inv H1. subst_dep. clear idx0. *)
-      inv H4; subst_dep. clear idx0.
+      remember (st L2 i s) as f2.
+      inv H4. inv H7. subst_dep.
+      (* inv H4; subst_dep. clear idx0. *)
       edestruct @bsim_simulation as (idx' & s2' & Hs2' & Hs'); eauto using bsim_lts.
-      red. red in Hsafe. admit. (** cannot prove it because of a bug???*)
+      eapply safe_internal; eauto.
       eexists (existT _ i idx'), _. split.
       * destruct Hs2'; [left | right]; intuition eauto using star_internal, plus_internal.
         constructor. auto.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
-      inv H6; subst_dep. clear idx0.
+      remember (st L2 i s) as f2. inv H6. inv H9. subst_dep.
       edestruct @bsim_match_external as (wx & s1' & qx1 & Hsteps1 & Hqx1 & Hqx & Hsex & Hrx); eauto using bsim_lts.
+      eapply safe_internal; eauto.
+      assert (Trivial_safe_q : forall qx1 s1, Smallstep.at_external (L1 i se1) s1 qx1 ->
+                                         exists s2, Smallstep.initial_state (L1 j se1) qx1 s2 ).
+      admit. (** TODO: need to be defined as some hypo*)
+      exploit Trivial_safe_q; eauto.
+      intros [sy2 INI2].
+      pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
+      exploit @bsim_match_initial_states; eauto.
+      intro Hrex.
+      destruct Hrex as [Hini1 Hini2]. exploit Hini2; eauto.
+      intros (s1'' & Hinity' & idx & MS).
+      eexists.
+      eexists. split. left. eapply plus_right.
+      eapply star_internal; eauto.
+      eapply step_push; eauto.
+      admit. (** shoule be correct? *)
+      reflexivity.
+      econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
+      intros. exploit Hrx; eauto. intros [A B].
+      (** TODO : we need to change the definition of match_state *)
       admit.
+    -
       (** Problem Here : we are given the [initial_state] from [L2 j] as an internal function call,
           However the bsim_properties can not provide the [initial_state] from target to forward. 
           
@@ -324,14 +359,13 @@ Section BSIM.
         final_state L1 se1 s1' r1 /\ match_reply cc w r1 r2.
   Proof.
     clear. intros idx s1 s2 r2 Hs Hsafe Hr2. destruct Hr2 as [i s2 r2 Hr2].
-    inv Hs. inv H4.
-    inv H3. subst_dep. clear idx0.
-    pose proof (bsim_lts (HL i) _ _ H1 H5).
+    inv Hs. inv H4. remember (st L2 i s2) as f2. inv H3. inv H5. subst_dep.
+    pose proof (bsim_lts (HL i) _ _ H H0).
     edestruct @bsim_match_final_states as (s1' & r1 & Hstar & Hr1 & Hr); eauto.
-    admit. (** bug? *)
+    eapply safe_internal; eauto.
     eexists. exists r1. split. eapply star_internal; eauto.
     split; eauto. constructor; eauto.
-  Admitted.
+  Qed.
   
   Lemma external_simulation:
     forall idx s1 s2 qx2, match_states idx s1 s2 -> safe L1 se1 s1 -> at_external L2 se2 s2 qx2 ->
@@ -341,16 +375,16 @@ Section BSIM.
   Proof.
     clear - HL Hse1.
     intros idx s1 s2 q2 Hs Hsafe Hq2. destruct Hq2 as [i s2 qx2 k2 Hqx2 Hvld].
-    inv Hs. inv H3. subst_dep. clear idx0.
-    pose proof (bsim_lts (HL i) _ _ H1 H6) as Hi.
-    edestruct @bsim_match_external as (wx & s1' & qx1 & Hstar & Hqx1 & Hqx & Hsex & H); eauto.
-    admit.
+    inv Hs. remember (st L2 i s2) as f2. inv H3. inv H6. subst_dep.
+    pose proof (bsim_lts (HL i) _ _ H H0) as Hi.
+    edestruct @bsim_match_external as (wx & s1' & qx1 & Hstar & Hqx1 & Hqx & Hsex & Hr); eauto.
+    eapply safe_internal; eauto.
     exists wx. eexists. exists qx1. intuition idtac.
     + eapply star_internal; eauto.
     + constructor. eauto.
       intros j. pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
       erewrite <- bsim_match_valid_query; eauto.
-    + exploit H; eauto. intros.  inv H2.
+    + exploit Hr; eauto. intros.  inv H3.
       constructor.
       -- intros s1'' Hy1. inv Hy1. subst_dep.
          exploit bsim_match_cont_exist; eauto.
@@ -360,7 +394,7 @@ Section BSIM.
          intros (s1'''  & Hy1' & Hrex).
          eexists. split. econstructor; eauto. inv Hrex. eexists.
          econstructor; eauto. econstructor; eauto.
-  Admitted.
+  Qed.
 
   Hypothesis determinate_L1: forall i, determinate (L1 i).
   
@@ -370,18 +404,9 @@ Section BSIM.
                   (exists q, at_external L2 se2 s2 q) \/
                     (exists t s2', step L2 se2 s2 t s2').
   Proof.
-    intros. inv H. inv H1.
+    intros. inv H. inv H1. subst_dep.
     assert (SAFE_L1i: Smallstep.safe (L1 i se1) s1).
-    { (** Why the inverion of H1 works here but fails in the previous lemmas *)
-      clear - H0. red. intros.
-      red in H0. exploit H0. eapply star_internal; eauto.
-      intros [[r A] | [[q B] | [t [s2' C]]]].
-      - inv A. subst_dep. left. eauto.
-      - inv B. subst_dep. right. left. eauto.
-      - inv C. subst_dep. right. right. eauto.
-        subst_dep. right. left. eauto.
-        subst_dep. left. eauto.
-    }
+    eapply safe_internal; eauto.
     pose proof (bsim_lts (HL i) _ _ H (Hse1 i)).
     exploit @bsim_progress; eauto.
     pose proof (determinate_L1 i).
@@ -393,13 +418,6 @@ Section BSIM.
       + inv Final1. subst_dep. left. inv H2. econstructor; eauto.
         econstructor; eauto.
       + inv Ext1. subst_dep.
-
-    (* red in H0. exploit H0. eapply star_refl.
-    intros HP_L1. intros HP_L2i.
-    destruct HP_L1 as [[r FINAL] | [[q EXT] | [t [s2' STEP]]]].
-    - (* source final *)
-      left. inv FINAL. subst_dep. *)
-
     (** TODO*)
   Admitted.
   
@@ -448,8 +466,10 @@ Proof.
   - destruct Ha, Hb. cbn. congruence.
   - intros se1 se2 w Hse Hse1.
     eapply semantics_simulation; eauto.
-    pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
-    intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.
+    + pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
+      intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.
+    + admit.
+    + admit.
   - clear - HL. intros [i x].
     induction (bsim_order_wf (HL i) x) as [x Hx IHx].
     constructor. intros z Hxz. inv Hxz; subst_dep. eauto.
