@@ -48,12 +48,14 @@ Inductive initial_c : query li_c -> Prop :=
     Genv.find_symbol se main_id_c = Some main_b ->
     initial_c (cq (Vptr main_b Ptrofs.zero) main_sg nil m).
 
-(*maybe we need to change this for backward*)
+(** This definition is not deterministic. Will this becomes a problem? *)
 Inductive final_c : int -> reply li_c -> Prop :=
 |final_c_int : forall r m,
     final_c r (cr (Vint r) m)
-|final_c_undef : forall r m,
-    final_c r (cr Vundef m).
+|final_c_other : forall res r m,
+    (forall i, res <> Vint i) ->
+    final_c r (cr res m).
+
 
 Definition initial_regset (pc : val) (sp: val):=
     (Pregmap.init Vundef) # PC <- pc
@@ -72,8 +74,8 @@ Inductive final_asm : int -> reply li_asm -> Prop :=
 |final_asm_int : forall r (rs : regset) m,
      rs # RAX = Vint r ->
      final_asm r (rs,m)
-|final_asm_undef : forall r (rs: regset) m,
-    rs # RAX = Vundef ->
+|final_asm_other : forall r (rs: regset) m,
+    (forall i, rs # RAX <> Vint i) ->
     final_asm r (rs,m).
 
 Inductive valid_world_cc_compcert : ccworld cc_compcert -> Prop :=
@@ -249,8 +251,9 @@ Hypothesis closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_e
 Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
 Proof.
   intros. destruct r. 
-  destruct (r # RAX) eqn: rRAX; eexists;
-    try (eapply final_asm_other; congruence).
+  destruct (r # RAX) eqn: rRAX;
+    try ( exists Int.one; eapply final_asm_other; congruence).
+  exists i.
   econstructor; eauto.
 Qed.
 
@@ -303,15 +306,18 @@ Proof.
   specialize (H RAX). 
   inv H1.
   - rewrite H5 in H. inv H. rewrite <- H3 in H9. inv H9.
-    econstructor; eauto. eapply final_c_others. congruence.
-  (** maybe we should allow [Vundef] in both final_c and final_asm, let [Vundef] corresponds to 
-int value [1] *)
-Admitted.
+    econstructor; eauto.
+    eapply final_c_other. congruence.
+    rewrite <- H3 in H9. inv H9. eapply final_c_other. congruence.
+  - eapply final_c_other.
+    intros. intro.
+    rewrite H1 in H9. inv H9. rewrite <- H6 in H. inv H. congruence.
+Qed.
 
 Definition close_c := close_semantics L_c initial_c final_c.
 Definition close_asm := close_semantics L_asm initial_asm final_asm.
 
-Theorem closed_forward_simulation_cc_compcert :
+Theorem closed_backward_simulation_cc_compcert :
   Closed.backward_simulation close_c close_asm.
 Proof.
   eapply close_sound_backward.
@@ -328,5 +334,5 @@ End CLOSE_BACKWARD.
 (* Checking whether the defs and lemmas from are typed as we want in the outside of the Section. *)
 Check close_c.
 Check close_asm.
-Check closed_forward_simulation_cc_compcert.
+Check closed_backward_simulation_cc_compcert.
 
