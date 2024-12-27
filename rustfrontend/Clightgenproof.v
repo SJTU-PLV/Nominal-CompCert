@@ -865,8 +865,8 @@ Proof.
   destruct (classify_sub ty1 ty2); inv H; eauto. 
 Qed. 
 
-Lemma eval_expr_inject: forall e te j a a' m tm v le,
-    eval_expr ce e m a v ->
+Lemma eval_expr_inject: forall e te j a a' m tm v le (GLOB: Genv.match_stbls j se tse),
+    eval_expr ce e m ge a v ->
     expr_to_cexpr ce tce a = OK a' ->
     match_env j e te ->
     Mem.inject j m tm ->
@@ -879,7 +879,7 @@ Proof.
     destruct (type_eq_except_origins t (typeof_place p)) eqn :Horg; try congruence. 
     exploit type_eq_except_origins_to_ctype; eauto. 
     intros TTYP.
-    intros a' m tm v le.
+    intros a' m tm v le GLOB.
     intros EVAL PEXPR MATJ MINJ.
     inv EVAL. 
     inv H2. 
@@ -892,7 +892,7 @@ Proof.
     intros Htpx. rewrite <- TTYP in Htpx. rewrite <- Htpx. 
     eauto. eauto.
   - simpl. 
-    intros a' m tm v le. 
+    intros a' m tm v le GLOB. 
     intros EVAL PEXPR MATJ MINJ. 
     generalize dependent v. 
     generalize dependent a'. 
@@ -1022,6 +1022,14 @@ Proof.
       intros Htpx0. rewrite <- Htpx0. eapply sem_binary_op_trans. eauto. 
       eauto.
     + inv EVAL. inv H0.
+      simpl in PEXPR. inv PEXPR.
+      edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB); eauto.
+      exploit deref_loc_inject; eauto.
+      intros (tv' & TDEF & VINJ).
+      exists tv'. split; eauto.
+      econstructor. eapply eval_Evar_global; eauto.
+      generalize (MATJ i). intros. rewrite NLOCAL in H. inv H. auto.
+      auto.
 Qed. 
 
 Lemma alignof_blockcopy_1248: forall ty ofs,
@@ -1196,7 +1204,7 @@ Proof.
     try(destruct Archi.ptr64 );
     try (destruct f0; simpl in *);
     TrivialInject. 
-    econstructor. eauto. auto.    
+    (* econstructor. eauto. auto.     *)
   - destruct t2; inv H0; simpl in *;
     try (destruct f0);
     try (destruct i); 
@@ -1205,8 +1213,9 @@ Proof.
     try(destruct i; destruct (Archi.ptr64)); 
     try (destruct f0); TrivialInject. 
   - destruct t2; inv H0; simpl in *;
-    try(destruct i; destruct (Archi.ptr64));
-    try (destruct f0); TrivialInject. 
+      try(destruct i; destruct (Archi.ptr64));
+       try (destruct f0); try (destruct type_eq); TrivialInject.
+    econstructor. eauto. auto.
   - destruct t2; inv H0; simpl in *;
     try(destruct i; destruct (Archi.ptr64));
     try (destruct f0); TrivialInject. 
@@ -1529,6 +1538,25 @@ Proof.
   intros MCONT1. inv MCONT1.
 Qed.
 
+(** Matching of global environments *)
+
+Lemma injp_acc_globalenv:
+  forall f m tm Hm,
+  injp_acc w (injpw f m tm Hm)->
+  Genv.match_stbls f se tse.
+Proof.
+  intros.
+  simpl in Hse.
+  destruct w. inv Hse.
+  inv H.
+  eapply Genv.match_stbls_incr; eauto.
+  intros. exploit H16; eauto. 
+  intros (A & B). split; eauto.
+  intro. eapply A. eapply H6. auto.
+  intro. eapply B. eapply H7. auto.
+Qed.
+
+Hint Resolve injp_acc_globalenv: matsym.
 
 (* This lemma is too strong, but it is easy to use *)
 Lemma injp_acc_match_cont: forall j1 j2 m1 m2 tm1 tm2 Hm1 Hm2 k tk bs,
@@ -2926,8 +2954,8 @@ Proof.
 Qed.
 
 
-Lemma eval_expr_cexprlist: forall al j le m tyargs vargs te le0 tm l',
-eval_exprlist ge le m al tyargs vargs
+Lemma eval_expr_cexprlist: forall al j le m tyargs vargs te le0 tm l' (GLOB: Genv.match_stbls j se tse),
+eval_exprlist ge le m ge al tyargs vargs
 -> expr_to_cexpr_list ce tce al = OK l'
 -> match_env j le te
 -> Mem.inject j m tm
@@ -3077,7 +3105,7 @@ Proof.
     (* eval place and expr *)
     exploit eval_place_inject;eauto. instantiate (1:= le0).
     intros (b' & ofs' & EL & INJL).
-    exploit eval_expr_inject; eauto. instantiate (1:= le0).
+    exploit eval_expr_inject; eauto with matsym. instantiate (1:= le0).
     intros (v' & ER & INJV1).
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
     intros (v1' & CASTINJ & INJV2).  
@@ -3143,7 +3171,7 @@ Proof.
       simpl. eapply Clight.deref_loc_copy. auto. simpl. eauto.
       eauto. eauto. }
     (* eval_expr_inject  *)
-    exploit eval_expr_inject; eauto. instantiate (1 := le0).
+    exploit eval_expr_inject; eauto with matsym. instantiate (1 := le0).
     intros (tv & TEVAL & VINJ4).
     (* sem_cast inject *)
     exploit sem_cast_to_ctype_inject; eauto. instantiate (1 := tm).
@@ -3220,12 +3248,12 @@ Proof.
     destruct (match_prog_malloc _ _ TRANSL) as (orgs & rels & tyl & rety & cc & MALLOC).    
     exploit Genv.find_def_symbol. eauto. intros A.
     eapply A in MALLOC as (mb & FINDSYMB & FINDMALLOC). clear A.
-    inv Hse.
-    edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB); eauto.
+    (* inv Hse. *)
+    edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB); eauto with matsym.
     (* find_funct tge tb = Some malloc_decl *)
     assert (TFINDFUN: Genv.find_funct tge (Vptr tmb Ptrofs.zero) = Some malloc_decl).
     { edestruct find_funct_match as (malloc & TFINDFUN & TRMALLOC).
-      eauto. eauto.
+      eauto. eauto with matsym.
       instantiate (2 := (Vptr mb Ptrofs.zero)). simpl.
       destruct Ptrofs.eq_dec; try congruence.
       eapply Genv.find_funct_ptr_iff. eauto.
@@ -3252,7 +3280,9 @@ Proof.
     instantiate (1 := INJ3). instantiate (1 := INJ2).
     intros INJP3.
     (* evaluate the expression which is stored in the malloc pointer *)
-    exploit eval_expr_inject. eauto. eauto.
+    exploit eval_expr_inject. instantiate (1 := j2).
+    eapply injp_acc_globalenv. etransitivity. eauto. eauto.
+    eauto. eauto.
     eapply match_env_incr. eapply match_env_incr.
     eauto. eauto. eauto. eauto.
     instantiate (1:= (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
@@ -3660,11 +3690,11 @@ Proof.
   - inv MSTMT. simpl in H6. 
     monadInv_comb H6. monadInv_sym EQ3. unfold gensym in EQ2. inv EQ2.
     destruct g. simpl in H8. inv H8. eapply list_cons_neq in H7.
-    contradiction. exploit eval_expr_inject; eauto. 
+    contradiction. exploit eval_expr_inject; eauto with matsym. 
     instantiate (1:= le0).
     intros (vf' & EVALF & INJF).   
     exploit expr_to_cexpr_type; eauto. intros TYPF. 
-    exploit eval_expr_cexprlist; eauto. intros EVAL_EVAL_LIST'. 
+    exploit eval_expr_cexprlist; eauto with matsym. intros EVAL_EVAL_LIST'. 
     destruct EVAL_EVAL_LIST' as (Tvargs' & EVAL_EVAL_LIST' & INJL). 
     assert (MSTBL: Genv.match_stbls j se tse). {
       inv Hse. 
@@ -3778,7 +3808,7 @@ Proof.
   (*   etransitivity; eauto.   *)
   (* step_return_1 *)
   - inv MSTMT. unfold transl_stmt in H3. monadInv_comb H3. 
-    exploit eval_expr_inject; eauto. intros (tv & TEVAL & VINJ1).
+    exploit eval_expr_inject; eauto with matsym. intros (tv & TEVAL & VINJ1).
     exploit sem_cast_to_ctype_inject; eauto. 
     (* type *)
     intros (tv1 & CAST1 & INJCAST).
@@ -3850,7 +3880,7 @@ Proof.
     econstructor. simpl. auto. instantiate (1:=g). auto.   
   (* step_ifthenelse *)
   - inv MSTMT. inv H0. 
-    exploit eval_expr_inject; eauto. intros (v' & CEVAL & INJ1). 
+    exploit eval_expr_inject; eauto with matsym. intros (v' & CEVAL & INJ1). 
     exploit bool_val_inject; eauto. intros BOOL.
     exploit expr_to_cexpr_type; eauto. intros EQTY.
     eexists. split. apply plus_one. econstructor; eauto. rewrite <- EQTY. eauto.

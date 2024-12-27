@@ -1807,10 +1807,11 @@ Qed.
 
 Lemma eval_pexpr_inject:
   forall e le m v tm tle own lo hi flagm tlo thi j
-    (EVAL: eval_pexpr ge le m e v)
+    (EVAL: eval_pexpr ge le m ge e v)
+    (MSENV: Genv.match_stbls j se tse)
     (MINJ: Mem.inject j m tm)
     (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
-    exists tv, eval_pexpr tge tle tm e tv /\ Val.inject j v tv.
+    exists tv, eval_pexpr tge tle tm tge e tv /\ Val.inject j v tv.
 Proof. 
   induction 1; intros. 
   - eexists. split. econstructor. eauto. 
@@ -1838,6 +1839,14 @@ Proof.
     destruct (Int.eq tag (Int.repr tagz)); simpl; econstructor. 
   - exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ).  
     eexists. split. econstructor; eauto. auto.
+  - edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB); eauto.
+    exploit deref_loc_inject; eauto.
+    intros (tv' & TDEF & VINJ).
+    rewrite Ptrofs.add_zero_l in TDEF.
+    exists tv'. split; eauto.
+    econstructor; eauto.
+    
+    
 Qed. 
 
 

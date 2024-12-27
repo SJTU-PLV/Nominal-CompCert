@@ -93,14 +93,8 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 .
 
 
-Inductive sem_wt_val_list (m: mem) : list footprint -> list val -> Prop :=
-| sem_wt_val_nil:
-  sem_wt_val_list m nil nil
-| sem_wt_val_cons: forall fpl fp vl v,
-    sem_wt_val_list m fpl vl ->
-    sem_wt_val m fp v ->
-    sem_wt_val_list m (fp::fpl) (v::vl)
-.
+Definition sem_wt_val_list (m: mem) fpl vl : Prop :=
+  list_forall2 (sem_wt_val m) fpl vl.
 
 Inductive bmatch (m: mem) (b: block) (ofs: Z) : footprint -> Prop :=
 | bm_box: forall b1 fp sz
@@ -182,9 +176,10 @@ Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
     forall (DIS: footprint_disjoint_list fpl)
     (SEMWT: sem_wt_val_list ce m fpl args)
     (* footprints are well-typed *)
-    (WTFP: list_forall2 (fun argty fp => wt_footprint (rs_sig_comp_env sg) argty fp) (rs_sig_args sg) fpl)
+    (WTFP: wt_footprint_list ce (rs_sig_args sg) fpl)
     (* structured footprint is equivalent with the flat footprint in the interface *)
-    (EQ: list_equiv fp (flat_map footprint_flat fpl)),
+    (EQ: list_equiv fp (flat_map footprint_flat fpl))
+    (NOREP: list_norepet fp),
     wt_rs_query (rsw sg fp m Hm) (rsq vf sg args m)
 .
 

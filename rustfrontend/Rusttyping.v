@@ -238,6 +238,8 @@ Inductive wt_expr: expr -> Prop :=
     wt_expr pe
 .
 
+Definition wt_exprlist al : Prop :=
+  Forall wt_expr al.
 
 Inductive wt_stmt: statement -> Prop :=
 | wt_Sassign: forall p e
@@ -260,7 +262,11 @@ Inductive wt_stmt: statement -> Prop :=
     (SZEQ: sizeof ce ty = sizeof ce (typeof e))
     (SZCK: 0 < sizeof ce (typeof e) <= Ptrofs.max_unsigned),
     wt_stmt (Sbox p e)
-.
+| wt_Scall: forall p e al
+    (WT1: wt_place p)
+    (WT2: wt_exprlist al),
+    wt_stmt (Scall p e al)
+              .
     
 (* Well-typed continuation and state *)
 

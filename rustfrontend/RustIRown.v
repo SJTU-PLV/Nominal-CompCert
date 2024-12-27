@@ -462,7 +462,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
-    eval_expr ge le m1 e v ->
+    eval_expr ge le m1 ge e v ->
     (* sem_cast to simulate Clight *)
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
@@ -477,7 +477,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (CO: ge.(genv_cenv) ! enum_id = Some co)
     (FTY: field_type fid co.(co_members) = OK ty)
     (* evaluate the expr, return the value *)
-    (EXPR: eval_expr ge le m1 e v)
+    (EXPR: eval_expr ge le m1 ge e v)
     (* evaluate the location of the variant in p (in memory m1) *)
     (PADDR1: eval_place ge le m1 p b ofs)
     (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
@@ -503,7 +503,7 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
     (* evaluate the expression after malloc to simulate*)
-    eval_expr ge le m3 e v ->
+    eval_expr ge le m3 ge e v ->
     (* sem_cast the value to simulate function call in Clight *)
     sem_cast v (typeof e) ty = Some v1 ->
     (* assign the value to the allocated location *)
@@ -536,8 +536,8 @@ Inductive step : state -> trace -> state -> Prop :=
     (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2)
     (GFUN: function_not_drop_glue fd),
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf ->
-    eval_exprlist ge le m al tyargs vargs ->
+    eval_expr ge le m ge a vf ->
+    eval_exprlist ge le m ge al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
@@ -567,7 +567,7 @@ skip return, see Rustlightown.v *)
 | step_return_1: forall le p v v1 lb m1 m2 f k ck own1 (* own2 *)
     (CONT: call_cont k = Some ck)
     (* (TFEXPR: move_place_option own1 (moved_place a) = own2), *)
-    (EVAL: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
+    (EVAL: eval_expr ge le m1 ge (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
     (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1)
     (* drop the stack blocks *)
@@ -603,7 +603,7 @@ skip return, see Rustlightown.v *)
       E0 (State f Sbreak k e own m)
 | step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1,
     (* there is no receiver for the moved place, so it must be None *)
-    eval_expr ge e m a v1 ->
+    eval_expr ge e m ge a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e own1 m)
@@ -670,7 +670,7 @@ Inductive step_mem_error : state -> Prop :=
     step_mem_error (State f (Sassign p e) k le own m)
 | step_assign_error3: forall f e p k le m b ofs v v1 ty own,
     eval_place ge le m p b ofs ->
-    eval_expr ge le m e v ->
+    eval_expr ge le m ge e v ->
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     assign_loc_mem_error ge ty m b ofs v1 ->
     step_mem_error (State f (Sassign p e) k le own m)
@@ -700,7 +700,7 @@ Inductive step_mem_error : state -> Prop :=
     sem_cast v (typeof e) ty = Some v1 ->
     field_tag fid (co_members co) = Some tag ->
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    eval_expr ge le m2 e v ->
+    eval_expr ge le m2 ge e v ->
     (* error in evaluating the address of the downcast *)
     eval_place_mem_error ge le m2 (Pdowncast p fid ty) ->
     step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m1)
@@ -712,7 +712,7 @@ Inductive step_mem_error : state -> Prop :=
     sem_cast v (typeof e) ty = Some v1 ->
     field_tag fid (co_members co) = Some tag ->
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    eval_expr ge le m2 e v ->
+    eval_expr ge le m2 ge e v ->
     eval_place_mem_error ge le m2 (Pdowncast p fid ty) ->
     eval_place ge le m2 (Pdowncast p fid ty) b1 ofs1 ->
     (* error in storing the rhs to downcast *)
@@ -735,7 +735,7 @@ Inductive step_mem_error : state -> Prop :=
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
-    eval_expr ge le m3 e v ->
+    eval_expr ge le m3 ge e v ->
     sem_cast v (typeof e) ty = Some v1 ->
     (* error in storing the rhs *)
     assign_loc_mem_error ge ty m3 b Ptrofs.zero v1 ->
@@ -744,7 +744,7 @@ Inductive step_mem_error : state -> Prop :=
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
-    eval_expr ge le m3 e v ->
+    eval_expr ge le m3 ge e v ->
     sem_cast v (typeof e) ty = Some v1 ->
     assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
     (* error in evaluating the address of lhs *)
@@ -754,7 +754,7 @@ Inductive step_mem_error : state -> Prop :=
     typeof_place p = Tbox ty ->
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
-    eval_expr ge le m3 e v ->
+    eval_expr ge le m3 ge e v ->
     sem_cast v (typeof e) ty = Some v1 ->
     assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
     eval_place ge le m4 p pb pofs ->
@@ -800,8 +800,8 @@ Inductive step_mem_error : state -> Prop :=
                    
 | step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels own,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf ->
-    eval_exprlist_mem_error ge le m al tyargs ->
+    eval_expr ge le m ge a vf ->
+    eval_exprlist_mem_error ge le m ge al tyargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     step_mem_error (State f (Scall p a al) k le own m)
@@ -816,7 +816,7 @@ Inductive step_mem_error : state -> Prop :=
     eval_expr_mem_error ge le m (Epure (Eplace p (typeof_place p)))->
     step_mem_error (State f (Sreturn p) k le own m)
 | step_return_2_error2: forall f p k le m v own,
-    eval_expr ge le m (Epure (Eplace p (typeof_place p))) v ->
+    eval_expr ge le m ge (Epure (Eplace p (typeof_place p))) v ->
     Mem.free_list m (blocks_of_env ge le) = None ->
     step_mem_error (State f (Sreturn p) k le own m)
 | step_skip_call_error: forall f k le m own,

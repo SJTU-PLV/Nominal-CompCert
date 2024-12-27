@@ -1096,6 +1096,7 @@ Proof.
     red. split; intros; auto.
 Qed.
 
+
 (** IMPORTANT TODO: what if b is changed? *)
 Lemma sem_wt_loc_unchanged_blocks: forall fp m1 m2 b ofs
     (WT: sem_wt_loc ce m1 fp b ofs)
@@ -2865,7 +2866,7 @@ Proof.
 Qed.  
   
   
- Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
+Lemma sem_cast_sem_wt: forall m fp v1 v2 ty1 ty2,
     sem_wt_val ce m fp v1 ->
     wt_footprint ce ty1 fp ->
     RustOp.sem_cast v1 ty1 ty2 = Some v2 ->
@@ -2881,7 +2882,83 @@ Proof.
   econstructor; eauto.
 Qed.
 
+(* The evaluation of a list of expression produces a list of footprint and a list of values which are sem_wt_val *)
+Lemma eval_exprlist_sem_wt: forall al vl tyl fpm1 m le own1 own2 init uninit init1 uninit1 universe
+    (MM: mmatch fpm1 ce m le own1)
+    (WF: list_norepet (flat_fp_map fpm1))
+    (DIS: list_disjoint (footprint_of_env le) (flat_fp_map fpm1))
+    (EVAL: eval_exprlist ce le m al tyl vl)
+    (SOUND: sound_own own1 init uninit universe)
+    (CHECK: move_check_exprlist ce init uninit universe al = Some (init1, uninit1))
+    (OWN: move_place_list own1 (moved_place_list al) = own2)
+    (WFENV: wf_env fpm1 ce le)
+    (WT: wt_exprlist le ce al)
+    (WFOWN: wf_own_env le ce own1),
+  exists fpl fpm2,
+    sem_wt_val_list ce m fpl vl
+    /\ wt_footprint_list ce (type_list_of_typelist tyl) fpl
+    /\ mmatch fpm2 ce m le own2
+    /\ wf_env fpm2 ce le
+    (* footprint disjointness *)
+    /\ list_norepet (flat_map footprint_flat fpl ++ flat_fp_map fpm2)
+    /\ list_equiv (flat_map footprint_flat fpl ++ flat_fp_map fpm2) (flat_fp_map fpm1)
+    (* it is satisfied trivially because we just move out a place *)
+    /\ wf_own_env le ce own2.
+Proof.
+  induction al; intros.
+  - inv EVAL. simpl in *.
+    exists nil, fpm1.
+    repeat apply conj; auto.
+    econstructor. econstructor.
+    simpl. red. intros. reflexivity.
+  - inv EVAL. inv WT.
+    simpl in CHECK.
+    destruct (move_check_expr ce init uninit universe) eqn: MOVE1; try congruence.
+    destruct p as (init2, uninit2).
+    unfold move_check_expr in MOVE1.
+    destruct (move_check_expr' ce init uninit universe a) eqn: MOVECKE; try congruence.
+    (* construct sem_wt_val for v2 *)
+    exploit eval_expr_sem_wt; eauto.
+    intros (fp2 & fpm2 & WTVAL1 & WTFP1 & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp2' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own1 (moved_place a)) init2 uninit2 universe).
+    { destruct (moved_place a) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }
+    (* show fpm2 is norepet *)
+    generalize NOREP1 as NOREP2. intros.
+    eapply list_norepet_app in NOREP2 as (N1 & N2 & N3).
+    assert (DIS1: list_disjoint (footprint_of_env le) (flat_fp_map fpm2)).
+    { red. intros.
+      eapply DIS. eauto.
+      eapply EQUIV1. eapply in_app; auto. }
+    exploit IHal; eauto.
+    intros (fpl & fpm3 & WTVAL3 & WTFP3 & MM2 & WFENV2 & NOREP2 & EQUIV2 & WFOWN2).
+    exists (fp2' :: fpl), fpm3.
+    repeat apply conj; auto.
+    + econstructor; eauto.
+    + econstructor; eauto.
+    + simpl. destruct (moved_place a); auto.
+    + simpl. rewrite <- app_assoc.
+      eapply list_norepet_app.
+      repeat apply conj; auto.
+      red. intros. eapply N3; auto.
+      eapply EQUIV2. auto.
+    + simpl. red. intros.
+      split; intros.
+      eapply EQUIV1. rewrite !in_app in H.
+      repeat destruct H; try (eapply in_app; eauto).
+      right. eapply EQUIV2. eapply in_app; auto.
+      right. eapply EQUIV2. eapply in_app; auto.
+      rewrite !in_app. eapply EQUIV1 in H.
+      rewrite !in_app in H.
+      destruct H; auto.
+      eapply EQUIV2 in H.  rewrite !in_app in H. destruct H; auto.
+    + simpl. destruct (moved_place a); auto.
+Qed.
 
+      
 (* The location of the member is sem_wt_loc. It is used in the invariant of dropstate *)
 Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
 | member_footprint_struct: forall fofs fid fty
@@ -3574,7 +3651,7 @@ Inductive sound_state: state -> Prop :=
     (FUNC: Genv.find_funct ge vf = Some fd)
     (FUNTY: type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv)
     (* arguments are semantics well typed *)
-    (WTVAL: sem_wt_val_list ce m fpl args)
+    (WTVAL: list_forall2 (sem_wt_val ce m) fpl args)
     (WTFP: list_forall2 (wt_footprint ce) (type_list_of_typelist tyargs) fpl)
     (STK: sound_stacks k m fpf)
     (FLAT: flat_fp = flat_fp_frame fpf)
@@ -5804,13 +5881,18 @@ Proof.
   (* step_call sound *)
   - inv SOUND. inv STMT. simpl in TR.
     simpl_getIM IM.
-    destruct (move_check_expr ce mayinit mayuninit universe e) eqn: MOVE1; try congruence.
-    unfold move_check_expr in MOVE1.
-    destruct (move_check_expr' ce mayinit mayuninit universe e) eqn: MOVECKE; try congruence.
+    destruct (move_check_exprlist ce mayinit mayuninit universe al) eqn: MOVE1; try congruence.
     destruct p0 as (mayinit' & mayuninit').
     destruct (move_check_assign mayinit' mayuninit' universe p) eqn: MOVE2; try congruence.
-    inv TR.
-
+    (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct list_norepet *)
+    simpl in NOREP.
+    generalize NOREP as NOREP'. intros.
+    eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+    Genv.find_funct
+    eval_exprlist_sem_wt
+    
 Lemma external_sound: forall s q,
     sound_state s ->
     wt_state ge s ->

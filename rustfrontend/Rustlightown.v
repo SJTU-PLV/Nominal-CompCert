@@ -624,35 +624,34 @@ Definition int_val_casted (v: val) (ty: type) : Prop :=
   | _, _ => True
   end.
 
-
 (* Evaluation of pure expression *)
 
-Inductive eval_pexpr: pexpr -> val ->  Prop :=
+Inductive eval_pexpr (se: Genv.symtbl) : pexpr -> val ->  Prop :=
 | eval_Eunit:
-    eval_pexpr Eunit (Vint Int.zero)
+    eval_pexpr se Eunit (Vint Int.zero)
 | eval_Econst_int:   forall i ty,
-    eval_pexpr (Econst_int i ty) (Vint i)
+    eval_pexpr se (Econst_int i ty) (Vint i)
 | eval_Econst_float:   forall f ty,
-    eval_pexpr (Econst_float f ty) (Vfloat f)
+    eval_pexpr se (Econst_float f ty) (Vfloat f)
 | eval_Econst_single:   forall f ty,
-    eval_pexpr (Econst_single f ty) (Vsingle f)
+    eval_pexpr se (Econst_single f ty) (Vsingle f)
 | eval_Econst_long:   forall i ty,
-    eval_pexpr (Econst_long i ty) (Vlong i)
+    eval_pexpr se (Econst_long i ty) (Vlong i)
 | eval_Eunop:  forall op a ty v1 v aty,
-    eval_pexpr a v1 ->
+    eval_pexpr se a v1 ->
     (* Note that to_ctype Tbox = None *)
     to_ctype (typeof_pexpr a) = aty ->
     (** TODO: define a rust-specific sem_unary_operation  *)
     sem_unary_operation op v1 aty m = Some v ->
-    eval_pexpr (Eunop op a ty) v
+    eval_pexpr se (Eunop op a ty) v
 | eval_Ebinop: forall op a1 a2 ty v1 v2 v ty1 ty2,
-    eval_pexpr a1 v1 ->
-    eval_pexpr a2 v2 ->
+    eval_pexpr se a1 v1 ->
+    eval_pexpr se a2 v2 ->
     to_ctype (typeof_pexpr a1) = ty1 ->
     to_ctype (typeof_pexpr a2) = ty2 ->
     sem_binary_operation_rust op v1 ty1 v2 ty2 m = Some v ->
     (* For now, we do not return moved place in binary operation *)
-    eval_pexpr (Ebinop op a1 a2 ty) v
+    eval_pexpr se (Ebinop op a1 a2 ty) v
 | eval_Eplace: forall p b ofs ty v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
@@ -660,7 +659,7 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     is type_bool and v is i8 which may be non-zero and non-one
     value. But we want to prove that it is one or zero *)
     (* int_val_casted v ty -> *)
-    eval_pexpr (Eplace p ty) v
+    eval_pexpr se (Eplace p ty) v
 | eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
     eval_place p b ofs ->
     (* load the tag *) 
@@ -668,38 +667,46 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
-    eval_pexpr (Ecktag p fid) (Val.of_bool (Int.eq tag (Int.repr tagz)))
+    eval_pexpr se (Ecktag p fid) (Val.of_bool (Int.eq tag (Int.repr tagz)))
 | eval_Eref: forall p b ofs mut ty org,
     eval_place p b ofs ->
-    eval_pexpr (Eref org mut p ty) (Vptr b ofs).
+    eval_pexpr se (Eref org mut p ty) (Vptr b ofs)
+(* Evaluation of global variables which is used to support function
+call *)
+| eval_Eglobal: forall id ty b v
+    (GADDR: Genv.find_symbol se id = Some b)
+    (DEF: deref_loc ty m b Ptrofs.zero v)
+    (NLOCAL: e!id = None),
+    eval_pexpr se (Eglobal id ty) v
+.
 
       
 (* expression evaluation has two phase: evaluate the value and produce
 the moved-out place *)
-Inductive eval_expr: expr -> val -> Prop :=
+Inductive eval_expr (se: Genv.symtbl) : expr -> val -> Prop :=
 | eval_Emoveplace: forall p ty v,
-    eval_pexpr (Eplace p ty) v ->
-    eval_expr (Emoveplace p ty) v
+    eval_pexpr se (Eplace p ty) v ->
+    eval_expr se (Emoveplace p ty) v
 (* | eval_Emoveget: forall p fid ty v, *)
 (*     eval_pexpr (Eget p fid ty) v -> *)
 (*     eval_expr (Emoveget p fid ty) v *)
 | eval_Epure: forall pe v,
-    eval_pexpr pe v ->
-    eval_expr (Epure pe) v.
+    eval_pexpr se pe v ->
+    eval_expr se (Epure pe) v.
 
-Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
+Inductive eval_exprlist se : list expr -> typelist -> list val -> Prop :=
 | eval_Enil:
-  eval_exprlist nil Tnil nil
+  eval_exprlist se nil Tnil nil
 | eval_Econs:   forall a bl ty tyl v1 v2 vl,
-    eval_expr a v1 ->
+    eval_expr se a v1 ->
     sem_cast v1 (typeof a) ty = Some v2 ->
-    eval_exprlist bl tyl vl ->
-    eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl).
+    eval_exprlist se bl tyl vl ->
+    eval_exprlist se (a :: bl) (Tcons ty tyl) (v2 :: vl).
 
 (** Memory error in evaluation of expression  *)
 
 
-Inductive eval_pexpr_mem_error: pexpr ->  Prop :=
+Inductive eval_pexpr_mem_error : pexpr ->  Prop :=
 | eval_Eunop_error:  forall op a ty,
     eval_pexpr_mem_error a ->
     eval_pexpr_mem_error (Eunop op a ty)
@@ -725,7 +732,7 @@ Inductive eval_pexpr_mem_error: pexpr ->  Prop :=
     eval_place_mem_error p ->
     eval_pexpr_mem_error (Eref org mut p ty).
 
-Inductive eval_expr_mem_error: expr -> Prop :=
+Inductive eval_expr_mem_error : expr -> Prop :=
 | eval_Emoveplace_error: forall p ty,
     eval_pexpr_mem_error (Eplace p ty) ->
     eval_expr_mem_error (Emoveplace p ty)
@@ -733,14 +740,14 @@ Inductive eval_expr_mem_error: expr -> Prop :=
     eval_pexpr_mem_error pe ->
     eval_expr_mem_error (Epure pe).
 
-Inductive eval_exprlist_mem_error : list expr -> typelist -> Prop :=
+Inductive eval_exprlist_mem_error se: list expr -> typelist -> Prop :=
 | eval_Econs_mem_error1: forall a bl ty tyl,
     eval_expr_mem_error a ->
-    eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
+    eval_exprlist_mem_error se (a :: bl) (Tcons ty tyl)
 | eval_Econs_mem_error2: forall a bl ty tyl v1,
-    eval_expr a v1 ->
-    eval_exprlist_mem_error bl tyl ->
-    eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
+    eval_expr se a v1 ->
+    eval_exprlist_mem_error se bl tyl ->
+    eval_exprlist_mem_error se (a :: bl) (Tcons ty tyl)
 .
 
 
@@ -1606,7 +1613,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
-    eval_expr ge le m1 e v ->
+    eval_expr ge le m1 ge e v ->
     (* sem_cast to simulate Clight *)
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
     (* assign to p *)
@@ -1622,7 +1629,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     (CO: ge.(genv_cenv) ! enum_id = Some co)
     (FTY: field_type fid co.(co_members) = OK ty)
     (* evaluate the expr, return the value *)
-    (EXPR: eval_expr ge le m1 e v)
+    (EXPR: eval_expr ge le m1 ge e v)
     (* evaluate the location of the variant in p (in memory m1) *)
     (PADDR1: eval_place ge le m1 p b ofs)
     (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
@@ -1647,7 +1654,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
     Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
     (* evaluate the expression after malloc to simulate*)
-    eval_expr ge le m3 e v ->
+    eval_expr ge le m3 ge e v ->
     (* sem_cast the value to simulate function call in Clight *)
     sem_cast v (typeof e) ty = Some v1 ->
     (* assign the value to the allocated location *)
@@ -1659,8 +1666,8 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
 | step_dropinset_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels own1 own2
     (TFEXPRLIST: move_place_list own1 (moved_place_list al) = own2),    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf ->
-    eval_exprlist ge le m al tyargs vargs ->
+    eval_expr ge le m ge a vf ->
+    eval_exprlist ge le m ge al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     (* Cannot call drop glue *)
@@ -1693,7 +1700,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     step_dropinsert (Dropinsert f (drop_escape_before []) (Dreturn p) k le own m1) E0
     (Dropinsert f (drop_return f.(fn_params)) (Dreturn p) k le own m1)
 | step_dropinsert_return_after: forall f p v v1 k ck le own m1 m2 lb
-    (EXPR: eval_expr ge le m1 (Epure (Eplace p (typeof_place p))) v)
+    (EXPR: eval_expr ge le m1 ge (Epure (Eplace p (typeof_place p))) v)
     (* sem_cast to the return type *)
     (CAST: sem_cast v (typeof_place p) f.(fn_return) = Some v1)
     (CONT: call_cont k = Some ck),
@@ -1793,7 +1800,7 @@ return nothing is only valid in void function! *)
       E0 (Dropinsert f (drop_escape_before (hd nil (cont_vars k))) Dbreak k e own m)
 | step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1,
     (* there is no receiver for the moved place, so it must be None *)
-    eval_expr ge e m a v1 ->
+    eval_expr ge e m ge a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e own1 m)

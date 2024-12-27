@@ -1674,6 +1674,9 @@ Inductive wt_footprint : type -> footprint -> Prop :=
     block does not cause overflow *)
     wt_footprint (Tbox ty) (fp_box b (sizeof ce ty) fp).
 
+Definition wt_footprint_list tyl fpl :=
+  list_forall2 wt_footprint tyl fpl.
+
 End COMP_ENV.
 
 

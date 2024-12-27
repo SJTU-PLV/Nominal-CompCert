@@ -1186,6 +1186,10 @@ module To_syntax = struct
       return (Rustsyntax.Eval (v, t))
     | Evar x ->
       get_or_new_ident x >>= fun ix ->
+      (* Check that the variable x has been declared in the scope or
+      not, if yes, it must be a local variable, if not, it must be a
+      global variable. For global variables, we only translate it to
+      r-value (Egloabl) *)
       get_local_type x >>= fun tx ->
       (match tx with
       (* x is local *)
@@ -1196,7 +1200,7 @@ module To_syntax = struct
         get_fn_decl_type x >>= fun (ix, fty) ->
         match fty with
         | Some(fty) ->
-          return (Rustsyntax.Evar(ix, fty))
+          return (Rustsyntax.Eglobal(ix, fty))
         | None ->
           (* It is not an external function. It must be internal function *)
           get_fn x >>= fun (ix, f) ->
@@ -1207,7 +1211,7 @@ module To_syntax = struct
           convert_origins f.generic_origins >>= fun orgs ->
           convert_origin_relations f.origin_relations >>= fun rels ->
           let tf' = Rusttypes.Tfunction (orgs, rels, targs'', tr', AST.cc_default) in
-          return (Rustsyntax.Evar (ix, tf'))
+          return (Rustsyntax.Eglobal (ix, tf'))
       )
     | Ebox e ->
       transl_expr e >>= fun e ->
