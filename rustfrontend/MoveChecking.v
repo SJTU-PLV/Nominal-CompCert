@@ -117,8 +117,9 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
           dominators_must_init init uninit universe p && must_init init uninit universe p
       | _ => false
       end
-  (** Eref is unsupported *)
+  (** Eref and Eglobal are unsupported *)        
   | Eref _ _ _ _ => false
+  | Eglobal _ _ => false
   | Eunop _ pe0 _ => move_check_pexpr pe0
   | Ebinop _ pe1 pe2 _ => move_check_pexpr pe1 && move_check_pexpr pe2
   | _ => true

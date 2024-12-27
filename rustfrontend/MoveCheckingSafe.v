@@ -896,7 +896,7 @@ Admitted.
 (* The footprint must be fp_emp in pexpr *)
 Lemma eval_pexpr_sem_wt: forall pe fpm m le own v init uninit universe
     (MM: mmatch fpm ce m le own)
-    (EVAL: eval_pexpr ce le m pe v)
+    (EVAL: eval_pexpr ce le m ge pe v)
     (SOUND: sound_own own init uninit universe)
     (CHECK: move_check_pexpr init uninit universe pe = true)
     (WTPE: wt_pexpr le ce pe)
@@ -936,7 +936,7 @@ Proof.
     exploit IHpe1; eauto. intros WTVAL1.
     exploit IHpe2; eauto. intros WTVAL2.
     eapply sem_wt_val_type_binop; eauto.
-  - inv EVAL.       
+  - simpl in CHECK. congruence.
 Qed.
 
 (* used to prove the premise of [mmatch_move_place_sound] *)
@@ -953,7 +953,7 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (MM: mmatch fpm1 ce m le own1)
     (WF: list_norepet (flat_fp_map fpm1))
     (DIS: list_disjoint (footprint_of_env le) (flat_fp_map fpm1))
-    (EVAL: eval_expr ce le m e v)
+    (EVAL: eval_expr ce le m ge e v)
     (SOUND: sound_own own1 init uninit universe)
     (CHECK: move_check_expr' ce init uninit universe e = true)
     (OWN: move_place_option own1 (moved_place e) = own2)
@@ -2887,7 +2887,7 @@ Lemma eval_exprlist_sem_wt: forall al vl tyl fpm1 m le own1 own2 init uninit ini
     (MM: mmatch fpm1 ce m le own1)
     (WF: list_norepet (flat_fp_map fpm1))
     (DIS: list_disjoint (footprint_of_env le) (flat_fp_map fpm1))
-    (EVAL: eval_exprlist ce le m al tyl vl)
+    (EVAL: eval_exprlist ce le m ge al tyl vl)
     (SOUND: sound_own own1 init uninit universe)
     (CHECK: move_check_exprlist ce init uninit universe al = Some (init1, uninit1))
     (OWN: move_place_list own1 (moved_place_list al) = own2)

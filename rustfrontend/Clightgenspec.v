@@ -772,42 +772,42 @@ Definition tr_trivial_meet_spec (s : statement) : Prop :=
     | _ => True
     end.
     
-Inductive tr_stmt : statement -> Clight.statement -> Prop :=
+Inductive tr_stmt (locals: list ident) : statement -> Clight.statement -> Prop :=
 (* We only require there **exists** a [tce] which satisfies the
 tr_composite relation *)
 | tr_trivial: forall s ts g,
     tr_trivial_meet_spec s ->
-    transl_stmt ce tce dropm s g = Res ts g ->
-    tr_stmt s ts
+    transl_stmt ce tce dropm locals s g = Res ts g ->
+    tr_stmt locals s ts
 | tr_box: forall p e stmt lhs e' temp temp_ty deref_ty,
     temp_ty = to_ctype (typeof_place p) ->
     deref_ty = to_ctype (deref_type (typeof_place p)) ->
-    transl_Sbox ce tce temp temp_ty deref_ty e = OK (stmt, e') ->
+    transl_Sbox ce tce locals temp temp_ty deref_ty e = OK (stmt, e') ->
     place_to_cexpr ce tce p = OK lhs ->
-    tr_stmt (Sbox p e) (Clight.Ssequence stmt (Clight.Sassign lhs e'))
+    tr_stmt locals (Sbox p e) (Clight.Ssequence stmt (Clight.Sassign lhs e'))
 | tr_call: forall p e l temp e' l' assign pe,
-    expr_to_cexpr_list ce tce l = OK l' ->
-    expr_to_cexpr ce tce e = OK e' ->
+    expr_to_cexpr_list ce tce locals l = OK l' ->
+    expr_to_cexpr ce tce locals e = OK e' ->
     place_to_cexpr ce tce p = OK pe ->
     assign = Clight.Sassign pe (Etempvar temp (to_ctype (typeof_place p))) ->
-    tr_stmt (Scall p e l) (Clight.Ssequence (Clight.Scall (Some temp) e' l') assign)
+    tr_stmt locals (Scall p e l) (Clight.Ssequence (Clight.Scall (Some temp) e' l') assign)
 | tr_drop: forall p set_stmt drop_stmt temp pe,
     set_stmt = Clight.Sset temp (Eaddrof pe (Tpointer (to_ctype (typeof_place p)) noattr)) ->
     place_to_cexpr ce tce p = OK pe ->
     expand_drop dropm temp (typeof_place p) = Some drop_stmt ->
-    tr_stmt (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
+    tr_stmt locals (Sdrop p) (Clight.Ssequence set_stmt drop_stmt)
 | tr_seq: forall s1 s2 s1' s2',
-    tr_stmt s1 s1' ->
-    tr_stmt s2 s2' ->
-    tr_stmt (Ssequence s1 s2) (Clight.Ssequence s1' s2')
+    tr_stmt locals s1 s1' ->
+    tr_stmt locals s2 s2' ->
+    tr_stmt locals (Ssequence s1 s2) (Clight.Ssequence s1' s2')
 | tr_ifthenelse: forall e e' s1 s2 s1' s2',
-    expr_to_cexpr ce tce e = OK e' ->
-    tr_stmt s1 s1' ->
-    tr_stmt s2 s2' ->
-    tr_stmt (Sifthenelse e s1 s2) (Clight.Sifthenelse e' s1' s2')
+    expr_to_cexpr ce tce locals e = OK e' ->
+    tr_stmt locals s1 s1' ->
+    tr_stmt locals s2 s2' ->
+    tr_stmt locals (Sifthenelse e s1 s2) (Clight.Sifthenelse e' s1' s2')
 | tr_loop: forall s s',
-      tr_stmt s s' ->
-      tr_stmt (Sloop s) (Clight.Sloop s' Clight.Sskip)
+      tr_stmt locals s s' ->
+      tr_stmt locals (Sloop s) (Clight.Sloop s' Clight.Sskip)
 .
 
 Inductive tr_function: function -> Clight.function -> Prop :=
@@ -816,7 +816,7 @@ Inductive tr_function: function -> Clight.function -> Prop :=
     (WFNAMES: list_disjoint (var_names (f.(fn_params) ++ f.(fn_vars))) (malloc_id :: free_id :: (map snd (PTree.elements dropm))))
     (COMPLETE: forall id ty, In (id, ty) (f.(fn_params) ++ f.(fn_vars)) -> complete_type ce ty = true),
     f.(fn_drop_glue) = None ->
-    tr_stmt f.(fn_body) tf.(Clight.fn_body) ->
+    tr_stmt (var_names (f.(fn_params) ++ f.(fn_vars))) f.(fn_body) tf.(Clight.fn_body) ->
     Clight.fn_return tf = to_ctype (fn_return f) ->
     Clight.fn_callconv tf = fn_callconv f ->
     Clight.fn_params tf = map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) ->
@@ -842,9 +842,9 @@ Inductive tr_function: function -> Clight.function -> Prop :=
 .
 
 
-Lemma transl_stmt_meet_spec: forall s ts g g',
-    transl_stmt ce tce dropm s g = Res ts g' ->
-    tr_stmt s ts.
+Lemma transl_stmt_meet_spec: forall s ts locals g g',
+    transl_stmt ce tce dropm locals s g = Res ts g' ->
+    tr_stmt locals s ts.
 Proof.
   induction s; simpl; intros until g'; intros TRANSL;
     try (monadInv_sym TRANSL); simpl; try (try (eapply tr_trivial); try(instantiate (1 := g')); simpl; auto; fail).

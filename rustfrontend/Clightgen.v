@@ -468,7 +468,9 @@ Fixpoint place_to_cexpr (p: place) : res Clight.expr :=
   end.
   
 
-Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
+(* locals are used to check that global variables are disjoint with
+locals to match the eval_Evar_global semantics in Clight *)
+Fixpoint pexpr_to_cexpr (locals: list ident) (e: pexpr) : Errors.res Clight.expr :=
   match e with
   | Eunit => OK (Clight.Econst_int Int.zero Ctypes.type_int32s)
   | Econst_int i ty => OK (Clight.Econst_int i (to_ctype ty))
@@ -476,7 +478,11 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
   | Econst_single f ty => OK (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => OK (Clight.Econst_long l (to_ctype ty))
   (* just for compliation, we do not have semantics for it *)
-  | Eglobal id ty => OK (Clight.Evar id (to_ctype ty))
+  | Eglobal id ty =>
+      if in_dec ident_eq id locals then
+        Error ([CTX id; MSG " global variable is contained in locals "])
+      else
+        OK (Clight.Evar id (to_ctype ty))
   | Eplace p ty =>
       if type_eq_except_origins ty (typeof_place p) then        
         (place_to_cexpr p)
@@ -502,37 +508,37 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
       | _ => Error (msg "Error in Ecktag 3, type error: expr_to_cexpr")
       end
   | Eunop uop e ty =>
-      do e' <- pexpr_to_cexpr e;
+      do e' <- pexpr_to_cexpr locals e;
       OK (Clight.Eunop uop e' (to_ctype ty))
   | Ebinop binop e1 e2 ty =>
-      do e1' <- pexpr_to_cexpr e1;
-      do e2' <- pexpr_to_cexpr e2;
+      do e1' <- pexpr_to_cexpr locals e1;
+      do e2' <- pexpr_to_cexpr locals e2;
       OK (Clight.Ebinop binop e1' e2' (to_ctype ty))
   end.
 
-Definition expr_to_cexpr (e: expr) : res Clight.expr :=
+Definition expr_to_cexpr locals (e: expr) : res Clight.expr :=
   match e with
   | Emoveplace p ty =>
-      pexpr_to_cexpr (Eplace p ty)
+      pexpr_to_cexpr locals (Eplace p ty)
   | Epure pe =>
-      pexpr_to_cexpr pe
+      pexpr_to_cexpr locals pe
   end.
 
-Fixpoint expr_to_cexpr_list (l: list expr) : res (list Clight.expr) :=
+Fixpoint expr_to_cexpr_list locals (l: list expr) : res (list Clight.expr) :=
   match l with
   | nil => OK nil
   | e :: l =>
-      do e' <- expr_to_cexpr e;
-      do l' <- expr_to_cexpr_list l;
+      do e' <- expr_to_cexpr locals e;
+      do l' <- expr_to_cexpr_list locals l;
       OK (e' :: l')
   end.
 
-Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.type) (e: expr) : res (Clight.statement * Clight.expr) :=
+Definition transl_Sbox locals (temp: ident) (temp_ty: Ctypes.type) (deref_ty: Ctypes.type) (e: expr) : res (Clight.statement * Clight.expr) :=
   (* temp = malloc(sz);
      *temp = e;
      temp *)
   if complete_type ce (typeof e) then
-    do e' <- expr_to_cexpr e;
+    do e' <- expr_to_cexpr locals e;
     let e_ty := Clight.typeof e' in
     let sz := Ctypes.sizeof tce e_ty in
     (* check sz is in the range of ptrofs.max_unsigned which is used in
@@ -619,15 +625,16 @@ Definition transl_assign_variant (p: place) (enum_id arm_id: ident) (e' lhs: Cli
   end.
 
 
-Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
+Fixpoint transl_stmt (locals: list ident) (stmt: statement) : mon Clight.statement :=
+  let transl_stmt := transl_stmt locals in
   match stmt with
   | Sskip => ret Clight.Sskip
   | Sassign p e =>
-      docomb e' <- expr_to_cexpr e;
+      docomb e' <- expr_to_cexpr locals e;
       docomb lhs <- place_to_cexpr p;
       ret (Clight.Sassign lhs e')      
   | Sassign_variant p enum_id arm_id e =>
-      docomb e' <- expr_to_cexpr e;
+      docomb e' <- expr_to_cexpr locals e;
       docomb lhs <- place_to_cexpr p;
       (* let ty := typeof e in *)
       docomb r <- transl_assign_variant p enum_id arm_id e' lhs;
@@ -639,15 +646,15 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let temp_ty := to_ctype (typeof_place p) in
       let deref_ty := to_ctype (deref_type (typeof_place p)) in
       dosym temp <- gensym temp_ty;
-      docomb (stmt, e') <- transl_Sbox temp temp_ty deref_ty e;
+      docomb (stmt, e') <- transl_Sbox locals temp temp_ty deref_ty e;
       docomb pe <- place_to_cexpr p;
       ret (Clight.Ssequence stmt (Clight.Sassign pe e'))
   | Sstoragelive _
   | Sstoragedead _ =>
       ret (Clight.Ssequence Clight.Sskip Clight.Sskip)
   | Scall p e el =>
-      docomb el' <- expr_to_cexpr_list el;
-      docomb e' <- expr_to_cexpr e;
+      docomb el' <- expr_to_cexpr_list locals el;
+      docomb e' <- expr_to_cexpr locals e;
       docomb pe <- place_to_cexpr p;
       (** TODO: if p is a local, do not generate a new temp  *)
       (* temp = f();
@@ -662,7 +669,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       dosym s2' <- transl_stmt s2;
       ret (Clight.Ssequence s1' s2')
   | Sifthenelse e s1 s2 =>
-      docomb e' <- expr_to_cexpr e;
+      docomb e' <- expr_to_cexpr locals e;
       dosym s1' <- transl_stmt s1;
       dosym s2' <- transl_stmt s2;
       ret (Clight.Sifthenelse e' s1' s2')
@@ -674,7 +681,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Scontinue =>
       ret Clight.Scontinue
   | Sreturn p =>
-      docomb e' <- expr_to_cexpr (Epure (Eplace p (typeof_place p)));
+      docomb e' <- expr_to_cexpr locals (Epure (Eplace p (typeof_place p)));
       ret (Clight.Sreturn (Some e'))
   | Sdrop p =>
       (* drop(p) is expanded to
@@ -701,7 +708,8 @@ end.
 Definition empty_ce := PTree.empty Ctypes.composite.
 
 Definition transl_function_normal (f: function) : Errors.res Clight.function :=
-  match transl_stmt f.(fn_body) initial_generator with
+  let locals := var_names (f.(fn_params) ++ f.(fn_vars)) in
+  match transl_stmt locals f.(fn_body) initial_generator with
   | Err msg => Errors.Error msg
   | Res stmt' g =>
       let params := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) in

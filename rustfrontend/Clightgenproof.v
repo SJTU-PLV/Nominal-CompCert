@@ -427,22 +427,25 @@ Definition wm2 :=
     injpw j m1 m2 Hm => m2
   end.
 
-
+Definition fvars (f: RustIR.function) :=
+  var_names (f.(fn_params) ++ f.(fn_vars)).
+  
 (* We need to record the list of stack block for the parameter of the
-drop glue *)
-Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list block -> Prop :=
-| match_Kstop: forall m tm bs,
-    match_cont j Kstop Clight.Kstop m tm bs
-| match_Kseq: forall s ts k tk m tm bs
+drop glue. The list of ident is used to record the local variables in
+the current frame *)
+Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list block -> list ident -> Prop :=
+| match_Kstop: forall m tm bs ls,
+    match_cont j Kstop Clight.Kstop m tm bs ls
+| match_Kseq: forall s ts k tk m tm bs ls
     (* To avoid generator, we need to build the spec *)
-    (MSTMT: tr_stmt ce tce dropm s ts)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs),
-    match_cont j (Kseq s k) (Clight.Kseq ts tk) m tm bs
-| match_Kloop: forall s ts k tk m tm bs
-    (MSTMT: tr_stmt ce tce dropm s ts)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs),
-    match_cont j (Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm bs
-| match_Kcall1: forall p f tf e te le k tk cty temp pe m tm bs
+    (MSTMT: tr_stmt ce tce dropm ls s ts)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs ls),
+    match_cont j (Kseq s k) (Clight.Kseq ts tk) m tm bs ls
+| match_Kloop: forall s ts k tk m tm bs ls
+    (MSTMT: tr_stmt ce tce dropm ls s ts)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs ls),
+    match_cont j (Kloop s k) (Clight.Kloop1 ts Clight.Sskip tk) m tm bs ls
+| match_Kcall1: forall p f tf e te le k tk cty temp pe m tm bs ls
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
     (* we need to consider temp is set to a Clight expr which is
@@ -450,18 +453,18 @@ Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list blo
     (TRFUN: tr_function ce tce dropm glues f tf)
     (CTY: cty = to_ctype (typeof_place p))
     (PE: place_to_cexpr ce tce p = OK pe)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs (fvars f))
     (MENV: match_env j e te),
-    match_cont j (Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm bs
-| match_Kcall2: forall f tf e te le k tk m tm bs
+    match_cont j (Kcall (Some p) f e k) (Clight.Kcall (Some temp) tf te le (Clight.Kseq (Clight.Sassign pe (Etempvar temp cty)) tk)) m tm bs ls
+| match_Kcall2: forall f tf e te le k tk m tm bs ls
     (WFENV: well_formed_env f e)
     (NORMALF: f.(fn_drop_glue) = None)
     (* how to relate le? *)
     (TRFUN: tr_function ce tce dropm glues f tf)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs (fvars f))
     (MENV: match_env j e te),
-    match_cont j (Kcall None f e k) (Clight.Kcall None tf te le tk) m tm bs
-| match_Kdropcall_composite: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 kts fid fty tys bs,
+    match_cont j (Kcall None f e k) (Clight.Kcall None tf te le tk) m tm bs ls
+| match_Kdropcall_composite: forall id te le k tk tf b ofs b' ofs' pb m tm co membs ts1 kts fid fty tys bs ls,
     (* invariant that needed to be preserved *)
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
@@ -483,7 +486,7 @@ Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list blo
     (* (STRUCT: co.(co_sv) = Struct) *)
     (* (MSTMT1: match_dropmemb_stmt id deref_param Struct (Some (drop_member_box fid fty tys)) ts1) *)
     (* (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2) *)
-    (MCONT: match_cont j k tk m tm bs)
+    (MCONT: match_cont j k tk m tm bs ls)
     (TE: te = (PTree.set param_id (pb, pty) Clight.empty_env ))
     (LOAD: Mem.loadv Mptr tm (Vptr pb Ptrofs.zero) = Some (Vptr b' ofs'))
     (VINJ: Val.inject j (Vptr b ofs) (Vptr b' ofs'))
@@ -495,7 +498,7 @@ Inductive match_cont (j: meminj) : cont -> Clight.cont -> mem -> mem -> list blo
     (GLUE: glues ! id = Some tf),
       match_cont j
         (Kdropcall id (Vptr b ofs) (Some (drop_member_box fid fty tys)) membs k)
-        (Clight.Kcall None tf te le (Clight.Kseq ts1 kts)) m tm (pb :: bs)
+        (Clight.Kcall None tf te le (Clight.Kseq ts1 kts)) m tm (pb :: bs) ls
 .
 
 (* | match_Kdropcall_enum: forall id te le k tk tf b ofs b' ofs' pb m tm co tys ts fid fty uts, *)
@@ -527,17 +530,17 @@ Inductive match_states: state -> Clight.state -> Prop :=
     (* maintain that this function is a normal function *)
     (NORMALF: f.(fn_drop_glue) = None)
     (MFUN: tr_function ce tce dropm glues f tf)
-    (MSTMT: tr_stmt ce tce dropm s ts)    
+    (MSTMT: tr_stmt ce tce dropm (fvars f) s ts)
     (* match continuation: we do not care about m and tm because they
     must be unused in the continuation of normal state *)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+    (MCONT: forall m tm bs, match_cont j k tk m tm bs (fvars f))
     (MINJ: Mem.inject j m tm)   
     (INJP: injp_acc w (injpw j m tm MINJ))
     (MENV: match_env j e te),
     match_states (State f s k e m) (Clight.State tf ts tk te le tm)
 | match_call_state: forall vf vargs k m tvf tvargs tk tm j
     (* match_kcall is independent of ce and dropm  *)
-    (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+    (MCONT: forall m tm bs ls, match_cont j k tk m tm bs ls)
     (VINJ: Val.inject j vf tvf)
     (MINJ: Mem.inject j m tm)
     (INCR: injp_acc w (injpw j m tm MINJ))
@@ -545,8 +548,8 @@ Inductive match_states: state -> Clight.state -> Prop :=
     (* (VFIND: Genv.find_funct ge vf = Some fd) *)
     (* (FUNTY: type_of_fundef fd = Tfunction orgs rels targs tres cconv), *)
     match_states (Callstate vf vargs k m) (Clight.Callstate tvf tvargs tk tm)
-| match_return_state: forall v k m tv tk tm j
-   (MCONT: forall m tm bs, match_cont j k tk m tm bs)
+| match_return_state: forall v k m tv tk tm j ls
+   (MCONT: forall m tm bs, match_cont j k tk m tm bs ls)
    (MINJ: Mem.inject j m tm)
    (INCR: injp_acc w (injpw j m tm MINJ))
    (RINJ: Val.inject j v tv),
@@ -573,7 +576,7 @@ Inductive match_states: state -> Clight.state -> Prop :=
 (*     (VINJ: Val.inject j (Vptr b ofs) (Vptr tb tofs)) *)
 (*     (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm))), *)
 (*     match_states (RustIR.Calldrop (Vptr b ofs) ty k m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr tb tofs)] tk tm) *)
-| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co membs pb b' ofs' b ofs s bs,
+| match_dropstate_struct: forall id k m tf ts1 ts2 tk te le tm j co membs pb b' ofs' b ofs s bs ls,
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
@@ -581,7 +584,7 @@ Inductive match_states: state -> Clight.state -> Prop :=
     (STRUCT: co.(co_sv) = Struct)
     (MSTMT1: match_dropmemb_stmt id deref_param Struct s ts1)
     (MSTMT2: drop_glue_for_members ce dropm deref_param membs = ts2)
-    (MCONT: match_cont j k tk m tm bs)
+    (MCONT: match_cont j k tk m tm bs ls)
     (MINJ: Mem.inject j m tm)
     (INCR: injp_acc w (injpw j m tm MINJ))
     (GLUE: glues ! id = Some tf)
@@ -595,7 +598,7 @@ Inductive match_states: state -> Clight.state -> Prop :=
     (NVALID: ~ Mem.valid_block wm2 pb)
     (NOTIN: ~ In pb bs),
       match_states (Dropstate id (Vptr b ofs) s membs k m) (Clight.State tf ts1 (Clight.Kseq ts2 tk) te le tm)
-| match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts uts bs,
+| match_dropstate_enum: forall id k m tf tk te le tm j co pb b' ofs' b ofs s ts uts bs ls,
     let co_ty := (Ctypes.Tstruct id noattr) in
     let pty := Tpointer co_ty noattr in
     let deref_param := Ederef (Evar param_id pty) co_ty in
@@ -603,7 +606,7 @@ Inductive match_states: state -> Clight.state -> Prop :=
     (* let field_param := Efield (Efield deref_param ufid (Tunion uid noattr)) fid (to_ctype fty) in *)
     forall (CO: ce ! id = Some co)
     (ENUM: co.(co_sv) = TaggedUnion)
-    (MCONT: match_cont j k tk m tm bs)
+    (MCONT: match_cont j k tk m tm bs ls)
     (MSTMT: match_dropmemb_stmt id deref_param TaggedUnion s ts)
     (MINJ: Mem.inject j m tm)
     (INCR: injp_acc w (injpw j m tm MINJ))
@@ -656,8 +659,8 @@ Lemma place_to_cexpr_type: forall p e,
     monadInv H4; try monadInv H; auto.  
   Qed.
 
-Lemma expr_to_cexpr_type: forall e e',
-    expr_to_cexpr ce tce e = OK e' ->
+Lemma expr_to_cexpr_type: forall e e' ls,
+    expr_to_cexpr ce tce ls e = OK e' ->
     to_ctype (typeof e) = Clight.typeof e'.
 Proof.
     destruct e eqn: E. 
@@ -681,10 +684,11 @@ Proof.
       destruct (field_tag i (co_members c)); try inversion H.
       destruct (get_variant_tag tce i0); try inversion H.
       monadInv H4. auto.
+      destruct in_dec in H; try congruence. inv H. auto.
 Qed.
 
-Lemma pexpr_to_cexpr_types : forall p x,
-    pexpr_to_cexpr ce tce p = OK x ->
+Lemma pexpr_to_cexpr_types : forall p x ls,
+    pexpr_to_cexpr ce tce ls p = OK x ->
     to_ctype (typeof_pexpr p) = Clight.typeof x. 
 Proof.
   induction p. 
@@ -709,7 +713,9 @@ Proof.
     simpl.  auto. 
   - intros. inv H. monadInv H1. simpl. auto.
   - intros. inv H. monadInv H1. simpl. auto.
-  - simpl. intros. monadInv H. auto.        
+  - simpl. intros.
+    destruct in_dec in H; try congruence. inv H.
+    auto.
 Qed. 
 
 
@@ -865,9 +871,10 @@ Proof.
   destruct (classify_sub ty1 ty2); inv H; eauto. 
 Qed. 
 
-Lemma eval_expr_inject: forall e te j a a' m tm v le (GLOB: Genv.match_stbls j se tse),
+Lemma eval_expr_inject: forall e te j a a' m tm v le f (GLOB: Genv.match_stbls j se tse),
     eval_expr ce e m ge a v ->
-    expr_to_cexpr ce tce a = OK a' ->
+    expr_to_cexpr ce tce (fvars f) a = OK a' ->
+    well_formed_env f e ->
     match_env j e te ->
     Mem.inject j m tm ->
     exists v', Clight.eval_expr tge te le tm a' v' /\ Val.inject j v v'.  
@@ -879,8 +886,8 @@ Proof.
     destruct (type_eq_except_origins t (typeof_place p)) eqn :Horg; try congruence. 
     exploit type_eq_except_origins_to_ctype; eauto. 
     intros TTYP.
-    intros a' m tm v le GLOB.
-    intros EVAL PEXPR MATJ MINJ.
+    intros until f. intros GLOB.
+    intros EVAL PEXPR WFENV MATJ MINJ.
     inv EVAL. 
     inv H2. 
     exploit eval_place_inject; eauto. 
@@ -892,8 +899,8 @@ Proof.
     intros Htpx. rewrite <- TTYP in Htpx. rewrite <- Htpx. 
     eauto. eauto.
   - simpl. 
-    intros a' m tm v le GLOB. 
-    intros EVAL PEXPR MATJ MINJ. 
+    intros until f. intros GLOB.
+    intros EVAL PEXPR WFENV MATJ MINJ.
     generalize dependent v. 
     generalize dependent a'. 
     induction p; intros.
@@ -901,9 +908,9 @@ Proof.
       esplit. split. econstructor. inv H0. eauto. 
     + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vint i). 
       split. inv H0. constructor. inv H0. eauto. 
-    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vfloat f).
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vfloat f0).
       split. inv H0. constructor. inv H0. eauto. 
-    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vsingle f).
+    + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vsingle f0).
       split. inv H0. constructor. inv H0. eauto. 
     + intros. simpl in *. inv EVAL. monadInv PEXPR. exists (Vlong i).
       split. inv H0. constructor. inv H0. eauto. 
@@ -1022,12 +1029,15 @@ Proof.
       intros Htpx0. rewrite <- Htpx0. eapply sem_binary_op_trans. eauto. 
       eauto.
     + inv EVAL. inv H0.
-      simpl in PEXPR. inv PEXPR.
+      simpl in PEXPR.
+      destruct in_dec in PEXPR; try congruence.
+      inv PEXPR.
       edestruct @Genv.find_symbol_match as (tmb & Htb & TFINDSYMB); eauto.
       exploit deref_loc_inject; eauto.
       intros (tv' & TDEF & VINJ).
       exists tv'. split; eauto.
       econstructor. eapply eval_Evar_global; eauto.
+      exploit wf_env_dom; eauto. intros NLOCAL.
       generalize (MATJ i). intros. rewrite NLOCAL in H. inv H. auto.
       auto.
 Qed. 
@@ -1508,10 +1518,10 @@ forall f tf m1 m2 tm1 j1 vargs tvargs e Hm1
 Qed.  
 
 (* transition of match_cont *)
-Lemma unchanged_on_blocks_match_cont: forall m tm tm' bs j k tk,
+Lemma unchanged_on_blocks_match_cont: forall m tm tm' bs ls j k tk,
     Mem.unchanged_on (fun b ofs => In b bs) tm tm' ->
-    match_cont j k tk m tm bs ->
-    match_cont j k tk m tm' bs.
+    match_cont j k tk m tm bs ls ->
+    match_cont j k tk m tm' bs ls.
 Proof.
   induction 2; try econstructor; eauto.
   eapply IHmatch_cont. eapply Mem.unchanged_on_implies; eauto.
@@ -1520,13 +1530,13 @@ Proof.
   red. intros. eapply Mem.perm_unchanged_on; eauto. simpl. auto.
 Qed.
 
-Lemma match_cont_inj_incr: forall j j' k tk,
+Lemma match_cont_inj_incr: forall j j' k tk ls,
     (* m tm bs are unrealated to this match_cont *)
-    (forall m tm bs, match_cont j k tk m tm bs) ->
+    (forall m tm bs, match_cont j k tk m tm bs ls) ->
     inject_incr j j' ->
-    forall m tm bs, match_cont j' k tk m tm bs.
+    forall m tm bs, match_cont j' k tk m tm bs ls.
 Proof.
-  induction k; intros until tk; intros MCONT INCR; intros m1 tm1 bs1.
+  induction k; intros until ls; intros MCONT INCR; intros m1 tm1 bs1.
   1-4:
     generalize (MCONT m1 tm1 bs1); intros MCONT1;
     inv MCONT1; econstructor; eauto.
@@ -1559,10 +1569,10 @@ Qed.
 Hint Resolve injp_acc_globalenv: matsym.
 
 (* This lemma is too strong, but it is easy to use *)
-Lemma injp_acc_match_cont: forall j1 j2 m1 m2 tm1 tm2 Hm1 Hm2 k tk bs,
-    match_cont j1 k tk m1 tm1 bs ->
+Lemma injp_acc_match_cont: forall j1 j2 m1 m2 tm1 tm2 Hm1 Hm2 k tk ls bs,
+    match_cont j1 k tk m1 tm1 bs ls ->
     injp_acc (injpw j1 m1 tm1 Hm1) (injpw j2 m2 tm2 Hm2) ->
-    match_cont j2 k tk m2 tm2 bs.
+    match_cont j2 k tk m2 tm2 bs ls.
 Proof.
   induction 1.
   - intros INJP; econstructor; eauto.
@@ -2079,7 +2089,8 @@ Proof.
       eapply match_dropstate_struct with (bs := pb :: bs) (j:= j); eauto. 
       econstructor.
       (* match_cont *)
-      { eapply injp_acc_match_cont.
+      { intros.
+        eapply injp_acc_match_cont.
         2: eapply INJP.
         econstructor; eauto.
         rewrite STRUCT0. (* instantiate (1 := tk). *)
@@ -2210,7 +2221,8 @@ Proof.
       eapply match_dropstate_struct with (bs := pb :: bs);eauto.
       econstructor.
       (* match_cont *)
-      { eapply injp_acc_match_cont.
+      { intros.
+        eapply injp_acc_match_cont.
         2: eapply INJP.
         econstructor; eauto.
         rewrite ENUM. 
@@ -2359,7 +2371,8 @@ Proof.
         eapply Mem.store_unchanged_on; eauto. }
       eapply match_dropstate_enum with (bs := pb::bs); eauto.
       (* match_cont *)
-      { eapply injp_acc_match_cont.
+      { intros.
+        eapply injp_acc_match_cont.
         2: eapply INJP.
         econstructor; eauto.
         rewrite STRUCT. 
@@ -2526,7 +2539,8 @@ Proof.
         eapply Mem.store_unchanged_on; eauto. }
       eapply match_dropstate_enum with (bs := pb::bs); eauto.
       (* match_cont *)
-      { eapply injp_acc_match_cont.
+      { intros.
+        eapply injp_acc_match_cont.
         2: eapply INJP.
         econstructor; eauto.
         rewrite ENUM0. 
@@ -2605,7 +2619,8 @@ Proof.
     eexists. split. eauto.
     (* match_state *)
     (* exploit injp_acc_inj_incr; eauto. intros INCR2. *)
-    exploit injp_acc_match_cont; eauto. intros MCONT2.
+    assert (MCONT2: match_cont j' k tk m' tm' bs ls).
+    { intros. eapply injp_acc_match_cont; eauto. }
     assert (INJP1: injp_acc w  (injpw j' m' tm' MINJ')).
     { etransitivity; eauto. }
     inv INJP.
@@ -2680,7 +2695,8 @@ Proof.
     intros (j' & tm' & MINJ' & STEP & INJP).
     eexists. split. eauto.
     (* match_state *)
-    exploit injp_acc_match_cont; eauto. intros MCONT2.
+    assert (MCONT2: match_cont j' k tk m' tm' bs ls).
+    { intros. eapply injp_acc_match_cont; eauto. }
     assert (INJP1: injp_acc w  (injpw j' m' tm' MINJ')).
     { etransitivity; eauto. }
     inv INJP.
@@ -2796,12 +2812,11 @@ Proof.
       intros. intro. destruct H3. eapply NVALID; auto.
       
   (* step_drop_return2 (in struct) *)
-  - inv MSTMT1. simpl.
+  - inv MSTMT1. simpl. inv MCONT.
     (* free function arguments success *)   
     assert (MFREE: {tm1 | Mem.free tm pb 0 (Ctypes.sizeof tce pty) = Some tm1}).
     eapply Mem.range_perm_free. auto.
     destruct MFREE as (tm1 & MFREE).
-    inv MCONT.
     (* Mem.inject *)
     exploit Mem.free_right_inject; eauto.
     intros. eapply UNREACH. eauto. instantiate (1 := ofs + delta).
@@ -2842,7 +2857,7 @@ Proof.
     (* match_states *)
     + assert (UNCHANGE: Mem.unchanged_on (fun b ofs => pb <> b) tm tm1).
       { eapply Mem.free_unchanged_on; eauto. } 
-      assert (MCONT3: match_cont j k tk0 m tm1 bs0).
+      assert (MCONT3: match_cont j k tk0 m tm1 bs0 ls).
       { eapply unchanged_on_blocks_match_cont. instantiate (1 := tm).
         eapply Mem.unchanged_on_implies; eauto. intros.
         intro. eapply NOTIN. subst. intuition.
@@ -2923,7 +2938,7 @@ Proof.
     (* match_states *)
     +  assert (UNCHANGE: Mem.unchanged_on (fun b ofs => pb <> b) tm tm1).
       { eapply Mem.free_unchanged_on; eauto. }        
-      assert (MCONT3: match_cont j k tk0 m tm1 bs0).
+      assert (MCONT3: match_cont j k tk0 m tm1 bs0 ls).
       { eapply unchanged_on_blocks_match_cont. instantiate (1 := tm).
         eapply Mem.unchanged_on_implies. eauto. simpl. intros.
         intro. eapply NOTIN. subst. intuition.
@@ -2954,10 +2969,11 @@ Proof.
 Qed.
 
 
-Lemma eval_expr_cexprlist: forall al j le m tyargs vargs te le0 tm l' (GLOB: Genv.match_stbls j se tse),
+Lemma eval_expr_cexprlist: forall al j le m tyargs vargs te le0 tm l' f (GLOB: Genv.match_stbls j se tse),
 eval_exprlist ge le m ge al tyargs vargs
--> expr_to_cexpr_list ce tce al = OK l'
+-> expr_to_cexpr_list ce tce (fvars f) al = OK l'
 -> match_env j le te
+-> well_formed_env f le
 -> Mem.inject j m tm
 -> exists Tvargs, Clight.eval_exprlist tge te le0 tm l' (to_ctypelist tyargs) Tvargs
 /\ Val.inject_list j vargs Tvargs.
@@ -3071,10 +3087,10 @@ Qed.
 
 (* From cfrontend/SimplLocalsproof.v *)
 Lemma match_cont_call_cont:
-  forall j k ck tk m tm bs,
-    match_cont j k tk m tm bs ->
+  forall j k ck tk m tm ls bs,
+    match_cont j k tk m tm bs ls ->
     call_cont k = Some ck ->
-  match_cont j ck (Clight.call_cont tk) m tm bs.
+  match_cont j ck (Clight.call_cont tk) m tm bs ls.
 Proof. 
   intros. induction H; simpl in *; try congruence; try econstructor; eauto.
   inv H0. econstructor.
@@ -3082,8 +3098,8 @@ Proof.
 Qed.  
 
 
-Lemma match_cont_is_call_cont: forall j k tk m tm bs,
-  match_cont j k tk m tm bs
+Lemma match_cont_is_call_cont: forall j k tk m tm bs ls,
+  match_cont j k tk m tm bs ls
   -> is_call_cont k
   -> Clight.is_call_cont tk.
 Proof.
@@ -3282,7 +3298,7 @@ Proof.
     (* evaluate the expression which is stored in the malloc pointer *)
     exploit eval_expr_inject. instantiate (1 := j2).
     eapply injp_acc_globalenv. etransitivity. eauto. eauto.
-    eauto. eauto.
+    eauto. eauto. eauto.
     eapply match_env_incr. eapply match_env_incr.
     eauto. eauto. eauto. eauto.
     instantiate (1:= (set_opttemp (Some temp) (Vptr tb Ptrofs.zero) le0)).
@@ -3528,7 +3544,7 @@ Proof.
     + eapply match_dropstate_struct with (bs := nil) (j:= j); eauto. 
       econstructor. 
       (* match_cont *)
-      eapply injp_acc_match_cont with (j1 := j).
+      eapply injp_acc_match_cont with (j1 := j) (ls:= (fvars f)).
       econstructor; eauto. eauto. 
       (* injp_acc *)
       etransitivity. eauto. eauto.
@@ -3643,7 +3659,7 @@ Proof.
 
     + eapply match_dropstate_enum with (bs := nil) (j:= j); eauto.
       (* match_cont *)
-      eapply injp_acc_match_cont with (j1 := j).
+      eapply injp_acc_match_cont with (j1 := j) (ls := fvars f).
       econstructor; eauto. eauto. 
       unfold pty.
       set (param := (Ederef (Evar param_id (Tpointer (Ctypes.Tstruct id noattr) noattr))
@@ -3794,7 +3810,7 @@ Proof.
     exists(Clight.Returnstate vres' tk m2'). split. eapply plus_one. eapply Clight.step_external_function. eauto. eauto.  
     econstructor.
     (* match_cont *)
-    instantiate (1 := f'). intros.
+    instantiate (2:= f'). instantiate (1 := nil). intros.
     eapply match_cont_inj_incr; eauto.
     etransitivity; eauto.
     eauto using val_inject_incr. 
@@ -3822,6 +3838,7 @@ Proof.
     eexists. split. eapply plus_one. eapply Clight.step_return_1; eauto. 
     rewrite <- CTY. simpl. rewrite H5. eauto. 
     econstructor; eauto. intros. generalize (MCONT m tm0 bs). intros.
+    instantiate (1 := fvars f).
     exploit match_cont_call_cont; eauto. 
     etransitivity; eauto. 
     (* contradiction *)
@@ -3904,7 +3921,7 @@ Proof.
   - (* loop break *)
     inv MSTMT. inv H. generalize (MCONT m tm nil). intros. inv H. inv H0. 
     eexists. split. eapply plus_one. eapply step_break_loop1. econstructor; eauto. 
-    econstructor. auto. simpl. auto. instantiate (1:=g). auto. 
+    econstructor. auto. simpl. auto. instantiate (1:=g). auto.
 Qed.
 
 Lemma map_typ_of_type_eq_typlist_of_typelist: forall tyl,
@@ -4011,8 +4028,8 @@ Proof.
     destruct H2. generalize H2. intros INJP. inv H2.
     inv H3. inv H16. eexists. split.
     + econstructor; eauto.
-    + econstructor. instantiate (1 := f').
-      eapply match_cont_inj_incr. eapply MCONT. eauto.
+    + econstructor. instantiate (2 := f'). instantiate (1 := nil).
+      eapply match_cont_inj_incr. intros. eapply MCONT. eauto.
       etransitivity. eauto. eauto.
       auto.      
 Qed.

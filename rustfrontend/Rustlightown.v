@@ -675,8 +675,7 @@ Inductive eval_pexpr (se: Genv.symtbl) : pexpr -> val ->  Prop :=
 call *)
 | eval_Eglobal: forall id ty b v
     (GADDR: Genv.find_symbol se id = Some b)
-    (DEF: deref_loc ty m b Ptrofs.zero v)
-    (NLOCAL: e!id = None),
+    (DEF: deref_loc ty m b Ptrofs.zero v),
     eval_pexpr se (Eglobal id ty) v
 .
 

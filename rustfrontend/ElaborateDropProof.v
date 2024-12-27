@@ -1844,17 +1844,16 @@ Proof.
     intros (tv' & TDEF & VINJ).
     rewrite Ptrofs.add_zero_l in TDEF.
     exists tv'. split; eauto.
-    econstructor; eauto.
-    
-    
+    econstructor; eauto.        
 Qed. 
 
 
 Lemma eval_expr_inject: forall e le m v tm tle own lo hi flagm tlo thi j
-        (EVAL: eval_expr ge le m e v)
+        (EVAL: eval_expr ge le m ge e v)
+        (MSENV: Genv.match_stbls j se tse)
         (MINJ: Mem.inject j m tm)
         (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
-        exists tv, eval_expr tge tle tm e tv /\ Val.inject j v tv.
+        exists tv, eval_expr tge tle tm tge e tv /\ Val.inject j v tv.
 Proof. 
   destruct e; intros. 
   - inv EVAL. inv H2. exploit eval_place_inject; eauto. intros (b' & ofs' & EV & INJ). 
@@ -1890,10 +1889,11 @@ Proof.
 Qed.
 
 Lemma eval_exprlist_inject: forall le m args vl tm tle own lo hi flagm tlo thi j tyl
-        (EVAL: eval_exprlist ge le m args tyl vl)
+        (EVAL: eval_exprlist ge le m ge args tyl vl)
+        (MSENV: Genv.match_stbls j se tse)
         (MINJ: Mem.inject j m tm)
         (MENV: match_envs_flagm j own le m lo hi tle flagm tm tlo thi),
-        exists tvl, eval_exprlist tge tle tm args tyl tvl /\ Val.inject_list j vl tvl.
+        exists tvl, eval_exprlist tge tle tm tge args tyl tvl /\ Val.inject_list j vl tvl.
 Proof. 
   induction 1; intros. 
   - eexists. split. econstructor. eauto. 
@@ -3442,7 +3442,26 @@ Proof.
   destruct a. destruct (split l) eqn: S.
   simpl in *. f_equal. auto.
 Qed.  
-  
+
+
+Lemma injp_acc_globalenv:
+  forall f m tm Hm,
+  injp_acc w (injpw f m tm Hm)->
+  Genv.match_stbls f se tse.
+Proof.
+  intros.
+  simpl in GE.
+  destruct w. inv GE.
+  inv H.
+  eapply Genv.match_stbls_incr; eauto.
+  intros. exploit H16; eauto. 
+  intros (A & B). split; eauto.
+  intro. eapply A. eapply H6. auto.
+  intro. eapply B. eapply H7. auto.
+Qed.
+
+Hint Resolve injp_acc_globalenv: matsym.
+
 Lemma step_simulation:
   forall S1 t S2, step ge S1 t S2 -> forall S1' (MS: match_states S1 S1'),
     exists S2', plus RustIRsem.step tge S1' t S2' /\ match_states S2 S2'.
@@ -3470,7 +3489,7 @@ Proof.
     instantiate (1 := tf).
     intros (tm3 & STEP2 & MINJ2 & MENV2 & UNC2 & RO2).
     (* evaluate assign *)
-    exploit eval_expr_inject; eauto.
+    exploit eval_expr_inject; eauto with matsym.
     intros (tv & EXPR & VINJ).
     exploit eval_place_inject; eauto.
     intros (tb & tofs & EVALP & VINJ1).
@@ -3575,7 +3594,7 @@ Proof.
     instantiate (1 := tf).
     intros (tm3 & STEP2 & MINJ2 & MENV2 & UNC2 & RO2).
     (* evaluate assign_variant *)
-    exploit eval_expr_inject; eauto.
+    exploit eval_expr_inject; eauto with matsym.
     intros (tv & TEXPR & VINJ).
     exploit eval_place_inject. eapply PADDR1. eauto. eauto.
     intros (tb & tofs & EVALP & VINJ1).
@@ -3726,7 +3745,30 @@ Proof.
     exploit match_envs_flagm_injp_acc. eauto.
     etransitivity. eauto. eauto. auto. auto.
     intros MENV3.
+    assert (UNC13: Mem.unchanged_on (fun b _ => sup_In b tlo) tm tm3).
+    { eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. simpl. intros. intro.
+      subst. eapply me_trange. eapply me_envs; eauto.
+      eauto. auto. }
+        assert (RO3: ValueAnalysis.ro_acc tm tm3).
+    { eapply ValueAnalysis.ro_acc_trans. eauto.
+      auto. }
+    assert (INJP0: injp_acc w (injpw j m1 tm3 MINJ2)).
+    { generalize me_tinitial. intros TINIT.
+      unfold wm2 in TINIT.
+      destruct w. inv RO3.
+      eapply injp_acc_local_simple. eauto.
+      auto. auto.
+      eapply Mem.unchanged_on_implies. eauto.
+      intros. simpl. destruct H10.
+      eapply TINIT. eapply me_envs; eauto. auto. }
     exploit eval_expr_inject; eauto.
+    eapply injp_acc_globalenv. etransitivity. eauto. eauto.
     intros (tv & TEXPR & VINJ).
     exploit sem_cast_inject; eauto. intros (tv1 & TCAST & VINJ1).
     (* assign the value to the allocated block *)
@@ -3763,16 +3805,6 @@ Proof.
     auto. auto.
     intros MENV5.
     (* match_cont *)
-    assert (UNC13: Mem.unchanged_on (fun b _ => sup_In b tlo) tm tm3).
-    { eapply Mem.unchanged_on_trans.
-      eapply Mem.unchanged_on_implies; eauto.
-      intros. simpl. intros. intro.
-      subst. eapply me_trange. eapply me_envs; eauto.
-      eauto. auto.
-      eapply Mem.unchanged_on_implies; eauto.
-      intros. simpl. intros. intro.
-      subst. eapply me_trange. eapply me_envs; eauto.
-      eauto. auto. }
     assert (INJP15: injp_acc (injpw j m1 tm3 MINJ2) (injpw j1 m5 tm7 MINJ6)).
     { etransitivity. eauto.
       etransitivity. eauto.
@@ -3786,18 +3818,6 @@ Proof.
     eapply me_tincr. eapply me_envs. eauto. auto.
     intros MCONT2.        
     (* injp_acc *)
-    assert (RO3: ValueAnalysis.ro_acc tm tm3).
-    { eapply ValueAnalysis.ro_acc_trans. eauto.
-      auto. }
-    assert (INJP0: injp_acc w (injpw j m1 tm3 MINJ2)).
-    { generalize me_tinitial. intros TINIT.
-      unfold wm2 in TINIT.
-      destruct w. inv RO3.
-      eapply injp_acc_local_simple. eauto.
-      auto. auto.
-      eapply Mem.unchanged_on_implies. eauto.
-      intros. simpl. destruct H10.
-      eapply TINIT. eapply me_envs; eauto. auto. }
     assert (INJP05: injp_acc w (injpw j1 m5 tm7 MINJ6)).
     { etransitivity; eauto. }
     (* step *)
@@ -3943,9 +3963,9 @@ Proof.
     eapply PathsMap.eq_sym. eapply sound_own_universe; eauto.
     instantiate (2 := tf).
     intros (tm1 & A1 & A2 & A3 & A4 & A5).
-    exploit eval_expr_inject; eauto.
+    exploit eval_expr_inject; eauto with matsym.
     intros (tv & TEXPR & VINJ1).
-    exploit eval_exprlist_inject; eauto.
+    exploit eval_exprlist_inject; eauto with matsym.
     intros (tvl & TARGS & VINJ2).
     assert (GE1: Genv.match_stbls j se tse).
     { replace j with (mi injp (injpw j m tm Hm)) by auto.
@@ -4198,7 +4218,7 @@ Proof.
     rename H0 into GETINIT. rename H into GETUNINIT.
     monadInv TR.
     (* evaluate the return place value *)
-    exploit eval_expr_inject; eauto. intros (tv & TEVAL & VINJ).
+    exploit eval_expr_inject; eauto with matsym. intros (tv & TEVAL & VINJ).
     (* sem_cast *)
     exploit sem_cast_inject; eauto. intros (tv1 & TCAST & VINJ1).
     (* free_list in target *)
@@ -4319,7 +4339,7 @@ Proof.
   - inv MSTMT.
     generalize IM as IM1. intros. inv IM.
     rename H2 into GETINIT. rename H3 into GETUNINIT.
-    exploit eval_expr_inject; eauto.
+    exploit eval_expr_inject; eauto with matsym.
     intros (tv & EVAL & VINJ).
     eexists. split.
     econstructor. econstructor; eauto.
