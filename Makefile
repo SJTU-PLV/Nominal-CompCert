@@ -179,7 +179,7 @@ endif
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v CallConv.v CA.v Compiler.v ClosedForward.v ClosedBackward.v
+DRIVER=Compopts.v CallConv.v CA.v Compiler.v ClosedForward.v ClosedBackward.v Complements.v
 
 # Complements.v
 
@@ -196,7 +196,7 @@ DEMO= Demo.v Demospec.v Demoproof.v\
 EXPORTLIB= Ctypesdefs.v Clightdefs.v Csyntaxdefs.v
 #else
 #EXPORTLIB=
-#endif
+#endif1
 
 # All source files
 

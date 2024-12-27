@@ -14,9 +14,29 @@
 
 Require Import Classical.
 Require Import Coqlib Errors.
-Require Import AST Linking Events Smallstep Behaviors.
+Require Import AST Linking Events Smallstep SmallstepClosed Behaviors.
 Require Import Csyntax Csem Cstrategy Asm.
-Require Import Compiler.
+Require Import Compiler ClosedForward ClosedBackward.
+
+
+(** * From CompCertO with Direct Refinement *)
+
+(** We use [close_c (Csem.semantics)] instead of the original closed semantic
+    function [Csem.semantics] from vanilla CompCert in this file.
+    Maybe we need to further refine the definitions of [close_c] and [close_asm]
+    to make the result more close to the versition in CompCert. Or some formal
+    relation could be proved between these two different definition of semantics
+    of "whole program".
+
+    In the end of the day, We believe that the "correctness" of such semantics
+    function as formal specification of source program should be evaluated by:
+    1) How easy it is to be used to connect source-level verification
+    (program verification)
+
+    2) Whether the specification proved on source semantics can be preserved to the
+    assembly level.
+  *)
+
 
 (** * Preservation of whole-program behaviors *)
 
@@ -31,11 +51,12 @@ Require Import Compiler.
 Theorem transf_c_program_preservation:
   forall p tp beh,
   transf_c_program p = OK tp ->
-  program_behaves (Asm.semantics tp) beh ->
-  exists beh', program_behaves (Csem.semantics p) beh' /\ behavior_improves beh' beh.
+  closed_program_asm tp ->  
+  program_behaves (close_asm (Asm.semantics tp)) beh ->
+  exists beh', program_behaves (close_c (Csem.semantics p)) beh' /\ behavior_improves beh' beh.
 Proof.
   intros. eapply backward_simulation_behavior_improves; eauto.
-  apply transf_c_program_correct; auto.
+  eapply transf_bsim_single_c; eauto.
 Qed.
 
 (** As a corollary, if the source C code cannot go wrong, i.e. is free of
@@ -44,14 +65,15 @@ Qed.
 
 Theorem transf_c_program_is_refinement:
   forall p tp,
-  transf_c_program p = OK tp ->
-  (forall beh, program_behaves (Csem.semantics p) beh -> not_wrong beh) ->
-  (forall beh, program_behaves (Asm.semantics tp) beh -> program_behaves (Csem.semantics p) beh).
+  transf_c_program p = OK tp -> closed_program_asm tp ->
+  (forall beh, program_behaves (close_c (Csem.semantics p)) beh -> not_wrong beh) ->
+  (forall beh, program_behaves (close_asm (Asm.semantics tp)) beh -> program_behaves (close_c (Csem.semantics p)) beh).
 Proof.
   intros. eapply backward_simulation_same_safe_behavior; eauto.
-  apply transf_c_program_correct; auto.
+  eapply transf_bsim_single_c; eauto.
 Qed.
 
+(*
 (** If we consider the C evaluation strategy implemented by the compiler,
   we get stronger preservation results. *)
 
@@ -111,6 +133,7 @@ Proof.
   left. apply transf_cstrategy_program_preservation with p; auto. red; auto.
   right; exists t; split; auto. apply transf_cstrategy_program_preservation with p; auto. red; auto.
 Qed.
+ *)
 
 (** * Satisfaction of specifications *)
 
@@ -133,9 +156,9 @@ Definition specification := program_behavior -> Prop.
   are in the specification. *)
 
 Definition c_program_satisfies_spec (p: Csyntax.program) (spec: specification): Prop :=
-  forall beh,  program_behaves (Csem.semantics p) beh -> spec beh.
+  forall beh,  program_behaves (close_c (Csem.semantics p)) beh -> spec beh.
 Definition asm_program_satisfies_spec (p: Asm.program) (spec: specification): Prop :=
-  forall beh,  program_behaves (Asm.semantics p) beh -> spec beh.
+  forall beh,  program_behaves (close_asm (Asm.semantics p)) beh -> spec beh.
   
 (** It is not always the case that if the source program satisfies a
   specification, then the generated assembly code satisfies it as
@@ -159,11 +182,12 @@ Definition safety_enforcing_specification (spec: specification): Prop :=
 Theorem transf_c_program_preserves_spec:
   forall p tp spec,
   transf_c_program p = OK tp ->
+  closed_program_asm tp ->
   safety_enforcing_specification spec ->
   c_program_satisfies_spec p spec ->
   asm_program_satisfies_spec tp spec.
 Proof.
-  intros p tp spec TRANSF SES CSAT; red; intros beh AEXEC.
+  intros p tp spec TRANSF CLOSE SES CSAT; red; intros beh AEXEC.
   exploit transf_c_program_preservation; eauto. intros (beh' & CEXEC & IMPR).
   apply CSAT in CEXEC. destruct IMPR as [EQ | [t [A B]]].
 - congruence.
@@ -181,17 +205,18 @@ Qed.
   liveness property, and it is preserved by compilation. *)
 
 Definition c_program_has_initial_trace (p: Csyntax.program) (t: trace): Prop :=
-  forall beh, program_behaves (Csem.semantics p) beh -> behavior_prefix t beh.
+  forall beh, program_behaves (close_c (Csem.semantics p)) beh -> behavior_prefix t beh.
 Definition asm_program_has_initial_trace (p: Asm.program) (t: trace): Prop :=
-  forall beh, program_behaves (Asm.semantics p) beh -> behavior_prefix t beh.
+  forall beh, program_behaves (close_asm (Asm.semantics p)) beh -> behavior_prefix t beh.
 
 Theorem transf_c_program_preserves_initial_trace:
   forall p tp t,
   transf_c_program p = OK tp ->
+  closed_program_asm tp ->  
   c_program_has_initial_trace p t ->
   asm_program_has_initial_trace tp t.
 Proof.
-  intros p tp t TRANSF CTRACE; red; intros beh AEXEC.
+  intros p tp t TRANSF CLOSE CTRACE; red; intros beh AEXEC.
   exploit transf_c_program_preservation; eauto. intros (beh' & CEXEC & IMPR).
   apply CTRACE in CEXEC. destruct IMPR as [EQ | [t' [A B]]].
 - congruence.
@@ -201,11 +226,16 @@ Proof.
   exists (behavior_app t0 beh1). apply behavior_app_assoc.
 Qed.
 
+(** The separate compilation from C to Asm is unsupported because of the Hcomp issue
+    of open backward simulation *)
+
+
 (** * Extension to separate compilation *)
 
 (** The results above were given in terms of whole-program compilation.
     They also extend to separate compilation followed by linking. *)
 
+(*
 Section SEPARATE_COMPILATION.
 
 (** The source: a list of C compilation units *)
@@ -302,3 +332,4 @@ Proof.
 Qed.
 
 End SEPARATE_COMPILATION.
+*)

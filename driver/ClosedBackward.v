@@ -242,11 +242,6 @@ End Initial.
 
 Let LTS_asm := L_asm tse.
 
-(** not sure about safe *)
-(** S1: make close into a semantics -> option closed_semantics *)
-(** S2: why we need this in the proof from SmallstepClosed? *)
-Hypothesis closed_cc_compcert : forall s2 q, Smallstep.safe LTS_asm s2 -> ~ at_external LTS_asm s2 q.
-
 (** seems to be unprovable for any given LTS where the [final_state] is opaque *)
 Lemma reply_sound_cc_compcert : forall s2 r, Smallstep.final_state LTS_asm s2 r -> exists i, final_asm i r.
 Proof.
@@ -317,11 +312,12 @@ Qed.
 Definition close_c := close_semantics L_c initial_c final_c.
 Definition close_asm := close_semantics L_asm initial_asm final_asm.
 
+Hypothesis closed_Lasm : forall s2 q, ~ at_external LTS_asm s2 q.
 Theorem closed_backward_simulation_cc_compcert :
   Closed.backward_simulation close_c close_asm.
 Proof.
   eapply close_sound_backward.
-  exact closed_cc_compcert.
+  intros. eapply closed_Lasm.
   exact reply_sound_cc_compcert.
   exact match_initial_backward_ca1.
   exact match_initial_backward_ca2.
@@ -332,7 +328,71 @@ Qed.
 End CLOSE_BACKWARD.
 
 (* Checking whether the defs and lemmas from are typed as we want in the outside of the Section. *)
-Check close_c.
+(* Check close_c.
 Check close_asm.
-Check closed_backward_simulation_cc_compcert.
+Check closed_backward_simulation_cc_compcert. *)
+
+Definition closed_program_asm (p: Asm.program): Prop :=
+  forall i f ef, Maps.PTree.get i (prog_defmap p) = Some (Gfun f) -> f <> External ef.
+
+Definition closed_semantics_asm (L : semantics li_asm li_asm ) : Prop :=
+  forall s q, ~ at_external (L ((Genv.symboltbl (skel L)))) s q.
+
+Lemma closed_program_asm_LTS: forall p, 
+    closed_program_asm p ->
+    closed_semantics_asm (Asm.semantics p).
+Proof.
+  intros. red. red in H. intros. intro.
+  red in H0. simpl in H0. destruct s. inv H0.
+  unfold Genv.find_funct in H1. destr_in H1. destr_in H1.
+  rewrite Genv.find_funct_ptr_iff in H1.
+  setoid_rewrite Genv.find_def_spec in H1. destr_in H1.
+  eapply H; eauto.
+Qed.
+
+Corollary transf_bsim_single_clight : forall p tp,
+    transf_clight_program p = OK tp ->
+    closed_program_asm tp ->
+    Closed.backward_simulation (close_c (Clight.semantics1 p)) (close_asm (Asm.semantics tp)).
+Proof.
+  intros.
+  eapply closed_backward_simulation_cc_compcert.
+  apply clight_semantic_preservation.
+  apply transf_clight_program_match; auto.
+  eapply closed_program_asm_LTS; eauto.  
+Qed.
+
+Corollary transf_bsim_single_c : forall p tp,
+    transf_c_program p = OK tp ->
+    closed_program_asm tp ->
+    Closed.backward_simulation (close_c (Csem.semantics p)) (close_asm (Asm.semantics tp)).
+Proof.
+  intros.
+  eapply closed_backward_simulation_cc_compcert.
+  apply transf_c_program_correct; auto.
+  eapply closed_program_asm_LTS; eauto.  
+Qed.
+
+Require Import Linking SmallstepLinking.
+Require Import AsmLinking.
+
+Corollary transf_bsim_link_clight :
+  forall p1 p2 spec tp1 tp2 tp,
+    compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->
+    transf_clight_program p1 = OK tp1 ->
+    transf_clight_program p2 = OK tp2 ->
+    link tp1 tp2 = Some tp ->
+    closed_program_asm tp ->
+    Closed.backward_simulation (close_c spec) (close_asm (Asm.semantics tp)).
+Proof.
+  intros.
+  eapply closed_backward_simulation_cc_compcert; eauto.
+  apply forward_to_backward_simulation.
+  eapply compose_transf_c_program_correct; eauto.
+  - unfold compose in H. unfold option_map in H. destr_in H. inv H.
+    eapply semantics_receptive. destruct i; eapply Clight.semantics_receptive; eauto.
+  - eapply Asm.semantics_determinate.
+  - eapply closed_program_asm_LTS; eauto.
+Qed.
+
 
