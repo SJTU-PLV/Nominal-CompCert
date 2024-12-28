@@ -299,7 +299,7 @@ Definition mmatch ce (m: mem) (e: env) (own: own_env): Prop :=
        sem_wt_loc ce m fp b ofs).
 
 
-Record wf_env (ce: composite_env) (e: env): Prop := {
+Record wf_env (ce: composite_env) (m: mem) (e: env): Prop := {
     wf_env_footprint: forall id b ty,
       e!id = Some (b, ty) ->
       (* Do we need to ensure the location is sem_wt? *)
@@ -310,7 +310,11 @@ Record wf_env (ce: composite_env) (e: env): Prop := {
     property can be expressed in sound_state *)
     (* wf_env_disjoint: *)
     (* list_disjoint (footprint_of_env e) (flat_fp_map fpm) *)
-    
+
+    (* The permission of stack blocks is freeable *)
+    wf_env_freeable: forall id b ty,
+      e!id = Some (b, ty) ->
+      Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable;
   }.
 
 End FPM.
@@ -489,7 +493,7 @@ is no static analysis result in dropplace, we need to use own_env to
 show p's dominators are init *)
 Lemma get_loc_footprint_map_progress: forall e m p own fpm
     (MM: mmatch fpm ce m e own)
-    (WFOWN: wf_env fpm ce e)
+    (WFOWN: wf_env fpm ce m e)
     (WT: wt_place (env_to_tenv e) ce p)
     (POWN: dominators_is_init own p = true)
     (** No downcast in the places *)
@@ -556,8 +560,8 @@ Qed.
 
 (** IMPRTANT TODO: use this lemma to prove eval_place_sound. Think
 about the field type in wt_footprint is correct or not? *)
-Lemma get_wt_place_footprint_wt: forall p fpm e b ofs fp,
-    wf_env fpm ce e ->
+Lemma get_wt_place_footprint_wt: forall p fpm e b ofs m fp,
+    wf_env fpm ce m e ->
     wt_place e ce p ->
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, ofs, fp) ->
     wt_footprint ce (typeof_place p) fp.
@@ -576,6 +580,37 @@ Proof.
 Qed.
 
 End COMP_ENV.
+
+(** wf_env is preserved if we do not change the stacks of the memory *)
+Lemma wf_env_unchanged: forall e ce m1 m2 fpm,
+    wf_env fpm ce m1 e ->
+    Mem.unchanged_on (fun b _ => In b (footprint_of_env e)) m1 m2 ->
+    wf_env fpm ce m2 e.
+Proof.
+  intros until fpm. intros WFENV UNC.
+  econstructor.
+  - intros. eapply wf_env_footprint; eauto.
+  - intros.
+    generalize (wf_env_freeable _ _ _ _ WFENV id b ty H); eauto. 
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. eapply in_footprint_of_env; eauto.
+    eapply Mem.perm_valid_block; eauto.
+Qed.
+
+(* Sometimes we change the contents in the stacks but the permission
+is unchanged (most of the time) *)
+Lemma wf_env_perm_unchanged: forall e ce m1 m2 fpm,
+    (forall b1 ofs1 k p, Mem.perm m1 b1 ofs1 k p <-> Mem.perm m2 b1 ofs1 k p) ->
+    wf_env fpm ce m1 e ->
+    wf_env fpm ce m2 e.
+Proof.
+  intros until fpm. intros WFENV UNC.
+  econstructor.
+  - intros. eapply wf_env_footprint; eauto.
+  - intros.
+    red. intros. eapply WFENV; eauto.
+    eapply wf_env_freeable; eauto.
+Qed.
 
 Lemma maxv:
   Ptrofs.max_unsigned = 18446744073709551615.
@@ -1115,14 +1150,14 @@ Proof.
 Qed.
 
 (** IMPORTANT TODO: wf_env remain valid if we set a wt_footprint *)
-Lemma wf_env_set_wt_footprint: forall p fpm1 fpm2 ce e fp
-    (WFENV: wf_env fpm1 ce e)
+Lemma wf_env_set_wt_footprint: forall p fpm1 fpm2 ce e m fp
+    (WFENV: wf_env fpm1 ce m e)
     (* how to know the type match the type located in the path of the
     footprint map? *)
     (WTFP: wt_footprint ce (typeof_place p) fp)
     (WTP: wt_place e ce p)
     (SET: set_footprint_map (path_of_place p) fp fpm1 = Some fpm2),
-    wf_env fpm2 ce e.
+    wf_env fpm2 ce m e.
 Proof.
   intros.
   destruct (path_of_place p) eqn: POP.
@@ -1142,6 +1177,7 @@ Proof.
     eapply wt_place_wt_path; eauto.
     eauto. auto. auto.
   - eauto.
+  - intros. eapply wf_env_freeable; eauto.
 Qed.
 
 
@@ -1202,10 +1238,10 @@ Proof.
 Qed.    
       
 (* clear some footprint does not affect wf_env *)
-Lemma wf_env_clear_footprint: forall fpm1 fpm2 ce e id phl,
-    wf_env fpm1 ce e ->
+Lemma wf_env_clear_footprint: forall fpm1 fpm2 ce e id m phl,
+    wf_env fpm1 ce m e ->
     clear_footprint_map e (id, phl) fpm1 = Some fpm2 ->
-    wf_env fpm2 ce e.
+    wf_env fpm2 ce m e.
 Proof.
   intros until phl. intros WF CLR.
   unfold clear_footprint_map in CLR.
@@ -1231,6 +1267,7 @@ Proof.
     (* wt_footprint remain if clear the footprint *)
     eapply wt_footprint_clear. auto.
   - eauto.
+  - intros. eapply wf_env_freeable; eauto.
 Qed.
 
 (* Properties of sem_wt_loc *)

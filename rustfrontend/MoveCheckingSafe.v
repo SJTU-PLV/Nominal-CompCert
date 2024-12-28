@@ -127,7 +127,7 @@ the same. *)
 Lemma eval_place_get_loc_footprint_map_equal: forall m le p fpm fp b1 ofs1 b2 ofs2 own
     (GFP: get_loc_footprint_map le (path_of_place p) fpm = Some (b1, ofs1, fp))
     (WT: wt_place le ce p)
-    (WFENV: wf_env fpm ce le)
+    (WFENV: wf_env fpm ce m le)
     (EVAL: eval_place ce le m p b2 ofs2)
     (MM: mmatch fpm ce m le own)
     (DOM: dominators_is_init own p = true),
@@ -243,7 +243,7 @@ Lemma eval_place_footprint_unchanged: forall p m b1 b2 ofs1 ofs2 fpm own le fp,
     dominators_is_init own p = true ->
     list_norepet (footprint_of_env le ++ flat_fp_map fpm) ->
     (* These premises are used to reuse eval_place_get_loc_footprint_map_equal *)
-    wf_env fpm ce le ->
+    wf_env fpm ce m le ->
     wt_place le ce p ->
     exists bs,
       (* We have to consider that we cannot change the location of the
@@ -367,7 +367,7 @@ Qed.
 Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (EVAL: eval_place ce e m p b ofs)
     (MM: mmatch fpm ce m e own)
-    (WFOWN: wf_env fpm ce e)
+    (WFOWN: wf_env fpm ce m e)
     (WT: wt_place (env_to_tenv e) ce p)
     (SOWN: sound_own own init uninit universe)
     (* evaluating the address of p does not require that p is
@@ -389,13 +389,13 @@ Proof.
     exists fp. repeat apply conj. simpl. rewrite H. rewrite FP. auto.
     simpl. auto.
     simpl. eapply sizeof_in_range. inv WT. auto.
-  (*** TODO add properties to wf_env *)
+    eapply wf_env_freeable; eauto.
   (* Pfield *)
   - inv WT.
     (* two type facts, reduce one *)
     rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
     exploit IHEVAL. 1-5: auto.
-    intros (fp & PFP & WTFP & RAN0). rewrite H in RAN0. simpl in RAN0.
+    intros (fp & PFP & WTFP & RAN0 & FREE). rewrite H in RAN0. simpl in RAN0.
     (** Inversion of WTFP *)
     rewrite H in WTFP. inv WTFP; simpl in *; try congruence.
     rewrite H0 in *. inv CO.
@@ -412,6 +412,11 @@ Proof.
     simpl. destruct (path_of_place p) eqn: POP.
     eapply get_loc_footprint_map_app. eauto.
     simpl.  rewrite INFPL. auto.
+    (* permission *)
+    exploit field_offset_in_range_complete; eauto.
+    intros R4.
+    red. intros. eapply FREE. rewrite H. simpl.
+    rewrite H0. lia.
   (* Pdowncast *)
   - inv WT.
     rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
@@ -424,7 +429,7 @@ Proof.
       eapply andb_true_iff. auto. }
     (** Prove that p is_init  *)
     exploit IHEVAL. 1-5: auto.
-    intros (fp & PFP & WTFP & RAN0).
+    intros (fp & PFP & WTFP & RAN0 & PERM).
     rewrite H in RAN0. simpl in RAN0. rewrite H0 in RAN0.
     (* construct some range hypotheses *)
     exploit variant_field_offset_in_max_range; eauto.
@@ -460,6 +465,10 @@ Proof.
     destruct list_eq_dec; simpl; try congruence.
     auto.
     lia.
+    (* permission *)
+    rewrite H in PERM. simpl in PERM. rewrite H0 in PERM.
+    exploit variant_field_offset_in_range_complete; eauto.
+    intros (R4 & R5). red. intros. eapply PERM. lia.
     generalize (list_nth_z_range _ _ TAG).
     generalize (COMP_LEN id0 co CO). 
     lia.
@@ -468,7 +477,7 @@ Proof.
     unfold dominators_must_init in POWN. simpl in POWN.
     eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).    
     exploit IHEVAL; eauto.
-    intros (fp & PFP & WTFP & RAN0).
+    intros (fp & PFP & WTFP & RAN0 & PERM).
     exploit MM. eauto.
     eapply must_init_sound; eauto.
     intros (BM & FULL). destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
@@ -489,6 +498,12 @@ Proof.
     inv H; simpl in *; try congruence.
     inv H0. rewrite LOAD in H1. inv H1. rewrite Ptrofs.unsigned_zero.
     lia.
+    (* permission *)
+    inv H; simpl in *; try congruence.
+    inv H0. rewrite LOAD in H1. inv H1.
+    red. intros. eapply VRES.
+    generalize (size_chunk_pos Mptr).
+    rewrite Ptrofs.unsigned_zero in H. lia.
 Qed.
         
 (* The location from a not_shallow_prefix path must be in the
@@ -730,9 +745,9 @@ Qed.
   
 (* The location returned by get_loc_footprint is align with the type
 of the footprint *)  
-Lemma get_loc_footprint_map_align: forall le p fpm b ofs fp,
+Lemma get_loc_footprint_map_align: forall le p fpm b ofs m fp,
     get_loc_footprint_map le (path_of_place p) fpm = Some (b, ofs, fp) ->
-    wf_env fpm ce le ->
+    wf_env fpm ce m le ->
     wt_place le ce p ->
     (alignof ce (typeof_place p) | ofs).
 Proof.
@@ -812,7 +827,7 @@ Lemma eval_pexpr_sem_wt: forall pe fpm m le own v init uninit universe
     (SOUND: sound_own own init uninit universe)
     (CHECK: move_check_pexpr init uninit universe pe = true)
     (WTPE: wt_pexpr le ce pe)
-    (WFENV: wf_env fpm ce le),
+    (WFENV: wf_env fpm ce m le),
     sem_wt_val ce m (fp_scalar (typeof_pexpr pe)) v.
 Proof.  
   induction pe; intros.
@@ -826,7 +841,7 @@ Proof.
     eapply andb_true_iff in CHECK as (DOM & INIT).
     inv WTPE.
     exploit eval_place_sound; eauto.
-    intros (pfp & GFP & WTFP & RAN).
+    intros (pfp & GFP & WTFP & RAN & PERM).
     exploit get_loc_footprint_map_align; eauto. intros AL.
     (* show that (b, ofs) is sem_wt_loc *)
     exploit MM. eauto. eapply must_init_sound; eauto.
@@ -869,7 +884,7 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (SOUND: sound_own own1 init uninit universe)
     (CHECK: move_check_expr' ce init uninit universe e = true)
     (OWN: move_place_option own1 (moved_place e) = own2)
-    (WFENV: wf_env fpm1 ce le)
+    (WFENV: wf_env fpm1 ce m le)
     (WT: wt_expr le ce e)
     (WFOWN: wf_own_env le ce own1),
   (** TODO: how to relate fp and fpm2 ? We should show that they are disjoint *)
@@ -880,7 +895,7 @@ Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
     (* /\ get_footprint_map phs fpm1 = Some fp *)
     (* /\ clear_footprint_map ce phs fpm1 = Some fpm2 *)
     /\ mmatch fpm2 ce m le own2
-    /\ wf_env fpm2 ce le
+    /\ wf_env fpm2 ce m le
     (* footprint disjointness *)
     /\ list_norepet (footprint_flat fp ++ flat_fp_map fpm2)
     (* we need to ensure that fp ∪ fpm2 = fpm1 to prove
@@ -1760,9 +1775,9 @@ Proof.
     eapply IHphl. 2: eauto. lia. eauto.
 Qed.
     
-Lemma get_loc_footprint_map_pos: forall phl id b ofs fp fpm e ce,
+Lemma get_loc_footprint_map_pos: forall phl id b ofs fp fpm e m ce,
     get_loc_footprint_map e (id, phl) fpm = Some (b, ofs, fp) ->
-    wf_env fpm ce e ->
+    wf_env fpm ce m e ->
     ofs >= 0.
 Proof.
   intros. simpl in *.
@@ -2356,7 +2371,7 @@ Lemma assign_loc_sound_gen: forall fpm1 m1 m2 own1 own2 b ofs p vfp pfp e ty
     (* (CAST: val_casted v ty) *)
     (NOREPVFP: list_norepet (footprint_flat vfp))
     (* (WT: sem_wt_val ce m1 vfp v) *)
-    (WFENV: wf_env fpm1 ce e)
+    (WFENV: wf_env fpm1 ce m1 e)
     (WTFP: wt_footprint ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
@@ -2370,7 +2385,7 @@ Lemma assign_loc_sound_gen: forall fpm1 m1 m2 own1 own2 b ofs p vfp pfp e ty
   exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
           /\ mmatch fpm2 ce m2 e own2
           /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
-          /\ wf_env fpm2 ce e.
+          /\ wf_env fpm2 ce m2 e.
 Proof.
   intros. destruct (path_of_place p) eqn: POP.
   exploit get_set_footprint_map_exists; eauto.
@@ -2389,9 +2404,10 @@ Proof.
   assert (NOREP3: list_norepet ((footprint_of_env e) ++ (flat_fp_map fpm2))).
   { eapply list_norepet_app; eauto. }
   (* set wt_footprint remains wf_env *)
-  assert (WFENV2: wf_env fpm2 ce e).
+  assert (WFENV2: wf_env fpm2 ce m2 e).
   {  (**  how to show that set a wt footprint remains wt: use the fact
   that p is well-typed?? *)
+    eapply wf_env_perm_unchanged. eauto.
     eapply wf_env_set_wt_footprint. eauto. erewrite <- TY.
     eauto. auto. rewrite POP. auto. }
   (* show that (b, ofs) does not locate in size record *)
@@ -2640,7 +2656,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
     (CAST: val_casted v ty)
     (NOREPVFP: list_norepet (footprint_flat vfp))
     (WT: sem_wt_val ce m1 vfp v)
-    (WFENV: wf_env fpm1 ce e)
+    (WFENV: wf_env fpm1 ce m1 e)
     (WTFP: wt_footprint ce ty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
@@ -2654,7 +2670,7 @@ Lemma assign_loc_sound: forall fpm1 m1 m2 own1 own2 b ofs v p vfp pfp e ty
   exists fpm2, set_footprint_map (path_of_place p) vfp fpm1 = Some fpm2
           /\ mmatch fpm2 ce m2 e own2
           /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
-          /\ wf_env fpm2 ce e.
+          /\ wf_env fpm2 ce m2 e.
 Proof.
   intros. eapply assign_loc_sound_gen; eauto.
   eapply assign_loc_unchanged_on; eauto.
@@ -2695,7 +2711,7 @@ Lemma assign_loc_variant_sound: forall fpm1 m1 m2 m3 own1 own2 b ofs v p vfp pfp
     (CAST: val_casted v fty)
     (NOREPVFP: list_norepet (footprint_flat vfp))
     (WT: sem_wt_val ce m1 vfp v)
-    (WFENV: wf_env fpm1 ce e)
+    (WFENV: wf_env fpm1 ce m1 e)
     (WTFP: wt_footprint ce fty vfp)
     (* The path of this place and the path of the footprint fo p (which is not used) *)
     (PFP: get_loc_footprint_map e (path_of_place p) fpm1 = Some (b, (Ptrofs.unsigned ofs), pfp))
@@ -2710,7 +2726,7 @@ Lemma assign_loc_variant_sound: forall fpm1 m1 m2 m3 own1 own2 b ofs v p vfp pfp
   exists fpm2, set_footprint_map (path_of_place p) (fp_enum id orgs tag fid fofs vfp) fpm1 = Some fpm2
           /\ mmatch fpm2 ce m3 e own2
           /\ list_norepet (footprint_of_env e ++ (flat_fp_map fpm2))
-          /\ wf_env fpm2 ce e.
+          /\ wf_env fpm2 ce m3 e.
 Proof.
   intros.
   assert (WTFP1: wt_footprint ce ty (fp_enum id orgs tag fid fofs vfp)).
@@ -2803,14 +2819,14 @@ Lemma eval_exprlist_sem_wt: forall al vl tyl fpm1 m le own1 own2 init uninit ini
     (SOUND: sound_own own1 init uninit universe)
     (CHECK: move_check_exprlist ce init uninit universe al = Some (init1, uninit1))
     (OWN: move_place_list own1 (moved_place_list al) = own2)
-    (WFENV: wf_env fpm1 ce le)
+    (WFENV: wf_env fpm1 ce m le)
     (WT: wt_exprlist le ce al)
     (WFOWN: wf_own_env le ce own1),
   exists fpl fpm2,
     sem_wt_val_list ce m fpl vl
     /\ wt_footprint_list ce (type_list_of_typelist tyl) fpl
     /\ mmatch fpm2 ce m le own2
-    /\ wf_env fpm2 ce le
+    /\ wf_env fpm2 ce m le
     (* footprint disjointness *)
     /\ list_norepet (flat_map footprint_flat fpl ++ flat_fp_map fpm2)
     /\ list_equiv (flat_map footprint_flat fpl ++ flat_fp_map fpm2) (flat_fp_map fpm1)
@@ -3454,7 +3470,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
     (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc cont brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
-    (WFNEV: wf_env fpm ce e)
+    (WFNEV: wf_env fpm ce m e)
     (** VERY DIFFICULT: Invariant of drop_place_state *)
     (SDP: sound_drop_place_state e m fpm own1 rfp st)
     (SEP: list_norepet (flat_fp_frame (fpf_dropplace e fpm rfp fpf)))
@@ -3485,7 +3501,7 @@ with sound_stacks : cont -> mem -> fp_frame -> Prop :=
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))   
     (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc contn brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
-    (WFENV: wf_env fpm ce e)
+    (WFENV: wf_env fpm ce m e)
     (* own2 is built after the function call *)
     (AFTER: own2 = init_place own1 p)
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
@@ -3509,7 +3525,7 @@ Inductive sound_state: state -> Prop :=
     (NOREP: list_norepet flat_fp)
     (ACC: rsw_acc w (rsw sg flat_fp m Hm))
     (* we need to maintain the well-formed invariant of own_env *)
-    (WFENV: wf_env fpm ce e)
+    (WFENV: wf_env fpm ce m e)
     (* invariant of the own_env *)
     (WFOWN: wf_own_env e ce own),
     sound_state (State f s k e own m)
@@ -3529,7 +3545,7 @@ Inductive sound_state: state -> Prop :=
     (ORDERED: move_ordered_split_places_spec own1 (map fst drops))
     (* fullspec is used to maintain the invariant between is_full and the full flags *)
     (FULLSPEC: forall p full,  In (p, full) drops -> is_full (own_universe own1) p = full)
-    (WF: wf_env fpm ce e)
+    (WF: wf_env fpm ce m e)
     (* We just want to make rfp well structured (e.g., field names are
     norepet and the size of blocks are in range) *)
     (* (WTRFP: wt_footprint ce rfpty rfp)  *)
@@ -3738,6 +3754,10 @@ Proof.
     eapply mmatch_unchanged. eauto.
     eapply Mem.unchanged_on_implies; eauto.
     simpl. intros. rewrite app_assoc. eapply in_app. auto.
+    (* wf_env *)
+    eapply wf_env_unchanged. eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply in_app. auto.
   - econstructor; eauto.
     eapply IHk; eauto.
     eapply Mem.unchanged_on_implies; eauto.
@@ -3745,6 +3765,10 @@ Proof.
     eapply mmatch_unchanged; eauto.
     eapply Mem.unchanged_on_implies; eauto.
     simpl. intros. rewrite app_assoc. eapply in_app. auto.
+    (* wf_env *)
+    eapply wf_env_unchanged. eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. simpl. eapply in_app. auto.
     (* sound_drop_place_state unchanged *)
     eapply sound_drop_place_state_unchanged; eauto.
     eapply Mem.unchanged_on_implies; eauto.
@@ -4999,6 +5023,11 @@ Proof.
     eapply rsw_acc_trans. eauto. eauto.
     (* sound_drop_place_state *)
     econstructor; eauto.
+    (* wf_env *)
+    eapply wf_env_unchanged. eauto.
+    eapply Mem.free_unchanged_on. eauto.
+    intros. intro. eapply NOTIN.
+    eapply in_app; auto.
     (* wt_state *)
     admit.
   (* step_dropplace_struct *)
@@ -5305,7 +5334,7 @@ Proof.
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
       eapply move_place_sound. auto. }      
     exploit eval_place_sound; eauto.
-    intros (pfp & GFP & WTFP3 & PRAN).
+    intros (pfp & GFP & WTFP3 & PRAN & PERM).
     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
@@ -5402,7 +5431,7 @@ Proof.
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
       eapply move_place_sound. auto. }      
     exploit eval_place_sound. eapply PADDR1. all: eauto.
-    intros (pfp & GFP & WTFP3 & PRAN).
+    intros (pfp & GFP & WTFP3 & PRAN & PERM).
     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
     intros (N6 & N7 & N8).
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
@@ -5527,9 +5556,13 @@ Proof.
     { eapply mmatch_unchanged. eapply MM.
       eapply Mem.unchanged_on_implies. eapply UNC1. simpl. intros.
       rewrite app_assoc. eapply in_app; auto. }
+    assert (WFENV1: wf_env fpm ce m3 le).
+    { eapply wf_env_unchanged. eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros. eapply in_app; auto. }
     (* show v is sem_wt_val *)
     exploit eval_expr_sem_wt. eapply MM1. all: eauto.
-    intros (vfp & fpm2 & WTVAL & WTFP & MM2 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    intros (vfp & fpm2 & WTVAL & WTFP & MM2 & WFENV2 & NOREP1 & EQUIV1 & WFOWN1).
     exploit sem_cast_sem_wt; eauto.
     intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
     exploit cast_val_is_casted; eauto. intros CASTED.
@@ -5565,13 +5598,17 @@ Proof.
       eapply Mem.unchanged_on_implies. eapply UNC2. simpl. intros.
       rewrite !in_app in H7. rewrite !in_app.
       destruct H7; auto. right. left. eapply EQUIV1. eapply in_app; auto. }
+    assert (WFENV3: wf_env fpm2 ce m4 le).
+    { eapply wf_env_unchanged. eapply WFENV2.
+      eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros. eapply in_app; auto. }
     (** sound_own after moving the place in the expression *)
     assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
       eapply move_place_sound. auto. }
     (* eval_place_sound *)
     exploit eval_place_sound; eauto. 
-    intros (pfp & GFP & WTFP3 & PRAN).
+    intros (pfp & GFP & WTFP3 & PRAN & PERM).
     (* assign the box pointer to p *)
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
      exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
@@ -5592,7 +5629,7 @@ Proof.
     intro. eapply BNIN. simpl. rewrite !in_app. rewrite in_app in H7.
     destruct H7; auto.
     right. left. eapply EQUIV1. eapply in_app; auto.
-    intros (fpm3 & SFP & MM4 & NOREP3 & WFENV3).        
+    intros (fpm3 & SFP & MM4 & NOREP3 & WFENV4).
     (* construct get_IM and sound_own *)
     exploit analyze_succ. 1-3: eauto.
     rewrite <- GETINIT. rewrite <- GETUNINIT. econstructor.
@@ -5943,7 +5980,7 @@ Qed.
 Lemma eval_place_no_mem_error: forall p m le own init uninit universe fpm
     (MM: mmatch fpm ce m le own)
     (ERR: eval_place_mem_error ce le m p)
-    (WFOWN: wf_env fpm ce le)
+    (WFOWN: wf_env fpm ce m le)
     (WT: wt_place (env_to_tenv le) ce p)
     (SOWN: sound_own own init uninit universe)
     (POWN: dominators_must_init init uninit universe p = true),
@@ -5984,7 +6021,7 @@ Qed.
 Lemma eval_pexpr_no_mem_error: forall pe m le own init uninit universe fpm
     (MM: mmatch fpm ce m le own)
     (ERR: eval_pexpr_mem_error ce le m pe)
-    (WFOWN: wf_env fpm ce le)
+    (WFOWN: wf_env fpm ce m le)
     (WT: wt_pexpr (env_to_tenv le) ce pe)
     (SOWN: sound_own own init uninit universe)
     (POWN: move_check_pexpr init uninit universe pe = true),
@@ -6026,7 +6063,7 @@ Qed.
 Lemma eval_expr_no_mem_error: forall e m le own init uninit universe fpm
     (MM: mmatch fpm ce m le own)
     (ERR: eval_expr_mem_error ce le m e)
-    (WFOWN: wf_env fpm ce le)
+    (WFOWN: wf_env fpm ce m le)
     (WT: wt_expr (env_to_tenv le) ce e)
     (SOWN: sound_own own init uninit universe)
     (POWN: move_check_expr' ce init uninit universe e = true),
