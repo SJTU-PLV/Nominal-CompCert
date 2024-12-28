@@ -379,7 +379,7 @@ Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
     (* range *)
     /\ (Ptrofs.unsigned ofs) + (sizeof ce (typeof_place p)) <= Ptrofs.max_unsigned
     (* we need to consider the assignment to this place *)
-    /\ Mem.range_perm m b (Ptrofs.unsigned ofs) (sizeof ce (typeof_place p)) Cur Freeable
+    /\ Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof ce (typeof_place p)) Cur Freeable
 .
 Proof.
   induction 1; intros.
@@ -666,15 +666,16 @@ Lemma deref_sem_wt_loc_sound: forall m fp b ofs ty v
     (* alignment *)
     (AL: (alignof ce ty | (Ptrofs.unsigned ofs)))
     (WTFP: wt_footprint ce ty fp)
-    (DE: deref_loc ty m b ofs v),
+    (DE: deref_loc ty m b ofs v)
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof ce ty) Cur Readable),
     sem_wt_val ce m fp v.
 Proof.
   intros. destruct ty; inv WTFP; inv WT; simpl in *; try inv MODE;
   inv DE; simpl in *; try congruence. 
   (* struct *)
-  - econstructor. eapply sem_wt_struct; eauto. auto.
+  - econstructor; eauto. eapply sem_wt_struct; eauto. 
   (* enum *)
-  - econstructor. eapply sem_wt_enum; eauto. auto.
+  - econstructor; eauto. eapply sem_wt_enum; eauto. 
 Qed.
 
 
@@ -850,6 +851,7 @@ Proof.
     exploit bmatch_scalar_type_sem_wt_loc; eauto. intros (WTLOC & FPEQ).
     subst.
     exploit deref_sem_wt_loc_sound; eauto.
+    eapply Mem.range_perm_implies; eauto. constructor.
   - simpl. inv WTPE. inv EVAL.
     destruct Int.eq. econstructor. econstructor.
   (* reference: impossible *)
@@ -913,7 +915,7 @@ Proof.
     (* p is not downcast *)
     + eapply andb_true_iff in CHECK. destruct CHECK as (DONW & MOVABLE).
       exploit eval_place_sound; eauto.
-      intros (pfp &  PFP & WTFP & RAN).
+      intros (pfp &  PFP & WTFP & RAN & PERM).
       (** TODO: wt_footprint implication *)
       (* location of p is sem_wt *)
       exploit movable_place_sem_wt; eauto.
@@ -922,7 +924,9 @@ Proof.
       (* deref sem_wt location *)
       exploit deref_sem_wt_loc_sound; eauto.
       (* prove that ofs is align with the size of p's type *)
-      eapply get_loc_footprint_map_align; eauto.      
+      eapply get_loc_footprint_map_align; eauto.
+      (* permission *)
+      eapply Mem.range_perm_implies; eauto. constructor.
       intros WT_VAL.
       assert (A: exists fpm2, clear_footprint_map le (path_of_place (valid_owner p)) fpm1 = Some fpm2).
       { unfold clear_footprint_map.
@@ -961,7 +965,7 @@ Proof.
     (* p is downcast *)
     + do 2 rewrite andb_true_iff in CHECK. destruct CHECK as ((DOWN & INIT) & FULL).
       exploit eval_place_sound; eauto.
-      intros (fp1 & PFP & WTFP & RAN).
+      intros (fp1 & PFP & WTFP & RAN & PERM).
       exploit valid_owner_place_footprint; eauto.
       intros (fp2 & ofs1 & fofs1 & PFP1 & VOFS & OFSEQ).
       exploit MM. eauto. eapply must_init_sound; eauto.
@@ -972,6 +976,7 @@ Proof.
       rewrite <- OFSEQ in WTLOC1.
       exploit deref_sem_wt_loc_sound; eauto.
       eapply get_loc_footprint_map_align; eauto.
+      eapply Mem.range_perm_implies; eauto. constructor.
       intros WT_VAL.
       set (p1 := valid_owner p) in *.
       assert (A: exists fpm2, clear_footprint_map le (path_of_place p1) fpm1 = Some fpm2).
@@ -6104,15 +6109,42 @@ Proof.
     eapply eval_pexpr_no_mem_error; eauto.
 Qed.
 
-Lemma assign_loc_no_mem_error: forall fp ty m b ofs v
+Lemma access_mode_by_copy: forall ty,
+    access_mode ty = Ctypes.By_copy ->
+    (exists orgs id, ty = Tstruct orgs id) \/ (exists orgs id, ty = Tvariant orgs id).
+Proof.
+  destruct ty; intros A; simpl in *; try (inv A; congruence); eauto.
+  destruct i; destruct s; try congruence.
+  destruct f; try congruence.
+Qed.
+
+Lemma assign_loc_no_mem_error: forall ty m b ofs v fp
     (ERR: assign_loc_mem_error ce ty m b ofs v)
-    (** TODO: we require that the address evaluated by eval_place must
-    contain valid permission so that later assignment of this location
-    does not cause memory error *)
-    eval_place_sound
-    assign_loc_sem_wt
-    eval_place_sound
-        
+    (AL: (alignof ce ty | Ptrofs.unsigned ofs))
+    (* note that the value may be an address of enum/struct *)
+    (WTVAL: sem_wt_val ce m fp v)
+    (WTFP: wt_footprint ce ty fp)
+    (* guaranteed by eval_place_sound *)
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof ce ty) Cur Writable),
+    False.
+Proof.
+  intros; inv ERR.
+  - eapply H0. red.
+    erewrite sizeof_by_value; eauto.
+    split; eauto.
+    erewrite alignof_by_value; eauto.
+  - eapply H0.
+    exploit access_mode_by_copy; eauto.
+    intros [(orgs & id & TY) | (orgs & id & TY)]; subst.
+    + inv WTFP. congruence.
+      simpl in WF. congruence.
+      inv WTVAL. simpl. eauto.
+    + inv WTFP. inv WTVAL.
+      simpl in WF. congruence.
+      inv WTVAL. simpl. eauto.
+  - eapply H0. eauto.
+Qed.
+
 End MOVE_CHECK.
 
 (** Specific definition of partial safe *)

@@ -546,7 +546,7 @@ Inductive assign_loc_mem_error (ce : composite_env) (ty : type) (m : mem) (b : b
 | assign_loc_copy_mem_error2: forall v,
     (* the memory location of the struct to be stored is not writable *)
     access_mode ty = By_copy ->
-    Mem.range_perm m b (Ptrofs.unsigned ofs) ((Ptrofs.unsigned ofs) + (sizeof ce ty)) Cur Writable ->
+    ~ Mem.range_perm m b (Ptrofs.unsigned ofs) ((Ptrofs.unsigned ofs) + (sizeof ce ty)) Cur Writable ->
     assign_loc_mem_error ce ty m b ofs v.
 
 

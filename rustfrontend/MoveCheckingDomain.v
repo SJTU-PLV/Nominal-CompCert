@@ -31,6 +31,14 @@ Definition alignof_comp (id: ident) :=
   | None => 1
   end.
 
+Definition sizeof_comp (id: ident) :=
+  match ce ! id with
+  | Some co => co_sizeof co
+  | None => 0
+  end.
+
+
+
 (* Semantics well typed location is mutually defined with semantics
 well typed value *)
 Inductive sem_wt_loc (m: mem) : footprint -> block -> Z -> Prop :=
@@ -84,11 +92,15 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 (*     sem_vt_val (Vptr b ofs) (Treference org mut ty) *)
 | wt_val_struct: forall b ofs id fpl
     (WTLOC: sem_wt_loc m (fp_struct id fpl) b (Ptrofs.unsigned ofs))
-    (AL: (alignof_comp id | Ptrofs.unsigned ofs)),
+    (AL: (alignof_comp id | Ptrofs.unsigned ofs))
+    (* The permission of the location is readable to make sure
+    assign_loc has no memory error *)
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable),
     sem_wt_val m (fp_struct id fpl) (Vptr b ofs)
 | wt_val_enum: forall b ofs fp tagz fid fofs id orgs
     (WTLOC: sem_wt_loc m (fp_enum id orgs tagz fid fofs fp) b (Ptrofs.unsigned ofs))
-    (AL: (alignof_comp id | Ptrofs.unsigned ofs)),
+    (AL: (alignof_comp id | Ptrofs.unsigned ofs))
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable),
     sem_wt_val m (fp_enum id orgs tagz fid fofs fp) (Vptr b ofs)
 .
 
