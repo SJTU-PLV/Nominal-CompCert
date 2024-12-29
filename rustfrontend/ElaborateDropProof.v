@@ -4053,7 +4053,7 @@ Proof.
     intros (nret & MSTMT & RET).
     (* own_env in function entry is sound *)
     exploit sound_function_entry. simpl. eauto.
-    eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
+    eauto. eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
     (** TODO: construct function entry in target program *)
     inv ENTRY.
     

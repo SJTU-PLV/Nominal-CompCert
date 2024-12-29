@@ -69,19 +69,19 @@ the universe set *)
 Definition analyze (ce: composite_env) (f: function) (cfg: rustcfg) (entry: node) : Errors.res (PMap.t IM.t * PMap.t IM.t * PathsMap.t) :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
-  (* initialize maybeInit set with parameters *)
-  let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
   (* It is necessary because we have to guarantee that the map is not
   PathMap.bot in the 'transfer' function *)
   let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
+  (* uninit the parameters and variables *)
+  let maybeUninit1 := add_place_list whole (places_of_locals (f.(fn_params) ++ f.(fn_vars))) empty_pathmap in
+  let pl := places_of_locals f.(fn_params) in
+  let maybeUninit2 := remove_place_list pl maybeUninit1 in
+  (* initialize maybeInit set with parameters *)
   let maybeInit := add_place_list whole pl empty_pathmap in
-  (* initialize maybeUninit with the variables *)
-  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
-  let maybeUninit := add_place_list whole vl empty_pathmap in
   (* generate selector-based CFG for analysis *)
   (* do (entry, cfg) <- generate_cfg f.(fn_body); *)
   let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry (IM.State maybeInit) in
-  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry (IM.State maybeUninit) in
+  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry (IM.State maybeUninit2) in
   match initMap, uninitMap with
   
   (* we only want the PTree because [None] represent the unreachable node *)
@@ -1039,6 +1039,16 @@ Proof.
   - simpl. eapply sound_own_universe0.
 Qed.
 
+Lemma init_place_list_sound :forall l own init uninit universe
+    (OWN: sound_own own init uninit universe),
+    sound_own (init_place_list own l) (add_place_list universe l init) (remove_place_list l uninit) universe.
+Proof.
+  induction l; intros; simpl.
+  auto.
+  eapply IHl. eapply init_place_sound.
+  auto.
+Qed.
+
 Lemma dominators_must_init_sound: forall p init uninit universe own,
     sound_own own init uninit universe ->
     dominators_must_init init uninit universe p = true ->
@@ -1141,35 +1151,47 @@ Inductive sound_state: state -> Prop :=
     sound_state (Dropstate id (Vptr b ofs) st membs k m)
 .
     
+Lemma sound_own_ge: forall own init init1 uninit uninit1 universe,
+    sound_own own init uninit universe ->
+    PathsMap.ge init1 init ->
+    PathsMap.ge uninit1 uninit ->
+    sound_own own init1 uninit1 universe.
+Proof.
+  intros until universe. intros SOWN GE1 GE2.
+  econstructor.
+  eapply PathsMap.ge_trans. eauto. eapply sound_own_init; eauto.
+  eapply PathsMap.ge_trans. eauto. eapply sound_own_uninit; eauto.
+  eapply sound_own_universe. eauto.
+Qed.
+
 (* soundness of function entry: use fixpoint_entry to prove it *)
-Lemma sound_function_entry: forall f initMap uninitMap universe entry cfg own
+Lemma sound_function_entry: forall f initMap uninitMap universe entry cfg own1 own2
     (AN: analyze ce f cfg entry = OK (initMap, uninitMap, universe))
     (CFG: generate_cfg f.(fn_body) = OK (entry, cfg))
-    (FENTRY: init_own_env ce f = OK own),
+    (FENTRY: init_own_env ce f = OK own1)
+    (INITPARAMS: init_place_list own1 (places_of_locals f.(fn_params)) = own2) ,
   exists init uninit,
     get_IM_state initMap!!entry uninitMap!!entry (Some (init, uninit)) /\
-      sound_own own init uninit universe.
+      sound_own own2 init uninit universe.
 Proof.
-  intros until own. intros AN CFG. unfold analyze in AN.
+  intros until own2. intros AN CFG. unfold analyze in AN.
   unfold init_own_env.  
   Errors.monadInv AN.
   rewrite EQ. simpl.
   set (empty_pathmap := (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)) in *.
-  set (initParams := (add_place_list x
-              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-              empty_pathmap)) in *.
-  set (uninitVars := (add_place_list x
-                  (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f))
-                  empty_pathmap)) in *.
+  set (uninit1 := (add_place_list x (places_of_locals (fn_params f ++ fn_vars f)) empty_pathmap)) in *.
+  set (initParams := (add_place_list x (places_of_locals (fn_params f)) empty_pathmap)) in *.
+  set (uninitVars := (remove_place_list (places_of_locals (fn_params f)) uninit1)) in *.
   (* generalize the beq  as Clightgenproof does *)
   (* set (flag := PathsMap.beq x (PathsMap.lub initParams uninitVars) && *)
   (*   PathsMap.beq (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x) *)
   (*     (PathsMap.combine inter_opt initParams uninitVars)). *)
-  set (flag := check_own_env_consistency empty_pathmap initParams uninitVars x).
+  set (flag := check_own_env_consistency empty_pathmap empty_pathmap uninit1 x).
   generalize (eq_refl flag).
   generalize flag at 1 3.
   intros flag0 E. destruct flag0; try congruence.
   intros FENTRY. inv FENTRY.
+  intros.
   destruct (DS.fixpoint cfg successors_instr (transfer x true f cfg) entry (IM.State initParams)) eqn: initAN; try congruence.
   destruct (DS.fixpoint cfg successors_instr (transfer x false f cfg) entry (IM.State uninitVars)) eqn: uninitAN; try congruence.
   destruct (IM.beq (IM.State x) (IM.lub t !! entry t0 !! entry)) eqn: CON; try congruence.
@@ -1181,11 +1203,9 @@ Proof.
   destruct (initMap !! entry); try contradiction.
   do 2 eexists. split.
   econstructor.
-  constructor; auto.
-  simpl. eapply PathsMap.eq_refl.
-  (* sound_own_consistent by translation validation *)
-  (* eapply PathsMap.beq_correct in CON. *)
-  (* exploit PathsMap_lub_union; eauto. *)  
+  eapply sound_own_ge with (init := initParams) (uninit:= uninitVars); eauto.
+  eapply init_place_list_sound.
+  econstructor; simpl; try eapply PathsMap.ge_refl; try eapply PathsMap.eq_refl.
 Qed.
 
 
@@ -1227,12 +1247,11 @@ Lemma analyze_successor: forall f initMap uninitMap (* mayinit1 *) mayinit2 (* m
 Proof.  (* use fixpoint_solution *)
   unfold analyze; intros. 
   Errors.monadInv AN.
-  set (params_init := (add_place_list x
-               (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-               (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x))) in *.
-  set (vars_uninit := (add_place_list x
-                   (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f))
-                   (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x))) in *.
+  set (params_init := (add_place_list x (places_of_locals (fn_params f))
+                  (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x))) in *.
+  set (vars_uninit := (remove_place_list (places_of_locals (fn_params f))
+                      (add_place_list x (places_of_locals (fn_params f ++ fn_vars f))
+                         (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) x)))) in *.
 
   destruct (DS.fixpoint cfg successors_instr (transfer x true f cfg) entry
               (IM.State params_init)) eqn: INITMAP; try congruence.

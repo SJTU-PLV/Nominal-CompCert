@@ -653,18 +653,16 @@ Proof.
     (* copy what we do in sound_function_entry (InitAnalysis) and
     match_transf_program (Clightgenproof) *)
     set (empty_pathmap := (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) t)) in *.
-    set (initParams := (add_place_list t
-              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-              empty_pathmap)) in *.
-    set (uninitVars := (add_place_list t
-                  (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_vars f))
-                  empty_pathmap)) in *.
-  set (flag := check_own_env_consistency empty_pathmap initParams uninitVars t).
+    (* set (initParams := (add_place_list t *)
+    (*           (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
+    (*           empty_pathmap)) in *. *)
+    set (uninitVars := (add_place_list t (places_of_locals (fn_params f ++ fn_vars f)) empty_pathmap)) in *.
+  set (flag := check_own_env_consistency empty_pathmap empty_pathmap  uninitVars t).
   generalize (eq_refl flag).
   (* so adhoc generalization... *)
   generalize flag at 1 3 7.
   intros flag0 E. destruct flag0; try congruence.
-  repeat f_equal. eapply Axioms.proof_irr.
+  repeat f_equal.
   auto.
   - simpl. erewrite <- collect_func_eq. erewrite A. simpl. auto.
     auto.
@@ -1096,9 +1094,9 @@ Proof.
     intros (tf & A1 & A2). simpl in A2. subst.
     eexists. split.
     econstructor. eapply RustIRown.step_internal_function.
-    4: { eapply function_entry_eq. eauto. }
+    5: { eapply function_entry_eq. eauto. }
     1-3: solve_eval.
-    erewrite <- init_own_env_eq; eauto.
+    erewrite <- init_own_env_eq; eauto. eauto.
     eapply star_refl. auto.
     econstructor; eauto.
     solve_eval.

@@ -100,16 +100,16 @@ Local Open Scope error_monad_scope.
 
 (* just copy from Rustlightown except the extract_vars *)
 Program Definition init_own_env (ce: composite_env) (f: function) : Errors.res own_env :=
-    (* collect the whole set in order to simplify the gen and kill operation *)
+  (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
-  let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
+  (* let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in *)
   (* It is necessary because we have to guarantee that the map is not
   PathMap.bot in the 'transfer' function *)
   let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
-  let init := add_place_list whole pl empty_pathmap in
-  (* initialize maybeUninit with the variables *)
-  let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
+  let init := empty_pathmap in
+  (* initialize maybeUninit with the variables and parameters *)
+  let vl := places_of_locals (f.(fn_params) ++ f.(fn_vars)) in
   let uninit := add_place_list whole vl empty_pathmap in
   (** Is it reasonable? Translation validation: check (whole = init ∪
   uninit) and (∅ = init ∩ uninit) *)
@@ -127,60 +127,17 @@ Next Obligation.
   destruct Heq_anonymous as (A & B).
   eapply PathsMap.beq_correct in A.
   eapply PathsMap.beq_correct in B.
-  set (init:= (add_place_list whole
-              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  (* set (init:= (add_place_list whole *)
+  (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
+  (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) in *.
   set (uninit :=(add_place_list whole
              (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
-                f.(fn_vars))
+                (fn_params f ++ fn_vars f))
              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
-  eapply LPaths.eq_sym.
-  eapply LPaths.eq_trans. eapply A.
-  red. red. intros a.
-  unfold PathsMap.lub.
-  set (g:=(fun a b : option LPaths.t =>
-             match a with
-             | Some u => match b with
-                        | Some v => Some (LPaths.lub u v)
-                        | None => a
-                        end
-             | None => b
-             end)) in *.
-  assert (C: g None None = None) by auto.
-  exploit (PathsMap.gcombine g C init uninit).  
-  instantiate (1 := id).
-  intros OPTEQ.
-  split; intros IN.
-  - unfold PathsMap.get in *.
-    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
-    + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
-      * eapply OPTEQ. auto.
-      * eapply Paths.union_2.
-        eapply OPTEQ. auto.
-      * eapply Paths.union_3.
-        eapply OPTEQ. auto.
-    + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
-      exfalso.
-      eapply Paths.empty_1. eauto.
-  - unfold PathsMap.get in *.
-    destruct (PathsMap.combine g init uninit) ! id eqn: GC.
-    + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
-      * eapply OPTEQ. auto.
-      * eapply Paths.union_1 in IN.
-        destruct IN.
-        eapply OPTEQ. auto.
-        exfalso. eapply Paths.empty_1. eauto.
-      * eapply Paths.union_1 in IN.
-        destruct IN.
-        exfalso. eapply Paths.empty_1. eauto.
-        eapply OPTEQ. auto.
-    + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
-      eapply Paths.union_1 in IN.
-      destruct IN; auto.
+  clear B.
+  eapply PathsMap_lub_union.
+  auto.
 Defined.
 Next Obligation.
   symmetry in Heq_anonymous.
@@ -188,12 +145,13 @@ Next Obligation.
   destruct Heq_anonymous as (A & B).
   eapply PathsMap.beq_correct in A.
   eapply PathsMap.beq_correct in B.
-  set (init:= (add_place_list whole
-              (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f))
-              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
+  (* set (init:= (add_place_list whole *)
+  (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
+  (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) at 1.
+  fold init in A ,B.
   set (uninit :=(add_place_list whole
-             (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
-                f.(fn_vars))
+             (places_of_locals (f.(fn_params) ++ f.(fn_vars)))
              (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *.
   red in B.
   generalize (B id). intros EQ.
@@ -213,16 +171,19 @@ Next Obligation.
   exploit (PathsMap.gcombine inter_opt C init uninit).  
   instantiate (1 := id).
   intros OPTEQ. clear EQ EQ1.
+  (* init is the same as empty map, we need to take care of them *)
+  unfold init at 2. fold uninit.
   split; intros IN.
   - unfold PathsMap.get in *.
     destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
     + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      (* Set Printing All. *)
+      destruct (@PTree.get LPaths.t id init) eqn: INIT; destruct (@PTree.get LPaths.t id uninit) eqn: UNINIT; try contradiction.
       * eapply OPTEQ. auto.
       * exfalso. eapply Paths.empty_1.
         eapply OPTEQ. eauto.                 
     + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      destruct (@PTree.get LPaths.t id init) eqn: INIT; destruct (@PTree.get LPaths.t id uninit) eqn: UNINIT; try contradiction.
       exfalso.
       eapply Paths.empty_1. eauto.
       exfalso.
@@ -230,12 +191,12 @@ Next Obligation.
   - unfold PathsMap.get in *.
     destruct (PathsMap.combine inter_opt init uninit) ! id eqn: GC.
     + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      destruct (@PTree.get LPaths.t id init) eqn: INIT; destruct (@PTree.get LPaths.t id uninit) eqn: UNINIT; try contradiction.
       * eapply OPTEQ. auto.
       * eapply Paths.inter_2 in IN.
         exfalso. eapply Paths.empty_1. eauto.
     + simpl in OPTEQ.
-      destruct (init ! id) eqn: INIT; destruct (uninit ! id) eqn: UNINIT; simpl in *; try contradiction.
+      destruct (@PTree.get LPaths.t id init) eqn: INIT; destruct (@PTree.get LPaths.t id uninit) eqn: UNINIT; try contradiction.
       eapply Paths.inter_1 in IN.
       exfalso. eapply Paths.empty_1. eauto.
       eapply Paths.inter_1 in IN. auto.
@@ -542,13 +503,14 @@ Inductive step : state -> trace -> state -> Prop :=
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 
-| step_internal_function: forall vf f vargs k m e m' init_own
+| step_internal_function: forall vf f vargs k m e m' own1 own2
     (FIND: Genv.find_funct ge vf = Some (Internal f))
     (NORMAL: f.(fn_drop_glue) = None)
     (* initialize own_env *)
-    (INITOWN: init_own_env ge f = OK init_own)
+    (INITOWN: init_own_env ge f = OK own1)
+    (INITPARAMS: init_place_list own1 (places_of_locals f.(fn_params)) = own2)
     (ENTRY: function_entry ge f vargs m e m'),
-    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e init_own m')
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e own2 m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
     (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc))

@@ -5906,8 +5906,17 @@ Proof.
     admit.
     
   (* step_internal_function *)
-  - 
-Admitted.
+  - inv SOUND.
+
+    assign_loc_sound
+    Lemma function_entry_sound: forall own f vl m1 le m2
+        (ENTRY: function_entry ge f vl m1 le m2)
+        (OWN: init_own_env ge f = OK own)
+        exists fpm,
+          mmatch fpm ge m2 le own
+          /\ wf_env fpm ge m2 le.
+      
+        
 
 Lemma external_sound: forall s q,
     sound_state s ->
