@@ -509,7 +509,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (* initialize own_env *)
     (INITOWN: init_own_env ge f = OK own1)
     (INITPARAMS: init_place_list own1 (places_of_locals f.(fn_params)) = own2)
-    (ENTRY: function_entry ge f vargs m e m'),
+    (ENTRY: function_entry ge f vargs m e m'),  
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e own2 m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels

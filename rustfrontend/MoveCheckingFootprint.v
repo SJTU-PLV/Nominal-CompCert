@@ -2366,3 +2366,191 @@ Qed.
 End COMP_ENV.
 
   
+(** Initialization of footprint in function entry *)
+
+Definition field_types_to_footprint (ce0: composite_env) (ms: members) (f: type -> footprint): list (ident * Z * footprint) :=
+  map (fun '(Member_plain fid fty) =>
+         match field_offset ce0 fid ms with
+         | OK fofs =>
+             (fid, fofs, f fty)
+         | Error _ => (* we can prove that it is impossible *)
+             (fid, 0, fp_emp)
+         end) ms.
+    
+Section COMP_ENV.
+
+Variable ce0: composite_env.
+
+Section REC.
+  
+  Variable ce: composite_env.
+  Variable rec: forall (ce': composite_env), (removeR ce' ce) -> type -> footprint.
+
+  Definition type_to_empty_footprint' (ty: type) : footprint :=
+    match ty with
+    | Tstruct _ i =>
+        match get_composite ce i with
+        | co_some i co P _ =>
+            let fields := field_types_to_footprint ce0 (co_members co) (rec (PTree.remove i ce) (PTree_removeR _ _ _ P)) in
+            fp_struct i fields
+        (* This case is ruled out by syntactic type checking in function entry *)
+        | co_none => fp_emp
+        end
+    | _ => fp_emp
+    end.
+
+End REC.
+
+End COMP_ENV.
+
+Definition type_to_empty_footprint ce (ty: type) :=
+  Fix (@well_founded_removeR composite) (type_to_empty_footprint' ce) ce ty.
+
+
+(** Checking of non-cyclic reference in Tstruct *)
+
+Lemma struct_or_variant_eq: forall (s1 s2: struct_or_variant),
+    {s1 = s2} + {s1 <> s2}.
+Proof. intros. decide equality. Qed.
+
+Section REC.
+
+  Variable ce: composite_env.
+  Variable rec: forall (ce': composite_env), (removeR ce' ce) -> type -> bool.
+
+  Definition check_cyclic_struct' (ty: type) : bool :=
+    match ty with
+    | Tstruct _ i =>
+        match get_composite ce i with
+        | co_some i co P _ =>
+            forallb (fun '(Member_plain _ fty) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P)fty) (co_members co) && (struct_or_variant_eq (co_sv co) Struct)
+        | co_none => false
+        end
+    | _ => true
+    end.
+
+End REC.
+
+Definition check_cyclic_struct ce (ty: type) : bool :=
+  Fix (@well_founded_removeR composite) check_cyclic_struct' ce ty.
+
+
+(** well-founded relation of composite env *)
+
+Definition ce_extends (env env': composite_env) : Prop := forall id co, env!id = Some co -> env'!id = Some co.
+
+Lemma ce_extends_remove: forall ce1 ce2 id,
+    ce_extends ce1 ce2 ->
+    ce_extends (PTree.remove id ce1) ce2.
+Proof.
+  intros. red.  
+  intros. destruct (ident_eq id id0). subst.
+  rewrite PTree.grs in H0. inv H0.
+  rewrite PTree.gro in H0; eauto.
+Qed.
+
+Lemma find_fields_to_footprint: forall ms fid fty fofs f ce
+    (FTY: field_type fid ms = OK fty)
+    (FOFS: field_offset ce fid ms = OK fofs),
+    find_fields fid (field_types_to_footprint ce ms f) = Some (fid, fofs, f fty).
+Proof.
+  intro ms. unfold field_types_to_footprint, field_offset.
+  generalize ms at 2 3.
+  generalize 0. 
+  induction ms; intros; simpl in *; try congruence.
+  destruct a. simpl in *.
+  destruct (ident_eq fid id).
+  - inv FTY. rewrite FOFS.
+    destruct ident_eq; try congruence. auto.    
+  - destruct (field_offset_rec ce id ms0 z) eqn:FOFS1;
+      destruct ident_eq; try congruence; eauto.
+Qed.
+
+Lemma find_fields_to_footprint_inv: forall ms fid fofs f ce ffp
+    (FIND: find_fields fid (field_types_to_footprint ce ms f) = Some (fid, fofs, ffp)),
+    exists fty, 
+      field_type fid ms = OK fty.
+Proof.
+  intro ms. unfold field_types_to_footprint, field_offset.
+  generalize ms at 1.
+  generalize 0.
+  induction ms; intros; simpl in *; try congruence.
+  destruct a. simpl in *.
+  destruct (field_offset_rec ce id ms0 z) eqn: FOFS.
+  - destruct (ident_eq fid id).
+    + inv FIND. eauto.
+    + eapply IHms; eauto.
+  - destruct (ident_eq fid id).
+    + inv FIND. eauto.
+    + eapply IHms; eauto.
+Qed.
+
+Lemma field_type_member: forall ms fid fty,
+    field_type fid ms = OK fty ->
+    In (Member_plain fid fty) ms.
+Proof.
+  induction ms; intros; simpl in *; try congruence.
+  destruct a. simpl in *.
+  destruct ident_eq.
+  inv H. eauto.
+  eauto.
+Qed.
+
+  
+Lemma type_to_empty_footprint_wt_aux: forall ce2 ce1 ty
+    (CHECK: check_cyclic_struct ce1 ty = true)
+    (EXT: ce_extends ce1 ce2),
+    wt_footprint ce2 ty (Fix well_founded_removeR (type_to_empty_footprint' ce2) ce1 ty).
+Proof.  
+  intros ce2. intros c. pattern c. apply well_founded_ind with (R := removeR).
+  eapply well_founded_removeR.
+  intros ce1 IH. intros. unfold check_cyclic_struct, type_to_empty_footprint in *.
+  erewrite unroll_Fix in *.
+  destruct ty; try (simpl; eapply wt_fp_emp; congruence).
+  simpl in *. destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
+  eapply andb_true_iff in CHECK as (C1 & C2).
+  destruct struct_or_variant_eq in C2; simpl in C2; try congruence.
+  eapply wt_fp_struct; eauto.
+  - intros fid fty FTY.
+    exploit field_type_implies_field_offset; eauto.
+    instantiate (1 := ce2).    
+    intros (fofs & FOFS).
+    exists (Fix well_founded_removeR (type_to_empty_footprint' ce2) (PTree.remove id1 ce1) fty), fofs.    
+    repeat apply conj; auto.
+    + eapply find_fields_to_footprint; eauto.
+    + eapply IH.
+      eapply PTree_removeR; eauto.
+      erewrite forallb_forall in C1.
+      exploit field_type_member. eauto. intros IN.
+      generalize (C1 (Member_plain fid fty) IN). auto.
+      eapply ce_extends_remove. auto.
+  - intros fid fofs ffp FIND.
+    exploit find_fields_to_footprint_inv; eauto.
+    intros (fty & FTY).
+    exploit field_type_implies_field_offset; eauto.
+    instantiate (1 := ce2).    
+    intros (fofs1 & FOFS).
+    exploit find_fields_to_footprint; eauto.
+    intros FIND1. erewrite FIND1 in FIND.
+    inv FIND.
+    exists fty. repeat apply conj; auto.
+    eapply IH.
+    eapply PTree_removeR; eauto.
+    erewrite forallb_forall in C1.
+    exploit field_type_member. eauto. intros IN.
+    generalize (C1 (Member_plain fid fty) IN). auto.
+    eapply ce_extends_remove. auto.
+  - unfold name_footprints, field_types_to_footprint, name_members.
+    rewrite map_map.
+    eapply map_ext_in. intros.
+    destruct a. simpl.
+    destruct (field_offset ce2 id (co_members co)); auto.
+Qed.
+
+Lemma type_to_empty_footprint_wt: forall ce ty
+    (CHECK: check_cyclic_struct ce ty = true),
+    wt_footprint ce ty (type_to_empty_footprint ce ty).
+Proof.   
+  intros. eapply type_to_empty_footprint_wt_aux. auto.
+  red. auto.
+Qed.

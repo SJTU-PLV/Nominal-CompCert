@@ -6,6 +6,7 @@ Require Import Lattice Kildall.
 Require Import Rusttypes Rustlight Rustlightown RustIR.
 Require Import Errors.
 Require Import InitDomain InitAnalysis RustIRcfg.
+Require Import Rusttyping.
 Require Import Wfsimpl.
 
 Import ListNotations.
@@ -218,13 +219,66 @@ Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res 
   | _, _ => OK tt
   end.
 
+Definition check_universe_wf (te: typenv) (ce: composite_env) (universe: PathsMap.t) : Errors.res unit := OK tt.
+
+Fixpoint bind_vars (te: typenv) (l: list (ident * type)) : typenv :=
+  match l with
+  | nil => te
+  | (id, ty) :: l' =>
+      bind_vars (PTree.set id ty te) l'
+  end.
+
+(** Checking of non-cyclic reference in Tstruct *)
+
+Lemma struct_or_variant_eq: forall (s1 s2: struct_or_variant),
+    {s1 = s2} + {s1 <> s2}.
+Proof. intros. decide equality. Qed.
+
+Section REC.
+
+  Variable ce: composite_env.
+  Variable rec: forall (ce': composite_env), (removeR ce' ce) -> type -> bool.
+
+  Definition check_cyclic_struct' (ty: type) : bool :=
+    match ty with
+    | Tstruct _ i =>
+        match get_composite ce i with
+        | co_some i co P _ =>
+            forallb (fun '(Member_plain _ fty) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P)fty) (co_members co) && (struct_or_variant_eq (co_sv co) Struct)
+        | co_none => false
+        end
+    | _ => true
+    end.
+
+End REC.
+
+Definition check_cyclic_struct ce (ty: type) : bool :=
+  Fix (@well_founded_removeR composite) check_cyclic_struct' ce ty.
+
+Definition check_cyclic_struct_res ce (tyl: list type) : Errors.res unit :=
+  if forallb (check_cyclic_struct ce) tyl then
+    OK tt
+  else Error (msg "There is a cyclic reference of struct in the type of paramerters or variables").
+
+Definition var_types (l: list (ident * type)) :=
+  map snd l.
 
 Definition move_check_function (ce: composite_env) (f: function) : Errors.res unit :=
   do (entry, cfg) <- generate_cfg f.(fn_body);
+  (** 1. Init Analaysis *)
   do analysis_res <- analyze ce f cfg entry;
+  (** 2. Naive syntactic type checking. The reason we put syntactic type
+  checking here instead of using a separated type check function (like
+  Ctyping) is that sound_state and wt_state rely on each other due to
+  well typedness property in wf_own_env. *)
+  let te := bind_vars (PTree.empty type) (f.(fn_params) ++ f.(fn_vars)) in
+  let (_, universe) := analysis_res in  
+  do _ <- check_universe_wf te ce universe;
+  do _ <- check_cyclic_struct_res ce (var_types (f.(fn_params) ++ f.(fn_vars)));
+  (** 3. Run move checking ! *)
   do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) (check_expr ce) f.(fn_body) cfg;
   OK tt.
-                                                                    
+
 Definition transf_fundef (ce : composite_env) (id : ident) (fd : fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>

@@ -389,22 +389,6 @@ Proof.
   intros. unfold dominators_is_init in *. simpl in H. auto.
 Qed.
 
-
-(** well-founded relation of composite env *)
-
-Definition ce_extends (env env': composite_env) : Prop := forall id co, env!id = Some co -> env'!id = Some co.
-
-Lemma ce_extends_remove: forall ce1 ce2 id,
-    ce_extends ce1 ce2 ->
-    ce_extends (PTree.remove id ce1) ce2.
-Proof.
-  intros. red.  
-  intros. destruct (ident_eq id id0). subst.
-  rewrite PTree.grs in H0. inv H0.
-  rewrite PTree.gro in H0; eauto.
-Qed.
-
-
 Section COMP_ENV.
 
 Variable ce: composite_env.

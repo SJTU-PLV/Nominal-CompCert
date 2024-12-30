@@ -968,7 +968,7 @@ Inductive bind_parameters (ce: composite_env) (e: env):
   | bind_parameters_nil:
       forall m,
       bind_parameters ce e m nil nil m
-  | bind_paranmeters_cons:
+  | bind_parameters_cons:
       forall m id ty params v1 vl b m1 m2,
       PTree.get id e = Some(b, ty) ->
       assign_loc ce ty m b Ptrofs.zero v1 m1 ->

@@ -1110,6 +1110,39 @@ Fixpoint field_offset_rec (env: composite_env) (id: ident) (ms: members) (pos: Z
 Definition field_offset (env: composite_env) (id: ident) (ms: members) : res Z :=
   field_offset_rec env id ms 0.
 
+
+Lemma align_zero: forall n,
+    n > 0 ->
+    align 0 n = 0.
+Proof.
+  intros. unfold align.
+  rewrite Z.add_0_l.
+  erewrite Z.div_small; try lia.
+Qed.
+
+Lemma field_type_implies_field_offset_rec: forall ms id ty ce s,
+    field_type id ms = OK ty ->
+    exists fofs, field_offset_rec ce id ms s = OK fofs.
+Proof.
+  induction ms; intros.
+  - simpl in H. inv H.
+  - simpl in H. destruct ident_eq.
+    + subst. inv H.
+      destruct a. simpl.
+      destruct ident_eq; try congruence. eauto.
+    + destruct a. simpl in *.
+      destruct ident_eq; try congruence.
+      generalize (IHms id ty ce ((align s (bitalignof ce t) + bitsizeof ce t)) H). intros (fofs & A). eauto.
+Qed.
+
+Lemma field_type_implies_field_offset: forall ms id ty ce,
+    field_type id ms = OK ty ->
+    exists fofs, field_offset ce id ms = OK fofs.
+Proof.
+  intros. unfold field_offset.
+  eapply field_type_implies_field_offset_rec; eauto.
+Qed.
+  
 (** field_offset_all returns all the byte offset for fileds in a structure  *)
 
 Fixpoint field_offset_all_rec (env: composite_env) (ms: members) (pos: Z)
