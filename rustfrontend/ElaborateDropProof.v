@@ -1179,16 +1179,6 @@ Proof.
 Qed.
 
 
-Lemma alloc_variables_app: forall ce m1 m2 m3 l1 l2 e1 e2 e3,
-    alloc_variables ce e1 m1 l1 e2 m2 ->
-    alloc_variables ce e2 m2 l2 e3 m3 ->
-    alloc_variables ce e1 m1 (l1 ++ l2) e3 m3.
-Proof. 
-  induction 1; intros.
-  - auto.
-  - simpl. econstructor; eauto.
-Qed.
-
 Inductive match_cont (j: meminj) : AN -> FM -> statement -> rustcfg -> cont -> RustIRsem.cont -> node -> option node -> option node -> node -> mem -> mem -> sup -> sup -> Prop :=
 | match_Kseq: forall an flagm body cfg s ts k tk pc next cont brk nret m tm bound tbound
     (MSTMT: match_stmt an flagm body cfg s ts pc next cont brk nret)

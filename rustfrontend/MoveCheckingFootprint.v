@@ -146,6 +146,17 @@ Proof.
   eapply PTree.elements_correct. eauto.
 Qed.
 
+Lemma in_footprint_of_env_inv: forall b le,    
+    In b (footprint_of_env le) ->
+    exists id ty, le ! id = Some (b, ty).
+Proof.
+  intros. unfold footprint_of_env in H.
+  eapply in_map_iff in H.
+  destruct H as ((id & (b1 & ty)) & A1 & A2).
+  simpl in *. subst.
+  exists id , ty. eapply PTree.elements_complete. eauto.
+Qed.
+
 Lemma in_footprint_flat_fp_map: forall b fp fpm id,
     fpm ! id = Some fp ->
     In b (footprint_flat fp) ->
@@ -155,6 +166,7 @@ Proof.
   eapply in_flat_map. exists (id, fp). split; auto.
   eapply PTree.elements_correct. auto.
 Qed.
+
 
 (* Try to define new sem_wt *)
 
@@ -2407,34 +2419,6 @@ Definition type_to_empty_footprint ce (ty: type) :=
   Fix (@well_founded_removeR composite) (type_to_empty_footprint' ce) ce ty.
 
 
-(** Checking of non-cyclic reference in Tstruct *)
-
-Lemma struct_or_variant_eq: forall (s1 s2: struct_or_variant),
-    {s1 = s2} + {s1 <> s2}.
-Proof. intros. decide equality. Qed.
-
-Section REC.
-
-  Variable ce: composite_env.
-  Variable rec: forall (ce': composite_env), (removeR ce' ce) -> type -> bool.
-
-  Definition check_cyclic_struct' (ty: type) : bool :=
-    match ty with
-    | Tstruct _ i =>
-        match get_composite ce i with
-        | co_some i co P _ =>
-            forallb (fun '(Member_plain _ fty) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P)fty) (co_members co) && (struct_or_variant_eq (co_sv co) Struct)
-        | co_none => false
-        end
-    | _ => true
-    end.
-
-End REC.
-
-Definition check_cyclic_struct ce (ty: type) : bool :=
-  Fix (@well_founded_removeR composite) check_cyclic_struct' ce ty.
-
-
 (** well-founded relation of composite env *)
 
 Definition ce_extends (env env': composite_env) : Prop := forall id co, env!id = Some co -> env'!id = Some co.
@@ -2554,3 +2538,28 @@ Proof.
   intros. eapply type_to_empty_footprint_wt_aux. auto.
   red. auto.
 Qed.
+
+Lemma type_to_empty_footprint_flat: forall ce ty,
+    footprint_flat (type_to_empty_footprint ce ty) = nil.
+Proof.
+  intros ce.
+  unfold type_to_empty_footprint.
+  generalize ce at 1.
+  pattern ce. apply well_founded_ind with (R := removeR).
+  eapply well_founded_removeR.
+  intros ce1 IH. intros. unfold type_to_empty_footprint in *.
+  erewrite unroll_Fix in *.
+  destruct ty; try (simpl; congruence).
+  simpl in *. destruct (get_composite ce1 i) eqn: GCO; try congruence. auto.
+  subst. simpl.
+  rewrite flat_map_concat_map.
+  eapply concat_nil_Forall. 
+  eapply Forall_forall. intros.
+  eapply in_map_iff in H.
+  destruct H as (((id & fofs) & ffp) & A1 & A2). subst.
+  eapply in_map_iff in A2.
+  destruct A2 as (m & B1 & B2). destruct m.
+  destruct (field_offset ce0 id0 (co_members co)) eqn: FOFS; inv B1; auto.
+  eapply IH. eapply PTree_removeR. eauto.
+Qed.  
+  

@@ -1067,6 +1067,66 @@ Proof.
     eapply IHfp; eauto.
 Qed.
 
+Definition footprint_of_val (v: val) : list block :=
+  match v with
+  | Vptr b _ => b :: nil
+  | _ => nil
+  end.
+
+Lemma sem_wt_val_unchanged_blocks: forall fp m1 m2 v
+    (WT: sem_wt_val ce m1 fp v)
+    (UNC: Mem.unchanged_on (fun b1 _ => In b1 (footprint_flat fp)
+                                     \/ In b1 (footprint_of_val v)) m1 m2),
+      sem_wt_val ce m2 fp v.
+Proof.
+  induction fp using strong_footprint_ind; intros.
+  - inv WT.
+  - inv WT; econstructor.
+  - inv WT. 
+    econstructor.
+    eapply sem_wt_loc_unchanged_blocks; eauto.
+    eapply Mem.unchanged_on_implies; eauto. simpl.
+    intros. destruct H; auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. auto.
+    eapply Mem.perm_valid_block; eauto.
+    eapply Mem.load_unchanged_on; eauto.
+    simpl. auto. auto.
+  - inv WT. econstructor.
+    eapply sem_wt_loc_unchanged_blocks; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. destruct H0; auto.
+    auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto. 
+    simpl. auto. 
+    eapply Mem.perm_valid_block; eauto.
+  - inv WT. econstructor.
+    eapply sem_wt_loc_unchanged_blocks; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. destruct H; auto.
+    auto.
+    red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
+    simpl. auto. 
+    eapply Mem.perm_valid_block; eauto.
+Qed.
+
+Lemma sem_wt_val_list_unchanged_blocks: forall fpl vl m1 m2
+    (WT: sem_wt_val_list ce m1 fpl vl)
+    (UNC: Mem.unchanged_on (fun b1 _ => In b1 (flat_map footprint_flat fpl)
+                                     \/ In b1 (flat_map footprint_of_val vl)) m1 m2),
+      sem_wt_val_list ce m2 fpl vl.
+Proof.
+  induction 1; intros; simpl in *.
+  econstructor.
+  econstructor.
+  eapply sem_wt_val_unchanged_blocks. eauto.
+  eapply Mem.unchanged_on_implies; eauto. simpl.
+  intros. rewrite !in_app. destruct H0; auto.
+  eapply IHWT.
+  eapply Mem.unchanged_on_implies; eauto. simpl.
+  intros. rewrite !in_app. destruct H0; auto.
+Qed.
+
 (* A more general lemma of sem_wt_loc_unchanged_blocks but it require
 wt_footprint premise: may be we can combine them into a single lemma?*)
 Lemma sem_wt_loc_unchanged_loc: forall fp m1 m2 b ofs ty
@@ -3585,6 +3645,8 @@ Inductive sound_state: state -> Prop :=
     (FUNTY: type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv)
     (* arguments are semantics well typed *)
     (WTVAL: list_forall2 (sem_wt_val ce m) fpl args)
+    (* Used in assign_loc_sound in function entry proof *)
+    (ANORM: val_casted_list args tyargs)
     (WTFP: list_forall2 (wt_footprint ce) (type_list_of_typelist tyargs) fpl)
     (STK: sound_stacks k m fpf)
     (FLAT: flat_fp = flat_fp_frame fpf ++ flat_map footprint_flat fpl)
@@ -5296,6 +5358,258 @@ Proof.
   eapply in_app in H0. destruct H0; auto.
   exfalso. eapply H. eapply in_app; auto.
 Qed.
+
+Lemma analyze_collect_func_inv: forall f cfg entry ce init uninit universe,
+    analyze ce f cfg entry = OK (init, uninit, universe) ->
+    collect_func ce f = OK universe.
+Admitted.
+
+Lemma check_universe_wf_own_env: forall le ce universe init uninit P1 P2
+    (CHECK: check_universe_wf le ce universe = OK tt)
+    (EMPTY: forall id paths, init ! id = Some paths ->
+                        Paths.Empty paths),
+    wf_own_env le ce (mkown init uninit universe P1 P2).
+Admitted.
+
+Lemma alloc_variables_bind_vars_eq: forall l ce le1 m1 le2 m2,
+    alloc_variables ce le1 m1 l le2 m2 ->
+    bind_vars (env_to_tenv le1) l = (env_to_tenv le2).
+Admitted.
+
+
+(* We should consider Tstruct ! *)
+Fixpoint init_footprint_map ce (l: list (ident * type)) (fpm: fp_map) :=
+  match l with
+  | nil => fpm
+  | (id, ty) :: l' =>
+      init_footprint_map ce l' (PTree.set id (type_to_empty_footprint ce ty) fpm)
+  end.
+
+Lemma alloc_variables_wf_env: forall l e1 e2 fpm1 m1 m2 ce
+    (WFENV: wf_env fpm1 ce m1 e1)
+    (ALLOC: alloc_variables ce e1 m1 l e2 m2)
+    (NOREP: list_norepet (var_names l))
+    (NIN: (forall id, In id (var_names l) -> fpm1 ! id = None))
+    (CHECK: check_cyclic_struct_res ce (var_types l) = OK tt),
+    wf_env (init_footprint_map ce l fpm1) ce m2 e2.
+Admitted.
+
+Lemma alloc_variables_norepet: forall l e1 e2 m1 m2 ce
+    (ALLOC: alloc_variables ce e1 m1 l e2 m2)
+    (VALID: forall id b ty, e1 ! id = Some (b, ty) -> Mem.valid_block m1 b)
+    (NIN: forall id ty, In (id, ty) l -> e1 ! id = None)
+    (NOREP: list_norepet (footprint_of_env e1)),
+    list_norepet (footprint_of_env e2)
+    /\ (forall id b ty, e2 ! id = Some (b, ty) ->
+                  e1 ! id = None ->
+                  ~ Mem.valid_block m1 b).
+Admitted.
+
+Lemma alloc_variables_unchanged_on: forall l e1 e2 m1 m2 ce P
+    (ALLOC: alloc_variables ce e1 m1 l e2 m2),
+    Mem.unchanged_on P m1 m2.
+Proof.
+  induction l; intros.
+  inv ALLOC. eapply Mem.unchanged_on_refl.
+  inv ALLOC. eapply Mem.unchanged_on_trans.
+  eapply Mem.alloc_unchanged_on; eauto.
+  eauto.
+Qed.
+
+Lemma mmatch_no_init_place: forall own m fpm le,
+    (forall p, is_init own p = false) ->
+    mmatch fpm ce m le own.
+Proof.
+  intros.
+  red. intros. congruence.
+Qed.
+
+Lemma wf_env_empty: forall fpm ce m,
+    wf_env fpm ce m empty_env.
+Proof.
+  intros. constructor; intros; rewrite PTree.gempty in H; try congruence.
+Qed.
+
+  
+Lemma bind_parameters_sound: forall pl vl fpl tyl fpm1 m1 m2 own1 own2 le ce
+   (MM: mmatch fpm1 ce m1 le own1)
+   (BIND: bind_parameters ce le m1 pl vl m2)
+   (CAST: val_casted_list vl tyl)
+   (NOREP1: list_norepet (flat_map footprint_flat fpl))
+   (WTVAL: sem_wt_val_list ce m1 fpl vl)
+   (WTFPL: wt_footprint_list ge (type_list_of_typelist tyl) fpl)
+   (INIT: init_place_list own1 (places_of_locals pl) = own2)
+   (NOREP2: list_norepet (footprint_of_env le ++ flat_fp_map fpm1))
+   (EMPFP: forall id ty, In (id, ty) pl -> exists fp, fpm1 ! id = Some fp /\ footprint_flat fp = nil)
+   (DIS: list_disjoint (flat_map footprint_flat fpl) (footprint_of_env le ++ flat_fp_map fpm1))
+   (WFOWN: wf_own_env le ce own1),
+  exists fpm2,
+    mmatch fpm2 ce m2 le own2
+    /\ list_norepet (footprint_of_env le ++ flat_fp_map fpm2)
+    /\ wf_env fpm2 ce m2 le
+    /\ incl (flat_fp_map fpm2) (flat_map footprint_flat fpl ++ flat_fp_map fpm1).
+  Admitted.
+
+Lemma type_of_params_eq_var_type: forall l,
+    type_list_of_typelist (type_of_params l) = var_types l.
+Proof.
+  induction l; simpl; auto.
+  destruct a. simpl. f_equal. auto.
+Qed.
+
+Lemma init_footprint_map_app: forall l1 l2 fpm ce,
+    init_footprint_map ce (l1 ++ l2) fpm =
+      init_footprint_map ce l2 (init_footprint_map ce l1 fpm).
+Proof.
+  induction l1; simpl; eauto; intros.
+  destruct a.  erewrite IHl1; eauto.
+Qed.
+
+Lemma init_footprint_map_flat_element: forall l fpm id ty
+    (IN: In (id, ty) l),
+    exists fp, (init_footprint_map ce l fpm) ! id = Some fp
+          /\ footprint_flat fp = nil.
+Proof.
+  intro. cut (exists n, length l = n); eauto. intros (n & LEN).
+  generalize dependent l.
+  induction n; intros.
+  - eapply length_zero_iff_nil in LEN. subst. simpl in *.
+    contradiction.
+  - eapply length_S_inv in LEN. destruct LEN as (l' & (id1 & ty1) & APP & LEN).
+    subst.
+    eapply in_app in IN. destruct IN.
+    + exploit IHn; eauto. instantiate (1 := fpm).
+      intros (fp & A1 & A2).
+      erewrite init_footprint_map_app. simpl.
+      rewrite PTree.gsspec.
+      destruct peq; subst.
+      * eexists. split; eauto.
+        eapply type_to_empty_footprint_flat.
+      * rewrite A1. eauto.
+    + inv H; try contradiction.
+      inv H0.
+      erewrite init_footprint_map_app. simpl.
+      rewrite PTree.gss.
+      eexists. split; eauto.
+      eapply type_to_empty_footprint_flat.
+Qed.
+    
+Lemma init_footprint_map_flat: forall l fpm1,
+    list_equiv (flat_fp_map (init_footprint_map ce l fpm1)) (flat_fp_map fpm1).
+Admitted.
+
+Lemma list_equiv_nil_r {A: Type}: forall (l: list A),
+    list_equiv l nil ->
+    l = nil.
+Proof.
+  intros. destruct l. auto. red in H.
+  generalize (H a). intros (A1 & A2).
+  exfalso. eapply A1. simpl. auto.
+Qed.
+
+Lemma function_entry_sound: forall f vl fpl m1 le m2 own1 own2 
+   (ENTRY: function_entry ge f vl m1 le m2)
+   (OWN1: init_own_env ge f = OK own1)
+   (OWN2: init_place_list own1 (places_of_locals (fn_params f)) = own2)
+   (WTVAL: sem_wt_val_list ge m1 fpl vl)
+   (WTFPL: wt_footprint_list ge (var_types f.(fn_params)) fpl)
+   (CAST: val_casted_list vl (type_of_params f.(fn_params)))
+   (INCL: Mem.sup_include (flat_map footprint_flat fpl) (Mem.support m1))
+   (NOREP: list_norepet (flat_map footprint_flat fpl))
+   (* used to prove wf_own_env for own1 *)
+   (CHECK: move_check_function ge f = OK tt)
+   (* prove disjointness between le and fpm *)
+   (VALID: forall b, In b (flat_map footprint_flat fpl) -> Mem.valid_block m1 b),
+  exists fpm,
+    mmatch fpm ge m2 le own2
+    /\ wf_env fpm ge m2 le
+    /\ list_norepet (footprint_of_env le ++ flat_fp_map fpm)
+    (* used to prove that fpm is separated from the footprint of
+    function frames *)
+    /\ (forall b, In b (footprint_of_env le ++ flat_fp_map fpm) ->
+            ~ Mem.valid_block m1 b \/ In b (flat_map footprint_flat fpl)).
+Proof.
+  intros.
+  unfold move_check_function in CHECK.
+  monadInv CHECK.
+  destruct x1 as ((initMap & uninitMap) & universe). monadInv EQ2.
+  (* try to destruct init_own_env *)
+  unfold init_own_env in OWN1.
+  destruct (collect_func ge f) eqn: COL; simpl in OWN1; try congruence.
+  set (empty:= (PTree.map
+                   (fun (_ : positive) (_ : LPaths.t) => Paths.empty)
+                   t)) in *.
+  set (uninit := (add_place_list t
+                (places_of_locals (fn_params f ++ fn_vars f)) empty)) in *.
+  generalize OWN1. clear OWN1.
+  set (flag := check_own_env_consistency empty empty uninit t).
+  generalize (eq_refl flag).
+  generalize flag at 1 3.
+  intros flag0 E. destruct flag0; try congruence.
+  intros. 
+  exploit analyze_collect_func_inv; eauto. intros COL1.
+  rewrite COL in COL1. inv COL1.
+  inv ENTRY.
+  assert (WFOWN1: wf_own_env le ge own1).
+  { inv OWN1. eapply check_universe_wf_own_env.
+    destruct x1.
+    replace (PTree.empty type) with (env_to_tenv (PTree.empty (block * type))) in EQ0 by auto.
+    erewrite alloc_variables_bind_vars_eq in EQ0.
+    2: eauto. eapply EQ0.
+    intros id paths EMP. unfold empty in EMP. erewrite PTree.gmap in EMP.
+    destruct (universe ! id) eqn: G; simpl in EMP; try congruence.
+    inv EMP. eapply Paths.empty_1. }              
+  assert (MM1: mmatch (init_footprint_map ce (fn_params f ++ fn_vars f) (PTree.empty footprint)) ce m0 le own1).
+  { eapply mmatch_no_init_place.
+    intros. inv OWN1.
+    unfold is_init. simpl.
+    unfold empty. unfold PathsMap.get.
+    rewrite PTree.gmap. destruct (universe ! (local_of_place p)); simpl.
+    auto. auto. }
+  set (fpm1 := (init_footprint_map ce (fn_params f ++ fn_vars f) (PTree.empty footprint))) in *.
+  assert (WFENV1: wf_env fpm1 ce m0 le).
+  { eapply alloc_variables_wf_env. 2: eauto.
+    eapply wf_env_empty. unfold var_names. rewrite map_app.
+    eauto.
+    intros. eapply PTree.gempty.
+    destruct x2. auto. }
+  assert (WTVAL1: sem_wt_val_list ge m0 fpl vl).
+  { eapply sem_wt_val_list_unchanged_blocks. eauto.
+    eapply alloc_variables_unchanged_on; eauto. }
+  exploit alloc_variables_norepet; eauto.
+  intros. rewrite PTree.gempty in H2. inv H2.
+  econstructor.
+  intros (NOREPLE & NVALID).
+  (* show that fpm1 is empty *)
+  generalize (init_footprint_map_flat (fn_params f ++ fn_vars f) (PTree.empty footprint)).
+  intros EQUIV.
+  replace (flat_fp_map (PTree.empty footprint)) with (@nil block) in EQUIV by auto.
+  exploit @list_equiv_nil_r; eauto. intros NIL. fold fpm1 in NIL.    
+  exploit bind_parameters_sound. eapply MM1. eauto. eauto.
+  eapply NOREP. eauto.
+  erewrite type_of_params_eq_var_type. eauto.
+  eauto.
+  (* norepet *)
+  rewrite NIL. rewrite app_nil_r. auto.
+  intros.  
+  eapply init_footprint_map_flat_element. eapply in_app; eauto.
+  (* disjoint *)
+  rewrite NIL. rewrite app_nil_r.
+  red. intros. intro. subst.
+  exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & LE).
+  eapply NVALID; eauto.
+  auto.
+  intros (fpm2 & MM2 & NOREP3 & WFENV2 & INCL1).
+  exists fpm2.
+  repeat apply conj; eauto.
+  intros. rewrite in_app in H2. destruct H2; auto.
+  exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & LE).
+  left. eauto.
+  right. eapply INCL1 in H2.
+  rewrite in_app in H2. destruct H2; auto.
+  rewrite NIL in H2. inv H2.
+Qed.
+
   
 (* More generally, rsw_acc is preserved under permuation of the
       footprint *)
@@ -5909,12 +6223,6 @@ Proof.
   - inv SOUND.
 
     assign_loc_sound
-    Lemma function_entry_sound: forall own f vl m1 le m2
-        (ENTRY: function_entry ge f vl m1 le m2)
-        (OWN: init_own_env ge f = OK own)
-        exists fpm,
-          mmatch fpm ge m2 le own
-          /\ wf_env fpm ge m2 le.
       
         
 

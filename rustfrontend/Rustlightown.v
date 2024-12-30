@@ -961,6 +961,17 @@ Inductive alloc_variables (ce: composite_env) : env -> mem ->
     alloc_variables ce (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
     alloc_variables ce e m ((id, ty) :: vars) e2 m2.
 
+
+Lemma alloc_variables_app: forall ce m1 m2 m3 l1 l2 e1 e2 e3,
+    alloc_variables ce e1 m1 l1 e2 m2 ->
+    alloc_variables ce e2 m2 l2 e3 m3 ->
+    alloc_variables ce e1 m1 (l1 ++ l2) e3 m3.
+Proof. 
+  induction 1; intros.
+  - auto.
+  - simpl. econstructor; eauto.
+Qed.
+
 (** Assign the values to the memory blocks of the function parameters  *)
 Inductive bind_parameters (ce: composite_env) (e: env):
                            mem -> list (ident * type) -> list val ->
