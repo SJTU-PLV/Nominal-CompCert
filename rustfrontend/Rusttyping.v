@@ -10,6 +10,7 @@ Require Import RustIR RustIRown.
 Require Import Errors Maps.
 Require Archi.
 
+Import ListNotations.
 Local Open Scope error_monad_scope.
 
 (* This file is not used for now *)
@@ -341,5 +342,107 @@ Proof.
   - inv H. simpl. eauto.
 Qed.
 
+
+(** Type checking algorithm *)
+
+Section COMP_ENV.
+
+  Variable ce: composite_env.
+  Variable te: typenv.
+  
+  Fixpoint type_check_place (p: place) : res unit :=
+    match p with
+    | Plocal id ty1 =>
+        match te ! id with
+        | Some ty2 =>
+            if type_eq ty1 ty2 && valid_type ty1 then
+              OK tt
+            else
+              Error [CTX id; MSG "has wrong type"]
+        | _ =>
+            Error [CTX id; MSG "is not declared"]
+        end
+    | Pderef p ty =>
+        do _ <- type_check_place p;
+        do ty1 <- type_deref (typeof_place p);
+        if type_eq ty ty1 then
+          OK tt
+        else
+          Error (msg "deref has wrong type")
+    | Pfield p fid fty =>
+        do _ <- type_check_place p;
+        match typeof_place p with
+        | Tstruct orgs id =>
+            match ce ! id with
+            | Some co =>
+                match co_sv co with
+                | Struct =>
+                    do fty1 <- field_type fid (co_members co);
+                    if type_eq fty fty1 then
+                  OK tt
+                    else
+                      Error (msg "wrong field type")
+                | _ => Error (msg "not struct in field type")
+                end
+            | _ => Error (msg "no composite")
+            end
+        | _ =>  Error (msg "wrong struct type")
+        end
+    | Pdowncast p fid fty =>
+        do _ <- type_check_place p;
+        match typeof_place p with
+        | Tvariant orgs id =>
+            match ce ! id with
+            | Some co =>
+                match co_sv co with
+                | TaggedUnion =>
+                    do fty1 <- field_type fid (co_members co);
+                    if type_eq fty fty1 then
+                  OK tt
+                    else
+                      Error (msg "wrong field type")
+                | _ => Error (msg "not variant in downcast type")
+                end
+            | _ => Error (msg "no composite")
+            end
+        | _ =>  Error (msg "wrong enum type")
+        end
+    end.
+    
+End COMP_ENV.
+
+(** Soundness of type checking  *)
+
+Lemma type_check_place_sound: forall ce te p,
+    type_check_place ce te p = OK tt ->
+    wt_place te ce p.
+Proof.
+  induction p; intros; simpl in *.
+  - destruct (te!i) eqn: A1; try congruence.
+    destruct (type_eq t t0 && valid_type t) eqn: A2; try congruence.
+    eapply andb_true_iff in A2 as (A3 & A4).
+    destruct type_eq in A3; simpl in A3; try congruence. subst.
+    econstructor; eauto.
+  - monadInv H.
+    destruct (typeof_place p) eqn: PTY; try congruence.
+    destruct (ce!i0) eqn: CO; try congruence.
+    destruct (co_sv c) eqn: SV; try congruence.
+    monadInv EQ0.
+    destruct type_eq; try congruence. subst.
+    destruct x.
+    econstructor; eauto. 
+  - monadInv H.    
+    destruct type_eq; try congruence. subst.
+    destruct x.
+    econstructor; eauto.
+  - monadInv H.
+    destruct (typeof_place p) eqn: PTY; try congruence.
+    destruct (ce!i0) eqn: CO; try congruence.
+    destruct (co_sv c) eqn: SV; try congruence.
+    monadInv EQ0.
+    destruct type_eq; try congruence. subst.
+    destruct x.
+    econstructor; eauto.
+Qed.
 
 (** End of syntactic type checking  *)

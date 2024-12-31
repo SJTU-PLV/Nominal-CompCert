@@ -219,7 +219,46 @@ Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res 
   | _, _ => OK tt
   end.
 
-Definition check_universe_wf (te: typenv) (ce: composite_env) (universe: PathsMap.t) : Errors.res unit := OK tt.
+(** Translation validation of wf_own_env *)
+
+Definition check_universe_shallow (universe: Paths.t) : bool :=
+  Paths.for_all (fun p1 => Paths.for_all (fun p2 => negb (is_shallow_prefix p1 p2))
+                          (Paths.filter (fun p2 => is_prefix_strict p1 p2) universe))
+                universe.
+
+Definition check_universe_no_downcast (universe: Paths.t) : bool :=
+  Paths.for_all (fun p => forallb (fun ph => match ph with
+                                        | ph_downcast _ _ => false
+                                        | _ => true
+                                        end) (snd (path_of_place p))) universe. 
+
+Definition check_universe_own_type (universe: Paths.t) : bool :=
+  Paths.for_all (fun p => match typeof_place p with
+                       | Tbox _ => true
+                       | _ => false
+                       end) (Paths.filter (fun p => negb (is_full_internal universe p)) universe).
+
+Definition check_universe_wt_place ce te (universe: Paths.t) : bool :=
+  Paths.for_all (fun p => match type_check_place ce te p with
+                       | OK _ => true
+                       | _ => false
+                       end) universe.
+
+Definition check_universe_wf' ce te (universe: PathsMap.t) : bool :=
+  (** Hard to debug! We can just comment one of the checking to see if
+  it fails *)
+  PTree_Properties.for_all universe (fun _ w => check_universe_shallow w
+                                             && check_universe_no_downcast w
+                                             && check_universe_own_type w
+                                             && check_universe_wt_place ce te w).
+
+Definition check_universe_wf (te: typenv) (ce: composite_env) (universe: PathsMap.t) : Errors.res unit :=
+  if check_universe_wf' ce te universe then
+    OK tt
+  else
+    Error (msg "check_universe_wf fail")
+.
+
 
 Fixpoint bind_vars (te: typenv) (l: list (ident * type)) : typenv :=
   match l with

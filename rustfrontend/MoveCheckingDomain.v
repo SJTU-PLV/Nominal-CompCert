@@ -1329,3 +1329,93 @@ Proof.
   destruct (move_check_expr' ce init uninit universe a); try congruence.
   destruct (moved_place a) eqn: MP; simpl; eauto.
 Qed.  
+
+
+(** Translation validation of wf_own_env in function entry *)
+
+Ltac simpl_paths_mem :=
+  let IN := fresh "IN" in
+  match goal with
+  | [H: Paths.mem ?p (PathsMap.get ?id ?s) = true |- _ ] =>
+      eapply Paths.mem_2 in H; unfold PathsMap.get in H;
+      destruct (s!id) eqn: IN;
+      [|unfold LPaths.bot in H; exfalso; eapply Paths.empty_1; eauto]
+  end.
+
+Lemma check_universe_wf_own_env: forall le ce universe init uninit P1 P2
+    (CHECK: check_universe_wf le ce universe = OK tt)
+    (EMPTY: forall id paths, init ! id = Some paths ->
+                        Paths.Empty paths),
+    wf_own_env le ce (mkown init uninit universe P1 P2).
+Proof.
+  intros.
+  unfold check_universe_wf in CHECK.
+  destruct (check_universe_wf' ce le universe) eqn: CK; try congruence.
+  unfold check_universe_wf' in CK. erewrite PTree_Properties.for_all_correct in CK.
+  econstructor; simpl; intros; try (unfold in_universe in *; simpl in *).
+  - unfold is_init in H.
+    eapply Paths.mem_2 in H. unfold PathsMap.get in H. simpl in H.
+    destruct (@PTree.get LPaths.t (local_of_place p) init) eqn: A.
+    exploit EMPTY; eauto. unfold LPaths.bot in H.
+    generalize (Paths.empty_1 H). contradiction.
+  - repeat simpl_paths_mem.
+    destruct (path_of_place p1) eqn: POP1.
+    destruct (path_of_place p2) eqn: POP2.
+    rewrite local_of_paths_of_place in *.
+    rewrite POP1 in *. rewrite POP2 in *. simpl in *.
+    destruct (ident_eq i i0).
+    + subst. exploit CK. eauto.
+      intros CK1. rewrite !andb_true_iff in CK1.
+      destruct CK1 as (((C1 & C2) & C3) & C4).
+      rewrite IN0 in IN. inv IN.
+      unfold check_universe_shallow in C1. 
+      eapply Paths.for_all_2 in C1.
+      eapply negb_true_iff.
+      eapply C1 in H. eapply Paths.for_all_2 in H.
+      assert (IN3: Paths.In p2 (Paths.filter (fun p2 : Paths.elt => is_prefix_strict p1 p2) t)).
+      { eapply Paths.filter_3. red. solve_proper. auto. auto. }
+      eapply H in IN3. auto.
+      red. solve_proper. red.
+      unfold Proper. reflexivity.
+    + unfold is_shallow_prefix.
+      rewrite POP1. rewrite POP2. destruct ident_eq; try congruence.
+      simpl. auto.
+  - simpl_paths_mem.
+    destruct (path_of_place p) eqn: POP. simpl in *.
+    exploit CK. eauto.
+    intros CK1. rewrite !andb_true_iff in CK1.
+    destruct CK1 as (((C1 & C2) & C3) & C4).
+    unfold check_universe_no_downcast in C2.
+    eapply Paths.for_all_2 in C2.
+    eapply C2 in H.
+    erewrite forallb_forall in H. rewrite POP in *.
+    simpl in H. intro.
+    eapply H in H0. congruence.
+    red. unfold Proper. reflexivity.
+  - simpl_paths_mem.
+    destruct (path_of_place p) eqn: POP. simpl in *.
+    exploit CK. eauto.
+    intros CK1. rewrite !andb_true_iff in CK1.
+    destruct CK1 as (((C1 & C2) & C3) & C4).
+    unfold check_universe_own_type in C3.
+    eapply Paths.for_all_2 in C3.
+    assert (IN1: Paths.In p (Paths.filter (fun p : Paths.elt => negb (is_full_internal t p)) t)).
+    { eapply Paths.filter_3. red. solve_proper.
+      auto. unfold is_full in H0.
+      unfold PathsMap.get in H0.
+      rewrite IN in H0.  eapply negb_true_iff; eauto. }
+    eapply C3 in IN1. destruct (typeof_place p); try congruence. eauto.
+    red. unfold Proper. reflexivity.
+  - simpl_paths_mem.
+    destruct (path_of_place p) eqn: POP.
+    exploit CK. eauto.
+    intros CK1. rewrite !andb_true_iff in CK1.
+    destruct CK1 as (((C1 & C2) & C3) & C4).
+    unfold check_universe_wt_place in C4.
+    eapply Paths.for_all_2 in C4.
+    eapply C4 in H.    
+    destruct (type_check_place ce le p) eqn: TCK; try congruence.
+    destruct u.
+    eapply type_check_place_sound; eauto.
+    red. unfold Proper. reflexivity.
+Qed.

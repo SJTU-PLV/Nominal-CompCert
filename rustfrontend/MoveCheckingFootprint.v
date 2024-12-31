@@ -168,6 +168,76 @@ Proof.
 Qed.
 
 
+(* Key lemma to simplify the proof of set_disjoint_footprint_norepet *)
+Lemma PTree_remove_elements_eq {A: Type}: forall id (v: A) m,
+    PTree.elements (PTree.remove id m) = PTree.elements (PTree.remove id (PTree.set id v m)).
+Proof.
+  intros.
+  eapply PTree.elements_extensional.
+  intros. rewrite !PTree.grspec.
+  destruct PTree.elt_eq; subst; auto.
+  rewrite PTree.gso; eauto.
+Qed.
+
+Lemma PTree_remove_elements_eq2 {A: Type}: forall id (v: A) m,
+    m ! id = None ->
+    PTree.elements m = PTree.elements (PTree.remove id (PTree.set id v m)).
+Proof.
+  intros.
+  eapply PTree.elements_extensional.
+  intros. rewrite !PTree.grspec.
+  destruct PTree.elt_eq; subst; auto.
+  rewrite PTree.gso; eauto.
+Qed.
+
+Lemma cons_app {A: Type}: forall a (l: list A),
+    a :: l = (a::nil) ++ l.
+Proof. reflexivity. Qed.
+  
+
+Lemma set_env_footprint_norepet: forall e1 id ty b,
+    list_norepet (footprint_of_env e1) ->
+    ~ In b (footprint_of_env e1) ->
+    list_norepet (footprint_of_env (PTree.set id (b, ty) e1)).
+Proof.
+  intros until b. intros NOREP NIN.
+  unfold footprint_of_env in *.
+  exploit PTree.elements_remove.
+  instantiate (3 := (PTree.set id (b, ty) e1)).
+  eapply PTree.gss. intros (l3 & l4 & A3 & A4).
+  rewrite A3.
+  rewrite map_app. simpl.
+  rewrite cons_app.     
+  eapply list_norepet_append_commut2. rewrite app_assoc. rewrite <- map_app.
+  destruct (e1 ! id) eqn: E1.
+  exploit PTree.elements_remove.
+  instantiate (3 := e1).
+  eauto. intros (l1 & l2 & A1 & A2).
+  erewrite <- PTree_remove_elements_eq in A4. rewrite A4 in A2. 
+  rewrite A2.
+  rewrite A1 in *. rewrite map_app in NOREP. simpl in NOREP.
+  rewrite cons_app in NOREP.
+  eapply list_norepet_append_commut2 in NOREP. rewrite app_assoc in NOREP.
+  rewrite <- map_app in NOREP.
+  eapply list_norepet_app in NOREP as (N1 & N2 & N3). eapply list_norepet_app.
+  repeat apply conj; auto.
+  eapply list_norepet_cons. simpl. auto. eapply list_norepet_nil.
+  red. intros. intro. subst. eapply NIN.
+  inv H0; try contradiction.
+  eapply in_map_iff in H. destruct H as ((id1 & (b1 & ty1)) & IN1 & IN2). simpl in *.
+  subst.
+  eapply in_map_iff. exists (id1, (y, ty1)). split; auto.
+  rewrite in_app in IN2. rewrite in_app. destruct IN2; auto.
+  right. eapply in_cons; auto.
+  erewrite <- PTree_remove_elements_eq2 in A4; auto. rewrite A4 in *. 
+  eapply list_norepet_app.
+  repeat apply conj; auto.
+  eapply list_norepet_cons. simpl. auto. eapply list_norepet_nil.
+  red. intros. intro. subst. eapply NIN.
+  inv H0; try contradiction.
+Qed.   
+
+
 (* Try to define new sem_wt *)
 
 Definition find_fields (fid: ident) (fpl: list (ident * Z * footprint)) : option (ident * Z * footprint) :=
@@ -1244,17 +1314,6 @@ Proof.
 Qed.
 
       
-(* Key lemma to simplify the proof of set_disjoint_footprint_norepet *)
-Lemma PTree_remove_elements_eq {A: Type}: forall id (v: A) m,
-    PTree.elements (PTree.remove id m) = PTree.elements (PTree.remove id (PTree.set id v m)).
-Proof.
-  intros.
-  eapply PTree.elements_extensional.
-  intros. rewrite !PTree.grspec.
-  destruct PTree.elt_eq; subst; auto.
-  rewrite PTree.gso; eauto.
-Qed.
-
 (* norepet (l ++ fpm) where l is a general list which can
     represent other elements in the frame *)
 Lemma set_disjoint_footprint_norepet: forall fpm1 fpm2 vfp id phl,
@@ -2562,4 +2621,137 @@ Proof.
   destruct (field_offset ce0 id0 (co_members co)) eqn: FOFS; inv B1; auto.
   eapply IH. eapply PTree_removeR. eauto.
 Qed.  
+
+(** Initialization of footprint map in function entry *)
+
+(* We should consider Tstruct ! *)
+Fixpoint init_footprint_map ce (l: list (ident * type)) (fpm: fp_map) :=
+  match l with
+  | nil => fpm
+  | (id, ty) :: l' =>
+      init_footprint_map ce l' (PTree.set id (type_to_empty_footprint ce ty) fpm)
+  end.
+
+
+Lemma init_footprint_map_app: forall l1 l2 fpm ce,
+    init_footprint_map ce (l1 ++ l2) fpm =
+      init_footprint_map ce l2 (init_footprint_map ce l1 fpm).
+Proof.
+  induction l1; simpl; eauto; intros.
+  destruct a.  erewrite IHl1; eauto.
+Qed.
+
+Lemma init_footprint_map_get_inv: forall l fpm id fp ce,
+    (init_footprint_map ce l fpm) ! id = Some fp ->
+    (exists ty, In (id, ty) l /\ fp = type_to_empty_footprint ce ty)
+    \/ fpm ! id = Some fp.
+Proof.
+  induction l; intros; simpl in *.
+  - eauto.
+  - destruct a.
+    exploit IHl; eauto. intros [(ty & A1 & A2) | A2].
+    + subst. left. exists ty. eauto.
+    + rewrite PTree.gsspec in A2.
+      destruct peq.
+      * subst. inv A2. left. exists t. eauto.
+      * eauto.
+Qed.
+
+Lemma init_footprint_map_get_not_in: forall l fpm id ce,
+    ~ In id (var_names l) ->
+    (init_footprint_map ce l fpm) ! id = fpm ! id.
+Proof.
+  induction l; simpl; auto; intros.
+  destruct a. simpl in *.
+  eapply Decidable.not_or in H. destruct H.
+  erewrite IHl; eauto.
+  rewrite PTree.gso; auto.
+Qed.  
   
+Lemma init_footprint_map_flat_element: forall l fpm id ty ce
+    (IN: In (id, ty) l),
+    exists fp, (init_footprint_map ce l fpm) ! id = Some fp
+          /\ footprint_flat fp = nil.
+Proof.
+  intro. cut (exists n, length l = n); eauto. intros (n & LEN).
+  generalize dependent l.
+  induction n; intros.
+  - eapply length_zero_iff_nil in LEN. subst. simpl in *.
+    contradiction.
+  - eapply length_S_inv in LEN. destruct LEN as (l' & (id1 & ty1) & APP & LEN).
+    subst.
+    eapply in_app in IN. destruct IN.
+    + exploit IHn; eauto. instantiate (1 := fpm).
+      intros (fp & A1 & A2).
+      erewrite init_footprint_map_app. simpl.
+      rewrite PTree.gsspec.
+      destruct peq; subst.
+      * eexists. split; eauto.
+        eapply type_to_empty_footprint_flat.
+      * rewrite A1. eauto.
+    + inv H; try contradiction.
+      inv H0.
+      erewrite init_footprint_map_app. simpl.
+      rewrite PTree.gss.
+      eexists. split; eauto.
+      eapply type_to_empty_footprint_flat.
+Qed.
+
+Lemma init_footprint_map_flat: forall l fpm1 ce
+    (NIN: forall id ty, In (id, ty) l -> fpm1 ! id = None),
+    (* (NOREP: list_norepet (var_names l)), *)
+    list_equiv (flat_fp_map (init_footprint_map ce l fpm1)) (flat_fp_map fpm1).
+Proof.
+  induction l; simpl; intros; auto.
+  red. intros. split; auto.
+  destruct a.
+  red. intros. split.
+  - intros.
+    destruct (in_dec ident_eq p (var_names l)).
+    (* show that IN2 is impossible because fp is empty *)
+    + eapply in_flat_map in H.
+      destruct H as ((id & fp) & IN1 & IN2).
+      eapply PTree.elements_complete in IN1.
+      exploit init_footprint_map_get_inv; eauto.
+      intros [(ty & A1 & A2) | A2].
+      * subst. simpl in IN2. rewrite type_to_empty_footprint_flat in IN2.
+        inv IN2.
+      * rewrite PTree.gsspec in A2.
+        destruct peq; auto.
+        inv A2. simpl in IN2. rewrite type_to_empty_footprint_flat in IN2.
+        inv IN2.
+        eapply in_flat_map; eauto.
+        exists (id, fp). simpl. split; auto.
+        eapply PTree.elements_correct. auto.
+    + exploit (IHl (PTree.set p (type_to_empty_footprint ce t) fpm1)).
+      simpl. intros. rewrite PTree.gsspec.
+      destruct peq; subst.
+      exfalso. eapply n. eapply in_map_iff. exists (p, ty). eauto.
+      eapply NIN; eauto.
+      instantiate (1 := x). intros EQUIV2.
+      erewrite EQUIV2 in H.
+      eapply in_flat_map in H.
+      destruct H as ((id & fp) & IN1 & IN2).
+      eapply PTree.elements_complete in IN1. erewrite PTree.gsspec in IN1.
+      destruct (peq id p); subst.
+      * inv IN1.  simpl in IN2.
+        erewrite type_to_empty_footprint_flat in IN2. inv IN2.
+      * eapply in_flat_map.
+        exists (id, fp). split. eapply PTree.elements_correct. eauto. auto.
+  - intros IN. eapply in_flat_map in IN.
+    destruct IN as ((id & fp) & IN1 & IN2).
+    eapply PTree.elements_complete in IN1.
+    destruct (in_dec ident_eq id (var_names l)).
+    + eapply in_map_iff in i. destruct i as ((id1 & ty) & B1 & B2).
+      simpl in B1. subst.
+      exploit NIN. right. eauto. intros C1. rewrite IN1 in C1. inv C1.
+    + eapply in_flat_map.
+      exists (id, fp). split; auto.
+      eapply PTree.elements_correct.
+      erewrite init_footprint_map_get_not_in; eauto.
+      rewrite PTree.gsspec.
+      destruct peq.
+      * subst. exploit NIN; eauto. intros. rewrite IN1 in H. inv H.
+      * auto.
+Qed.
+
