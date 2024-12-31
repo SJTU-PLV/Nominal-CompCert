@@ -95,12 +95,15 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
     (AL: (alignof_comp id | Ptrofs.unsigned ofs))
     (* The permission of the location is readable to make sure
     assign_loc has no memory error *)
-    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable),
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable)
+    (* range_perm cannot ensure that b is valid *)
+    (VALID: Mem.valid_block m b),
     sem_wt_val m (fp_struct id fpl) (Vptr b ofs)
 | wt_val_enum: forall b ofs fp tagz fid fofs id orgs
     (WTLOC: sem_wt_loc m (fp_enum id orgs tagz fid fofs fp) b (Ptrofs.unsigned ofs))
     (AL: (alignof_comp id | Ptrofs.unsigned ofs))
-    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable),
+    (PERM: Mem.range_perm m b (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sizeof_comp id) Cur Readable)
+    (VALID: Mem.valid_block m b),
     sem_wt_val m (fp_enum id orgs tagz fid fofs fp) (Vptr b ofs)
 .
 
@@ -326,7 +329,8 @@ Record wf_env (ce: composite_env) (m: mem) (e: env): Prop := {
     (* The permission of stack blocks is freeable *)
     wf_env_freeable: forall id b ty,
       e!id = Some (b, ty) ->
-      Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable;
+      Mem.range_perm m b 0 (sizeof ce ty) Cur Freeable /\
+        Mem.valid_block m b ;
   }.
 
 End FPM.
@@ -348,6 +352,7 @@ Record wf_own_env le ce (own: own_env) : Prop := {
     wf_own_universe_shallow: forall p1 p2,
       in_universe own p1 = true ->      
       in_universe own p2 = true ->
+      is_prefix_strict p1 p2 = true ->
       is_shallow_prefix p1 p2 = false;
 
     (* all place in the universe has no downcast *)
@@ -587,24 +592,30 @@ Proof.
   econstructor.
   - intros. eapply wf_env_footprint; eauto.
   - intros.
-    generalize (wf_env_freeable _ _ _ _ WFENV id b ty H); eauto. 
+    generalize (wf_env_freeable _ _ _ _ WFENV id b ty H); eauto.
+    intros (PERM & VAL).
+    split; auto.
     red. intros. erewrite <- Mem.unchanged_on_perm; eauto.
     simpl. eapply in_footprint_of_env; eauto.
-    eapply Mem.perm_valid_block; eauto.
+    eapply Mem.unchanged_on_support; eauto.    
 Qed.
 
 (* Sometimes we change the contents in the stacks but the permission
 is unchanged (most of the time) *)
 Lemma wf_env_perm_unchanged: forall e ce m1 m2 fpm,
     (forall b1 ofs1 k p, Mem.perm m1 b1 ofs1 k p <-> Mem.perm m2 b1 ofs1 k p) ->
+    Mem.sup_include (Mem.support m1) (Mem.support m2) ->
     wf_env fpm ce m1 e ->
     wf_env fpm ce m2 e.
 Proof.
-  intros until fpm. intros WFENV UNC.
+  intros until fpm. intros UNC SUP WFENV.
   econstructor.
   - intros. eapply wf_env_footprint; eauto.
   - intros.
-    red. intros. eapply WFENV; eauto.
+    split.
+    red. intros. eapply UNC; eauto.
+    eapply wf_env_freeable; eauto.
+    eapply SUP.
     eapply wf_env_freeable; eauto.
 Qed.
 

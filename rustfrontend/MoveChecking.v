@@ -260,6 +260,15 @@ Definition check_cyclic_struct_res ce (tyl: list type) : Errors.res unit :=
     OK tt
   else Error (msg "There is a cyclic reference of struct in the type of paramerters or variables").
 
+
+(* Check that the types of locals are valid type (i.e., not reference,
+array and function) *)
+Definition check_valid_types (tyl: list type) : Errors.res unit :=
+  if forallb valid_type tyl then
+    OK tt
+  else Error (msg "There is non-valid type in paramerters or variables").
+
+
 Definition var_types (l: list (ident * type)) :=
   map snd l.
 
@@ -275,6 +284,7 @@ Definition move_check_function (ce: composite_env) (f: function) : Errors.res un
   let (_, universe) := analysis_res in  
   do _ <- check_universe_wf te ce universe;
   do _ <- check_cyclic_struct_res ce (var_types (f.(fn_params) ++ f.(fn_vars)));
+  do _ <- check_valid_types (var_types (f.(fn_params) ++ f.(fn_vars)));
   (** 3. Run move checking ! *)
   do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) (check_expr ce) f.(fn_body) cfg;
   OK tt.
