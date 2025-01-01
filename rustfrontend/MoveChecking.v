@@ -328,7 +328,7 @@ Definition move_check_function (ce: composite_env) (f: function) : Errors.res un
   do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) (check_expr ce) f.(fn_body) cfg;
   OK tt.
 
-Definition transf_fundef (ce : composite_env) (id : ident) (fd : fundef) : Errors.res fundef :=
+Definition move_check_fundef (ce : composite_env) (id : ident) (fd : fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>
       match move_check_function ce f with
@@ -341,7 +341,7 @@ Definition transf_fundef (ce : composite_env) (id : ident) (fd : fundef) : Error
 Definition transl_globvar := fun (_ : ident) (ty : type) => OK ty.
 
 Definition move_check_program (p : program) :=
-  do p1 <- (transform_partial_program2 (transf_fundef (prog_comp_env p)) transl_globvar p);
+  do p1 <- (transform_partial_program2 (move_check_fundef (prog_comp_env p)) transl_globvar p);
    OK
      {|
      prog_defs := AST.prog_defs p1;

@@ -19,6 +19,35 @@ Require Import Wfsimpl.
 Import ListNotations.
 Local Open Scope error_monad_scope.    
 
+Inductive move_check_fundef_spec ce: fundef -> Prop :=
+| move_check_funct: forall f
+    (CKFUN: move_check_function ce f = OK tt),
+    move_check_fundef_spec ce (Internal f)
+| move_check_extern: forall orgs rels ef tyl rty cc,
+    move_check_fundef_spec ce (External orgs rels ef tyl rty cc).
+
+(** Specification of move checking  *)
+Record move_check_program_spec (p: program) :=
+  { prog_comp_consistent: composite_env_consistent (prog_comp_env p);
+
+    prog_comp_range: forall id co,
+      (prog_comp_env p) ! id = Some co ->
+      co_sizeof co <= Ptrofs.max_unsigned;
+
+    prog_comp_length: forall id co,
+      (prog_comp_env p) ! id = Some co ->
+      list_length_z (co_members co) <= Int.max_unsigned;
+
+    prog_comp_norepet: forall id co,
+      (prog_comp_env p) ! id = Some co ->
+      list_norepet (name_members (co_members co));
+
+    prog_fundef: forall id fd,
+      In (id, Gfun fd) p.(prog_defs) ->
+      move_check_fundef_spec p.(prog_comp_env) fd;
+
+  }.
+    
 Section MOVE_CHECK.
 
 Variable prog: program.
@@ -33,13 +62,18 @@ Let ce := ge.(genv_cenv).
 
 Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
                                                                   
-Let match_stmt (ae: AN) body cfg s := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s s.
+Let match_stmt (ae: AN) body cfg s ts := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s ts.
 
+(* split move_check_program_spec into the following hypotheses to simplify the proof *)
 Hypothesis CONSISTENT: composite_env_consistent ce.
 
 Hypothesis COMP_RANGE: forall id co, ce ! id = Some co -> co_sizeof co <= Ptrofs.max_unsigned.
 Hypothesis COMP_LEN: forall id co, ce ! id = Some co -> list_length_z (co_members co) <= Int.max_unsigned.
 Hypothesis COMP_NOREP: forall id co, ce ! id = Some co -> list_norepet (name_members (co_members co)).
+Hypothesis FUN_CHECK:  forall id fd,
+    In (id, Gfun fd) prog.(prog_defs) ->
+    move_check_fundef_spec ce fd.
+
 
 (** Properties of evaluation of place  *)
 
@@ -3153,7 +3187,8 @@ Lemma bind_parameters_sound: forall pl vl fpl fpm1 m1 m2 own1 own2 le
     mmatch fpm2 ce m2 le own2
     /\ list_norepet (footprint_of_env le ++ flat_fp_map fpm2)
     /\ wf_env fpm2 ce m2 le
-    /\ incl (flat_fp_map fpm2) (flat_map footprint_flat fpl ++ flat_fp_map fpm1).
+    /\ incl (flat_fp_map fpm2) (flat_map footprint_flat fpl ++ flat_fp_map fpm1)
+    /\ wf_own_env le ce own2.
 Proof.
   induction pl; intros.
   - inv BIND. inv CAST. inv WTVAL. inv WTFPL. simpl.
@@ -3212,7 +3247,7 @@ Proof.
     eapply wf_own_env_init_place. auto. auto.
     (* wf_env *)
     auto.
-    intros (fpm3 & MM3 & NOREP4 & WFENV3 & INCL2).
+    intros (fpm3 & MM3 & NOREP4 & WFENV3 & INCL2 & WFOWN2).
     exists fpm3. repeat apply conj; auto.
     (* incl *)
     simpl. red. intros. eapply INCL2 in H.
@@ -3224,10 +3259,22 @@ Proof.
     destruct peq in IN1; subst. inv IN1. simpl in IN2.
     auto. right. 
     eapply in_flat_map. exists (id1, fp1). split; eauto.
-    eapply PTree.elements_correct; eauto.
+    eapply PTree.elements_correct; eauto.    
 Qed.
-    
-    
+
+Lemma bind_parameters_unchanged_on: forall pl vl m1 m2 le ce,
+    bind_parameters ce le m1 pl vl m2 ->
+    Mem.unchanged_on (fun b _ => ~ In b (footprint_of_env le)) m1 m2.
+Proof.
+  induction 1; intros; simpl.
+  eapply Mem.unchanged_on_refl.
+  eapply Mem.unchanged_on_trans; eauto.
+  eapply Mem.unchanged_on_implies.
+  eapply assign_loc_unchanged_on; eauto. simpl.
+  intros. intro. apply H2. destruct H4. subst.
+  eapply in_footprint_of_env; eauto.
+Qed.
+
 Lemma type_of_params_eq_var_type: forall l,
     type_list_of_typelist (type_of_params l) = var_types l.
 Proof.
@@ -3255,17 +3302,21 @@ Lemma function_entry_sound: forall f vl fpl m1 le m2 own1 own2
    (INCL: Mem.sup_include (flat_map footprint_flat fpl) (Mem.support m1))
    (NOREP: list_norepet (flat_map footprint_flat fpl))
    (* used to prove wf_own_env for own1 *)
-   (CHECK: move_check_function ge f = OK tt)
+   (CHECK: move_check_function ge f = OK tt),
    (* prove disjointness between le and fpm *)
-   (VALID: forall b, In b (flat_map footprint_flat fpl) -> Mem.valid_block m1 b),
   exists fpm,
     mmatch fpm ge m2 le own2
     /\ wf_env fpm ge m2 le
+    /\ wf_own_env le ce own2
     /\ list_norepet (footprint_of_env le ++ flat_fp_map fpm)
     (* used to prove that fpm is separated from the footprint of
     function frames *)
-    /\ (forall b, In b (footprint_of_env le ++ flat_fp_map fpm) ->
-            ~ Mem.valid_block m1 b \/ In b (flat_map footprint_flat fpl)).
+    /\ (forall b, In b (footprint_of_env le) ->
+            ~ Mem.valid_block m1 b)
+    /\ (forall b, In b (flat_fp_map fpm) ->
+            In b (flat_map footprint_flat fpl))
+    (* used to prove sound_cont *)
+    /\ (forall P, Mem.unchanged_on P m1 m2).
 Proof.
   intros.
   unfold move_check_function in CHECK.
@@ -3296,7 +3347,7 @@ Proof.
     2: eauto. eapply EQ0.
     intros id paths EMP. unfold empty in EMP. erewrite PTree.gmap in EMP.
     destruct (universe ! id) eqn: G; simpl in EMP; try congruence.
-    inv EMP. eapply Paths.empty_1. }              
+    inv EMP. eapply Paths.empty_1. }
   assert (MM1: mmatch (init_footprint_map ce (fn_params f ++ fn_vars f) (PTree.empty footprint)) ce m0 le own1).
   { eapply mmatch_no_init_place.
     intros. inv OWN1.
@@ -3351,23 +3402,57 @@ Proof.
   rewrite NIL. rewrite app_nil_r.
   red. intros. intro. subst.
   exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & LE).
-  eapply NVALID1; eauto.
+  eapply NVALID1; eauto. eapply INCL; eauto.
   (* disjointness between le and vl *)
   red. intros. intro. subst.
   exploit in_footprint_of_env_inv. eauto. intros (id & ty & IN1).
   eapply NVALID1; eauto.
   eapply sem_wt_val_list_valid_blocks; eauto.
   auto. auto.
-  intros (fpm2 & MM2 & NOREP3 & WFENV2 & INCL1).
+  intros (fpm2 & MM2 & NOREP3 & WFENV2 & INCL1 & WFOWN2).
   exists fpm2.
   repeat apply conj; eauto.
-  intros. rewrite in_app in H2. destruct H2; auto.
+  (* not valid *)
+  intros. 
   exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & LE).
-  left. eauto.
-  right. eapply INCL1 in H2.
+  eapply NVALID1. eauto.
+  (* fpm2 is included in fpl *)
+  intros. eapply INCL1 in H2.
   rewrite in_app in H2. destruct H2; auto.
   unfold fpm1 in H2.
   rewrite NIL in H2. inv H2.
+  (* unchanged_on m1 m2 *)
+  intros.
+  exploit alloc_variables_unchanged_on; eauto. instantiate (1 := P).
+  intros UNC1.
+  exploit bind_parameters_unchanged_on; eauto. intros UNC2.
+  intros. econstructor.
+  eapply Mem.sup_include_trans.
+  eapply Mem.unchanged_on_support; eauto.
+  eapply Mem.unchanged_on_support; eauto.
+  (* permission *)
+  intros. split; intros.
+  erewrite <- Mem.unchanged_on_perm.
+  erewrite <- Mem.unchanged_on_perm. eauto. eauto. exact H2. auto.  
+  eauto.  simpl. intro.
+  exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & IN1).          
+  eapply NVALID1; eauto.
+  eapply Mem.unchanged_on_support; eauto.
+  erewrite Mem.unchanged_on_perm.
+  erewrite Mem.unchanged_on_perm. eauto. eauto.
+  simpl. intro.
+  exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & IN1).          
+  eapply NVALID1; eauto. eapply Mem.unchanged_on_support; eauto. eauto.  
+  exact H2. auto.  
+  (* contents *)
+  intros. eapply Mem.perm_valid_block in H3 as VAL.
+  erewrite Mem.unchanged_on_contents.
+  2: eapply UNC2.
+  eapply Mem.unchanged_on_contents; eauto.
+  simpl. intro.
+  exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & IN1).          
+  eapply NVALID1; eauto.
+  erewrite <- Mem.unchanged_on_perm; eauto. 
 Qed.
 
       
@@ -3936,13 +4021,13 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
 | sound_Kstop: forall an body cfg nret m
     (RET: cfg ! nret = Some Iend),
     sound_cont an body cfg Kstop nret None None nret m fpf_emp
-| sound_Kseq: forall an body cfg s k pc next cont brk nret m fpf
-    (MSTMT: match_stmt an body cfg s pc next cont brk nret)
+| sound_Kseq: forall an body cfg s ts k pc next cont brk nret m fpf
+    (MSTMT: match_stmt an body cfg s ts pc next cont brk nret)
     (MCONT: sound_cont an body cfg k next cont brk nret m fpf),
     sound_cont an body cfg (Kseq s k) next cont brk nret m fpf
-| sound_Kloop: forall an body cfg s k body_start loop_jump_node exit_loop nret contn brk m fpf
+| sound_Kloop: forall an body cfg s ts k body_start loop_jump_node exit_loop nret contn brk m fpf
     (START: cfg ! loop_jump_node = Some (Inop body_start))
-    (MSTMT: match_stmt an body cfg s body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
+    (MSTMT: match_stmt an body cfg s ts body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
     (MCONT: sound_cont an body cfg k exit_loop contn brk nret m fpf),
     sound_cont an body cfg (Kloop s k)loop_jump_node (Some loop_jump_node) (Some exit_loop) nret m fpf
 | sound_Kcall: forall an body cfg k nret f e own p m fpf
@@ -3997,9 +4082,9 @@ with sound_stacks : cont -> mem -> fp_frame -> Prop :=
 (** TODO: add syntactic well typedness in the sound_state and
 sound_cont *)
 Inductive sound_state: state -> Prop :=
-| sound_regular_state: forall f cfg entry maybeInit maybeUninit universe s pc next cont brk nret k e own m fpm fpf flat_fp sg mayinit mayuninit Hm
+| sound_regular_state: forall f cfg entry maybeInit maybeUninit universe s ts pc next cont brk nret k e own m fpm fpf flat_fp sg mayinit mayuninit Hm
     (AN: analyze ce f cfg entry = OK (maybeInit, maybeUninit, universe))
-    (STMT: match_stmt (maybeInit, maybeUninit, universe) f.(fn_body) cfg s pc next cont brk nret)
+    (STMT: match_stmt (maybeInit, maybeUninit, universe) f.(fn_body) cfg s ts pc next cont brk nret)
     (CONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k next cont brk nret m fpf)
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
     (OWN: sound_own own mayinit mayuninit universe)
@@ -5782,6 +5867,15 @@ Qed.
 (* More generally, rsw_acc is preserved under permuation of the
       footprint *)
 
+Lemma find_funct_move_check: forall vf fd,
+    Genv.find_funct ge vf = Some fd ->
+    move_check_fundef_spec ge fd.
+Proof.
+  intros. simpl in H.  eapply Genv.find_funct_prop; eauto.
+  intros. eapply FUN_CHECK. eauto.
+Qed.
+
+  
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
   inversion IM1 as [? | ? | ? ? GETINIT GETUNINIT]; subst;
@@ -6389,11 +6483,70 @@ Proof.
     
   (* step_internal_function *)
   - inv SOUND.
-
+    exploit find_funct_move_check. eapply FIND. intros SPEC. 
+    inv SPEC. simpl in FUNC.
+    simpl in FIND. rewrite FIND in FUNC. inv FUNC.
+    simpl in FUNTY. unfold type_of_function in FUNTY. inv FUNTY.
+    (* construct footprint map after function entry *)
+    exploit function_entry_sound. eauto. eauto. eauto.
+    eauto. rewrite type_of_params_eq_var_type in WTFP. auto.
+    auto. eapply Mem.sup_include_trans. 2: eauto.
+    red. intros. eapply in_app; eauto.
+    eapply list_norepet_append_right; eauto.
+    auto.
+    intros (fpm1 & MM1 & WFENV1 & WFOWN1 & NOREP1 & NVALID & INCL1 & UNC1).
+    assert (NOREP2: list_norepet (flat_fp_frame (fpf_func e fpm1 fpf))).
+    { simpl. rewrite app_assoc.
+      eapply list_norepet_app. repeat apply conj; auto.
+      eapply list_norepet_append_left; eauto.
+      red. intros. intro. subst.
+      rewrite in_app in H. destruct H; eauto.
+      eapply NVALID in H. apply H.
+      eapply Hm. eapply in_app; eauto.
+      eapply list_norepet_app in NOREP as (N1 & N2 & N3). eapply N3; eauto. }
+    (** construct analyze, match_stmt and sound_own which are the same
+    as ElaborateDropProof *)
+    unfold move_check_function in CKFUN. monadInv CKFUN.
+    destruct x1 as ((init & uninit) & universe). monadInv EQ2.
+    exploit (@transl_on_cfg_meet_spec AN); eauto. 
+    intros (nret & MSTMT & RET).
+    (* own_env in function entry is sound *)
+    exploit sound_function_entry. simpl. eapply EQ1. 
+    eauto. eauto. eauto. intros (einit & euninit & GIM & OWNENTRY).
+    (** end of construction *)        
+    split.
+    assert (Hm1: Mem.sup_include (flat_fp_frame (fpf_func e fpm1 fpf)) (Mem.support m')).
+    { simpl. red. intros.
+      unfold sup_In in H. erewrite !in_app in H.
+      repeat destruct H.
+      exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & IN1).
+      eapply wf_env_freeable; eauto.
+      eapply Mem.unchanged_on_support. eauto.
+      eapply Hm. eapply in_app; eauto.
+      eapply Mem.unchanged_on_support. eauto.
+      eapply Hm. eapply in_app; eauto. }
+    assert (RACC: rsw_acc (rsw sg (flat_fp_frame fpf ++ flat_map footprint_flat fpl) m Hm)  (rsw sg (flat_fp_frame (fpf_func e fpm1 fpf)) m' Hm1)).
+    { econstructor.
+      eapply UNC1.      
+      red. intros. simpl in H0. rewrite !in_app in H0.
+      destruct H0.
+      exploit in_footprint_of_env_inv; eauto.
+      destruct H0. intro. eapply H. eapply in_app; eauto.
+      intro. eapply H. eapply in_app; auto. }
+    eapply sound_regular_state; eauto.
+    (* sound_cont *)
+    inv STK.
+    econstructor; eauto.
+    econstructor; eauto. econstructor; eauto.
+    eapply sound_cont_unchanged; eauto.
+    eapply mmatch_unchanged; eauto.
+    eapply wf_env_unchanged; eauto.
+    (* rsw_acc *)
+    eapply rsw_acc_trans; eauto.
+    (* wt_state *)
+    admit.
     
-      
-        
-
+    
 Lemma external_sound: forall s q,
     sound_state s ->
     wt_state ge s ->
