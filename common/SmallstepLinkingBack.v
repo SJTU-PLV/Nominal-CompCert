@@ -39,10 +39,12 @@ Section LINK.
           Smallstep.at_external (L i se) s q ->
           valid_query (L j se) q = true ->
           Smallstep.initial_state (L j se) q s' ->
+          i <> j ->
           step (st i s :: k) E0 (st j s' :: st i s :: k)
       | step_pop i j s sk r s' k :
           Smallstep.final_state (L i se) s r ->
           Smallstep.after_external (L j se) sk r s' ->
+          i <> j ->
           step (st i s :: st j sk :: k) E0 (st j s' :: k).
 
     Inductive initial_state (q: query li): state -> Prop :=
@@ -164,7 +166,6 @@ Section LINK.
     - destruct 1. inversion 1; subst_dep.
       + eapply sd_at_external_nostep; eauto.
       + edestruct (sd_at_external_determ (HL i se) s q q0); eauto.
-        specialize (H0 j). congruence.
       + eapply sd_final_noext; eauto.
     - destruct 1. inversion 1; subst_dep.
       eapply sd_at_external_determ; eauto.
@@ -212,7 +213,7 @@ Section BSIM.
       match_senv cc wk' se1 se2 ->
       (forall r1 r2, match_reply cc wk r1 r2 ->
      (* Smallstep.after_external (L1 i se1) s1 r1 s1' -> *)
-     bsim_match_cont (rex (bsim_match_states (HL i) se1 se2 wk))
+     bsim_match_cont (rex (bsim_match_states (HL i) se1 se2 wk'))
        (Smallstep.after_external (L1 i se1) s1 r1)
        (Smallstep.after_external (L2 i se2) s2 r2)) ->
        (* exists idx s2',
@@ -283,7 +284,7 @@ Section BSIM.
         constructor. auto.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
-      remember (st L2 i s) as f2. inv H4. inv H11. subst_dep.
+      remember (st L2 i s) as f2. inv H5. inv H12. subst_dep.
       edestruct @bsim_match_external as (wx & s1' & qx1 & Hsteps1 & Hqx1 & Hqx & Hsex & Hrx); eauto using bsim_lts.
       eapply safe_internal; eauto.
       pose proof (determinate_L1 i se1) as DETERMi1.
@@ -291,66 +292,59 @@ Section BSIM.
       intros [[r1' Final1] | [[q1 Ext1] | [t [s2' Step1]]]].
       + inv Final1. subst_dep. exfalso. eapply @sd_final_noext; eauto.
       + inv Ext1. subst_dep. exfalso. exploit @sd_at_external_determ. eauto.
-        apply Hqx1. apply H11. intro. subst qx1.
+        apply Hqx1. apply H12. intro. subst qx1.
         pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
         erewrite bsim_match_valid_query in H0; eauto. congruence.
       + inv Step1; subst_dep.
         -- exfalso. eapply @sd_at_external_nostep; eauto.
         -- exploit @sd_at_external_determ. eauto.
-           apply Hqx1. apply H10. intro. subst qx1.
+           apply Hqx1. apply H11. intro. subst qx1.
            pose proof (bsim_lts (HL j1) _ _ Hsex (Hse1 j1)).
            exploit @bsim_match_initial_states; eauto.
            intros HrexI. inv HrexI.
+           assert (j0 = j1).
+           { destruct j0; destruct j1; destruct i; congruence. }
+           subst j1. assert (j0 = j).
+           { destruct j0; destruct j; destruct i; congruence. }
+           subst j0.
            exploit bsim_match_cont_match; eauto.
-        erewrite bsim_match_valid_query; eauto.
-      intros []
-       
-      (* 
-      assert (Trivial_safe_q : forall qx1 s1, Smallstep.at_external (L1 i se1) s1 qx1 ->
-                                         exists s2, Smallstep.initial_state (L1 j se1) qx1 s2 ).
-      admit. (** TODO: need to be defined as some hypo*)
-      exploit Trivial_safe_q; eauto.
-      intros [sy2 INI2].
-      pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
-      exploit @bsim_match_initial_states; eauto.
-      intro Hrex.
-      destruct Hrex as [Hini1 Hini2]. exploit Hini2; eauto.
-      intros (s1'' & Hinity' & idx & MS).
-      eexists.
-      eexists. split. left. eapply plus_right.
-      eapply star_internal; eauto.
-      eapply step_push; eauto.
-      admit. (** shoule be correct? *)
-      reflexivity.
-      econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
-      intros. exploit Hrx; eauto. intros [A B].
-      (** TODO : we need to change the definition of match_state *) *)
-      admit.
-    -
-      (** Problem Here : we are given the [initial_state] from [L2 j] as an internal function call,
-          However the bsim_properties can not provide the [initial_state] from target to forward. 
-          
-          Why? Why we have to define the backward simulation in this form. 
-          What is the criteria for the correctness of defintion of BSIM? Behavior Refinement? *)
-      Admitted.
-(*      pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
-      exploit @bsim_match_initial_states; eauto. intro Hrex. inv Hrex.
-      exploit bsim_match_cont_match; eauto.
-      edestruct @bsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
-      eexists (existT _ j idx'), _. split.
-      + left. apply plus_one. eapply step_push; eauto 1.
-        erewrite fsim_match_valid_query; eauto.
-      + repeat (econstructor; eauto).
+           intros [s1j' [HIj1 [idx' Hmsj]]].
+           eexists. eexists. split.
+           left. eapply plus_right. eapply star_internal; eauto.
+           eapply step_push; eauto. reflexivity.
+           econstructor.
+           econstructor; eauto. econstructor; eauto. econstructor; eauto. eauto.
+        -- exfalso. eapply @sd_final_noext; eauto.
     - (* cross-component return *)
-      inv H4; subst_dep. clear idx0.
-      pose proof (fsim_lts (HL i) _ _ H3 H7).
-      edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
-      inv H6. inv H8; subst_dep. edestruct H10 as (idx' & s2' & Hs2'& Hs'); eauto.
-      eexists (existT _ j idx'), _. split.
-      + left. apply plus_one. eapply step_pop; eauto.
-      + repeat (econstructor; eauto).
-  Admitted. *)
-
+      remember (st L2 i s) as f2.
+      inv H4. inv H11. subst_dep. clear idx0.
+      pose proof (bsim_lts (HL i) _ _ H2 H3).
+      apply safe_internal in Hsafe as Hsafei.
+      edestruct @bsim_match_final_states as (s2' & r2 & Hstar2 & Hr2 & Hr); eauto.
+      remember (st L2 j sk :: k) as k2.
+      inv H7; try congruence. inv H14.
+      remember (st L2 j sk) as f2. inv H6. inv H14.
+      subst_dep. specialize (H11 _ _ Hr).
+      inv H11.
+      pose proof (determinate_L1 i se1) as DETERMi1.
+      exploit Hsafe; eauto. eapply star_internal; eauto.
+      intros [[r1' Final1] | [[q1 Ext1] | [t [s2'' Step1]]]].
+      + inv Final1.
+      + inv Ext1. subst_dep. exfalso. exploit @sd_final_noext; eauto.
+      + inv Step1; subst_dep.
+        -- exfalso. exploit @sd_final_nostep; eauto.
+        -- exfalso. exploit @sd_final_noext; eauto.
+        -- exploit @sd_final_determ. eauto. apply Hr2. apply H17. intro.
+           subst r0.
+           assert (j1 = i). {destruct j1; destruct i; destruct j; congruence. }
+           subst j1.
+           exploit bsim_match_cont_match; eauto.
+           intros (s1j' & HY1j & idxj & Hmsj).
+           eexists. eexists. split.
+           left. eapply plus_right. eapply star_internal; eauto.
+           eapply step_pop; eauto. reflexivity.
+           econstructor; eauto. econstructor; eauto.
+  Qed.
   (* bsim_properties *)
 
   Hypothesis match_query_excl : forall q1 q2 i j,
@@ -454,12 +448,17 @@ Section BSIM.
       + inv Step1. subst_dep.
         -- exfalso. exploit @sd_final_nostep; eauto.
         -- subst_dep. exfalso. exploit @sd_final_noext; eauto.
-        -- subst_dep. inv H2. assert (j1 = i).
+        -- subst_dep. inv H2.
+           assert (j1 = i).
            { destruct j; destruct j1; destruct i; congruence. }
-           subst j1. right. right.
-           exploit @sd_final_determ. eauto. apply Final1i. apply H12. intro. subst r0.
-           inv H9. subst_dep. rename j0 into j.
-           exploit H15. eauto. intro. inv H2.
+           subst j1.
+           assert (j0 = j).
+           { destruct j; destruct j0; destruct i; congruence. }
+           subst j0.
+           right. right.
+           exploit @sd_final_determ. eauto. apply Final1i. apply H10. intro. subst r0.
+           inv H9. subst_dep.
+           exploit H11. eauto. intro. inv H2.
            exploit bsim_match_cont_exist; eauto.
            intros [s2' AFTER2j].
            eexists. eexists.
@@ -486,7 +485,7 @@ Section BSIM.
            intro Hrexj0. inv Hrexj0. exploit bsim_match_cont_exist; eauto.
            intros [s2' I2j0]. do 2 eexists.
            eapply step_push. eauto. 
-           erewrite bsim_match_valid_query; eauto. eauto.
+           erewrite bsim_match_valid_query; eauto. eauto. eauto.
         -- subst_dep. exfalso. eapply @sd_final_noext; eauto.
     - right. right. do 2 eexists. econstructor; eauto.
   Qed.
