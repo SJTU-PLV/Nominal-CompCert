@@ -23,8 +23,8 @@ Inductive move_check_fundef_spec ce: fundef -> Prop :=
 | move_check_funct: forall f
     (CKFUN: move_check_function ce f = OK tt),
     move_check_fundef_spec ce (Internal f)
-| move_check_extern: forall orgs rels ef tyl rty cc,
-    move_check_fundef_spec ce (External orgs rels ef tyl rty cc).
+| move_check_external: forall orgs rels tyl rty cc name sg,
+    move_check_fundef_spec ce (External orgs rels (EF_external name sg) tyl rty cc).
 
 (** Specification of move checking  *)
 Record move_check_program_spec (p: program) :=
@@ -2954,6 +2954,15 @@ Proof.
   econstructor; eauto.
 Qed.
 
+Lemma sem_cast_val_footprint_unchanged: forall v1 v2 ty1 ty2,
+    sem_cast v1 ty1 ty2 = Some v2 ->
+    footprint_of_val v1 = footprint_of_val v2.
+Proof.
+  destruct ty1; intros until ty2; intros CAST;
+    destruct ty2; (unfold sem_cast in CAST; simpl in CAST; DestructCases); try congruence;
+    simpl; auto.
+Qed.
+
 (* The evaluation of a list of expression produces a list of footprint and a list of values which are sem_wt_val *)
 Lemma eval_exprlist_sem_wt: forall al vl tyl fpm1 m le own1 own2 init uninit init1 uninit1 universe
     (MM: mmatch fpm1 ce m le own1)
@@ -3635,11 +3644,11 @@ Proof.
       econstructor; eauto. 
 Qed.
 
-Fixpoint typeof_cont_call (ttop: type) (k: cont) : option type :=
+Fixpoint typeof_cont_call (ttop: type) (k: cont) : type :=
   match k with
   | Kcall p _ _ _ _ =>
-      Some (typeof_place p)
-  | Kstop => Some ttop
+      typeof_place p
+  | Kstop => ttop
   | Kseq _ k
   | Kloop _ k
   (* impossible? *)
@@ -4158,13 +4167,16 @@ Inductive sound_state: state -> Prop :=
     (NOREP: list_norepet flat_fp)
     (ACC: rsw_acc w (rsw sg flat_fp m Hm)),
     sound_state (Callstate vf args k m)
-| sound_returnstate: forall sg flat_fp m k retty rfp v Hm
-    (ACC: rsw_acc w (rsw sg flat_fp m Hm))
+| sound_returnstate: forall sg fpf flat_fp m k retty rfp v Hm    
     (* For now, all function must have return type *)
-    (RETY: typeof_cont_call (rs_sig_res sg) k = Some retty)
+    (RETY: typeof_cont_call (rs_sig_res sg) k = retty)
     (WTVAL: sem_wt_val ce m rfp v)
-    (WTFP: wt_footprint ce (rs_sig_res sg) rfp)
-    (SEP: list_norepet (flat_fp ++ (footprint_flat rfp))),
+    (CAST: val_casted v retty)
+    (WTFP: wt_footprint ce retty rfp)
+    (FLAT: flat_fp = flat_fp_frame fpf ++ flat_fp_frame fpf)
+    (SEP: list_norepet flat_fp)
+    (STK: sound_stacks k m fpf)
+    (ACC: rsw_acc w (rsw sg flat_fp m Hm)),
     sound_state (Returnstate v k m)
 .
 
@@ -5875,7 +5887,18 @@ Proof.
   intros. eapply FUN_CHECK. eauto.
 Qed.
 
-  
+Lemma footprint_of_not_composite_val: forall ty v fp m,
+    sem_wt_val ce m fp v ->
+    wt_footprint ce ty fp ->
+    not_composite ty = true ->
+    incl (footprint_of_val v) (footprint_flat fp).
+Proof.
+  induction 1; simpl; intros; try (apply incl_refl).
+  - red. intros. inv H1. simpl; auto. inv H2.
+  - inv H. simpl in *. congruence.
+  - inv H. simpl in *. congruence.
+Qed.
+
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
   inversion IM1 as [? | ? | ? ? GETINIT GETUNINIT]; subst;
@@ -6546,6 +6569,60 @@ Proof.
     (* wt_state *)
     admit.
     
+  (** step_external_function: we cannot prove that the builtin
+  external functions defined by CompCert satisfy the rely-guarantee
+  property of rsw_acc because some of them use Vundef as return value
+  which is not supported in sem_wt_val. But we observe that the memory
+  relation of rsw_acc may be satisfied by external_call_mem_inject if
+  we instantiate the source and target memorys with the same memory
+  and injection function with the (flat_inj footprint_of_args). The
+  return footprint can be constructed by (filter j (support m_res)). *)
+  - inv SOUND.
+    exploit find_funct_move_check. eapply FIND.
+    intros SPEC. inv SPEC. inv H.
+  (* step_return_1 *)
+  - inv SOUND. inv STMT. unfold move_check_stmt in TR.
+    unfold get_init_info in TR.
+    simpl_getIM IM.
+    set (e:= (if scalar_type (typeof_place p)
+            then Epure (Eplace p (typeof_place p))
+            else Emoveplace p (typeof_place p))) in *.
+    destruct (move_check_expr' ce mayinit mayuninit universe e) eqn: MOVE1; try congruence.
+    (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct list_norepet *)
+    simpl in NOREP.
+    generalize NOREP as NOREP'. intros.
+    eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+    (* eval_expr *)
+    assert (EVAL1: eval_expr (globalenv se prog) le m1 (globalenv se prog) e v).
+    { unfold e. destruct (scalar_type (typeof_place p)); auto.
+      inv EVAL. inv H0. econstructor. econstructor; eauto. }
+    assert (WTE: wt_expr le ce e).
+    { unfold e. destruct (scalar_type (typeof_place p)) eqn: PTY; econstructor; auto.
+      econstructor. auto. }
+    assert (TYEQ: typeof e = typeof_place p).
+    { unfold e. destruct (scalar_type (typeof_place p)) eqn: PTY; auto. }
+    exploit eval_expr_sem_wt; eauto.
+    intros (fp & fpm1 & WTVAL1 & WTFP1 & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    rewrite <- TYEQ in *.
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    exploit cast_val_is_casted; eauto. intros CASTED.
+    (* show that v(v1) does not contain footprint in le *)
+    pose proof (footprint_of_not_composite_val _ _ _ _ WTVAL1 WTFP1 WT3) as INCL1.
+    erewrite sem_cast_val_footprint_unchanged in INCL1; eauto.
+    rewrite FPEQ in INCL1.
+    assert (DISVAL: list_disjoint (footprint_of_val v1) (footprint_of_env le)).
+    { red. intros. intro. subst.
+      eapply N3. eapply in_app; eauto.
+      eapply EQUIV1. eapply in_app. left. eapply INCL1. eauto. reflexivity. }
+    (* free stack blocks *)
+    
+    
+    split.
+    econstructor; eauto.
+    assign_loc_sound
     
 Lemma external_sound: forall s q,
     sound_state s ->

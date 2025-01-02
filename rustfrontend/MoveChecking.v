@@ -196,7 +196,11 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
           | None => Error (msg "move_check_exprlist error in Scall")
           end
       | Sreturn p =>
-          if move_check_expr' ce mayinit mayuninit universe (Epure (Eplace p (typeof_place p))) then
+          let e := (if scalar_type (typeof_place p) then
+                     Epure (Eplace p (typeof_place p))
+                   else
+                     Emoveplace p (typeof_place p)) in
+          if move_check_expr' ce mayinit mayuninit universe e then
             OK stmt
           else
             Error (msg "move_check_expr error in Sreturn")
@@ -335,7 +339,13 @@ Definition move_check_fundef (ce : composite_env) (id : ident) (fd : fundef) : E
       | OK _ => OK (Internal f)
       | Error msg => Error ([MSG "In function "; CTX id; MSG " , in pc "] ++ msg)
       end
-  | External orgs rels ef targs tres cconv => OK (External orgs rels ef targs tres cconv)
+  | External orgs rels ef targs tres cconv =>
+      (* We do not support builtin external functions for now *)
+      match ef with
+      | EF_external _ _ =>
+          OK (External orgs rels ef targs tres cconv)
+      | _ => Error ([MSG "In function "; CTX id; MSG " , unsupported builtin external function"])
+      end
   end.
 
 Definition transl_globvar := fun (_ : ident) (ty : type) => OK ty.

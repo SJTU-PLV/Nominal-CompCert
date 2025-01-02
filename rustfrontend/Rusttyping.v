@@ -165,6 +165,13 @@ Definition valid_type (ty: type) : bool :=
   | _ => true
   end.
 
+Definition not_composite (ty: type) : bool :=
+  match ty with
+  | Tstruct _ _
+  | Tvariant _ _ => false
+  | _ => true
+  end.
+
 Definition typenv := PTree.t type.
 
 Section TYPING.
@@ -270,6 +277,10 @@ Inductive wt_stmt: statement -> Prop :=
     (WT3: ty = Tfunction orgs rels tyl rty cc),
     (* We only support this kind of function call *)
     wt_stmt (Scall p (Eglobal id ty) al)
+| wt_Sreturn: forall p
+    (WT1: wt_place p)
+    (WT2: not_composite (typeof_place p) = true),
+    wt_stmt (Sreturn p)
 .
 
 (* Well-typed continuation and state *)
