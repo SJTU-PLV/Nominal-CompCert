@@ -264,13 +264,6 @@ Definition check_universe_wf (te: typenv) (ce: composite_env) (universe: PathsMa
 .
 
 
-Fixpoint bind_vars (te: typenv) (l: list (ident * type)) : typenv :=
-  match l with
-  | nil => te
-  | (id, ty) :: l' =>
-      bind_vars (PTree.set id ty te) l'
-  end.
-
 (** Checking of non-cyclic reference in Tstruct *)
 
 Lemma struct_or_variant_eq: forall (s1 s2: struct_or_variant),
@@ -323,7 +316,7 @@ Definition move_check_function (ce: composite_env) (f: function) : Errors.res un
   checking here instead of using a separated type check function (like
   Ctyping) is that sound_state and wt_state rely on each other due to
   well typedness property in wf_own_env. *)
-  let te := bind_vars (PTree.empty type) (f.(fn_params) ++ f.(fn_vars)) in
+  let te := (bind_vars (bind_vars (PTree.empty _) f.(fn_params)) f.(fn_vars)) in
   let (_, universe) := analysis_res in  
   do _ <- check_universe_wf te ce universe;
   do _ <- check_cyclic_struct_res ce (var_types (f.(fn_params) ++ f.(fn_vars)));

@@ -55,6 +55,13 @@ Definition is_call_cont (k: cont) : Prop :=
   | _ => False
   end.
 
+Lemma call_cont_correct: forall k k',
+    call_cont k = Some k' ->
+    is_call_cont k'.
+Proof.
+  induction k; intros k' CC; simpl in *; auto; try (inv CC; econstructor; eauto).
+Qed.
+
 (** States *)
 
 Inductive state: Type :=

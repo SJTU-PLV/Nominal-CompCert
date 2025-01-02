@@ -5,6 +5,7 @@ Require Import Floats.
 Require Import Values.
 Require Import Memory.
 Require Import Ctypes Cop Ctyping.
+Require Import Globalenvs.
 Require Import Rusttypes RustOp Rustlight Rustlightown.
 Require Import RustIR RustIRown.
 Require Import Errors Maps.
@@ -12,8 +13,6 @@ Require Archi.
 
 Import ListNotations.
 Local Open Scope error_monad_scope.
-
-(* This file is not used for now *)
 
 (* To move *)
 Definition type_unop (op: unary_operation) (ty: Rusttypes.type) : res type :=
@@ -283,28 +282,10 @@ Inductive wt_stmt: statement -> Prop :=
     wt_stmt (Sreturn p)
 .
 
-(* Well-typed continuation and state *)
-
-Inductive wt_cont: cont -> Prop :=
-| wt_Kseq: forall s k
-    (WT1: wt_stmt s)
-    (WT2: wt_cont k),
-    wt_cont (Kseq s k).
-
 End TYPING.
 
 Coercion env_to_tenv (e: env) : typenv :=
   PTree.map1 snd e.
-
-Inductive wt_state (ce: composite_env) : state -> Prop :=
-| wt_regular_state: forall f s k (e: env) own m
-    (WT1: wt_stmt e ce s)                  
-    (WT2: wt_cont e ce k),
-    wt_state ce (State f s k e own m)
-| wt_dropplace_state: forall f st drops k own m (e: env)
-    (WT1: Forall (fun p => wt_place e ce p) (map fst drops)),
-    wt_state ce (Dropplace f st drops k e own m)
-.
 
 
 Lemma get_tenv_some: forall e id ty,
@@ -353,6 +334,137 @@ Proof.
   - inv H. simpl. eauto.
 Qed.
 
+Fixpoint typeof_cont_call (ttop: type) (k: cont) : type :=
+  match k with
+  | Kcall p _ _ _ _ =>
+      typeof_place p
+  | Kstop => ttop
+  | Kseq _ k
+  | Kloop _ k
+  (* impossible? *)
+  | Kdropplace _ _ _ _ _ k
+  | Kdropcall _ _ _ _ k => typeof_cont_call ttop k
+  end.
+
+
+(** Typing of functions and programs *)
+
+Fixpoint bind_vars (te: typenv) (l: list (ident * type)) : typenv :=
+  match l with
+  | nil => te
+  | (id, ty) :: l' =>
+      bind_vars (PTree.set id ty te) l'
+  end.
+
+Lemma bind_vars_app: forall l1 l2 le,
+    bind_vars (bind_vars le l1) l2 = bind_vars le (l1 ++ l2).
+Proof.
+  induction l1; simpl; auto.
+  intros. destruct a; auto.
+Qed.
+  
+Inductive wt_function (ce: composite_env) : function -> Prop :=
+  | wt_function_intro: forall f
+      (WTS1: wt_stmt (bind_vars (bind_vars (PTree.empty _) f.(fn_params)) f.(fn_vars)) ce f.(fn_body)),
+      wt_function ce f.
+
+Inductive wt_fundef (ce: composite_env) : fundef -> Prop :=
+| wt_fundef_internal: forall f,
+    wt_function ce f ->
+    wt_fundef ce (Internal f)
+| wt_fundef_external: forall ef targs tres cc orgs rels,
+    (* (ef_sig ef).(sig_res) = rettype_of_type tres -> *)
+    wt_fundef ce (External orgs rels ef targs tres cc).
+
+Inductive wt_program : program -> Prop :=
+| wt_program_intro: forall p,
+    (forall id fd,
+        In (id, Gfun fd) p.(prog_defs) ->
+        wt_fundef p.(prog_comp_env) fd) ->
+    wt_program p.
+
+Section PRESERVATION.
+
+Variable prog: program.
+Hypothesis WTPROG: wt_program prog.
+Variable se: Genv.symtbl.
+Let ge := globalenv se prog.
+
+Variable sg: rust_signature.
+(* Well-typed continuation and state *)
+
+Inductive wt_cont : typenv -> function -> cont -> Prop :=
+| wt_Kseq: forall s k f te
+    (WT1: wt_stmt te ge s)
+    (WT2: wt_cont te f k),
+    wt_cont te f (Kseq s k)
+| wt_Kcall: forall k p f f' le own te
+    (WT1: wt_call_cont (Kcall p f' le own k) f.(fn_return)),
+    wt_cont te f (Kcall p f' le own k)
+
+with wt_call_cont : cont -> type -> Prop :=
+| wt_call_Kstop:
+  wt_call_cont  Kstop (rs_sig_res sg)
+| wt_call_Kcall: forall p f (le: env) own k
+    (WT1: wt_cont le f k)
+    (WT2: wt_place le ge p),
+    (* For simplicity, we do not consider casting in function call *)
+  wt_call_cont (Kcall p f le own k) (typeof_place p)
+.
+
+
+Inductive wt_state : state -> Prop :=
+| wt_regular_state: forall f s k (e: env) own m
+    (WT1: wt_stmt e ge s)                  
+    (WT2: wt_cont e f k),
+    wt_state (State f s k e own m)
+| wt_callstate: forall vf fd orgs rels tyl rty cc k m vl
+    (FIND: Genv.find_funct ge vf = Some fd)
+    (FTY: type_of_fundef fd = Tfunction orgs rels tyl rty cc)
+    (WT1: wt_call_cont k rty),
+    wt_state (Callstate vf vl k m)
+| wt_returnstate: forall k rty m v
+    (WT1: wt_call_cont k rty),
+    wt_state (Returnstate v k m)
+| wt_dropplace_state: forall f st drops k own m (e: env)
+    (WT1: Forall (fun p => wt_place e ge p) (map fst drops)),
+    wt_state (Dropplace f st drops k e own m)
+.
+
+Lemma wt_call_cont_type_eq: forall k ty1,
+    wt_call_cont k ty1 ->
+    typeof_cont_call (rs_sig_res sg) k = ty1.
+Proof.
+  induction 1; intros; simpl in *; auto.
+Qed.
+
+Lemma is_wt_call_cont:
+  forall te f k,
+    is_call_cont k -> wt_cont te f k -> wt_call_cont k f.(fn_return).
+Proof.
+  intros. inv H0; simpl in H; try contradiction. auto.
+Qed.
+
+Lemma wt_cont_call_cont: forall k le f ck,
+    wt_cont le f k ->
+    call_cont k = Some ck ->
+    wt_cont le f ck.
+Proof.
+  induction 1; intros CC; simpl in *; auto; try (inv CC; econstructor; eauto).
+Qed.
+
+Lemma call_cont_wt_call_cont:
+  forall te f k ck,
+    call_cont k = Some ck ->
+    wt_cont te f k -> wt_call_cont ck f.(fn_return).
+Proof.
+  intros. eapply (is_wt_call_cont te).
+  eapply call_cont_correct. eauto.
+  eapply wt_cont_call_cont; eauto.
+Qed.
+
+
+End PRESERVATION.
 
 (** Type checking algorithm *)
 

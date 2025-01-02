@@ -64,6 +64,12 @@ Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
                                                                   
 Let match_stmt (ae: AN) body cfg s ts := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s ts.
 
+Definition mod_sg := match w with
+                    | rsw sg _ _ _ => sg
+                    end.
+
+Let wt_state := wt_state prog se mod_sg.
+
 (* split move_check_program_spec into the following hypotheses to simplify the proof *)
 Hypothesis CONSISTENT: composite_env_consistent ce.
 
@@ -398,15 +404,15 @@ Proof.
 Qed.
 
 (* The footprint contained in the location of a place *)
-Lemma eval_place_sound: forall e m p b ofs own fpm init uninit universe
+Lemma eval_place_sound: forall e m p b ofs own fpm (* init uninit universe *)
     (EVAL: eval_place ce e m p b ofs)
     (MM: mmatch fpm ce m e own)
     (WFOWN: wf_env fpm ce m e)
     (WT: wt_place (env_to_tenv e) ce p)
-    (SOWN: sound_own own init uninit universe)
+    (* (SOWN: sound_own own init uninit universe) *)
     (* evaluating the address of p does not require that p is
     owned. Shallow own is used in bmatch *)
-    (POWN: dominators_must_init init uninit universe p = true),
+    (POWN: dominators_is_init (* init uninit universe *) own p = true),
   exists fp (* ce' *) (* phl *),
     get_loc_footprint_map e (path_of_place p) fpm = Some (b, (Ptrofs.unsigned ofs), fp)
     /\ wt_footprint ce (typeof_place p) fp
@@ -461,8 +467,8 @@ Proof.
     rewrite H in WT2. inv WT2. rewrite H0 in WT3. inv WT3.
     (** TODO: make it a lemma: prove p's dominators are init *)
     (** It is impossible to be proved  *)
-    assert (PDOM: dominators_must_init init uninit universe p = true).
-    { unfold dominators_must_init in *. simpl in *.
+    assert (PDOM: dominators_is_init (* init uninit universe *) own p = true).
+    { unfold dominators_is_init in *. simpl in *.
       eapply andb_true_iff in POWN. destruct POWN as (A & B).
       destruct p; simpl in *; auto.
       eapply andb_true_iff. auto. }
@@ -481,8 +487,7 @@ Proof.
     exploit valid_owner_place_footprint. eauto. eauto. intros (fp1 & ofs1 & fofs1 & PFP1 & VOFS1 & OFSEQ).
     unfold dominators_must_init in POWN. simpl in POWN.
     eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).
-    exploit MM. eauto.
-    eapply must_init_sound; eauto.        
+    exploit MM. eauto. auto.
     (* valid owner's bmatch implies subfield bmatch *)
     intros (BM & FULL).
     assert (BM1: bmatch ce m b (Ptrofs.unsigned ofs) fp).
@@ -518,8 +523,7 @@ Proof.
     eapply andb_true_iff in POWN. destruct POWN as (PINIT & POWN).    
     exploit IHEVAL; eauto.
     intros (fp & PFP & WTFP & RAN0 & PERM).
-    exploit MM. eauto.
-    eapply must_init_sound; eauto.
+    exploit MM. eauto. auto.
     intros (BM & FULL). destruct (typeof_place p) eqn: PTY; simpl in WT2; try congruence.
     inv WT2.
     inv WTFP; inv BM; simpl in *; try congruence.
@@ -889,6 +893,7 @@ Proof.
   - inv EVAL.
     simpl in CHECK. destruct (scalar_type t) eqn: TYP; try congruence.
     eapply andb_true_iff in CHECK as (DOM & INIT).
+    eapply dominators_must_init_sound in DOM; eauto.
     inv WTPE.
     exploit eval_place_sound; eauto.
     intros (pfp & GFP & WTFP & RAN & PERM & VALID).
@@ -963,6 +968,7 @@ Proof.
     destruct (place_eq p (valid_owner p)); subst.
     (* p is not downcast *)
     + eapply andb_true_iff in CHECK. destruct CHECK as (DONW & MOVABLE).
+      eapply dominators_must_init_sound in DONW; eauto.
       exploit eval_place_sound; eauto.
       intros (pfp &  PFP & WTFP & RAN & PERM & VALID).
       (** TODO: wt_footprint implication *)
@@ -1013,6 +1019,7 @@ Proof.
       eapply wf_own_env_move_place; eauto.      
     (* p is downcast *)
     + do 2 rewrite andb_true_iff in CHECK. destruct CHECK as ((DOWN & INIT) & FULL).
+      eapply dominators_must_init_sound in DOWN; eauto.
       exploit eval_place_sound; eauto.
       intros (fp1 & PFP & WTFP & RAN & PERM & VALID).
       exploit valid_owner_place_footprint; eauto.
@@ -3351,6 +3358,7 @@ Proof.
   assert (WFOWN1: wf_own_env le ge own1).
   { inv OWN1. eapply check_universe_wf_own_env.
     destruct x1.
+    rewrite bind_vars_app in EQ0.
     replace (PTree.empty type) with (env_to_tenv (PTree.empty (block * type))) in EQ0 by auto.
     erewrite alloc_variables_bind_vars_eq in EQ0.
     2: eauto. eapply EQ0.
@@ -4080,6 +4088,9 @@ with sound_stacks : cont -> mem -> fp_frame -> Prop :=
     (MCONT: sound_cont (maybeInit, maybeUninit, universe) f.(fn_body) cfg k pc contn brk nret m fpf)
     (MM: mmatch fpm ce m e own1)
     (WFENV: wf_env fpm ce m e)
+    (* we need to maintain this invariant for p's evaluation when
+    function return *)
+    (DOM: dominators_is_init own1 p = true)
     (* own2 is built after the function call *)
     (AFTER: own2 = init_place own1 p)
     (IM: get_IM_state maybeInit!!pc maybeUninit!!pc (Some (mayinit, mayuninit)))
@@ -4173,7 +4184,7 @@ Inductive sound_state: state -> Prop :=
     (WTVAL: sem_wt_val ce m rfp v)
     (CAST: val_casted v retty)
     (WTFP: wt_footprint ce retty rfp)
-    (FLAT: flat_fp = flat_fp_frame fpf ++ flat_fp_frame fpf)
+    (FLAT: flat_fp = footprint_flat rfp ++ flat_fp_frame fpf)
     (SEP: list_norepet flat_fp)
     (STK: sound_stacks k m fpf)
     (ACC: rsw_acc w (rsw sg flat_fp m Hm)),
@@ -4372,7 +4383,7 @@ Qed.
 Lemma initial_state_sound: forall q s,
     query_inv wt_rs (se, w) q ->
     Smallstep.initial_state L q s ->
-    sound_state s /\ wt_state ce s.
+    sound_state s /\ wt_state s.
 Admitted.
 
 
@@ -5004,9 +5015,9 @@ Qed.
 
 Lemma step_dropstate_sound: forall s1 t s2,
     sound_state s1 ->
-    wt_state ce s1 ->
+    wt_state s1 ->
     step_drop ge s1 t s2 ->
-    sound_state s2 /\ wt_state ce s2.
+    sound_state s2 /\ wt_state s2.
 Proof.
   intros s1 t s2 SOUND WTST STEP.
   inv STEP.
@@ -5321,9 +5332,9 @@ Admitted.
     
 Lemma step_dropplace_sound: forall s1 t s2,
     sound_state s1 ->
-    wt_state ce s1 ->
+    wt_state s1 ->
     step_dropplace ge s1 t s2 ->
-    sound_state s2 /\ wt_state ce s2.
+    sound_state s2 /\ wt_state s2.
 Proof.
   intros s1 t s2 SOUND WTST STEP.
   inv STEP.
@@ -5899,6 +5910,42 @@ Proof.
   - inv H. simpl in *. congruence.
 Qed.
 
+Lemma free_list_unchanged_on :
+  forall l m m' P,
+  Mem.free_list m l = Some m' ->
+  (forall b z1 z2, In (b,z1,z2) l -> ~ P b) ->
+  Mem.unchanged_on (fun b _ => P b) m m'.
+Proof.
+  induction l; simpl; intros.
+  - inv H. eapply Mem.unchanged_on_refl.
+  - destruct a. destruct p. destruct (Mem.free m b z0 z) eqn: FREE; try congruence.
+    eapply Mem.unchanged_on_trans. 2: eapply IHl; eauto.
+    eapply Mem.free_unchanged_on; eauto.
+Qed.
+
+Lemma footprint_blocks_of_env_eq: forall le,
+    footprint_of_env le = map (fun '(b, _, _) => b) (blocks_of_env ce le).
+Proof.
+  intros. unfold footprint_of_env, blocks_of_env.
+  rewrite map_map.  apply map_ext.
+  intros (id & (b & ty)). auto.
+Qed.
+
+Lemma call_cont_sound: forall k ck maybeInit maybeUninit universe body cfg next cont brk nret m fpf
+    (CONT: sound_cont (maybeInit, maybeUninit, universe) body cfg k next cont brk nret m fpf)
+    (CC: call_cont k = Some ck),
+    sound_stacks ck m fpf.
+Proof.
+  induction k; intros; simpl; inv CC; inv CONT; eauto; econstructor.
+Qed.
+
+Lemma rsw_acc_sg_eq: forall sg fp m Hm,
+    rsw_acc w (rsw sg fp m Hm) ->
+    mod_sg = sg.
+Proof.
+  intros. unfold mod_sg. destruct w. inv H. auto.
+Qed.
+
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
   inversion IM1 as [? | ? | ? ? GETINIT GETUNINIT]; subst;
@@ -5908,9 +5955,9 @@ Ltac simpl_getIM IM :=
 step *)
 Lemma step_sound: forall s1 t s2,
     sound_state s1 ->
-    wt_state ce s1 ->
+    wt_state s1 ->
     Step L s1 t s2 ->
-    sound_state s2 /\ wt_state ce s2.
+    sound_state s2 /\ wt_state s2.
 Proof.
   intros s1 t s2 SOUND WTST STEP. simpl in STEP.
   inv STEP.
@@ -5936,7 +5983,8 @@ Proof.
     (** sound_own after moving the place in the expression *)
     assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
-      eapply move_place_sound. auto. }      
+      eapply move_place_sound. auto. }
+    eapply dominators_must_init_sound in MOVE2; eauto.
     exploit eval_place_sound; eauto.
     intros (pfp & GFP & WTFP3 & PRAN & PERM).
     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
@@ -6004,8 +6052,7 @@ Proof.
     (* rsw_acc *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place.
-    eapply dominators_must_init_sound; eauto.    
+    eapply wf_own_env_init_place. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
@@ -6033,7 +6080,8 @@ Proof.
     (** sound_own after moving the place in the expression *)
     assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
-      eapply move_place_sound. auto. }      
+      eapply move_place_sound. auto. }
+    eapply dominators_must_init_sound in MOVE2; eauto.
     exploit eval_place_sound. eapply PADDR1. all: eauto.
     intros (pfp & GFP & WTFP3 & PRAN & PERM).
     exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
@@ -6043,8 +6091,7 @@ Proof.
     (* show that the address of p after assigning the enum body is unchanged *)
     assert (PADDREQ: b = b1 /\ ofs = ofs1).
     { exploit eval_place_footprint_unchanged.
-      2: eapply PADDR1. eauto. eauto.
-      eapply dominators_must_init_sound; eauto.
+      2: eapply PADDR1. eauto. eauto. auto.
       all: eauto.
       intros (bs & UNC & NBS & INCL & DIS).
       eapply UNC; eauto.
@@ -6122,8 +6169,7 @@ Proof.
     (* accessibility *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place.
-    eapply dominators_must_init_sound; eauto.    
+    eapply wf_own_env_init_place. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
@@ -6211,6 +6257,7 @@ Proof.
     { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
       eapply move_place_sound. auto. }
     (* eval_place_sound *)
+    eapply dominators_must_init_sound in MOVE2; eauto.
     exploit eval_place_sound; eauto. 
     intros (pfp & GFP & WTFP3 & PRAN & PERM).
     (* assign the box pointer to p *)
@@ -6226,7 +6273,8 @@ Proof.
     eapply list_norepet_append_left; eauto.
     (* wt_footprint *)
     rewrite H. replace (genv_cenv (globalenv se prog)) with ce by auto.
-    rewrite H in WT4. inv WT4. 
+    rewrite H in WT4. inv WT4.
+    replace (genv_cenv (globalenv se prog)) with ce in SZEQ by auto.
     rewrite <- SZEQ. econstructor; eauto.
     (* disjointness *)
     simpl. eapply list_disjoint_cons_l. eauto.
@@ -6362,8 +6410,7 @@ Proof.
     (* accessibility *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place.
-    eapply dominators_must_init_sound; eauto.    
+    eapply wf_own_env_init_place. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
@@ -6480,6 +6527,9 @@ Proof.
     eauto.
     intros (mayinit3 & mayuninit3 & A & B).      
     (* end of construct *)
+    (* prove that p is dominator owned in (move_place_list own1 (moved_place_list al)) *)
+    assert (DOM: dominators_is_init (move_place_list own1 (moved_place_list al)) p = true).
+    { eapply dominators_must_init_sound; eauto. }
     (* sound_state *)
     assert (RACC: exists Hm1, rsw_acc (rsw sg (flat_fp_frame (fpf_func le fpm fpf)) m Hm)
                            (rsw sg ((flat_fp_frame (fpf_func le fpm2 fpf)) ++ flat_map footprint_flat vfpl) m Hm1)).
@@ -6617,27 +6667,123 @@ Proof.
     { red. intros. intro. subst.
       eapply N3. eapply in_app; eauto.
       eapply EQUIV1. eapply in_app. left. eapply INCL1. eauto. reflexivity. }
-    (* free stack blocks *)
-    
-    
+    (* free stack blocks unchanged on *)
+    assert (UNC1: Mem.unchanged_on (fun b _ => ~ In b (footprint_of_env le)) m1 m2).
+    { eapply free_list_unchanged_on. eauto.
+      intros. intro. eapply H0.
+      rewrite footprint_blocks_of_env_eq.
+      eapply in_map_iff. exists (b, z1, z2). eauto. }
+    (* show that v1 is sem_wt in m2 *)
+    exploit sem_wt_val_unchanged_blocks. eapply WTVAL2.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro.
+    eapply N4. eauto. eapply EQUIV1.
+    eapply in_app. left. destruct H; eauto. reflexivity.
+    intros WTVAL2'.    
+    (* prove that ck is wt_call_cont *)
+    assert (WTCC: wt_call_cont prog se mod_sg ck f.(fn_return)).
+    { eapply call_cont_wt_call_cont; eauto. }
+    assert (TYCC: typeof_cont_call (rs_sig_res sg) ck = f.(fn_return)).
+    { replace sg with mod_sg.
+      eapply wt_call_cont_type_eq; eauto.
+      eapply rsw_acc_sg_eq; eauto. }
+    assert (RACC: exists Hm1, rsw_acc (rsw sg (flat_fp_frame (fpf_func le fpm fpf)) m1 Hm)
+                           (rsw sg (footprint_flat fp' ++ flat_fp_frame fpf) m2 Hm1)).
+    { eapply rsw_acc_shrink.
+      simpl. rewrite app_assoc. eapply incl_app_app.
+      eapply incl_appr. red. intros. eapply EQUIV1. eapply in_app; auto.
+      eapply incl_refl.
+      simpl. eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros.  intro. eapply H. rewrite !in_app; auto. }
+    destruct RACC as (Hm1 & RACC).
     split.
+    eapply sound_returnstate with (fpf := fpf); eauto.
+    (* norepet *)
+    eapply list_norepet_app. repeat apply conj.
+    eapply list_norepet_append_left; eauto.
+    eapply list_norepet_append_right; eauto.
+    red. intros. intro. subst. eapply N3.
+    eapply in_app; eauto. eapply EQUIV1. eapply in_app; eauto. reflexivity.
+    (* sound_stacks *)    
+    eapply call_cont_sound; eauto.
+    eapply sound_cont_unchanged; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro. eapply DIS1. eapply in_app; eauto. eauto.
+    reflexivity.
+    (* rsw_acc *)
+    eapply rsw_acc_trans; eauto.
+    (* wt_state *)
     econstructor; eauto.
-    assign_loc_sound
+    
+  (* step_returnstate *)
+  - inv SOUND. simpl in *. inv STK.
+    (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct norepet *)
+    eapply list_norepet_app in SEP as (N1 & N2 & N3). simpl in N2, N3.
+    generalize N2 as N2'. intros.
+    eapply list_norepet3_fpm_changed in N2 as (N4 & N5 & N6 & N7 & N8 & DIS1).
+    rewrite app_assoc in N3.
+    eapply list_disjoint_app_r in N3 as (N3 & N3').
+    (* evaluate the place *)
+    exploit eval_place_sound; eauto.
+    intros (pfp & GFP & WTFP1 & PRAN & PERM & VALIDB).
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.        
+    (* assign *)
+    exploit assign_loc_sound; eauto.
+    intros (fpm1 & SFP & MM1 & NOREP1 & WFENV1).
+    assert (RACC: exists Hm1, rsw_acc (rsw sg (footprint_flat rfp ++ flat_fp_frame (fpf_func e fpm fpf0)) m1 Hm) (rsw sg (flat_fp_frame (fpf_func e fpm1 fpf0)) m2 Hm1)).
+    { destruct (path_of_place p) eqn: POP.
+      eapply rsw_acc_shrink. simpl.
+      red. intros. rewrite !in_app in H2. rewrite !in_app.
+      repeat destruct H2; auto.
+      exploit set_footprint_map_incl; eauto. intros [A|B]; auto.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on; eauto.
+      simpl. intros. intro. destruct H4. subst.
+      eapply H2. rewrite !in_app.
+      exploit get_loc_footprint_map_in_range; eauto. intros IN.
+      apply in_app in IN as [A|B]; auto. }
+    destruct RACC as (Hm1 & RACC).
+    split.
+    econstructor; eauto. econstructor. 
+    (* sound_cont *)
+    eapply sound_cont_unchanged; eauto.
+    eapply Mem.unchanged_on_implies. eapply assign_loc_unchanged_on; eauto.
+    simpl. intros. intro. destruct H4. subst.
+    eapply DIS1. destruct (path_of_place p) eqn: POP.
+    eapply get_loc_footprint_map_in_range; eauto. eauto. reflexivity.
+    (* norepet *)
+    simpl. rewrite app_assoc. eapply list_norepet_app.
+    repeat apply conj; eauto.
+    eapply list_norepet_append_right; eauto.
+    red. intros. intro. subst. rewrite in_app in H2.
+    destruct H2. eapply DIS1; eauto. apply in_app; auto.
+    destruct (path_of_place p) eqn: POP.
+    exploit set_footprint_map_incl; eauto. intros [A|B].
+    eapply DIS1; eauto. apply in_app; auto.
+    eapply N3'; eauto.
+    (* rsw_acc *)
+    eapply rsw_acc_trans; eauto.
+    (* wf_own_env *)
+    eapply wf_own_env_init_place; eauto.
+    (* wt_state *)
+    Admitted.
     
 Lemma external_sound: forall s q,
     sound_state s ->
-    wt_state ge s ->
+    wt_state s ->
     at_external ge s q ->
     exists wA, symtbl_inv wt_rs wA se /\ query_inv wt_rs wA q /\
             forall r, reply_inv wt_rs wA r ->
                  (exists s', after_external s r s' (* do we really need
                  this exists s'? It is repeated in partial safe *)
-                        /\ forall s', after_external s r s' -> sound_state s' /\ wt_state ge s').
+                        /\ forall s', after_external s r s' -> sound_state s' /\ wt_state s').
 Admitted.
 
 Lemma final_sound: forall s r,
     sound_state s ->
-    wt_state ge s ->
+    wt_state s ->
     final_state s r ->
     reply_inv wt_rs (se, w) r.
 Admitted.
