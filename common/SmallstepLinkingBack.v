@@ -257,12 +257,7 @@ Section BSIM.
       subst_dep. left. eauto.
   Qed.
 
-  (** Now only Asm is determinate while C is recrptive are provided by CompCert.
-      Here I am assuming that  the source semantics (conventionally C) is determinate. 
-      This is wrong but hopefully we only need to exclude the situation that a state 
-      can [at_external] or [final_state] or [step] at the same time. The internal 
-      determinacy of [step] seems is not necessary. *)
-  Hypothesis determinate_L1: forall i, determinate (L1 i).
+  Hypothesis determinate_L1: forall i, determinate_big (L1 i).
   
   Lemma step_simulation:
     forall idx s1 s2 t s2', match_states idx s1 s2 -> step L2 se2 s2 t s2' -> safe L1 se1 s1 ->
@@ -290,14 +285,14 @@ Section BSIM.
       pose proof (determinate_L1 i se1) as DETERMi1.
       exploit Hsafe; eauto. eapply star_internal; eauto. rename q into q2.
       intros [[r1' Final1] | [[q1 Ext1] | [t [s2' Step1]]]].
-      + inv Final1. subst_dep. exfalso. eapply @sd_final_noext; eauto.
-      + inv Ext1. subst_dep. exfalso. exploit @sd_at_external_determ. eauto.
+      + inv Final1. subst_dep. exfalso. eapply @sd_big_final_noext; eauto.
+      + inv Ext1. subst_dep. exfalso. exploit @sd_big_at_external_determ. eauto.
         apply Hqx1. apply H12. intro. subst qx1.
         pose proof (bsim_lts (HL j) _ _ Hsex (Hse1 j)).
         erewrite bsim_match_valid_query in H0; eauto. congruence.
       + inv Step1; subst_dep.
-        -- exfalso. eapply @sd_at_external_nostep; eauto.
-        -- exploit @sd_at_external_determ. eauto.
+        -- exfalso. eapply @sd_big_at_external_nostep; eauto.
+        -- exploit @sd_big_at_external_determ. eauto.
            apply Hqx1. apply H11. intro. subst qx1.
            pose proof (bsim_lts (HL j1) _ _ Hsex (Hse1 j1)).
            exploit @bsim_match_initial_states; eauto.
@@ -314,7 +309,7 @@ Section BSIM.
            eapply step_push; eauto. reflexivity.
            econstructor.
            econstructor; eauto. econstructor; eauto. econstructor; eauto. eauto.
-        -- exfalso. eapply @sd_final_noext; eauto.
+        -- exfalso. eapply @sd_big_final_noext; eauto.
     - (* cross-component return *)
       remember (st L2 i s) as f2.
       inv H4. inv H11. subst_dep. clear idx0.
@@ -330,11 +325,11 @@ Section BSIM.
       exploit Hsafe; eauto. eapply star_internal; eauto.
       intros [[r1' Final1] | [[q1 Ext1] | [t [s2'' Step1]]]].
       + inv Final1.
-      + inv Ext1. subst_dep. exfalso. exploit @sd_final_noext; eauto.
+      + inv Ext1. subst_dep. exfalso. exploit @sd_big_final_noext; eauto.
       + inv Step1; subst_dep.
-        -- exfalso. exploit @sd_final_nostep; eauto.
-        -- exfalso. exploit @sd_final_noext; eauto.
-        -- exploit @sd_final_determ. eauto. apply Hr2. apply H17. intro.
+        -- exfalso. exploit @sd_big_final_nostep; eauto.
+        -- exfalso. exploit @sd_big_final_noext; eauto.
+        -- exploit @sd_big_final_determ. eauto. apply Hr2. apply H17. intro.
            subst r0.
            assert (j1 = i). {destruct j1; destruct i; destruct j; congruence. }
            subst j1.
@@ -347,12 +342,22 @@ Section BSIM.
   Qed.
   (* bsim_properties *)
 
-  Hypothesis match_query_excl : forall q1 q2 i j,
+  Hypothesis valid_query_excl:
+    forall i j se q,
+      Smallstep.valid_query (L1 i se) q = true ->
+      Smallstep.valid_query (L1 j se) q = true ->
+      i = j.
+  
+  Lemma match_query_excl : forall q1 q2 i j,
       match_query cc w q1 q2 ->
       Smallstep.valid_query (L1 i se1) q1 = true ->
       Smallstep.valid_query (L2 j se2) q2 = true ->
       i = j.
-  
+  Proof.
+    intros.  pose proof (bsim_lts (HL j) _ _ Hse (Hse1 j)).
+    erewrite bsim_match_valid_query in H1; eauto.
+  Qed.
+    
   Lemma initial_states_simulation:
     forall q1 q2, match_query cc w q1 q2 ->
                 bsim_match_cont (rex match_states) (initial_state L1 se1 q1) (initial_state L2 se2 q2).
@@ -444,10 +449,10 @@ Section BSIM.
         econstructor; eauto.
       + inv Ext1. subst_dep.
         exfalso.
-        exploit @sd_final_noext; eauto.
+        exploit @sd_big_final_noext; eauto.
       + inv Step1. subst_dep.
-        -- exfalso. exploit @sd_final_nostep; eauto.
-        -- subst_dep. exfalso. exploit @sd_final_noext; eauto.
+        -- exfalso. exploit @sd_big_final_nostep; eauto.
+        -- subst_dep. exfalso. exploit @sd_big_final_noext; eauto.
         -- subst_dep. inv H2.
            assert (j1 = i).
            { destruct j; destruct j1; destruct i; congruence. }
@@ -456,7 +461,7 @@ Section BSIM.
            { destruct j; destruct j0; destruct i; congruence. }
            subst j0.
            right. right.
-           exploit @sd_final_determ. eauto. apply Final1i. apply H10. intro. subst r0.
+           exploit @sd_big_final_determ. eauto. apply Final1i. apply H10. intro. subst r0.
            inv H9. subst_dep.
            exploit H11. eauto. intro. inv H2.
            exploit bsim_match_cont_exist; eauto.
@@ -469,16 +474,16 @@ Section BSIM.
       exploit H0; eauto. eapply star_internal; eauto.
       intros [[r1' Final1] | [[q Ext1] | [t [s2' Step1]]]].
       + (** the source semantics finals, i.e. with empty state stack *)
-        inv Final1. subst_dep. exfalso. eapply @sd_final_noext; eauto.
+        inv Final1. subst_dep. exfalso. eapply @sd_big_final_noext; eauto.
       + inv Ext1. subst_dep. right. left.
-        exploit @sd_at_external_determ. eauto. apply X1i. apply H11. intro.
+        exploit @sd_big_at_external_determ. eauto. apply X1i. apply H11. intro.
         subst q. exists q2. econstructor; eauto.
         intros j0. pose proof (bsim_lts (HL j0) _ _ MS (Hse1 j0)).
         erewrite bsim_match_valid_query; eauto.
       + inv Step1. subst_dep.
-        -- exfalso. exploit @sd_at_external_nostep; eauto.
+        -- exfalso. exploit @sd_big_at_external_nostep; eauto.
         -- subst_dep. right. right.
-           exploit @sd_at_external_determ. eauto. apply X1i. apply H10.
+           exploit @sd_big_at_external_determ. eauto. apply X1i. apply H10.
            intro. subst q.
            pose proof (bsim_lts (HL j0) _ _ MS (Hse1 j0)).
            exploit @bsim_match_initial_states. apply H7. eauto.
@@ -486,7 +491,7 @@ Section BSIM.
            intros [s2' I2j0]. do 2 eexists.
            eapply step_push. eauto. 
            erewrite bsim_match_valid_query; eauto. eauto. eauto.
-        -- subst_dep. exfalso. eapply @sd_final_noext; eauto.
+        -- subst_dep. exfalso. eapply @sd_big_final_noext; eauto.
     - right. right. do 2 eexists. econstructor; eauto.
   Qed.
 
@@ -516,15 +521,17 @@ Local Unset Program Cases.
 Definition compose {li} (La Lb: Smallstep.semantics li li) :=
   let L i := match i with true => La | false => Lb end in
   option_map (semantics L) (link (skel La) (skel Lb)).
-
+      
 Lemma compose_simulation {li1 li2} (cc: callconv li1 li2) L1a L1b L1 L2a L2b L2:
   backward_simulation cc cc L1a L2a ->
   backward_simulation cc cc L1b L2b ->
+  determinate_big L1a -> determinate_big L1b ->
+  (forall q se, ~ ((Smallstep.valid_query (L1a se)) q = true /\ Smallstep.valid_query (L1b se) q = true)) ->
   compose L1a L1b = Some L1 ->
   compose L2a L2b = Some L2 ->
   backward_simulation cc cc L1 L2.
 Proof.
-  intros [Ha] [Hb] H1 H2. unfold compose in *. unfold option_map in *.
+  intros [Ha] [Hb] Hd1 Hd2 Hqex H1 H2. unfold compose in *. unfold option_map in *.
   destruct (link (skel L1a) (skel L1b)) as [sk1|] eqn:Hsk1; try discriminate. inv H1.
   destruct (link (skel L2a) (skel L2b)) as [sk2|] eqn:Hsk2; try discriminate. inv H2.
   set (L1 := fun i:bool => if i then L1a else L1b).
@@ -538,9 +545,9 @@ Proof.
     + pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
       intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.
       (** preconditions introduced above *)
-    + admit.
-    + admit.
+    + intros. destruct i; eauto.
+    + intros. destruct i; destruct j; simpl in *; eauto; exfalso; eapply Hqex; eauto.        
   - clear - HL. intros [i x].
     induction (bsim_order_wf (HL i) x) as [x Hx IHx].
     constructor. intros z Hxz. inv Hxz; subst_dep. eauto.
-Admitted.
+Qed.
