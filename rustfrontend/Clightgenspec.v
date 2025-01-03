@@ -801,7 +801,7 @@ tr_composite relation *)
     tr_stmt locals s2 s2' ->
     tr_stmt locals (Ssequence s1 s2) (Clight.Ssequence s1' s2')
 | tr_ifthenelse: forall e e' s1 s2 s1' s2',
-    pexpr_to_cexpr ce tce locals e = OK e' ->
+    expr_to_cexpr ce tce locals e = OK e' ->
     tr_stmt locals s1 s1' ->
     tr_stmt locals s2 s2' ->
     tr_stmt locals (Sifthenelse e s1 s2) (Clight.Sifthenelse e' s1' s2')

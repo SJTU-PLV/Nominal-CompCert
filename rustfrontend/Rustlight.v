@@ -95,7 +95,7 @@ Inductive statement : Type :=
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
-| Sifthenelse : pexpr  -> statement -> statement -> statement (**r conditional *)
+| Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak : statement                      (**r [break] statement *)
 | Scontinue : statement                   (**r [continue] statement *)

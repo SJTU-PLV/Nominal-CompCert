@@ -3089,7 +3089,7 @@ Proof.
       eapply star_step. econstructor.
       (* evaluate if then else *)
       eapply star_step. econstructor.
-      econstructor. econstructor. 
+      econstructor. econstructor. econstructor.
       eauto. econstructor. simpl. eauto.
       eauto. simpl. eauto.
       unfold Cop.bool_val. simpl. eauto.
@@ -3144,7 +3144,7 @@ Proof.
       eapply star_step. econstructor.
       (* evaluate if then else *)
       eapply star_step. econstructor.
-      econstructor. econstructor. 
+      econstructor. econstructor. econstructor.
       eauto. econstructor. simpl. eauto.
       eauto. simpl. eauto.
       unfold Cop.bool_val. simpl. eauto.
@@ -4329,7 +4329,7 @@ Proof.
   - inv MSTMT.
     generalize IM as IM1. intros. inv IM.
     rename H2 into GETINIT. rename H3 into GETUNINIT.
-    exploit eval_pexpr_inject; eauto with matsym.
+    exploit eval_expr_inject; eauto with matsym.
     intros (tv & EVAL & VINJ).
     eexists. split.
     econstructor. econstructor; eauto.
