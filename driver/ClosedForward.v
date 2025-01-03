@@ -305,5 +305,5 @@ Corollary transf_fsim_link :
 Proof.
   intros. 
   eapply closed_forward_simulation_cc_compcert.
-  eapply compose_transf_c_program_correct; eauto.
+  eapply compose_transf_clight_program_correct; eauto.
 Qed.

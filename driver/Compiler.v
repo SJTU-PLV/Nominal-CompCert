@@ -921,7 +921,7 @@ Qed.
 Require Import SmallstepLinking.
 Require Import AsmLinking.
 
-Lemma compose_transf_c_program_correct:
+Lemma compose_transf_clight_program_correct:
   forall p1 p2 spec tp1 tp2 tp,
     compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->
     transf_clight_program p1 = OK tp1 ->
@@ -944,3 +944,39 @@ Proof.
   apply link_erase_program in H2. rewrite H2. cbn. f_equal. f_equal.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
+
+Require Import SmallstepLinkingBack.
+
+Lemma compose_transf_c_program_correct:
+  forall p1 p2 spec tp1 tp2 tp,
+    compose (Csem.semantics p1) (Csem.semantics p2) = Some spec ->
+    transf_c_program p1 = OK tp1 ->
+    transf_c_program p2 = OK tp2 ->
+    link tp1 tp2 = Some tp ->
+    backward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_backward_simulations.
+  2: { unfold compose in H.
+       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
+       cbn in *. inv H.
+       eapply forward_to_backward_simulation.
+       eapply AsmLinking.asm_linking; eauto.
+       eapply SmallstepLinking.semantics_receptive.
+       intros. destruct i; eapply Asm.semantics_receptive.
+       eapply Asm.semantics_determinate.
+  }
+  2: { intros. pose proof (Asm.semantics_receptive tp se3). apply H3. }
+  eapply compose_simulation; eauto.
+  - eapply transf_c_program_correct; eauto.
+  - eapply transf_c_program_correct; eauto.
+  - admit.
+  - admit.
+  - admit.
+  - 
+  unfold compose. cbn.
+  apply link_erase_program in H2. rewrite H2. cbn.
+  f_equal. admit.
+Admitted.

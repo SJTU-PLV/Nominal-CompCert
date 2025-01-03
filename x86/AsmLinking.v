@@ -472,4 +472,5 @@ Section ASM_LINKING.
           destruct H; inv H9. destruct H1; congruence.
     - apply well_founded_ltof.
   Qed.
+
 End ASM_LINKING.

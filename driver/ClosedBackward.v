@@ -388,11 +388,26 @@ Proof.
   intros.
   eapply closed_backward_simulation_cc_compcert; eauto.
   apply forward_to_backward_simulation.
-  eapply compose_transf_c_program_correct; eauto.
+  eapply compose_transf_clight_program_correct; eauto.
   - unfold compose in H. unfold option_map in H. destr_in H. inv H.
     eapply semantics_receptive. destruct i; eapply Clight.semantics_receptive; eauto.
   - eapply Asm.semantics_determinate.
   - eapply closed_program_asm_LTS; eauto.
 Qed.
 
+Require Import SmallstepLinkingBack.
 
+Corollary transf_bsim_link_c :
+  forall p1 p2 spec tp1 tp2 tp,
+    compose (Csem.semantics p1) (Csem.semantics p2) = Some spec ->
+    transf_c_program p1 = OK tp1 ->
+    transf_c_program p2 = OK tp2 ->
+    link tp1 tp2 = Some tp ->
+    closed_program_asm tp ->
+    Closed.backward_simulation (close_c spec) (close_asm (Asm.semantics tp)).
+Proof.
+  intros.
+  eapply closed_backward_simulation_cc_compcert; eauto.
+  2: { eapply closed_program_asm_LTS; eauto. }
+  eapply compose_transf_c_program_correct; eauto.
+Qed.
