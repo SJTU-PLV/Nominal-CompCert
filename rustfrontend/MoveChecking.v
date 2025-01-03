@@ -210,15 +210,18 @@ Definition move_check_stmt ce (an : IM.t * IM.t * PathsMap.t) (stmt : statement)
   | _, _ => OK stmt
   end.
 
-Definition check_expr ce (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res unit :=
+Definition check_cond_expr (an : IM.t * IM.t * PathsMap.t) (e: expr) : Errors.res unit :=
   let '(mayInit, mayUninit, universe) := an in
   match mayInit, mayUninit with
-  | IM.State mayinit, IM.State mayuninit =>      
-      match move_check_expr ce mayinit mayuninit universe e with
-      | Some _ =>
-          OK tt
-      | None =>
-          Error (msg "move_check_expr error")
+  | IM.State mayinit, IM.State mayuninit =>
+      match e with
+      | Emoveplace _ _ =>
+          Error (msg "cannot move place in conditional expression")
+      | Epure pe =>
+          if move_check_pexpr mayinit mayuninit universe pe then
+            OK tt
+          else
+            Error (msg "move_check_pexpr error in conditional expression")
       end
   | _, _ => OK tt
   end.
@@ -322,7 +325,7 @@ Definition move_check_function (ce: composite_env) (f: function) : Errors.res un
   do _ <- check_cyclic_struct_res ce (var_types (f.(fn_params) ++ f.(fn_vars)));
   do _ <- check_valid_types (var_types (f.(fn_params) ++ f.(fn_vars)));
   (** 3. Run move checking ! *)
-  do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) (check_expr ce) f.(fn_body) cfg;
+  do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) check_cond_expr f.(fn_body) cfg;
   OK tt.
 
 Definition move_check_fundef (ce : composite_env) (id : ident) (fd : fundef) : Errors.res fundef :=

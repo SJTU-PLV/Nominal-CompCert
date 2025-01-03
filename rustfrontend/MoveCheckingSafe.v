@@ -62,7 +62,7 @@ Let ce := ge.(genv_cenv).
 
 Let AN : Type := (PMap.t IM.t * PMap.t IM.t * PathsMap.t).
                                                                   
-Let match_stmt (ae: AN) body cfg s ts := match_stmt get_init_info ae (move_check_stmt ce) (check_expr ce) body cfg s ts.
+Let match_stmt (ae: AN) body cfg s ts := match_stmt get_init_info ae (move_check_stmt ce) check_cond_expr body cfg s ts.
 
 Definition mod_sg := match w with
                     | rsw sg _ _ _ => sg
@@ -3472,6 +3472,56 @@ Proof.
   erewrite <- Mem.unchanged_on_perm; eauto. 
 Qed.
 
+(** Function return *)
+
+Lemma find_funct_move_check: forall vf fd,
+    Genv.find_funct ge vf = Some fd ->
+    move_check_fundef_spec ge fd.
+Proof.
+  intros. simpl in H.  eapply Genv.find_funct_prop; eauto.
+  intros. eapply FUN_CHECK. eauto.
+Qed.
+
+Lemma footprint_of_not_composite_val: forall ty v fp m,
+    sem_wt_val ce m fp v ->
+    wt_footprint ce ty fp ->
+    not_composite ty = true ->
+    incl (footprint_of_val v) (footprint_flat fp).
+Proof.
+  induction 1; simpl; intros; try (apply incl_refl).
+  - red. intros. inv H1. simpl; auto. inv H2.
+  - inv H. simpl in *. congruence.
+  - inv H. simpl in *. congruence.
+Qed.
+
+Lemma free_list_unchanged_on :
+  forall l m m' P,
+  Mem.free_list m l = Some m' ->
+  (forall b z1 z2, In (b,z1,z2) l -> ~ P b) ->
+  Mem.unchanged_on (fun b _ => P b) m m'.
+Proof.
+  induction l; simpl; intros.
+  - inv H. eapply Mem.unchanged_on_refl.
+  - destruct a. destruct p. destruct (Mem.free m b z0 z) eqn: FREE; try congruence.
+    eapply Mem.unchanged_on_trans. 2: eapply IHl; eauto.
+    eapply Mem.free_unchanged_on; eauto.
+Qed.
+
+Lemma footprint_blocks_of_env_eq: forall le,
+    footprint_of_env le = map (fun '(b, _, _) => b) (blocks_of_env ce le).
+Proof.
+  intros. unfold footprint_of_env, blocks_of_env.
+  rewrite map_map.  apply map_ext.
+  intros (id & (b & ty)). auto.
+Qed.
+
+Lemma rsw_acc_sg_eq: forall sg fp m Hm,
+    rsw_acc w (rsw sg fp m Hm) ->
+    mod_sg = sg.
+Proof.
+  intros. unfold mod_sg. destruct w. inv H. auto.
+Qed.
+
       
 (* The location of the member is sem_wt_loc. It is used in the invariant of dropstate *)
 Inductive member_footprint (m: mem) (co: composite) (b: block) (ofs: Z) (fp: footprint) : member -> Prop :=
@@ -4041,7 +4091,7 @@ Inductive sound_cont : AN -> statement -> rustcfg -> cont -> node -> option node
 | sound_Kseq: forall an body cfg s ts k pc next cont brk nret m fpf
     (MSTMT: match_stmt an body cfg s ts pc next cont brk nret)
     (MCONT: sound_cont an body cfg k next cont brk nret m fpf),
-    sound_cont an body cfg (Kseq s k) next cont brk nret m fpf
+    sound_cont an body cfg (Kseq s k) pc cont brk nret m fpf
 | sound_Kloop: forall an body cfg s ts k body_start loop_jump_node exit_loop nret contn brk m fpf
     (START: cfg ! loop_jump_node = Some (Inop body_start))
     (MSTMT: match_stmt an body cfg s ts body_start loop_jump_node (Some loop_jump_node) (Some exit_loop) nret)
@@ -4379,7 +4429,16 @@ Proof.
     eapply Mem.unchanged_on_implies; eauto.
     simpl. intros. rewrite !in_app. auto.
 Qed.
-    
+
+
+Lemma call_cont_sound: forall k ck maybeInit maybeUninit universe body cfg next cont brk nret m fpf
+    (CONT: sound_cont (maybeInit, maybeUninit, universe) body cfg k next cont brk nret m fpf)
+    (CC: call_cont k = Some ck),
+    sound_stacks ck m fpf.
+Proof.
+  induction k; intros; simpl; inv CC; inv CONT; eauto; econstructor.
+Qed.
+
 Lemma initial_state_sound: forall q s,
     query_inv wt_rs (se, w) q ->
     Smallstep.initial_state L q s ->
@@ -5890,62 +5949,6 @@ Qed.
 (* More generally, rsw_acc is preserved under permuation of the
       footprint *)
 
-Lemma find_funct_move_check: forall vf fd,
-    Genv.find_funct ge vf = Some fd ->
-    move_check_fundef_spec ge fd.
-Proof.
-  intros. simpl in H.  eapply Genv.find_funct_prop; eauto.
-  intros. eapply FUN_CHECK. eauto.
-Qed.
-
-Lemma footprint_of_not_composite_val: forall ty v fp m,
-    sem_wt_val ce m fp v ->
-    wt_footprint ce ty fp ->
-    not_composite ty = true ->
-    incl (footprint_of_val v) (footprint_flat fp).
-Proof.
-  induction 1; simpl; intros; try (apply incl_refl).
-  - red. intros. inv H1. simpl; auto. inv H2.
-  - inv H. simpl in *. congruence.
-  - inv H. simpl in *. congruence.
-Qed.
-
-Lemma free_list_unchanged_on :
-  forall l m m' P,
-  Mem.free_list m l = Some m' ->
-  (forall b z1 z2, In (b,z1,z2) l -> ~ P b) ->
-  Mem.unchanged_on (fun b _ => P b) m m'.
-Proof.
-  induction l; simpl; intros.
-  - inv H. eapply Mem.unchanged_on_refl.
-  - destruct a. destruct p. destruct (Mem.free m b z0 z) eqn: FREE; try congruence.
-    eapply Mem.unchanged_on_trans. 2: eapply IHl; eauto.
-    eapply Mem.free_unchanged_on; eauto.
-Qed.
-
-Lemma footprint_blocks_of_env_eq: forall le,
-    footprint_of_env le = map (fun '(b, _, _) => b) (blocks_of_env ce le).
-Proof.
-  intros. unfold footprint_of_env, blocks_of_env.
-  rewrite map_map.  apply map_ext.
-  intros (id & (b & ty)). auto.
-Qed.
-
-Lemma call_cont_sound: forall k ck maybeInit maybeUninit universe body cfg next cont brk nret m fpf
-    (CONT: sound_cont (maybeInit, maybeUninit, universe) body cfg k next cont brk nret m fpf)
-    (CC: call_cont k = Some ck),
-    sound_stacks ck m fpf.
-Proof.
-  induction k; intros; simpl; inv CC; inv CONT; eauto; econstructor.
-Qed.
-
-Lemma rsw_acc_sg_eq: forall sg fp m Hm,
-    rsw_acc w (rsw sg fp m Hm) ->
-    mod_sg = sg.
-Proof.
-  intros. unfold mod_sg. destruct w. inv H. auto.
-Qed.
-
 Ltac simpl_getIM IM :=
   generalize IM as IM1; intros;
   inversion IM1 as [? | ? | ? ? GETINIT GETUNINIT]; subst;
@@ -6594,9 +6597,9 @@ Proof.
       repeat destruct H.
       exploit in_footprint_of_env_inv; eauto. intros (id1 & ty1 & IN1).
       eapply wf_env_freeable; eauto.
-      eapply Mem.unchanged_on_support. eauto.
+      eapply Mem.unchanged_on_support with (P:= fun _ _ => True). eauto.
       eapply Hm. eapply in_app; eauto.
-      eapply Mem.unchanged_on_support. eauto.
+      eapply Mem.unchanged_on_support with (P:= fun _ _ => True). eauto.
       eapply Hm. eapply in_app; eauto. }
     assert (RACC: rsw_acc (rsw sg (flat_fp_frame fpf ++ flat_map footprint_flat fpl) m Hm)  (rsw sg (flat_fp_frame (fpf_func e fpm1 fpf)) m' Hm1)).
     { econstructor.
@@ -6768,8 +6771,99 @@ Proof.
     (* wf_own_env *)
     eapply wf_own_env_init_place; eauto.
     (* wt_state *)
-    Admitted.
+    admit.
     
+  (* step_seq *)
+  - inv SOUND. inv STMT.
+    split.
+    econstructor; eauto.
+    econstructor; eauto.
+    (* wt_state *)
+    admit.
+  (* step_skip_seq *)
+  - inv SOUND. inv STMT. inv CONT.
+    split.
+    econstructor; eauto.
+    admit.
+  (* step_continue_seq *)
+  - inv SOUND. inv STMT. inv CONT.
+    split.
+    econstructor; eauto.
+    econstructor.
+    admit.
+  (* step_break_seq *)
+  - inv SOUND. inv STMT. inv CONT.
+    split.
+    econstructor; eauto.
+    econstructor.
+    admit.
+  (* step_ifthenelse *)
+  - inv SOUND. inv STMT.
+    simpl_getIM IM.        
+    split.
+    destruct b.
+    + exploit analyze_succ; eauto.
+      rewrite <- GETINIT. rewrite <- GETUNINIT. eauto.
+      simpl. left. eauto.      
+      unfold transfer. rewrite <- GETINIT. rewrite MCOND. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite MCOND. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      econstructor; eauto.
+    + exploit analyze_succ; eauto.
+      rewrite <- GETINIT. rewrite <- GETUNINIT. eauto.
+      simpl. right. eauto.      
+      unfold transfer. rewrite <- GETINIT. rewrite MCOND. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite MCOND. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      econstructor; eauto.
+    (* wt_state *)
+    + admit.
+  (* step_loop *)
+  - inv SOUND. inv STMT.
+    simpl_getIM IM.
+    exploit analyze_succ; eauto.
+    rewrite <- GETINIT. rewrite <- GETUNINIT. eauto.
+    simpl. eauto.
+    unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+    unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+    intros (mayinit3 & mayuninit3 & GIM & SO).
+    split.
+    econstructor; eauto.
+    econstructor; eauto.
+    admit.
+  (* step_skip_or_continue_loop *)
+  - inv SOUND. inv CONT.    
+    simpl_getIM IM.
+    destruct H; subst; inv STMT.
+    + exploit analyze_succ; eauto.
+      rewrite <- GETINIT. rewrite <- GETUNINIT. eauto.
+      simpl. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      split.
+      econstructor; eauto.
+      econstructor; eauto.
+      admit.
+    + exploit analyze_succ; eauto.
+      rewrite <- GETINIT. rewrite <- GETUNINIT. eauto.
+      simpl. eauto.
+      unfold transfer. rewrite <- GETINIT. rewrite START. auto.
+      unfold transfer. rewrite <- GETUNINIT. rewrite START. auto.
+      intros (mayinit3 & mayuninit3 & GIM & SO).
+      split.
+      econstructor; eauto.
+      econstructor; eauto.
+      admit.
+  (* step_break_loop *)
+  - inv SOUND. inv STMT. inv CONT.
+    split.
+    econstructor; eauto.
+    econstructor; eauto.
+    admit.
+
+Admitted.
+
 Lemma external_sound: forall s q,
     sound_state s ->
     wt_state s ->
@@ -6813,67 +6907,40 @@ Proof.
   - inv WTFP; inv BM. simpl in *.
     inv WT.
 Qed.
-    
-Lemma dominators_must_init_deref1: forall init uninit universe p ty,
-    dominators_must_init init uninit universe (Pderef p ty) = true ->
-    dominators_must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in H. simpl in H.
-  eapply andb_true_iff in H. destruct H. auto.
-Qed.
 
-Lemma dominators_must_init_deref2: forall init uninit universe p ty,
-    dominators_must_init init uninit universe (Pderef p ty) = true ->
-    must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in H. simpl in H.
-  eapply andb_true_iff in H. destruct H. auto.
-Qed.
-
-Lemma dominators_must_init_downcast: forall init uninit universe p fid fty,
-    dominators_must_init init uninit universe (Pdowncast p fid fty) = true ->
-    dominators_must_init init uninit universe p = true.
-Proof.
-  intros. unfold dominators_must_init in *.
-  eapply forallb_forall. intros.
-  erewrite forallb_forall in H. eapply H.
-  eapply place_dominators_downcast_incl; auto.
-Qed.
 
 (** The evaluation of place has no memory error  *)
 
 (* This lemma requires eval_place_sound *)
-Lemma eval_place_no_mem_error: forall p m le own init uninit universe fpm
+Lemma eval_place_no_mem_error: forall p m le own fpm
     (MM: mmatch fpm ce m le own)
     (ERR: eval_place_mem_error ce le m p)
     (WFOWN: wf_env fpm ce m le)
     (WT: wt_place (env_to_tenv le) ce p)
-    (SOWN: sound_own own init uninit universe)
-    (POWN: dominators_must_init init uninit universe p = true),
+    (POWN: dominators_is_init own p = true),
     False.
 Proof.
   induction p; intros; inv ERR; inv WT.
   - eapply IHp; eauto.
   - eapply IHp. 1-5: eauto. 
-    eapply dominators_must_init_deref1. eauto.
-  - exploit dominators_must_init_deref1; eauto. intros DOM.
+    eapply dominators_is_init_deref1. eauto.
+  - exploit dominators_is_init_deref1; eauto. intros DOM.
     exploit eval_place_sound; eauto.
     intros (fp & A1 & A2 & A3).
     (* show that the location (l, ofs) is bmatch so
     deref_loc_mem_error is impossible *)
     exploit MM. eauto.
-    eapply must_init_sound. eauto. eapply dominators_must_init_deref2; eauto.
+    eapply dominators_is_init_deref2; eauto.
     intros (BM & FULL).
     eapply deref_loc_no_mem_error; eauto.
-  - exploit dominators_must_init_downcast; eauto.
-  - exploit dominators_must_init_downcast; eauto. intros DOM.
+  - exploit dominators_is_init_downcast; eauto.
+  - exploit dominators_is_init_downcast; eauto. intros DOM.
     exploit eval_place_sound; eauto.
     intros (fp & A1 & A2 & A3).
     exploit valid_owner_place_footprint; eauto.
     intros (fp' & ofs' & fofs & GFP & VOWN & EQ).
     exploit MM. eapply GFP.
-    eapply must_init_sound. eauto.
-    unfold dominators_must_init in POWN. simpl in POWN.
+    unfold dominators_is_init in POWN. simpl in POWN.
     eapply andb_true_iff in POWN. destruct POWN. auto.
     intros (BM & FULL).
     exploit valid_owner_bmatch; eauto.
@@ -6896,9 +6963,13 @@ Proof.
   induction pe; intros; try (inv ERR; inv WT); simpl in POWN; try congruence.
   - destruct (scalar_type (typeof_place p)) eqn: TYP; try congruence.
     eapply andb_true_iff in POWN as (A1 & A2).
+    assert (INIT: dominators_is_init own p = true).
+    { eapply dominators_must_init_sound; eauto. }
     eapply eval_place_no_mem_error; eauto.
   - destruct (scalar_type (typeof_place p)) eqn: TYP; try congruence.
     eapply andb_true_iff in POWN as (B1 & B2).
+    assert (INIT: dominators_is_init own p = true).
+    { eapply dominators_must_init_sound; eauto. }
     exploit eval_place_sound; eauto.
     intros (fp & A1 & A2 & A3).
     exploit MM. eauto.
@@ -6907,9 +6978,13 @@ Proof.
     eapply deref_loc_no_mem_error; eauto.
   - destruct (typeof_place p) eqn: PTY; try congruence.
     eapply andb_true_iff in POWN as (B1 & B2).
+    assert (INIT: dominators_is_init own p = true).
+    { eapply dominators_must_init_sound; eauto. }
     eapply eval_place_no_mem_error; eauto.
   - destruct (typeof_place p) eqn: PTY; try congruence.
     eapply andb_true_iff in POWN as (B1 & B2).
+    assert (INIT: dominators_is_init own p = true).
+    { eapply dominators_must_init_sound; eauto. }
     exploit eval_place_sound; eauto.
     intros (fp & A1 & A2 & A3).
     exploit MM. eauto.
@@ -6939,6 +7014,8 @@ Proof.
   - simpl in POWN.
     destruct place_eq in POWN.
     + eapply andb_true_iff in POWN as (A1 & A2).
+      assert (INIT: dominators_is_init own p = true).
+      { eapply dominators_must_init_sound; eauto. }      
       inv H0.
       * eapply eval_place_no_mem_error; eauto.
       * exploit eval_place_sound; eauto.
@@ -6949,9 +7026,12 @@ Proof.
         eapply deref_loc_no_mem_error; eauto.
         eapply sem_wt_loc_implies_bmatch. eauto.
     + rewrite !andb_true_iff in POWN.
-      destruct POWN as ((A1 & A2) & A3). inv H0.      
+      destruct POWN as ((A1 & A2) & A3).
+      assert (INIT: dominators_is_init own p = true).
+      { eapply dominators_must_init_sound; eauto. }
+      inv H0.      
       * eapply eval_place_no_mem_error; eauto.
-      * exploit eval_place_sound. 1-5: eauto. eapply A1.
+      * exploit eval_place_sound. 1-5: eauto. 
         intros (fp & B1 & B2 & B3).
         exploit valid_owner_place_footprint. eauto. eapply WT1.
         intros (fp1 & ofs1 & fofs & C1 & C2 & C3).

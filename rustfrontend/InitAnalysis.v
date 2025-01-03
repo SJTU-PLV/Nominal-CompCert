@@ -832,6 +832,136 @@ Proof.
   auto.
 Qed.
 
+(** Properties of dominators_is/must_init  *)
+
+Lemma move_place_init_is_init: forall p p1 own,
+    is_init (move_place own p1) p = true ->
+    is_init own p = true.
+Admitted.
+
+Lemma move_children_still_init: forall own p1 p2 p3,
+    is_init (move_place own p1) p3 = true ->
+    is_prefix p1 p2 = true ->
+    is_init (move_place own p2) p3 = true.
+Admitted.
+
+Lemma place_dominators_valid_owner_incl: forall p,
+    incl (place_dominators (valid_owner p)) (place_dominators p).
+Proof.
+  induction p; simpl; auto; try apply incl_refl.
+  - red. intros. simpl. right. auto.
+Qed.
+
+Lemma place_dominators_downcast_incl: forall p fid fty,
+    incl (place_dominators p) (place_dominators (Pdowncast p fid fty)).
+Proof.
+  induction p; simpl; auto; intros; try apply incl_nil_l.
+  - red. intros. simpl. right; auto.
+  - red. intros. simpl. right; auto.
+  - apply incl_refl.
+Qed.
+  
+(* what if move out a downcast? Use place_dominators_valid_owner_incl
+and place_dominators_downcast_incl ! *)
+Lemma move_place_dominator_still_init: forall p own,    
+    dominators_is_init own p = true ->
+    dominators_is_init (move_place own p) p = true.
+Proof.
+  induction p; intros; unfold dominators_is_init in *; auto.
+  - simpl in H. 
+    exploit IHp.
+    eauto. intros.
+    eapply forallb_forall. intros.
+    eapply forallb_forall in H0. 2: eauto.
+    eapply move_children_still_init. eauto.
+    eapply is_prefix_field.
+  - simpl in H.
+    eapply andb_true_iff in H. destruct H.
+    exploit IHp.
+    eauto. intros.
+    eapply forallb_forall. intros.
+    simpl in H2. destruct H2; subst.
+    (* case1 *)
+    eapply move_irrelavent_place_still_owned. auto.
+    eapply is_prefix_antisym. eapply is_prefix_strict_deref.
+    (* case2 *)
+    eapply forallb_forall in H1. 2: eauto.
+    eapply move_children_still_init. eauto.
+    eapply is_prefix_deref.
+  - exploit IHp. 
+    (* H can imply the premise of IHp *)
+    eapply forallb_forall. intros.
+    eapply forallb_forall in H. eauto. eapply place_dominators_downcast_incl. auto.
+    intros A.
+    (* valid_owner p is init *)
+    simpl in H.  eapply andb_true_iff in H. destruct H.
+    simpl. eapply andb_true_iff. split.
+    eapply move_irrelavent_place_still_owned. eauto.
+    eapply is_prefix_antisym.
+    eapply is_prefix_strict_trans_prefix2. eapply is_prefix_valid_owner.
+    eapply is_prefix_strict_downcast.
+    (* p's dominators are init so the dominators of (valid_owner p) are init *)
+    eapply forallb_forall. intros.
+    eapply forallb_forall in A. eapply move_children_still_init. eauto.
+    eapply is_prefix_downcast.
+    eapply place_dominators_valid_owner_incl. auto.
+Qed.
+
+
+Lemma dominators_must_init_deref1: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_deref2: forall init uninit universe p ty,
+    dominators_must_init init uninit universe (Pderef p ty) = true ->
+    must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_must_init_downcast: forall init uninit universe p fid fty,
+    dominators_must_init init uninit universe (Pdowncast p fid fty) = true ->
+    dominators_must_init init uninit universe p = true.
+Proof.
+  intros. unfold dominators_must_init in *.
+  eapply forallb_forall. intros.
+  erewrite forallb_forall in H. eapply H.
+  eapply place_dominators_downcast_incl; auto.
+Qed.
+
+
+Lemma dominators_is_init_deref1: forall own p ty,
+    dominators_is_init own (Pderef p ty) = true ->
+    dominators_is_init own p = true.
+Proof.
+  intros. unfold dominators_is_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_is_init_deref2: forall own p ty,
+    dominators_is_init own (Pderef p ty) = true ->
+    is_init own p = true.
+Proof.
+  intros. unfold dominators_is_init in H. simpl in H.
+  eapply andb_true_iff in H. destruct H. auto.
+Qed.
+
+Lemma dominators_is_init_downcast: forall own p fid fty,
+    dominators_is_init own (Pdowncast p fid fty) = true ->
+    dominators_is_init own p = true.
+Proof.
+  intros. unfold dominators_is_init in *.
+  eapply forallb_forall. intros.
+  erewrite forallb_forall in H. eapply H.
+  eapply place_dominators_downcast_incl; auto.
+Qed.
+
+
 
 (* move it to a new file *)
 
