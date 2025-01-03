@@ -188,13 +188,12 @@ Inductive wt_rs_world :=
 Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
 | wt_rs_query_intro: forall sg m vf args fpl fp Hm,
     let ce := rs_sig_comp_env sg in
-    forall (DIS: footprint_disjoint_list fpl)
+    forall (NOREP: list_norepet (flat_map footprint_flat fpl))
     (SEMWT: sem_wt_val_list ce m fpl args)
     (* footprints are well-typed *)
     (WTFP: wt_footprint_list ce (rs_sig_args sg) fpl)
     (* structured footprint is equivalent with the flat footprint in the interface *)
-    (EQ: list_equiv fp (flat_map footprint_flat fpl))
-    (NOREP: list_norepet fp),
+    (EQ: list_equiv fp (flat_map footprint_flat fpl)),
     wt_rs_query (rsw sg fp m Hm) (rsq vf sg args m)
 .
 
@@ -214,8 +213,10 @@ Inductive wt_rs_reply : wt_rs_world -> rust_reply -> Prop :=
     let ce := rs_sig_comp_env sg in
     forall (SEMWT: sem_wt_val ce m rfp rv)
     (WTFP: wt_footprint (rs_sig_comp_env sg) (rs_sig_res sg) rfp)
-    (* rfp is separated from fpl *)
-    (SEP: list_disjoint (footprint_flat rfp) fp),
+    (CAST: val_casted rv (rs_sig_res sg))
+    (* rfp is extracted from fpl *)
+    (INCL: incl (footprint_flat rfp) fp)
+    (NOREP: list_norepet (footprint_flat rfp)),
     wt_rs_reply (rsw sg fp m Hm) (rsr rv m)
 .
 

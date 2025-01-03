@@ -80,6 +80,7 @@ Hypothesis FUN_CHECK:  forall id fd,
     In (id, Gfun fd) prog.(prog_defs) ->
     move_check_fundef_spec ce fd.
 
+Hypothesis SG_COMP_ENV: (rs_sig_comp_env mod_sg = ce).
 
 (** Properties of evaluation of place  *)
 
@@ -4433,7 +4434,24 @@ Proof.
     simpl. intros. rewrite !in_app. auto.
 Qed.
 
+Lemma sound_stacks_unchanged_on: forall k m1 m2 fpf
+    (SOUND: sound_stacks k m1 fpf)
+    (UNC: Mem.unchanged_on (fun b _ => In b (flat_fp_frame fpf)) m1 m2),
+    sound_stacks k m2 fpf.
+Proof.
+  induction k; intros; try (inv SOUND; econstructor; eauto).
+  eapply sound_cont_unchanged; eauto.
+  eapply Mem.unchanged_on_implies; eauto. simpl.
+  intros. rewrite !in_app. auto.
+  eapply mmatch_unchanged; eauto.
+  eapply Mem.unchanged_on_implies; eauto. simpl.
+  intros. rewrite app_assoc. rewrite in_app. auto.
+  eapply wf_env_unchanged. eauto.
+  eapply Mem.unchanged_on_implies; eauto.
+  intros. simpl. eapply in_app. auto.
+Qed.
 
+  
 Lemma call_cont_sound: forall k ck maybeInit maybeUninit universe body cfg next cont brk nret m fpf
     (CONT: sound_cont (maybeInit, maybeUninit, universe) body cfg k next cont brk nret m fpf)
     (CC: call_cont k = Some ck),
@@ -4441,13 +4459,7 @@ Lemma call_cont_sound: forall k ck maybeInit maybeUninit universe body cfg next 
 Proof.
   induction k; intros; simpl; inv CC; inv CONT; eauto; econstructor.
 Qed.
-
-Lemma initial_state_sound: forall q s,
-    query_inv wt_rs (se, w) q ->
-    Smallstep.initial_state L q s ->
-    sound_state s /\ wt_state s.
-Admitted.
-
+  
 
 Lemma valid_owner_same: forall p,
     (forall (ty : type) (fid : ident), ~ In (ph_downcast ty fid) (snd (path_of_place p))) ->
@@ -6867,6 +6879,35 @@ Proof.
 
 Admitted.
 
+
+
+Lemma initial_state_sound: forall q s,
+    query_inv wt_rs (se, w) q ->
+    initial_state ge q s ->
+    sound_state s /\ wt_state s.
+Proof.
+  intros q s QINV INIT.
+  inv INIT. inv QINV. simpl in *.
+  set (sg1 := {|
+         rs_sig_generic_origins := orgs;
+         rs_sig_origins_relation := org_rels;
+         rs_sig_args := type_list_of_typelist targs;
+         rs_sig_res := tres;
+         rs_sig_cc := tcc;
+               rs_sig_comp_env := prog_comp_env prog |}) in *.
+  assert (RACC: exists Hm1, rsw_acc w (rsw sg1 (flat_map footprint_flat fpl) m Hm1)).
+  { rewrite <- H4. eapply rsw_acc_shrink.
+    red. intros. eapply EQ; eauto.
+    eapply Mem.unchanged_on_refl. }
+  destruct RACC as (Hm1 & RACC).
+  split. eapply sound_callstate with (sg := sg1); eauto.
+  econstructor. simpl. eauto.
+  simpl. eauto.
+  (* wt_state *)
+  admit.
+Admitted.
+
+
 Lemma external_sound: forall s q,
     sound_state s ->
     wt_state s ->
@@ -6876,13 +6917,101 @@ Lemma external_sound: forall s q,
                  (exists s', after_external s r s' (* do we really need
                  this exists s'? It is repeated in partial safe *)
                         /\ forall s', after_external s r s' -> sound_state s' /\ wt_state s').
+Proof.
+  intros s q SOUND WTST ATEXT.
+  inv ATEXT. inv SOUND. inv WTST.
+  assert (Hm1: Mem.sup_include (flat_map footprint_flat fpl) (Mem.support m)).
+  { eapply Mem.sup_include_trans.
+    2: eapply Hm.
+    red. intros. eapply in_app; auto. }
+  set (sg1:= {|
+                rs_sig_generic_origins := orgs;
+                rs_sig_origins_relation := org_rels;
+                rs_sig_args := type_list_of_typelist targs;
+                rs_sig_res := tres;
+                rs_sig_cc := cconv;
+                rs_sig_comp_env := ge |}) in *.
+  exists (se, (rsw sg1 (flat_map footprint_flat fpl) m Hm1)). simpl.
+  (* find_funct rewriting *)
+  rewrite H in FUNC. inv FUNC. simpl in *. inv FUNTY.
+  rewrite H in FIND. inv FIND. simpl in *. inv FTY.
+  repeat apply conj; auto.
+  - eapply wt_rs_query_intro with (fpl := fpl).
+    eapply list_norepet_append_right; eauto.
+    eauto.
+    (* wt_footprint_list *)
+    eauto.
+    red. intros; auto. reflexivity.
+  - intros r (w1 & ACC1 & WTR). inv ACC1.
+    inv WTR.
+    (* 1. state existence *)
+    exists (Returnstate rv k m'). split.
+    econstructor.
+    (* 2. invariant preservation *)
+    intros s' AFEXT. inv AFEXT.
+    split.
+    unfold sg1 in *. simpl in *.
+    assert (TYCC: typeof_cont_call (rs_sig_res sg) k = rty).
+    { replace sg with mod_sg.
+      eapply wt_call_cont_type_eq; eauto.
+      eapply rsw_acc_sg_eq; eauto. }
+    eapply list_norepet_app in NOREP as (N1 & N2 & N3).
+    assert (SUP: Mem.sup_include (footprint_flat rfp ++ flat_fp_frame fpf) (Mem.support m')).
+    { red. unfold sup_In. intros.
+      apply in_app in H0. destruct H0.
+      eapply Hm'. eapply INCL. eauto.
+      eapply Mem.unchanged_on_support. eauto. eapply Hm.
+      eapply in_app. eauto. }
+    assert (RACC: rsw_acc (rsw sg (flat_fp_frame fpf ++ flat_map footprint_flat fpl) m Hm)
+                    (rsw sg (footprint_flat rfp ++ flat_fp_frame fpf) m' SUP)).
+    { econstructor.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. intro. eapply H0. eapply in_app; eauto.
+      red. intros.
+      rewrite !in_app in H1. destruct H1.
+      (* b in rfp *)
+      intro. eapply SEP. intro. eapply H0. eapply in_app; eauto.
+      eapply INCL. eauto. auto.
+      (* b in fpf : contradition *)
+      intro. eapply H0. eapply in_app; auto. }
+    eapply sound_returnstate with (sg := sg) (fpf:= fpf); eauto.
+    (* norepet *)
+    eapply list_norepet_app. repeat apply conj; auto.
+    (* disjointness between rfp and fpf *)
+    red. intros. intro. subst.
+    (* two cases: block y is in (fpl) or not *)
+    red in SEP. destruct (in_dec eq_block y (flat_map footprint_flat fpl)).
+    eapply N3; eauto.
+    exploit SEP; eauto. eapply Hm. eapply in_app; eauto.
+    (* sound_stacks *)
+    eapply sound_stacks_unchanged_on; eauto.
+    eapply Mem.unchanged_on_implies; eauto.
+    simpl. intros. intro. eapply N3; eauto.
+    (* rsw_acc *)
+    eapply rsw_acc_trans; eauto.
+    (* wt_state *)
+    admit.
 Admitted.
 
+    
 Lemma final_sound: forall s r,
     sound_state s ->
     wt_state s ->
     final_state s r ->
     reply_inv wt_rs (se, w) r.
+Proof.
+  intros s r SOUND WTST FINAL.
+  inv FINAL. inv SOUND. inv WTST.  
+  simpl.
+  assert (SUP: Mem.sup_include (footprint_flat rfp) (Mem.support m)).
+  { eapply Mem.sup_include_trans. 2: eauto.
+    red. intros. eapply in_app; eauto. }    
+  exists (rsw sg (footprint_flat rfp) m SUP).
+  split.
+  (* rsw_acc *)
+  admit.
+  (* wt_query *)
+  eapply wt_rs_reply_intro with (rfp:= rfp).
 Admitted.
 
 
