@@ -48,7 +48,7 @@ Inductive statement : Type :=
 | Sdrop: place -> statement             (**r conditionally drop the place [p]. [p] must be an ownership pointer. *)
 | Scall: place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
 | Ssequence: statement -> statement -> statement  (**r sequence *)
-| Sifthenelse: expr  -> statement -> statement -> statement (**r conditional *)
+| Sifthenelse: pexpr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak: statement                      (**r [break] statement *)
 | Scontinue: statement                   (**r [continue] statement *)

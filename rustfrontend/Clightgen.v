@@ -669,7 +669,7 @@ Fixpoint transl_stmt (locals: list ident) (stmt: statement) : mon Clight.stateme
       dosym s2' <- transl_stmt s2;
       ret (Clight.Ssequence s1' s2')
   | Sifthenelse e s1 s2 =>
-      docomb e' <- expr_to_cexpr locals e;
+      docomb e' <- pexpr_to_cexpr locals e;
       dosym s1' <- transl_stmt s1;
       dosym s2' <- transl_stmt s2;
       ret (Clight.Sifthenelse e' s1' s2')

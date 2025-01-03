@@ -1823,7 +1823,7 @@ return nothing is only valid in void function! *)
       E0 (Dropinsert f (drop_escape_before (hd nil (cont_vars k))) Dbreak k e own m)
 | step_ifthenelse:  forall f a s1 s2 k e m v1 b ty own1,
     (* there is no receiver for the moved place, so it must be None *)
-    eval_expr ge e m ge a v1 ->
+    eval_pexpr ge e m ge a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e own1 m)

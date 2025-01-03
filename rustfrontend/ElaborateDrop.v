@@ -152,7 +152,7 @@ Definition generate_drop (p: place) (full: bool) (flag: option ident) : statemen
   match flag with
   | Some id =>
       let set_flag := set_dropflag id false in
-      Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) (Ssequence set_flag drop) Sskip
+      Sifthenelse (Eplace (Plocal id type_bool) type_bool) (Ssequence set_flag drop) Sskip
   | None => drop
   end.
 

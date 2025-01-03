@@ -3896,10 +3896,14 @@ Proof.
     eexists. split. apply plus_one. econstructor; eauto. econstructor; eauto.
     econstructor. simpl. auto. instantiate (1:=g). auto.   
   (* step_ifthenelse *)
-  - inv MSTMT. inv H0. 
-    exploit eval_expr_inject; eauto with matsym. intros (v' & CEVAL & INJ1). 
+  - inv MSTMT. inv H0.
+    assert (EVAL1: eval_expr ge e m ge a v1).
+    { econstructor. eauto. }
+    exploit eval_expr_inject; eauto with matsym.
+    simpl. eauto.
+    intros (v' & CEVAL & INJ1). 
     exploit bool_val_inject; eauto. intros BOOL.
-    exploit expr_to_cexpr_type; eauto. intros EQTY.
+    exploit (expr_to_cexpr_type (Epure a)); eauto. intros EQTY.
     eexists. split. apply plus_one. econstructor; eauto. rewrite <- EQTY. eauto.
     econstructor; eauto. destruct b; eauto. 
   (* step_loop *)

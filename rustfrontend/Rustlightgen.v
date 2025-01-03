@@ -447,7 +447,7 @@ Definition eval_simpl_expr (a: expr) : option val :=
   end.
 
 (** TODO: some optimizations  *)
-Definition makeif (a: expr) (s1 s2: statement) : statement :=
+Definition makeif (a: pexpr) (s1 s2: statement) : statement :=
   (* match eval_simpl_expr a with *)
   (* | Some v => *)
   (*     match bool_val v (typeof a) Mem.empty with *)
@@ -459,9 +459,14 @@ Definition makeif (a: expr) (s1 s2: statement) : statement :=
 
 Definition transl_if (r: Rustsyntax.expr) (s1 s2: statement) : mon statement :=
   do (sl, a) <- transl_value_expr r;
-  (**TODO: check the usage of finish_stmt *)
-  do s <- finish_stmt sl;
-  ret (Ssequence s (makeif a s1 s2)).
+  match a with
+  | Emoveplace _ _ =>
+      error (msg "Error in moving out a place in conditional expression of while")
+  | Epure pe =>
+      (**TODO: check the usage of finish_stmt *)
+      do s <- finish_stmt sl;
+      ret (Ssequence s (makeif pe s1 s2))
+  end.
 
 (* the returned gen_trail must be empty to ensure that all the new
 introduced variables are declared by let statements *)
@@ -495,11 +500,16 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
   | Rustsyntax.Sifthenelse e s1 s2 =>
       (* TODO: To ensure safety or no leak? e' must not be move expression *)
       do (sl, e') <- transl_value_expr e;
-      (* e is in temporary scope *)
-      do s' <- finish_stmt sl;
-      do s1' <- transl_stmt s1;
-      do s2' <- transl_stmt s2;
-      ret (Ssequence s' (Sifthenelse e' s1' s2'))
+      match e' with
+      | Emoveplace _ _ =>
+          error [MSG "Error in moving out a place in conditional expression of if"]
+      | Epure pe =>
+          (* e is in temporary scope *)
+          do s' <- finish_stmt sl;
+          do s1' <- transl_stmt s1;
+          do s2' <- transl_stmt s2;
+          ret (Ssequence s' (Sifthenelse pe s1' s2'))
+      end
   | Swhile e body =>
       do cond <- transl_if e Sskip Sbreak;
       do body' <- transl_stmt body;

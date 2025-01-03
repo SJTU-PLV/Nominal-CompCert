@@ -190,7 +190,7 @@ Definition node := positive.
 Inductive instruction : Type :=
   | Inop: node -> instruction
   | Isel: selector -> node -> instruction
-  | Icond: expr -> node -> node -> instruction
+  | Icond: pexpr -> node -> node -> instruction
   | Iend: instruction.
 
 Definition rustcfg := PTree.t instruction.
@@ -1655,7 +1655,7 @@ Proof.
     + eapply selector_disjoint_app_left. eapply DISJOINT.
       erewrite <- H0. eauto.
   - monadInv TR.
-    eapply add_instr_sel_norepet with (instr := (Icond e x x0)).
+    eapply add_instr_sel_norepet with (instr := (Icond p x x0)).
     congruence. eauto.
     exploit IHbody1; eauto.
     (* prove disjointness *)
@@ -1761,7 +1761,7 @@ Proof.
       * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
     (* Icond *)
     + Errors.monadInv A1.
-      assert (B1: transl (transl_on_instr s p0 i0) (p, Icond e n n0) = OK s0).
+      assert (B1: transl (transl_on_instr s p0 i0) (p, Icond p1 n n0) = OK s0).
       { destruct i0; simpl in *; try rewrite EQ; inv A2; auto.
         destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
         rewrite EQ0. simpl. rewrite EQ1. simpl. rewrite EQ. auto.
@@ -2309,7 +2309,7 @@ Proof.
     rewrite S1 in S3. inv S3. destruct b2; simpl in *; try congruence.
     erewrite select_stmt_nil in *. inv S2. inv S4.
     rewrite A1 in S1. inv S1.
-    exists (Sifthenelse e ts1 ts2). split; auto.
+    exists (Sifthenelse p ts1 ts2). split; auto.
     econstructor; eauto.
     eapply match_stmt_state_incr; eauto.
     eapply match_stmt_state_incr; eauto.
@@ -2322,7 +2322,7 @@ Proof.
     destruct (fold_left transl l1 (OK body1)) eqn: C1.
     2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
     simpl in TRANSL.
-    destruct ((do _ <- check_expr (get_an ae n) e; OK s3)) eqn: C2.
+    destruct ((do _ <- check_expr (get_an ae n) p; OK s3)) eqn: C2.
     2: { rewrite transl_on_instrs_error in TRANSL. inv TRANSL. }
     Errors.monadInv C2. auto. destruct x1. auto.
   (* Sloop *)
