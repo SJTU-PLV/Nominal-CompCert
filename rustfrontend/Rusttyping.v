@@ -569,3 +569,199 @@ Proof.
 Qed.
 
 (** End of syntactic type checking  *)
+
+(** Some properties of is_prefix of well-typed places *)
+
+Lemma paths_contain_app_one_inv: forall l1 l2 ph,
+    paths_contain l1 (l2 ++ [ph]) = true ->
+    l1 = l2 ++ [ph] \/ paths_contain l1 l2 = true.
+Proof.
+  induction l1; intros; simpl in *; auto.
+  destruct l2; simpl in *.
+  + destruct path_eq; subst.
+    * destruct l1; simpl in H; try congruence. auto.
+    * congruence.
+  + destruct path_eq; subst.
+    * exploit IHl1; eauto.
+      intros [A|B].
+      -- subst. left. auto.
+      -- auto.
+    * congruence.
+Qed.
+
+Lemma path_of_place_nil: forall p id,
+    path_of_place p = (id, nil) ->
+    exists ty, p = Plocal id ty.
+Proof.
+  induction p; intros id A; simpl in *.
+  - inv A; eauto.
+  - destruct (path_of_place p) eqn: P. inv A.
+    exploit app_eq_nil. eapply H1. intros (A1 & A2). inv A2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    exploit app_eq_nil. eapply H1. intros (A1 & A2). inv A2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    exploit app_eq_nil. eapply H1. intros (A1 & A2). inv A2.
+Qed.  
+
+Lemma path_of_place_field: forall p id fid l,
+    path_of_place p = (id, l ++ [ph_field fid]) ->
+    exists p' fty,
+      p = Pfield p' fid fty
+      /\ path_of_place p' = (id, l).
+Proof.
+  induction p; intros id fid l A; simpl in *.
+  - inv A. exploit app_eq_nil. symmetry. eapply H1.
+    intros (A1 & A2). inv A2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2. subst.
+    eauto.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.
+Qed.
+
+Lemma path_of_place_deref: forall p id l,
+    path_of_place p = (id, l ++ [ph_deref]) ->
+    exists p' ty,
+      p = Pderef p' ty
+      /\ path_of_place p' = (id, l).
+Proof.
+  induction p; intros id l A; simpl in *.
+  - inv A. exploit app_eq_nil. symmetry. eapply H1.
+    intros (A1 & A2). inv A2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.    
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2. 
+    eauto.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.
+Qed.
+
+Lemma path_of_place_downcast: forall p id ty fid l,
+    path_of_place p = (id, l ++ [ph_downcast ty fid]) ->
+    exists p' fty,
+      p = Pdowncast p' fid fty
+      /\ path_of_place p' = (id, l).
+Proof.
+  induction p; intros id ty fid l A; simpl in *.
+  - inv A. exploit app_eq_nil. symmetry. eapply H1.
+    intros (A1 & A2). inv A2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.    
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2.
+  - destruct (path_of_place p) eqn: P. inv A.
+    eapply app_inj_tail in H1 as (B1 & B2). inv B2. subst.
+    eauto.
+Qed.
+
+Lemma path_of_wt_place_eq: forall le ce p1 p2,
+    wt_place le ce p1 ->
+    wt_place le ce p2 ->
+    path_of_place p1 = path_of_place p2 ->
+    p1 = p2.
+Proof.
+  induction p1; intros p2 WT1 WT2 PEQ; simpl in *; destruct (path_of_place p2) eqn: P2; try (destruct (path_of_place p1) eqn: P1).
+  - inv PEQ.
+    eapply path_of_place_nil in P2 as (ty & A1). subst.
+    inv WT1. inv WT2. rewrite WT0 in WT1. inv WT1. auto.
+  - inv PEQ. eapply path_of_place_field in P2 as (p' & fty & A1 & A2).
+    subst. inv WT1. inv WT2.
+    exploit IHp1. eapply WT0. eapply WT1. eauto. intros. subst.
+    rewrite WT3 in WT7. inv WT7. rewrite WT4 in WT8. inv WT8.
+    rewrite WT5 in WT9. inv WT9. auto.
+  - inv PEQ. eapply path_of_place_deref in P2 as (p' & ty & A1 & A2).
+    subst. inv WT1. inv WT2.
+    exploit IHp1. eapply WT0. eapply WT1. eauto. intros. subst.
+    rewrite WT3 in WT4. inv WT4. auto.
+  - inv PEQ. eapply path_of_place_downcast in P2 as (p' & fty & A1 & A2).
+    subst. inv WT1. inv WT2.
+    exploit IHp1. eapply WT0. eapply WT1. eauto. intros. subst.
+    rewrite WT3 in WT7. inv WT7. rewrite WT4 in WT8. inv WT8.
+    rewrite WT5 in WT9. inv WT9. auto.
+Qed.
+
+(** is_prefix and is_prefix_type are equivalent under two well-type places *)
+Lemma is_prefix_wt: forall ce le p2 p1,
+    wt_place le ce p1 ->
+    wt_place le ce p2 ->
+    is_prefix p1 p2 = true ->
+    is_prefix_type p1 p2 = true.
+Proof.
+  induction p2; intros p1 WT1 WT2 PRE; simpl in *.
+  - destr_prefix. inv POP0.
+    destruct l; simpl in PRE1; try congruence.
+    eapply path_of_place_nil in POP as (ty & A1). subst.
+    inv WT1. inv WT2.
+    rewrite WT0 in WT1. inv WT1.
+    unfold is_prefix_type.
+    destruct place_eq; try congruence. auto.    
+  - inv WT2.
+    destr_prefix.
+    destruct (path_of_place p2) eqn: POP2. inv POP0.
+    exploit paths_contain_app_one_inv. eapply PRE1.
+    intros [A|B].
+    + subst. eapply path_of_place_field in POP as (p' & fty & A1 & A2).
+      subst. inv WT1.
+      exploit path_of_wt_place_eq. eapply WT0. eapply WT2.
+      rewrite POP2. rewrite A2. auto. intros. subst.
+      rewrite WT3 in WT7. inv WT7. rewrite WT4 in WT8. inv WT8.
+      rewrite WT5 in WT9. inv WT9.
+      eapply orb_true_iff. left.
+      destruct place_eq; try congruence; auto.
+    + exploit IHp2. eapply WT1. eapply WT0.
+      unfold is_prefix. rewrite POP. rewrite POP2. rewrite B.
+      destruct ident_eq; try congruence; auto.
+      intros PRE2.
+      eapply orb_true_iff. right.
+      eapply proj_sumbool_is_true. simpl.       
+      unfold is_prefix_type in PRE2.
+      eapply orb_true_iff in PRE2.
+      destruct PRE2 as [A1|A1]; try apply proj_sumbool_true in A1; subst; auto.
+  - inv WT2.
+    destr_prefix.
+    destruct (path_of_place p2) eqn: POP2. inv POP0.
+    exploit paths_contain_app_one_inv. eapply PRE1.
+    intros [A|B].
+    + subst. eapply path_of_place_deref in POP as (p' & ty & A1 & A2).
+      subst. inv WT1.
+      exploit path_of_wt_place_eq. eapply WT0. eapply WT2.
+      rewrite POP2. rewrite A2. auto. intros. subst.
+      rewrite WT3 in WT4. inv WT4.
+      eapply orb_true_iff. left.
+      eapply proj_sumbool_is_true. auto.
+    + exploit IHp2. eapply WT1. eapply WT0.
+      unfold is_prefix. rewrite POP. rewrite POP2. rewrite B.
+      rewrite proj_sumbool_is_true; auto.
+      intros PRE2.
+      eapply orb_true_iff. right.
+      eapply proj_sumbool_is_true. simpl.       
+      unfold is_prefix_type in PRE2.
+      eapply orb_true_iff in PRE2.
+      destruct PRE2 as [A1|A1]; try apply proj_sumbool_true in A1; subst; auto.
+  - inv WT2.
+    destr_prefix.
+    destruct (path_of_place p2) eqn: POP2. inv POP0.
+    exploit paths_contain_app_one_inv. eapply PRE1.
+    intros [A|B].
+    + subst. eapply path_of_place_downcast in POP as (p' & fty & A1 & A2).
+      subst. inv WT1.
+      exploit path_of_wt_place_eq. eapply WT0. eapply WT2.
+      rewrite POP2. rewrite A2. auto. intros. subst.
+      rewrite WT3 in WT7. inv WT7. rewrite WT4 in WT8. inv WT8.
+      rewrite WT5 in WT9. inv WT9.
+      eapply orb_true_iff. left.
+      eapply proj_sumbool_is_true. auto.
+    + exploit IHp2. eapply WT1. eapply WT0.
+      unfold is_prefix. rewrite POP. rewrite POP2. rewrite B.
+      rewrite proj_sumbool_is_true; auto.
+      intros PRE2.
+      eapply orb_true_iff. right.
+      eapply proj_sumbool_is_true. simpl.       
+      unfold is_prefix_type in PRE2.
+      eapply orb_true_iff in PRE2.
+      destruct PRE2 as [A1|A1]; try apply proj_sumbool_true in A1; subst; auto.
+Qed.      
+  

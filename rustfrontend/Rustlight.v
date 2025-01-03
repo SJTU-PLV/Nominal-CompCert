@@ -756,20 +756,10 @@ Proof.
   congruence.
 Qed.
 
-  
-(*
+(** Alternative definition of is_prefix which considers the type information *)
 
-Definition is_prefix (p1 p2: place) : bool :=
+Definition is_prefix_type (p1 p2: place) : bool :=
   place_eq p1 p2 || in_dec place_eq p1 (parent_paths p2).
-
-Definition is_shallow_prefix (p1 p2: place) : bool :=
-  place_eq p1 p2 || in_dec place_eq p1 (shallow_parent_paths p2).
-
-Definition is_support_prefix (p1 p2: place) : bool :=
-  place_eq p1 p2 || in_dec place_eq p1 (support_parent_paths p2).
-
-Definition is_prefix_strict (p1 p2: place) : bool :=
-  in_dec place_eq p1 (parent_paths p2).
 
 Lemma In_place_trans: forall p3 p1 p2, In p1 (parent_paths p2) ->
 In p2 (parent_paths p3) -> In p1 (parent_paths p3).
@@ -786,6 +776,56 @@ Proof.
     + auto.
     + right. eapply IHp3. eapply H. apply H0.
 Qed.
+
+
+Lemma in_parent_paths_is_prefix: forall p2 p1,
+    In p1 (parent_paths p2) ->
+    is_prefix p1 p2 = true.
+Proof.
+  induction p2; intros p1 IN; simpl in *.
+  - contradiction.
+  - destruct IN; subst.
+    + eapply is_prefix_field.
+    + eapply is_prefix_trans. eapply IHp2; eauto.
+      eapply is_prefix_field.
+  - destruct IN; subst.
+    + eapply is_prefix_deref.
+    + eapply is_prefix_trans. eapply IHp2; eauto.
+      eapply is_prefix_deref.
+  - destruct IN; subst.
+    + eapply is_prefix_downcast.
+    + eapply is_prefix_trans. eapply IHp2; eauto.
+      eapply is_prefix_downcast.
+Qed.
+      
+Lemma is_prefix_type_is_prefix: forall p2 p1,
+    is_prefix_type p1 p2 = true ->
+    is_prefix p1 p2 = true.
+Proof.
+  intros p2 p1 PRE.
+  unfold is_prefix_type in PRE.
+  eapply orb_true_iff in PRE. destruct PRE.
+  apply proj_sumbool_true in H. subst.
+  apply is_prefix_refl.
+  apply proj_sumbool_true in H.
+  eapply in_parent_paths_is_prefix. auto.
+Qed.
+
+
+(*
+
+Definition is_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (parent_paths p2).
+
+Definition is_shallow_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (shallow_parent_paths p2).
+
+Definition is_support_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (support_parent_paths p2).
+
+Definition is_prefix_strict (p1 p2: place) : bool :=
+  in_dec place_eq p1 (parent_paths p2).
+
 
 Lemma In_place_no_refl: forall p, ~In p (parent_paths p).
 Proof.

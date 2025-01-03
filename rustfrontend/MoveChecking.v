@@ -251,10 +251,15 @@ Definition check_universe_wt_place ce te (universe: Paths.t) : bool :=
                        | _ => false
                        end) universe.
 
+Definition check_universe_dominator_complete (universe: Paths.t) : bool :=
+  Paths.for_all (fun p => forallb (fun p1 => Paths.mem p1 universe) (place_dominators p)) universe.
+
+
 Definition check_universe_wf' ce te (universe: PathsMap.t) : bool :=
   (** Hard to debug! We can just comment one of the checking to see if
   it fails *)
-  PTree_Properties.for_all universe (fun _ w => check_universe_shallow w
+  PTree_Properties.for_all universe (fun _ w => check_universe_dominator_complete w
+                                             && check_universe_shallow w
                                              && check_universe_no_downcast w
                                              && check_universe_own_type w
                                              && check_universe_wt_place ce te w).

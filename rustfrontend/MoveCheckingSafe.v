@@ -3260,7 +3260,10 @@ Proof.
     (* DIS2 *)
     simpl in DIS2. eapply list_disjoint_app_r. eauto.
     (* wf_own_env *)
-    eapply wf_own_env_init_place. auto. auto.
+    assert (WTP: wt_place le ce (Plocal id ty)).
+    { econstructor. unfold env_to_tenv. rewrite PTree.gmap1.
+      rewrite H1. eauto. eapply VALIDTYS. simpl. eauto. }
+    eapply wf_own_env_init_place. auto. auto. auto.
     (* wf_env *)
     auto.
     intros (fpm3 & MM3 & NOREP4 & WFENV3 & INCL2 & WFOWN2).
@@ -6055,7 +6058,7 @@ Proof.
     (* rsw_acc *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place. auto.
+    eapply wf_own_env_init_place. auto. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
@@ -6172,7 +6175,7 @@ Proof.
     (* accessibility *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place. auto.
+    eapply wf_own_env_init_place. auto. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)
@@ -6413,7 +6416,7 @@ Proof.
     (* accessibility *)
     eapply rsw_acc_trans. eauto. eauto.
     (* wf_own_env preservation (write it in another lemma) *)
-    eapply wf_own_env_init_place. auto.
+    eapply wf_own_env_init_place. auto. auto.
     destruct (moved_place e); simpl.
     eapply wf_own_env_move_place. eauto. eauto.
     (* wt_state *)

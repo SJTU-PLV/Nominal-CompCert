@@ -348,6 +348,14 @@ Record wf_own_env le ce (own: own_env) : Prop := {
       is_init own p = true ->
       dominators_is_init own p = true;
 
+    (* if a place is in the universe, all its dominators are in
+    universe. It is used to prove wf_own_dominators when doing
+    init_place. *)
+    wf_own_dominators_complete: forall p p1,
+      in_universe own p = true ->
+      In p1 (place_dominators p) ->
+      in_universe own p1 = true;
+    
     (* validation property *)
     wf_own_universe_shallow: forall p1 p2,
       in_universe own p1 = true ->      
@@ -379,20 +387,59 @@ in init set *)
 Lemma wf_own_env_move_place: forall own p le ce,
     wf_own_env le ce own ->
     wf_own_env le ce (move_place own p).
-Admitted.
+Proof.
+  intros own p le ce WFOWN.
+  econstructor.
+  - intros.
+    eapply move_place_init_is_init in H as A1.
+    eapply wf_own_dominators in A1 as A2. 2: eauto.
+    eapply move_irr_place_dominator_still_init; eauto.
+  - intros. unfold move_place, remove_place, in_universe in *. simpl in *.
+    eapply wf_own_dominators_complete; eauto.
+  - intros.
+    eapply wf_own_universe_shallow; eauto.
+  - intros.
+    eapply wf_own_no_downcast; eauto.
+  - intros.
+    eapply wf_own_type; eauto.
+  - intros.
+    eapply wf_own_wt_place; eauto.
+Qed.
 
+ 
 Lemma wf_own_env_init_place: forall own p le ce,
+    wt_place le ce p ->
     dominators_is_init own p = true ->
     wf_own_env le ce own ->
     wf_own_env le ce (init_place own p).
-Admitted.
-
-Lemma dominators_is_init_field: forall own p fid fty,
-    dominators_is_init own (Pfield p fid fty) = true ->
-    dominators_is_init own p = true.
 Proof.
-  intros. unfold dominators_is_init in *. simpl in H. auto.
+  intros own p le ce WTP DOM WFOWN.
+  econstructor.
+  - intros.    
+    exploit init_irrelavent_place_still_not_owned_inv. eauto.
+    intros [A|B].
+    + eapply wf_own_dominators in A as A1. 2: eauto. 
+      eapply init_place_dominators_still_init; eauto.      
+    + assert (INU: in_universe own p0 = true).
+      { erewrite in_universe_eq.
+        eapply is_init_in_universe. eapply H.
+        unfold init_place. simpl. eapply PathsMap.eq_refl. }      
+      eapply init_dominator_init_prefix.
+      intros. eapply wf_own_dominators_complete; eauto. 
+      eapply is_prefix_wt; eauto.
+      eapply wf_own_wt_place; eauto. auto.
+  - intros. unfold init_place, add_place, in_universe in *. simpl in *.
+    eapply wf_own_dominators_complete; eauto.
+  - intros.
+    eapply wf_own_universe_shallow; eauto.
+  - intros.
+    eapply wf_own_no_downcast; eauto.
+  - intros.
+    eapply wf_own_type; eauto.
+  - intros.
+    eapply wf_own_wt_place; eauto.
 Qed.
+    
 
 Section COMP_ENV.
 
@@ -1286,6 +1333,19 @@ Proof.
     exploit EMPTY; eauto. unfold LPaths.bot in H.
     generalize (Paths.empty_1 H). contradiction.
   - repeat simpl_paths_mem.
+    exploit CK. eauto.
+    intros CK1. rewrite !andb_true_iff in CK1.
+    destruct CK1 as ((((C0 & C1) & C2) & C3) & C4).
+    unfold check_universe_dominator_complete in C0.
+    eapply Paths.for_all_2 in C0.    
+    unfold PathsMap.get. erewrite is_prefix_same_local.
+    2: eapply place_dominators_are_prefixes; eauto.
+    rewrite IN.
+    eapply C0 in H.
+    erewrite forallb_forall in H.
+    eapply H in H0. auto.
+    red. solve_proper.    
+  - repeat simpl_paths_mem.
     destruct (path_of_place p1) eqn: POP1.
     destruct (path_of_place p2) eqn: POP2.
     rewrite local_of_paths_of_place in *.
@@ -1293,7 +1353,7 @@ Proof.
     destruct (ident_eq i i0).
     + subst. exploit CK. eauto.
       intros CK1. rewrite !andb_true_iff in CK1.
-      destruct CK1 as (((C1 & C2) & C3) & C4).
+      destruct CK1 as ((((C0 & C1) & C2) & C3) & C4).
       rewrite IN0 in IN. inv IN.
       unfold check_universe_shallow in C1. 
       eapply Paths.for_all_2 in C1.
@@ -1311,7 +1371,7 @@ Proof.
     destruct (path_of_place p) eqn: POP. simpl in *.
     exploit CK. eauto.
     intros CK1. rewrite !andb_true_iff in CK1.
-    destruct CK1 as (((C1 & C2) & C3) & C4).
+    destruct CK1 as ((((C0 & C1) & C2) & C3) & C4).
     unfold check_universe_no_downcast in C2.
     eapply Paths.for_all_2 in C2.
     eapply C2 in H.
@@ -1323,7 +1383,7 @@ Proof.
     destruct (path_of_place p) eqn: POP. simpl in *.
     exploit CK. eauto.
     intros CK1. rewrite !andb_true_iff in CK1.
-    destruct CK1 as (((C1 & C2) & C3) & C4).
+    destruct CK1 as ((((C0 & C1) & C2) & C3) & C4).
     unfold check_universe_own_type in C3.
     eapply Paths.for_all_2 in C3.
     assert (IN1: Paths.In p (Paths.filter (fun p : Paths.elt => negb (is_full_internal t p)) t)).
@@ -1337,7 +1397,7 @@ Proof.
     destruct (path_of_place p) eqn: POP.
     exploit CK. eauto.
     intros CK1. rewrite !andb_true_iff in CK1.
-    destruct CK1 as (((C1 & C2) & C3) & C4).
+    destruct CK1 as ((((C0 & C1) & C2) & C3) & C4).
     unfold check_universe_wt_place in C4.
     eapply Paths.for_all_2 in C4.
     eapply C4 in H.    

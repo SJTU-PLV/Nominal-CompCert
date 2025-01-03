@@ -441,7 +441,16 @@ Proof.
   - auto.
 Qed.
 
-
+Lemma init_irrelavent_place_still_not_owned_inv: forall p1 p2 own,
+    is_init (init_place own p2) p1 = true ->
+    is_init own p1 = true \/ is_prefix p2 p1 = true.
+Proof.
+  intros.
+  destruct (is_init own p1) eqn: A; auto.
+  destruct (is_prefix p2 p1) eqn: B; auto.
+  exploit init_irrelavent_place_still_not_owned; eauto.
+Qed.
+  
 Lemma move_prefix_not_init: forall p1 p2 own,
     (* this premise is important to prevent that p1 and p2 *)
 (*        does not exists in universe so that move p1 has no *)
@@ -497,6 +506,45 @@ Proof.
     eapply Paths.union_2. auto.
   - auto.
 Qed.
+
+
+Lemma move_place_init_is_init: forall p p1 own,
+    is_init (move_place own p1) p = true ->
+    is_init own p = true.
+Proof.
+  intros p p1 own INIT.
+  unfold is_init, move_place, remove_place in *. simpl in *.
+  eapply Paths.mem_2 in INIT.
+  eapply Paths.mem_1.
+  erewrite PathsMap.gsspec in INIT.
+  destruct peq in INIT; auto.
+  eapply Paths.filter_1 in INIT. rewrite e. auto.
+  red. solve_proper.
+Qed.
+  
+Lemma move_children_still_init: forall own p1 p2 p3,
+    is_init (move_place own p1) p3 = true ->
+    is_prefix p1 p2 = true ->
+    is_init (move_place own p2) p3 = true.
+Proof.
+  intros own p1 p2 p3 INIT PRE.
+  unfold is_init, move_place, remove_place in *. simpl in *.
+  eapply Paths.mem_2 in INIT.
+  eapply Paths.mem_1.
+  erewrite PathsMap.gsspec in INIT.
+  erewrite PathsMap.gsspec.
+  erewrite (is_prefix_same_local p1)in INIT; eauto.
+  destruct peq; auto.
+  eapply Paths.filter_1 in INIT as A1.
+  eapply Paths.filter_2 in INIT as A2. 
+  eapply Paths.filter_3; auto.
+  red. solve_proper.
+  destruct (is_prefix p2 p3) eqn: A3; auto.
+  erewrite is_prefix_trans in A2; eauto.
+  red. solve_proper.
+  red. solve_proper.
+Qed.
+  
 
 (* all the children has been moved out (PRES). It is used to prove
 move_split_places_uncheck_sound *)
@@ -834,17 +882,6 @@ Qed.
 
 (** Properties of dominators_is/must_init  *)
 
-Lemma move_place_init_is_init: forall p p1 own,
-    is_init (move_place own p1) p = true ->
-    is_init own p = true.
-Admitted.
-
-Lemma move_children_still_init: forall own p1 p2 p3,
-    is_init (move_place own p1) p3 = true ->
-    is_prefix p1 p2 = true ->
-    is_init (move_place own p2) p3 = true.
-Admitted.
-
 Lemma place_dominators_valid_owner_incl: forall p,
     incl (place_dominators (valid_owner p)) (place_dominators p).
 Proof.
@@ -934,6 +971,12 @@ Proof.
   eapply place_dominators_downcast_incl; auto.
 Qed.
 
+Lemma dominators_is_init_field: forall own p fid fty,
+    dominators_is_init own (Pfield p fid fty) = true ->
+    dominators_is_init own p = true.
+Proof.
+  intros. unfold dominators_is_init in *. simpl in H. auto.
+Qed.
 
 Lemma dominators_is_init_deref1: forall own p ty,
     dominators_is_init own (Pderef p ty) = true ->
@@ -962,6 +1005,149 @@ Proof.
 Qed.
 
 
+Lemma place_dominators_are_prefixes: forall p2 p1,
+    In p2 (place_dominators p1) ->
+    is_prefix p2 p1 = true.
+Proof.
+  induction p1; intros; simpl in *; try contradiction.
+  - exploit IHp1. eauto. intros PRE.
+    eapply is_prefix_trans. eauto.
+    eapply is_prefix_field.
+  - destruct H; subst.
+    + eapply is_prefix_deref.
+    + exploit IHp1. eauto. intros PRE.
+      eapply is_prefix_trans. eauto.
+      eapply is_prefix_deref.
+  - destruct H.
+    + subst. eapply is_prefix_trans.
+      eapply is_prefix_valid_owner.
+      eapply is_prefix_downcast.
+    + exploit IHp1.
+      eapply place_dominators_valid_owner_incl. auto.
+      intros PRE.
+      eapply is_prefix_trans. eauto.
+      eapply is_prefix_downcast.
+Qed.
+      
+Lemma move_irr_place_dominator_still_init: forall p1 p2 own,
+    dominators_is_init own p1 = true ->
+    is_init (move_place own p2) p1 = true ->
+    dominators_is_init (move_place own p2) p1 = true.
+Proof.
+  intros p1 p2 own DOM INIT.
+  unfold dominators_is_init in *.
+  eapply forallb_forall.
+  erewrite forallb_forall in DOM. intros.
+  eapply DOM in H as A1.
+  destruct (is_prefix p2 p1) eqn: PRE.
+  exploit (move_prefix_not_init p2 p1 own). eauto. intros INIT1.
+  congruence.
+  exploit place_dominators_are_prefixes. eapply H. intros PRE1.
+  destruct (is_prefix p2 x) eqn: PRE3.
+  exploit is_prefix_trans. eapply PRE3. eauto. congruence.
+  eapply move_irrelavent_place_still_owned; eauto.
+Qed.
+
+Lemma init_place_dominators_still_init: forall p1 p2 own,
+    dominators_is_init own p1 = true ->
+    dominators_is_init (init_place own p2) p1 = true.
+Proof.
+  intros p1 p2 own DOM.
+  unfold dominators_is_init in *.
+  eapply forallb_forall.
+  rewrite forallb_forall in DOM. intros.
+  eapply init_owned_place_still_owned; eauto.
+Qed.
+
+(* Lemma is_prefix_field_inv: forall p1 p2 fid fty, *)
+(*     is_prefix p1 (Pfield p2 fid fty) = true -> *)
+(*     is_prefix p1 p2 = false -> *)
+(*     exists fty', p1 = Pfield p2 fid fty'. *)
+(* Proof. *)
+(*   induction p1; intros. *)
+(*   - destr_prefix. unfold is_prefix in H0. *)
+(*     simpl in *. destruct (path_of_place p2) eqn: POP2. *)
+(*     inv POP. inv POP0. simpl in *. destruct ident_eq in H0; try congruence. *)
+(*     simpl in H0. congruence. *)
+(*   - repeat destr_prefix. unfold is_prefix in H0. *)
+(*     simpl in *. *)
+(*     destruct (path_of_place p1) eqn: POP1. *)
+(*     destruct (path_of_place p2) eqn: POP2. *)
+(*     inv POP. inv POP0. simpl in *. destruct ident_eq in H0; try congruence. *)
+    
+(*   induction p2; intros. *)
+(*   - simpl in *. admit. *)
+(*   -  *)
+(*   intros. unfold is_prefix. *)
+(*   repeat destr_prefix. *)
+(*   destruct (path_of_place p2) eqn: P2. *)
+(*   inv POP0. *)
+Lemma in_place_dominatros_and_parent_paths: forall p2 p p1
+    (IN1: In p (place_dominators p2))
+    (IN2: In p1 (parent_paths p2)),
+    p1 = p \/ In p1 (parent_paths p) \/ In p (place_dominators p1).
+Proof.
+  induction p2; intros; simpl in *.
+  - contradiction.
+  - destruct IN2.
+    + subst. auto.
+    + eauto.
+  - destruct IN1; destruct IN2; subst; eauto.
+  - destruct IN1; destruct IN2; subst.
+    + destruct p1; simpl; auto.
+    + destruct p2; simpl; auto; simpl in *. eauto.
+    + destruct p1; simpl in *; auto.
+    + destruct p2; simpl; auto. simpl in *. auto.
+Qed.
+
+(* if p in dom(p2) and p1 is prefix (the version with type
+   information) of p2, then p is either a children of p1 or p is in
+   dom(p1). *)
+Lemma in_place_dominatros_prefix_type_rel: forall p2 p p1,
+    In p (place_dominators p2) ->
+    is_prefix_type p1 p2 = true ->
+    is_prefix_type p1 p = true \/ In p (place_dominators p1).
+Proof.
+  intros. eapply orb_true_iff in H0.
+  destruct H0.
+  - apply proj_sumbool_true in H0. subst. auto.
+  - apply proj_sumbool_true in H0.
+    exploit in_place_dominatros_and_parent_paths; eauto.
+    intros [A|[B|C]].
+    + subst. left. eapply orb_true_iff.
+      left. apply proj_sumbool_is_true. auto.
+    + left. eapply orb_true_iff. right.
+      eapply proj_sumbool_is_true. auto.
+    + auto.
+Qed.
+
+(* The dominators of p1 are init, so if we initialize p1, all
+   the children of p1 (here p2) are dominator initialized. In the
+   other word, the ownership chain has no empty hole *)
+Lemma init_dominator_init_prefix: forall p1 p2 own
+     (* used to ensure that all places in dom(p1) are in the universe *)
+    (COMPLETE: forall p,
+        In p (place_dominators p2) ->
+        in_universe own p = true),
+    is_prefix_type p1 p2 = true ->
+    dominators_is_init own p1 = true ->
+    dominators_is_init (init_place own p1) p2 = true.
+Proof.
+  intros p1 p2 own COMPLETE PRE DOM.
+  unfold dominators_is_init in *.
+  eapply forallb_forall.
+  rewrite forallb_forall in DOM. intros.      
+  exploit in_place_dominatros_prefix_type_rel. eauto. eapply PRE.
+  intros [A|B].
+  - eapply init_prefix_init.
+    eapply COMPLETE in H as INU.
+    unfold in_universe in INU.
+    erewrite is_prefix_same_local. 
+    eapply Paths.mem_2 in INU. eauto.
+    eapply is_prefix_type_is_prefix; auto.
+    eapply is_prefix_type_is_prefix; auto.
+  - eapply init_owned_place_still_owned. eauto.
+Qed.
 
 (* move it to a new file *)
 
