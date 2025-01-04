@@ -909,8 +909,7 @@ Proof.
   assert (nlist_forall2 match_prog c_units asm_units).
   { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_clight_program_match; auto. }
   assert (exists asm_program, link_list asm_units = Some asm_program /\ match_prog c_program asm_program).
-  { eapply link_list_compose_passes; eauto. }
-  destruct H2 as (asm_program & P & Q).
+  { eapply link_list_compose_passes; eauto. }  destruct H2 as (asm_program & P & Q).
   exists asm_program; split; auto. apply clight_semantic_preservation; auto.
 Qed.
 *)
@@ -918,7 +917,7 @@ Qed.
 (** An example of how the correctness theorem, horizontal composition,
   and assembly linking proofs can be used together. *)
 
-Require Import SmallstepLinking.
+Require Import SmallstepLinking SmallstepLinkingForward.
 Require Import AsmLinking.
 
 Lemma compose_transf_clight_program_correct:
@@ -947,6 +946,111 @@ Qed.
 
 Require Import SmallstepLinkingBack.
 
+Lemma Csem_determinate_big: forall p, determinate_big (Csem.semantics p).
+Proof.
+  intros p se. constructor.
+  - (*initial_determ*)
+    intros. inv H; inv H0. reflexivity.
+  - (*initial_nostep*)
+    intros. red. intros. intro. inv H. inv H0. inv H. inv H.
+    setoid_rewrite H1 in FIND. inv FIND.
+    setoid_rewrite H1 in FIND. inv FIND. inv H7.
+  - (*ext_determ*)
+    intros. inv H. inv H0. setoid_rewrite H1 in H6. inv H6. reflexivity.
+  - (*after_determ*)
+    intros. inv H. inv H0. reflexivity.
+  - (*final_nostep*)
+    intros. red. intros. intro. inv H. inv H0. inv H. inv H.
+  - (*final_noext*)
+    intros. inv H. inv H0.
+  - (*final_determ*)
+    intros. inv H. inv H0. reflexivity.
+Qed.
+
+Lemma match_c_prog_defmap_exists : forall i p tp f,
+    match_c_prog p tp ->
+    Maps.PTree.get i (prog_defmap (Ctypes.program_of_program p)) = Some (Gfun (Ctypes.Internal f)) ->
+    exists tf,
+      Maps.PTree.get i (prog_defmap tp) = Some (Gfun (Internal tf)).
+Proof.
+  intros i p tp f M. unfold match_c_prog, pass_match in M; simpl in M.
+  repeat DestructM. subst tp.
+  intro Hfp0. rename p1 into p2. rename p0 into p1. rename p into p0.
+
+  inv M0. eapply match_program_defmap in H. setoid_rewrite Hfp0 in H. inv H. inv H3. inv H4.
+  rename H2 into Hfp1. symmetry in Hfp1. 
+  inv M. eapply match_program_defmap in H. setoid_rewrite Hfp1 in H. inv H. inv H6.
+  inv H7. monadInv H6. rename H5 into Hfp2. symmetry in Hfp2.
+  eapply match_program_defmap in M1. setoid_rewrite Hfp2 in M1. inv M1. inv H6. inv H8.
+  rename H5 into Hfp3. symmetry in Hfp3.
+  eapply match_program_defmap in M2. setoid_rewrite Hfp3 in M2. inv M2. inv H8. inv H10.
+  monadInv H8. rename H5 into Hfp4. symmetry in Hfp4.
+  eapply match_program_defmap in M3. setoid_rewrite Hfp4 in M3. inv M3. inv H8. destruct H11 as [A [B C]].
+  inv C. monadInv H8. rename H5 into Hfp5. symmetry in Hfp5.
+  eapply match_program_defmap in M4. setoid_rewrite Hfp5 in M4. inv M4. inv H8. inv H12.
+  monadInv H8. rename H5 into Hfp6. symmetry in Hfp6.
+  assert (Hfp7: exists f7, Maps.PTree.get i (prog_defmap p7) = Some (Gfun (Internal f7))).
+  { unfold match_if in M5. destr_in M5.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M5. setoid_rewrite Hfp6 in M5. inv M5. inv H8.
+    eexists. f_equal. f_equal. reflexivity.
+  } destruct Hfp7 as [f7 Hfp7].
+  eapply match_program_defmap in M6. setoid_rewrite Hfp7 in M6. inv M6. inv H8. inv H13.
+  monadInv H8. rename H5 into Hfp8. symmetry in Hfp8.
+  eapply match_program_defmap in M7. setoid_rewrite Hfp8 in M7. inv M7. inv H8. simpl in H5.
+  rename H5 into Hfp9. symmetry in Hfp9.
+  assert (Hfp10: exists f10, Maps.PTree.get i (prog_defmap p10) = Some (Gfun (Internal f10))).
+  { unfold match_if in M8. destr_in M8.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M8. setoid_rewrite Hfp9 in M8. inv M8. inv H8.
+    simpl. eauto.
+  } destruct Hfp10 as [f10 Hfp10].
+  assert (Hfp11: exists f11, Maps.PTree.get i (prog_defmap p11) = Some (Gfun (Internal f11))).
+  { unfold match_if in M9. destr_in M9.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M9. setoid_rewrite Hfp10 in M9. inv M9. inv H8.
+    simpl. eauto.
+  } destruct Hfp11 as [f11 Hfp11].
+  assert (Hfp12: exists f12, Maps.PTree.get i (prog_defmap p12) = Some (Gfun (Internal f12))).
+  { unfold match_if in M10. destr_in M10.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M10. setoid_rewrite Hfp11 in M10. inv M10. inv H8.
+    simpl in H15. monadInv H15.
+    simpl. eauto.
+  } destruct Hfp12 as [f12 Hfp12].
+  assert (Hfp13: exists f13, Maps.PTree.get i (prog_defmap p13) = Some (Gfun (Internal f13))).
+  { unfold match_if in M11. destr_in M11.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M11. setoid_rewrite Hfp12 in M11. inv M11. inv H8.
+    inv H15. monadInv H8.
+    simpl. eauto.
+  } destruct Hfp13 as [f13 Hfp13].
+  assert (Hfp14: exists f14, Maps.PTree.get i (prog_defmap p14) = Some (Gfun (Internal f14))).
+  { inv M12. destruct H as [C D]. inv D. specialize (match_prog_def i) as HH.
+    destr_in HH. eexists. rewrite HH. eauto. unfold option_map in HH.
+    rewrite Hfp13 in HH. simpl in HH. eauto.
+  } destruct Hfp14 as [f14 Hfp14].
+  eapply match_program_defmap in M13. setoid_rewrite Hfp14 in M13. inv M13. inv H8. inv H15.
+  monadInv H8. rename H5 into Hfp15. symmetry in Hfp15.
+  eapply match_program_defmap in M14. setoid_rewrite Hfp15 in M14. inv M14. inv H8. simpl in H5.
+  rename H5 into Hfp16. symmetry in Hfp16.
+  eapply match_program_defmap in M15. setoid_rewrite Hfp16 in M15. inv M15. inv H8. inv H17.
+  monadInv H8. rename H5 into Hfp17. symmetry in Hfp17.
+  eapply match_program_defmap in M16. setoid_rewrite Hfp17 in M16. inv M16. inv H8. simpl in H5.
+  rename H5 into Hfp18. symmetry in Hfp18.
+  assert (Hfp19: exists f19, Maps.PTree.get i (prog_defmap p19) = Some (Gfun (Internal f19))).
+  { unfold match_if in M17. destr_in M17.
+    2: { subst. eauto. } 
+    eapply match_program_defmap in M17. setoid_rewrite Hfp18 in M17. inv M17. inv H8.
+    inv H19. monadInv H8.
+    simpl. eauto.
+  } destruct Hfp19 as [f19 Hfp19].
+  eapply match_program_defmap in M18. setoid_rewrite Hfp19 in M18. inv M18. inv H8. inv H19.
+  monadInv H8. rename H5 into Hfp20. symmetry in Hfp20.
+  eapply match_program_defmap in M19. setoid_rewrite Hfp20 in M19. inv M19. inv H8. inv H20.
+  monadInv H8. eauto.
+Qed.
+
 Lemma compose_transf_c_program_correct:
   forall p1 p2 spec tp1 tp2 tp,
     compose (Csem.semantics p1) (Csem.semantics p2) = Some spec ->
@@ -969,14 +1073,30 @@ Proof.
        eapply Asm.semantics_determinate.
   }
   2: { intros. pose proof (Asm.semantics_receptive tp se3). apply H3. }
-  eapply compose_simulation; eauto.
-  - eapply transf_c_program_correct; eauto.
-  - eapply transf_c_program_correct; eauto.
-  - admit.
-  - admit.
-  - admit.
-  - 
-  unfold compose. cbn.
-  apply link_erase_program in H2. rewrite H2. cbn.
-  f_equal. admit.
-Admitted.
+  pose proof (transf_c_program_correct _ _ H0) as Bsim1.
+  pose proof (transf_c_program_correct _ _ H1) as Bsim2.
+  eapply compose_simulation. 6: eauto. all: eauto using Csem_determinate_big.
+  - intros. intros [A B].
+    (* unfold compose in H. unfold option_map in H. destr_in H.
+    inv H. *)
+    inv A. inv B.
+    unfold Genv.is_internal in *. destr_in H4. destr_in H5.
+    destruct f; inv H4.
+    destruct f0; inv H5.
+    unfold Genv.find_funct in *. repeat destr_in Heqo.
+    rewrite Genv.find_funct_ptr_iff,Genv.find_def_spec in Heqo0.
+    rewrite Genv.find_funct_ptr_iff,Genv.find_def_spec in H4.
+    destr_in Heqo0.
+    eapply transf_c_program_match in H0.
+    eapply transf_c_program_match in H1.
+    exploit match_c_prog_defmap_exists. apply H0. apply H4.
+    intros [tf0 A].
+    exploit match_c_prog_defmap_exists. apply H1. apply Heqo0.
+    intros [tf B].
+    destruct (link_prog_inv _ _ _ H2) as (_ & X & _).
+    exploit X; eauto. intros (_ & _ & [gd Y]).
+    inv Y.
+  - unfold compose. cbn.
+    apply link_erase_program in H2. rewrite H2. cbn.
+    f_equal. f_equal. apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.

@@ -99,7 +99,7 @@ COMMON=Errors.v AST.v Linking.v \
   Values.v Smallstep.v Switch.v Unityping.v \
   Separation.v Builtins0.v Builtins1.v Builtins.v \
   LanguageInterface.v \
-  SmallstepLinking.v SmallstepLinkingBack.v \
+  SmallstepLinking.v SmallstepLinkingForward.v SmallstepLinkingBack.v \
   Invariant.v \
   CallconvAlgebra.v \
   SmallstepClosed.v Loading.v \
