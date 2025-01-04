@@ -578,24 +578,24 @@ Proof.
       * destr_fp_enum fp1 ty.
         simpl in *. eauto.
 Qed.                                               
-                                               
-(** IMPORTANT TODO: if (own_env, fpm (or abstract memory), mem)
-satisfies mmatch, then moving out the valid_owner of a place [p]
-preserves mmatch properties. *)
-Lemma mmatch_move_place_sound: forall p fpm1 fpm2 m le own
+
+(* if (own_env, fpm (or abstract memory), mem) satisfies mmatch, then
+moving out the valid_owner of a place [p] preserves mmatch
+properties. *)
+Lemma mmatch_move_place_sound: forall p1 fpm1 fpm2 m le own
     (MM: mmatch fpm1 ce m le own)
     (WF: wf_own_env le ce own)
     (* This property ensure that the place to be moved out has shallow
     prefix (its location) in the universe. This property is ensured by
     must_movable *)
-    (EX: Paths.Exists (fun p1 => is_shallow_prefix (valid_owner p) p1 = true) (PathsMap.get (local_of_place p) own.(own_universe)))
-    (CLR: clear_footprint_map le (path_of_place (valid_owner p)) fpm1 = Some fpm2),
-    (* valid_owner makes this proof difficult *)
-    mmatch fpm2 ce m le (move_place own (valid_owner p)).
+    (EX: Paths.Exists (fun p2 => is_shallow_prefix p1 p2 = true) (PathsMap.get (local_of_place p1) own.(own_universe)))
+    (CLR: clear_footprint_map le (path_of_place p1) fpm1 = Some fpm2),
+    mmatch fpm2 ce m le (move_place own p1).
 Proof.
   intros. red. intros until fp.
   intros PFP INIT.
-  set (p1:= (valid_owner p)) in *.
+  (* set (p1:= (valid_owner p)) in *. *)
+  rename p into p0.
   destruct (is_prefix p1 p0) eqn: PRE.
   (* impossible *)
   - unfold is_init, move_place, remove_place in INIT. simpl in INIT.
@@ -605,10 +605,10 @@ Proof.
     * eapply Paths.filter_2 in INIT.
       rewrite PRE in INIT. simpl in INIT. congruence.
       red. solve_proper.
-    * unfold p1 in *.
-      rewrite valid_owner_same_local in n.
-      erewrite <- (is_prefix_same_local (valid_owner p) p0) in n.
-      erewrite valid_owner_same_local in n.
+    * (* unfold p1 in *. *)
+      (* rewrite valid_owner_same_local in n. *)
+      erewrite <- (is_prefix_same_local p1 p0) in n.
+      (* erewrite valid_owner_same_local in n. *)
       congruence.
       auto.      
   (* valid_owner p is not a prefix of p0 *)
@@ -617,7 +617,7 @@ Proof.
       affects the footprint of p0 *)
     * unfold clear_footprint_map in CLR.
       destruct (get_loc_footprint_map le (path_of_place p1) fpm1) eqn: GET1; try congruence.
-      repeat destruct p2.
+      repeat destruct p.
       destruct (path_of_place p1) eqn: POP.
       exploit is_prefix_paths_app. eapply PRE1. rewrite POP.
       destruct (path_of_place p0) eqn: POP2. simpl.
@@ -632,6 +632,7 @@ Proof.
       exploit MM. erewrite POP2. eauto.
       eapply move_place_init_is_init. eauto.
       intros (BM & FULL).
+      (** TODO: check that this property is necessary *)
       destruct EX as (p2 & IN & SPRE).
       assert (PRE01: is_prefix_strict p0 p1 = true).
       { eapply is_not_prefix_strict; auto. }
@@ -661,7 +662,7 @@ Proof.
         eapply move_place_eq_universe. 
         unfold in_universe. eapply Paths.mem_1; auto.
         erewrite <- is_shallow_prefix_same_local. 2: eapply B1.
-        erewrite <- valid_owner_same_local in IN.
+        (* erewrite <- valid_owner_same_local in IN. *)
         erewrite is_shallow_prefix_same_local. eauto.
         eauto. auto. }
       assert (NOT_SHALLOW_PHL: not_shallow_prefix_paths phl).
@@ -673,14 +674,14 @@ Proof.
       intros FULL1. unfold is_full, is_full_internal in FULL1.
       eapply Paths.for_all_2 in FULL1. exploit FULL1.
       erewrite is_prefix_same_local. 2: eapply PRE1.
-      unfold p1. erewrite valid_owner_same_local. eauto.
+      (* unfold p1. erewrite valid_owner_same_local.  *) eauto.
       intros NPRE.
       rewrite PRE02 in NPRE. simpl in NPRE. congruence.
       red. solve_proper.
     (* p0 is not prefix of p1 *)
     * unfold clear_footprint_map in CLR.
       destruct (get_loc_footprint_map le (path_of_place p1) fpm1) eqn: GET1; try congruence.
-      repeat destruct p2.      
+      repeat destruct p.      
       (* no relation between p0 and (valid_owner p), so two cases *)
       destruct (ident_eq (local_of_place p1) (local_of_place p0)).
      + exploit is_not_prefix_disjoint. eapply PRE. eapply PRE1.
@@ -712,6 +713,8 @@ Proof.
        eapply move_place_init_is_init. eauto.
        intros (BM & WTLOC). auto.
 Qed.       
+
+
     
 (** dereferce a semantically well typed location produces well typed value *)
 Lemma deref_sem_wt_loc_sound: forall m fp b ofs ty v               
@@ -922,13 +925,7 @@ Proof.
     eapply sem_wt_val_type_binop; eauto.
   - simpl in CHECK. congruence.
 Qed.
-
-(* used to prove the premise of [mmatch_move_place_sound] *)
-Lemma must_movable_exists_shallow_prefix: forall ce init uninit universe p,
-    must_movable ce init uninit universe p = true ->
-    Paths.Exists (fun p1 : Paths.elt => is_shallow_prefix (valid_owner p) p1 = true) (PathsMap.get (local_of_place p) universe).
-Admitted.
-  
+    
   
 (* The value produced by eval_expr is semantics well-typed. We need to
 update the abstract memory (split the footprint of the value from
@@ -992,11 +989,13 @@ Proof.
       destruct A as (fpm2 & CLEAR).
       destruct (path_of_place p) eqn: POP.
       exists pfp, fpm2. repeat apply conj; auto.
-      eapply mmatch_move_place_sound; eauto.
+      eapply (mmatch_move_place_sound (valid_owner p)); eauto.
       (** implication of must_movable  *)
       exploit must_movable_exists_shallow_prefix; eauto.
       intros (p2 & IN & A). exists p2. split.
-      eapply sound_own_universe in IN. eauto.  eauto. auto.      
+      eapply sound_own_universe in IN.
+      rewrite valid_owner_same_local. eauto.
+      eauto.  eauto.
       (* wf_env *)
       rewrite <- e in *.
       rewrite POP in *.
@@ -1049,13 +1048,13 @@ Proof.
       exploit valid_owner_footprint_flat_eq; eauto.
       intros FEQ.
       exists fp1, fpm2. repeat apply conj; auto.
-      eapply mmatch_move_place_sound; eauto.
+      eapply (mmatch_move_place_sound (valid_owner p)); eauto.
       (* exists shallow prefix *)
       exists p1. split.      
       exploit is_init_in_universe. eapply must_init_sound. eauto. eauto.
       unfold in_universe. intros. eapply Paths.mem_2.
-      unfold p1 in H.
-      erewrite valid_owner_same_local in H. auto.
+      unfold p1 in H. eauto.
+      (* erewrite valid_owner_same_local in H. unfold p1. auto. *)
       eapply is_shallow_prefix_refl.
       fold p1.  rewrite POP. auto.
       (* wf_env *)
@@ -2485,8 +2484,9 @@ Qed.
 
 Lemma init_place_full_unchanged: forall own p p1,
     is_full (own_universe own) p = is_full (own_universe (init_place own p1)) p.
-Admitted.
-
+Proof.
+  intros. unfold is_full, init_place. simpl. auto.
+Qed.
 
 Lemma list_disjoint_app_r {A: Type}: forall (l1 l2 l3: list A),
     list_disjoint l1 (l2 ++ l3) ->

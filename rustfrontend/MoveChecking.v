@@ -58,11 +58,17 @@ Section REC.
                 true
               else false
             else
-              (* the whole struct is not in the universe, so we must
+              (** we must check that this struct is a ZST or not. If
+              it is ZST, it must be init and full *)
+              match co_members co with
+              | nil => false
+              | _ =>
+                  (* the whole struct is not in the universe, so we must
               check its sub-fields *)
-              let fields_types := map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) co.(co_members) in
-              (** All sub-fields must be movable *)
-              forallb (fun '(fp, ft) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P) init uninit universe fp ft) fields_types                      
+                  let fields_types := map (fun '(Member_plain fid fty) => (Pfield p fid fty, fty)) co.(co_members) in
+                  (** All sub-fields must be movable *)
+                  forallb (fun '(fp, ft) => rec (PTree.remove i ce) (PTree_removeR _ _ _ P) init uninit universe fp ft) fields_types
+              end
         | co_none =>
             (* type error *) false
         end

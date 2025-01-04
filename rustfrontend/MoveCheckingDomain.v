@@ -667,6 +667,41 @@ Proof.
     eapply wf_env_freeable; eauto.
 Qed.
 
+
+(* used to prove the premise of [mmatch_move_place_sound] *)
+Lemma must_movable_exists_shallow_prefix: forall ce init uninit universe p
+    (MOVE: must_movable ce init uninit universe p = true),
+    Paths.Exists (fun p1 : Paths.elt => is_shallow_prefix (valid_owner p) p1 = true) (PathsMap.get (local_of_place p) universe).
+Proof.
+  intros ce. pattern ce. apply well_founded_ind with (R:= removeR).
+  eapply well_founded_removeR.
+  intros ce1 IH. intros. unfold must_movable, must_movable_fix in *.
+  erewrite unroll_Fix in *.
+  destruct (typeof_place p) eqn: PTY; simpl in *; try congruence.
+  Ltac solve_exists p:= exists p; split; [eapply must_init_in_universe; eauto| eapply valid_owner_is_shallow_prefix].
+  1-4 : solve_exists p.    
+  - destruct must_init eqn: INIT; try congruence.
+    destruct is_full eqn: FULL in MOVE; try congruence; solve_exists p.
+  - destruct (get_composite ce1 i) eqn: GCO; try congruence. subst.
+    destruct (must_init init uninit universe p) eqn: INIT.
+    + destruct is_full eqn: FULL; try congruence.
+      solve_exists p.
+    + destruct (co_members co) eqn: MEMBS; try congruence.
+      simpl in MOVE. destruct m.
+      eapply andb_true_iff in MOVE as (M1 & M2).
+      replace t with (typeof_place (Pfield p id t)) in M1 by auto.
+      exploit IH; eauto.
+      eapply PTree_removeR; eauto.
+      intros (p2 & IN & SHA).
+      exists p2. simpl in *. split; auto.
+      eapply is_shallow_prefix_trans. 2: eauto. 
+      eapply is_shallow_prefix_trans. eapply valid_owner_is_shallow_prefix.
+      eapply is_shallow_prefix_field.
+  - destruct (ce1 ! i) eqn: CO; try congruence.
+    eapply andb_true_iff in MOVE as (M1 & M2).
+    solve_exists p.
+Qed.
+      
 Lemma maxv:
   Ptrofs.max_unsigned = 18446744073709551615.
 Proof.
@@ -801,8 +836,9 @@ Proof.
       (* prove sem_wt_loc: first eliminate Tbox *)
       eapply WTLOC1.
       erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
-      eauto.
       (** Case2: p is not in the universe *)
+      destruct (co_members co) eqn: COMEMBS; try congruence.
+      rewrite <- COMEMBS in *. clear COMEMBS.
       erewrite forallb_forall in POWN.
       (** Get the structure of fp by wt_footprint *)
       inv WT; simpl in *; try congruence. 
@@ -855,8 +891,10 @@ Proof.
     destruct (is_full universe p) eqn: FULL; try congruence.
     exploit MM. eauto. eapply must_init_sound; eauto.
     intros (BM & WTLOC).  eapply WTLOC.
-    erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.
+    erewrite <- is_full_same. eauto. eapply sound_own_universe; eauto.    
     (** Case2: p is not in the universe *)
+    destruct (co_members co) eqn: COMEMBS; try congruence.
+    rewrite <- COMEMBS in *. clear COMEMBS.
     erewrite forallb_forall in POWN.
     (** Get the structure of fp by wt_footprint *)
     inv WTFP; simpl in *; try congruence.

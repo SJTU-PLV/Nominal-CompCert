@@ -2444,15 +2444,6 @@ Proof.
     apply UNI.     eapply Paths.mem_1. auto.
 Qed.
 
-Lemma is_init_in_universe: forall own p,
-    is_init own p = true ->
-    in_universe own p = true.
-Proof.
-  intros. unfold is_init in H. unfold in_universe.
-  eapply Paths.mem_1.
-  eapply Paths.mem_2 in H.
-  apply own_consistent. eapply Paths.union_2. auto.
-Qed.
 
 (** important: it performs the evaluation of the statement generated
 by add_dropflag whichs sets the drop flag for the place. The

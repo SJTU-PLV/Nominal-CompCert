@@ -812,6 +812,48 @@ Proof.
 Qed.
 
 
+Lemma paths_shallow_contain_app: forall l1 l2,
+    is_shallow_prefix_paths l2 = true ->
+    paths_shallow_contain l1 (l1 ++ l2) = true.
+Proof.
+  induction l1; simpl; intros; auto.
+  destruct path_eq; try congruence. eauto.
+Qed.
+
+
+Lemma is_shallow_prefix_downcast: forall p1 fid fty,
+    is_shallow_prefix p1 (Pdowncast p1 fid fty) = true.
+Proof.
+  intros. unfold is_shallow_prefix. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_shallow_contain_app.
+  unfold is_shallow_prefix_paths.
+  destruct in_dec; try congruence; simpl in *; auto.
+  destruct i0; try contradiction. inv H.
+Qed.
+
+Lemma is_shallow_prefix_field: forall p1 fid fty,
+    is_shallow_prefix p1 (Pfield p1 fid fty) = true.
+Proof.
+  intros. unfold is_shallow_prefix. simpl.
+  destruct (path_of_place p1).
+  solve_prefix_left.
+  eapply paths_shallow_contain_app.
+  unfold is_shallow_prefix_paths.
+  destruct in_dec; try congruence; simpl in *; auto.
+  destruct i0; try contradiction. inv H.
+Qed.
+
+Lemma valid_owner_is_shallow_prefix: forall p,
+    is_shallow_prefix (valid_owner p) p = true.
+Proof.
+  induction p; simpl; try apply is_shallow_prefix_refl.
+  eapply is_shallow_prefix_trans. eauto.
+  eapply is_shallow_prefix_downcast.
+Qed.
+
+
 (*
 
 Definition is_prefix (p1 p2: place) : bool :=
