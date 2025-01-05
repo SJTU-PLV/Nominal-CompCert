@@ -4053,6 +4053,17 @@ Proof.
   - inv H. lia.
 Qed.
 
+Lemma deref_loc_rec_footprint_pos: forall tys m ty b ofs rfp b1 ofs1 ty1 fp1,
+    deref_loc_rec_footprint m b ofs ty rfp tys b1 ofs1 ty1 fp1 ->
+    0 <= ofs ->
+    0 <= ofs1.
+Proof.
+  destruct tys; intros.
+  - inv H. lia.    
+  - inv H. lia.
+Qed.
+
+
 (* Used in proving sound_cont which is different from
 deref_loc_rec_footprint_unchanged which is used to prove the situation
 that we are freeing the blocks in fp1 *)
@@ -5087,6 +5098,25 @@ Proof.
   eapply flat_footprint_separated_shrink; eauto.
 Qed.
 
+
+Lemma field_offset_in_range_add: forall fofs fty ofs co,
+    co_sizeof co <= Ptrofs.max_unsigned ->
+    (0 <= fofs /\ fofs + sizeof ge fty <= co_sizeof co) ->
+    (Ptrofs.unsigned ofs) + co_sizeof co <= Ptrofs.max_unsigned ->
+    Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr fofs)) = Ptrofs.unsigned ofs + fofs.
+Proof.
+  intros until co. intros COSZ R OFS.
+  destruct R as (R1 & R2).
+  generalize (sizeof_pos ge fty). intros R3.
+  rewrite Ptrofs.add_unsigned.
+  rewrite !Ptrofs.unsigned_repr. auto.
+  lia.
+  rewrite Ptrofs.unsigned_repr.
+  generalize (Ptrofs.unsigned_range ofs).
+  lia. lia.
+Qed.  
+
+
 Lemma step_dropstate_sound: forall s1 t s2,
     sound_state s1 ->
     wt_state s1 ->
@@ -5130,15 +5160,8 @@ Proof.
     { destruct (co_sv co) eqn: COSV.
       eapply field_offset_in_range_complete; eauto.
       exploit variant_field_offset_in_range_complete; eauto. lia. }
-    destruct R as (R1 & R2).
-    generalize (sizeof_pos ge fty). intros R3.
-    generalize (COMP_RANGE id1 co CO1). intros R4.
-    rewrite Ptrofs.add_unsigned in DEREF.
-    rewrite Ptrofs.unsigned_repr in DEREF. 2: lia.
-    (* show that deref_loc_rec and deref_loc_rec_footprint return the same address *)
-    assert (OFSEQ: Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned ofs1 + fofs0)) = (Ptrofs.unsigned ofs1 + fofs0)).
-    { erewrite Ptrofs.unsigned_repr. auto.
-      generalize (Ptrofs.unsigned_range ofs1). lia. }
+    exploit field_offset_in_range_add. eapply COMP_RANGE. eapply CO1. all: eauto. 
+    intros OFSEQ.
     rewrite <- OFSEQ in FFP.
     exploit deref_loc_rec_footprint_eq; eauto. intros (E1 & E2). subst.
     (* construct the footprint list for the members to be dropped *)
@@ -7218,6 +7241,245 @@ Proof.
   - eapply H0. eauto.
 Qed.
 
+Lemma deref_loc_rec_footprint_no_mem_error: forall tys m b ofs ty fp b1 ofs1 ty1 fp1
+    (WTFP: wt_footprint ge ty1 fp1)
+    (DEF: deref_loc_rec_footprint m b (Ptrofs.unsigned ofs) ty fp tys b1 ofs1 ty1 fp1)
+    (ERR: deref_loc_rec_mem_error m b ofs tys),
+    False.
+Proof.
+  induction tys; intros; simpl in *.
+  - inv ERR.
+  - inv DEF. inv ERR.
+    + eapply IHtys. 2-3 : eauto.
+      econstructor; eauto.
+    + exploit deref_loc_rec_footprint_eq; eauto. intros (A1 & A2). subst.
+      eapply deref_loc_no_mem_error with (fp:= (fp_box b1 (sizeof ce ty1) fp1)) (b:= b2) (ofs:= ofs1). 
+      econstructor; eauto.
+      econstructor; eauto. auto.
+Qed.
+
+Lemma deref_loc_progress_no_mem_error: forall m b ofs ty v,
+    deref_loc ty m b ofs v ->
+    deref_loc_mem_error ty m b ofs ->
+    False.
+Proof.
+  intros. inv H0. apply H2.
+  inv H.
+  - rewrite H1 in H0. inv H0. eapply Mem.load_valid_access; eauto.
+  - rewrite H1 in H0. inv H0.
+  - rewrite H1 in H0. inv H0.
+Qed.
+
+    
+Lemma deref_loc_rec_progress_no_mem_error: forall tys m b ofs v,
+    deref_loc_rec m b ofs tys v ->
+    deref_loc_rec_mem_error m b ofs tys ->
+    False.
+Proof.
+  induction tys; intros.
+  - inv H0.
+  - inv H. inv H0; eauto.
+    eapply deref_loc_progress_no_mem_error; eauto.
+    exploit deref_loc_rec_det. eauto. eapply H3. intros A. inv A. eauto.
+Qed.
+
+Lemma extcall_free_sem_progress_no_mem_error: forall vl m1 t v m2,
+    extcall_free_sem ge vl m1 t v m2 ->
+    extcall_free_sem_mem_error vl m1 ->
+    False.
+Proof. 
+  intros. inv H; inv H0.
+  - eapply H6. eapply Mem.load_valid_access; eauto.
+  - eapply H8.
+    rewrite H1 in H5.
+    destruct (Val.eq (Vptrofs sz) (Vptrofs sz0)); try congruence.
+    eapply Vptrofs_det in e. subst.
+    eapply Mem.free_range_perm; eauto.
+Qed.
+
+Lemma drop_box_rec_progress_no_mem_error: forall tys b ofs m1 m2,
+    drop_box_rec ge b ofs m1 tys m2 ->
+    drop_box_rec_mem_error ge b ofs m1 tys ->
+    False.
+Proof.
+  induction tys; intros.
+  - inv H0.
+  - inv H. inv H0.
+    + eapply deref_loc_rec_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H5.
+      intros A. inv A.
+      eapply deref_loc_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H2.
+      intros A. inv A.
+      exploit deref_loc_det. eapply H4. eapply H7.
+      intros A. inv A.
+      eapply extcall_free_sem_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H2.
+      intros A. inv A.
+      exploit deref_loc_det. eapply H4. eapply H5.
+      intros A. inv A.
+      exploit extcall_free_sem_det. eapply H6. eapply H9.
+      intros (A1 & A2). subst.
+      eauto.
+Qed.
+
+
+(* It is not easy to directly prove that step_drop is total safe
+because there are some dynamic type checking in the semantics. For now
+we just pove that step-drop has no memory error *)
+Lemma step_dropstate_no_mem_error: forall s,
+    sound_state s ->
+    wt_state s ->
+    step_drop_mem_error ge s ->
+    False.
+Proof.
+  intros s SOUND WTST ERR; try (inv ERR; inv SOUND).
+  - inv DROPMEMB.
+    (* repeated code in the following 4 cases. TODO: make it a
+    lemma *)
+    unfold ce in *. rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.    
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty <= co_sizeof co).
+    { destruct (co_sv co) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit variant_field_offset_in_range_complete; eauto. lia. }
+    exploit field_offset_in_range_add; eauto.
+    intros OFSEQ.
+    (* end of repeated code *)
+    eapply deref_loc_rec_footprint_no_mem_error. eapply WTFP. rewrite OFSEQ. eauto.
+    auto.
+  - inv DROPMEMB.
+    unfold ce in *. rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.    
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty1 <= co_sizeof co).
+    { destruct (co_sv co) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit variant_field_offset_in_range_complete; eauto. lia. }
+    exploit field_offset_in_range_add; eauto.
+    intros OFSEQ.
+    eapply deref_loc_rec_footprint_no_mem_error. eapply WTFP. rewrite OFSEQ. eauto.
+    auto.
+  - inv DROPMEMB.
+    unfold ce in *. rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.    
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty1 <= co_sizeof co).
+    { destruct (co_sv co) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit variant_field_offset_in_range_complete. 3: eauto. all: eauto.
+      lia. }
+    exploit field_offset_in_range_add. 2: eauto. eauto. eauto.
+    intros OFSEQ.
+    exploit deref_loc_rec_footprint_eq.
+    rewrite OFSEQ. eauto. all: eauto.
+    intros (A1 & A2). subst.
+    inv WTFP; inv WTLOC. simpl in *. congruence.
+    eapply TAG. eapply Mem.load_valid_access. eauto.
+  - inv DROPMEMB.
+    unfold ce in *. rewrite CO1 in CO. inv CO.
+    rewrite FOFS in FOFS0. inv FOFS0.    
+    assert (R: 0 <= fofs0 /\ fofs0 + sizeof ge fty <= co_sizeof co0).
+    { destruct (co_sv co0) eqn: COSV.
+      eapply field_offset_in_range_complete; eauto.
+      exploit variant_field_offset_in_range_complete; eauto. lia. }
+    exploit field_offset_in_range_add; eauto.
+    intros OFSEQ.
+    simpl in NOREP.
+    eapply list_norepet_app in NOREP as (N1 & N2 & N3).    
+    exploit drop_box_rec_progress_and_unchanged. eauto.
+    intro. eapply DIS. apply in_app; eauto.
+    rewrite OFSEQ. eauto.
+    intros (m2 & DROP & UNC).
+    eapply drop_box_rec_progress_no_mem_error; eauto.
+Qed.
+
+(* If the evaluation of p2 is memory error, and SPLIT holds, then the
+evaluation of p1 must be memory errro *)
+Lemma sound_split_fully_own_place_no_mem_error: forall l p1 p2 m b ofs fp b1 ofs1 ty1 fp1 le own fpm fp2
+  (SPLIT: sound_split_fully_own_place m p1 b ofs fp l p2 b1 ofs1 ty1 fp1)
+  (ERR: eval_place_mem_error ge le m p2)
+  (* The following premises are used to prove that (b, ofs) is equal
+  to the result of eval_place p1. And then prove (b1, ofs1) is equal
+  to the evaluation of p2 *)
+  (MM: mmatch fpm ge m le own)
+  (DOM: dominators_is_init own p1 = true)
+  (GFP: get_loc_footprint_map le (path_of_place p1) fpm = Some (b, ofs, fp2))
+  (WFENV: wf_env fpm ge m le)
+  (WTP: wt_place le ge p1),
+    eval_place_mem_error ge le m p1.
+Proof.
+  induction l; intros; inv SPLIT; auto.
+  inv ERR.
+  + eauto.
+  + exploit sound_split_fully_own_place_type_inv; eauto.
+    intros TYA. rewrite TYA in *.
+    exploit sound_split_fully_own_place_eval_place; eauto.
+    intros (b3 & ofs3 & A1 & A2).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (B1 & B2 & B3 & B4). subst.
+    exploit A2. eauto. intros B5. inv B5.
+    inv H2. simpl in *. inv H. exfalso.
+    eapply H0. eapply Mem.load_valid_access; eauto.
+Qed.
+
+(* It is not easy to directly prove that step_drop is total safe
+because there are some dynamic type checking in the semantics. For now
+we just pove that step-drop has no memory error *)
+Lemma step_dropplace_no_mem_error: forall s,
+    sound_state s ->
+    wt_state s ->
+    step_dropplace_mem_error ge s ->
+    False.
+Proof.
+  intros s SOUND WTST ERR; try (inv ERR; inv SOUND).
+  - inv SDP. inv SPLIT.
+    assert (NERR: ~ eval_place_mem_error ge le m r).
+    { intro. eapply eval_place_no_mem_error; eauto. }
+    eapply NERR. eapply sound_split_fully_own_place_no_mem_error; eauto.
+  - inv SDP. inv SPLIT.
+    (* the same as the proof of sound_split_fully_own_place_no_mem_error *)
+    exploit sound_split_fully_own_place_eval_place; eauto.
+    intros (b3 & ofs3 & A1 & A2).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (B1 & B2 & B3 & B4). subst.
+    exploit A2. eauto. intros B5. inv B5.
+    inv PVAL. simpl in *. inv H.
+    eapply H0. eapply Mem.load_valid_access; eauto.
+  - inv SDP. inv SPLIT.
+    (* same as the last case *)
+    exploit sound_split_fully_own_place_eval_place; eauto.
+    intros (b3 & ofs3 & A1 & A2).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (B1 & B2 & B3 & B4). subst.
+    exploit A2. eauto. intros B5. inv B5.
+    inv PVAL; simpl in *; try congruence. inv H. rewrite LOAD in H0.
+    inv H0. inv FREE.
+    + eapply H2. eapply Mem.load_valid_access; eauto.
+    + eapply H4.
+      rewrite Z.sub_0_l in *.
+      rewrite SIZE in H1. 
+      destruct (Val.eq (Vptrofs (Ptrofs.repr (sizeof ce ty1))) (Vptrofs sz)); try congruence.
+      eapply Vptrofs_det in e. subst.
+      rewrite Z.add_0_l. rewrite Ptrofs.unsigned_repr. eauto.
+      lia.
+  - inv SDP. 
+    assert (NERR: ~ eval_place_mem_error ge le m r).
+    { intro. eapply eval_place_no_mem_error; eauto. }
+    eapply NERR. eapply sound_split_fully_own_place_no_mem_error; eauto.
+  - inv SDP. 
+    assert (NERR: ~ eval_place_mem_error ge le m r).
+    { intro. eapply eval_place_no_mem_error; eauto. }
+    eapply NERR. eapply sound_split_fully_own_place_no_mem_error; eauto.
+  - inv SDP.
+    exploit sound_split_fully_own_place_eval_place; eauto.
+    intros (b3 & ofs3 & A1 & A2).
+    exploit eval_place_get_loc_footprint_map_equal; eauto.
+    intros (B1 & B2 & B3 & B4). subst.
+    exploit A2. eauto. intros B5. inv B5.
+    rewrite PTY in *. inv WTFP; simpl in *; try congruence; inv WTLOC.
+    eapply ERR0.
+    eapply Mem.load_valid_access; eauto.
+Qed.
+
 End MOVE_CHECK.
 
 (** Specific definition of partial safe *)
@@ -7241,7 +7503,10 @@ Proof.
   set (IS := fun se1 '(w1, (se2, w2)) s =>
                SINV se1 w1 s
                /\ sound_state p w2 se2 s
-               /\ wt_state p.(prog_comp_env) s
+               /\ wt_state p se2 (mod_sg w2) s
+               (** adhoc: for now we add this invariant here to deal
+               with typing information passed between modules *)
+               /\ rs_sig_comp_env (mod_sg w2) = p.(prog_comp_env)
                /\ se1 = se2).
   red. constructor.
   eapply (Module_ksafe_components li_rs li_rs (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF IS).

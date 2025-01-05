@@ -1299,7 +1299,7 @@ Inductive deref_loc_rec_mem_error (m: mem) (b: block) (ofs: ptrofs) : list type 
     deref_loc_rec_mem_error m b ofs (ty::tys)
 | deref_loc_rec_error2: forall ty tys b1 ofs1,
     deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    deref_loc_mem_error ty m b ofs ->
+    deref_loc_mem_error ty m b1 ofs1 ->
     deref_loc_rec_mem_error m b ofs (ty::tys)
 .
 
@@ -1324,15 +1324,15 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m (ty :: tys) m2
 .
 
-Inductive extcall_free_sem_mem_error: val -> mem -> Prop :=
-| free_error1: forall (b : block) (lo : ptrofs) (m : mem),
+Inductive extcall_free_sem_mem_error: list val -> mem -> Prop :=
+| extcall_free_error1: forall (b : block) (lo : ptrofs) (m : mem),
     ~ Mem.valid_access m Mptr b (Ptrofs.unsigned lo - size_chunk Mptr) Readable ->
-    extcall_free_sem_mem_error (Vptr b lo) m
-| free_error2: forall (b : block) (lo sz : ptrofs) (m m' : mem),
+    extcall_free_sem_mem_error [Vptr b lo] m
+| extcall_free_error2: forall (b : block) (lo sz : ptrofs) (m : mem),
     Mem.load Mptr m b (Ptrofs.unsigned lo - size_chunk Mptr) = Some (Vptrofs sz) ->
     Ptrofs.unsigned sz > 0 ->
     ~ Mem.range_perm m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable ->
-    extcall_free_sem_mem_error (Vptr b lo) m.
+    extcall_free_sem_mem_error [Vptr b lo] m.
 
 
 Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> Prop :=
@@ -1341,11 +1341,17 @@ Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> 
     drop_box_rec_mem_error b ofs m (ty :: tys)
 | drop_box_rec_error2: forall m ty tys b1 ofs1,
     deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    extcall_free_sem_mem_error (Vptr b1 ofs1) m -> 
+    deref_loc_mem_error ty m b1 ofs1 ->
     drop_box_rec_mem_error b ofs m (ty :: tys)
-| drop_box_rec_error3: forall m m1 ty tys b1 ofs1,
+| drop_box_rec_error3: forall m ty tys b1 ofs1 b2 ofs2,
     deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
-    extcall_free_sem ge [Vptr b1 ofs1] m E0 Vundef m1 ->
+    deref_loc ty m b1 ofs1 (Vptr b2 ofs2) ->
+    extcall_free_sem_mem_error [Vptr b2 ofs2] m ->
+    drop_box_rec_mem_error b ofs m (ty :: tys)
+| drop_box_rec_error4: forall m m1 ty tys b1 ofs1 b2 ofs2,
+    deref_loc_rec m b ofs tys (Vptr b1 ofs1) ->
+    deref_loc ty m b1 ofs1 (Vptr b2 ofs2) ->
+    extcall_free_sem ge [Vptr b2 ofs2] m E0 Vundef m1 ->
     drop_box_rec_mem_error b ofs m1 tys ->
     drop_box_rec_mem_error b ofs m (ty :: tys)
 .
@@ -1557,7 +1563,7 @@ Inductive step_dropplace_mem_error: state -> Prop :=
     (PTY: typeof_place p = Tbox ty)
     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
     (* free error *)
-    (FREE: extcall_free_sem_mem_error (Vptr b' ofs') m),
+    (FREE: extcall_free_sem_mem_error [Vptr b' ofs'] m),
     step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
 | step_dropplace_comp_error: forall m k p f le own ps l
     (* p is struct or enum *)
