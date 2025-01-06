@@ -272,6 +272,66 @@ Proof.
     auto.
 Qed.
 
+Lemma field_offset_in_range_eq_gen: forall ofs fofs sz,
+    0 <= fofs <= sz ->
+    Ptrofs.unsigned ofs + sz <= Ptrofs.max_unsigned ->
+    Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr fofs)) = Ptrofs.unsigned ofs + fofs.
+Proof.
+  intros.
+  generalize (Ptrofs.unsigned_range ofs). intros R.
+  erewrite Ptrofs.add_unsigned.
+  rewrite Ptrofs.unsigned_repr. 1-2: rewrite Ptrofs.unsigned_repr; auto.  
+  lia.
+  lia. lia.
+Qed.
+
+Lemma field_offset_in_range_eq: forall ofs fofs orgs id fid fty co,
+    ce ! id = Some co ->
+    co_sv co = Struct ->
+    field_offset ce fid (co_members co) = OK fofs ->
+    field_type fid (co_members co) = OK fty ->
+    Ptrofs.unsigned ofs + sizeof ce (Tstruct orgs id) <= Ptrofs.max_unsigned ->
+    Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr fofs)) = Ptrofs.unsigned ofs + fofs
+    /\ Ptrofs.unsigned ofs <= Ptrofs.unsigned ofs + fofs
+    /\ Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.unsigned ofs + sizeof ce (Tstruct orgs id).
+Proof.
+  intros. 
+  exploit field_offset_in_range_complete; eauto.
+  intros (R1 & R2).
+  generalize (Ptrofs.unsigned_range ofs). intros F4.
+  generalize (COMP_RANGE id co H). intros R3.
+  generalize (sizeof_pos ce fty). intros R4.
+  simpl in *. rewrite H in *.
+  repeat apply conj.
+  eapply field_offset_in_range_eq_gen; eauto.
+  lia. lia. lia.
+Qed.
+
+Lemma variant_field_offset_in_range_eq: forall ofs fofs orgs id fid fty co,
+    ce ! id = Some co ->
+    co_sv co = TaggedUnion ->
+    variant_field_offset ce fid (co_members co) = OK fofs ->
+    field_type fid (co_members co) = OK fty ->
+    Ptrofs.unsigned ofs + sizeof ce (Tvariant orgs id) <= Ptrofs.max_unsigned ->
+    Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr fofs)) = Ptrofs.unsigned ofs + fofs
+    /\ Ptrofs.unsigned ofs <= Ptrofs.unsigned ofs + fofs
+    /\ Ptrofs.unsigned ofs + fofs + sizeof ce fty <= Ptrofs.unsigned ofs + sizeof ce (Tvariant orgs id)
+    /\ 4 <= fofs.
+Proof.
+  intros. 
+  exploit variant_field_offset_in_range_complete; eauto.
+  intros (R1 & R2).
+  generalize (Ptrofs.unsigned_range ofs). intros F4.
+  generalize (COMP_RANGE id co H). intros R3.
+  generalize (sizeof_pos ce fty). intros R4.
+  simpl in *. rewrite H in *.
+  repeat apply conj.
+  eapply field_offset_in_range_eq_gen; eauto.
+  lia. lia. lia. lia.
+Qed.
+
+  
+
 (* This lemma is used to state that the location of a place is
 unchanged if we the memory location in [bs] is unchanged. [bs] is the
 location of the dominator of [p]. It is used to prove the soundness of
@@ -291,9 +351,11 @@ Lemma eval_place_footprint_unchanged: forall p m b1 b2 ofs1 ofs2 fpm own le fp,
       tag field if p is an enum, very difficult. But we can just
       ignore the changing in b2 because changing the tag does not
       affect the field offset *)
-      (forall m' b3 ofs3, Mem.unchanged_on (fun b' ofs' => In b' bs) m m' ->
-                     eval_place ce le m' p b3 ofs3 ->
-                     b2 = b3 /\ ofs2 = ofs3)
+      (* (forall m' b3 ofs3, Mem.unchanged_on (fun b' ofs' => In b' bs) m m' -> *)
+      (*                eval_place ce le m' p b3 ofs3 -> *)
+      (*                b2 = b3 /\ ofs2 = ofs3) *)
+      (forall m', Mem.unchanged_on (fun b' ofs' => In b' bs \/ (b' = b2 /\ ~ ((Ptrofs.unsigned ofs2 <= ofs' < Ptrofs.unsigned ofs2 + sizeof ce (typeof_place p))))) m m' ->
+             eval_place ce le m' p b2 ofs2)
       /\ list_norepet bs
       /\ incl bs (footprint_of_env le ++ flat_fp_map fpm)
       /\ list_disjoint bs (b2 :: footprint_flat fp).
@@ -305,8 +367,7 @@ Proof.
     destruct (fpm!i) eqn: A; try congruence.
     inv GFP.
     exists nil. repeat apply conj.
-    + intros. inv H0. rewrite H3 in H6. inv H6.
-      auto.
+    + intros. econstructor; eauto.
     + constructor.
     + eapply incl_nil_l.
     + red. intros. inv H.
@@ -323,12 +384,21 @@ Proof.
     rewrite H6 in WT3. inv WT3.
     exploit IHp; eauto.
     intros (bs & UNC & NOREP1 & INCL & DIS).
+    (** FIXME: range proof with very bad structure *)
+    exploit eval_place_get_loc_footprint_map_equal. rewrite POP.
+    all: eauto.
+    intros (C1 & C2 & C3 & C4). subst.
+    exploit field_offset_in_range_eq; eauto.
+    rewrite <- H3. eauto. intros (OFSEQ & R1 & R2).
     exists bs. repeat apply conj; eauto.
-    + intros. inv H0.
-      rewrite H3 in H10. inv H10. rewrite H6 in H13. inv H13.
-      rewrite H7 in H14. inv H14.
-      exploit UNC; eauto.
-      intros (A1 & A2). subst. eauto.
+    + intros. econstructor; eauto.
+      eapply UNC. eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros. destruct H0; auto.
+      destruct H0; subst.
+      right. split; auto.
+      intro. eapply H5. rewrite H1 in H0.
+      (* range proof *)
+      rewrite OFSEQ in *. rewrite H3. lia.
     + red. intros. eapply DIS; auto.
       inv H0. simpl. auto.
       eapply in_cons. simpl. eapply in_flat_map; eauto.
@@ -350,18 +420,18 @@ Proof.
     rewrite POP. eauto.
     intros (D1 & D2 & D3 & D4). subst.
     repeat apply conj; eauto.
-    + intros. inv H0.
+    + intros.
       exploit type_deref_some; eauto. intros PTY.
       rewrite PTY in *.
-      inv H4; simpl in *; try congruence. inv H0.
-      inv H9; simpl in *; try congruence. inv H0.
-      exploit UNC; eauto.
+      inv H4; simpl in *; try congruence.      
+      econstructor. eapply UNC.
       eapply Mem.unchanged_on_implies; eauto.
+      simpl. intros.
+      destruct H4; auto. destruct H4; subst. auto.
+      rewrite PTY in *.
+      eapply deref_loc_value; eauto.
+      eapply Mem.load_unchanged_on; eauto.
       simpl. intros. auto.
-      intros (S1 & S2). subst.
-      eapply Mem.load_unchanged_on in H3; eauto.
-      rewrite H4 in H3. inv H3. auto.
-      simpl. auto.
     + econstructor; auto.
       intro. eapply DIS; eauto. simpl. auto.
     + eapply incl_cons; auto.
@@ -397,11 +467,24 @@ Proof.
     exploit IHp; eauto.
     intros (bs & UNC & NOREP1 & INCL & DIS).
     exists bs. repeat apply conj; eauto.
-    + intros. inv H0.
-      rewrite H3 in H12. inv H12. rewrite H4 in H13. inv H13.
-      rewrite H9 in H18. inv H18.
-      exploit UNC; eauto.
-      intros (A1 & A2). subst. eauto.
+    + intros.
+      (** FIXME: range proof with very bad structure *)
+      exploit eval_place_get_loc_footprint_map_equal. rewrite POP.
+      all: eauto.
+      intros (C1 & C2 & C3 & C4). subst.
+      exploit variant_field_offset_in_range_eq; eauto.
+      rewrite <- H3. eauto. intros (OFSEQ & R1 & R2 & R3).      
+      econstructor; eauto.
+      * eapply UNC. eapply Mem.unchanged_on_implies; eauto.
+        simpl. intros.
+        destruct H0; auto.
+        destruct H0; subst; auto.
+        right. split; auto.
+        intro. eapply H7.
+        rewrite OFSEQ in *. rewrite H1 in *. rewrite H3. lia.
+      * eapply Mem.load_unchanged_on; eauto.
+        simpl. intros. right. split; auto.
+        rewrite H1. rewrite OFSEQ. lia.
 Qed.
 
 (* The footprint contained in the location of a place *)
@@ -2846,6 +2929,23 @@ Proof.
  generalize (sizeof_variant_ge4 ce0 (co_members co)). lia.
 Qed.
 
+Lemma variant_field_offset_aligned_add: forall ofs fofs id orgs co fid fty,
+    ce ! id = Some co ->
+    co_sv co = TaggedUnion ->
+    variant_field_offset ce fid (co_members co) = OK fofs ->
+    field_type fid (co_members co) = OK fty ->
+    (alignof ce (Tvariant orgs id) | ofs) ->
+    (alignof ce fty | ofs + fofs).
+Proof.
+  intros.
+  eapply Z.divide_add_r.
+  eapply Z.divide_trans; eauto.
+  simpl. rewrite H.
+  erewrite co_consistent_alignof; eauto. 
+  eapply field_alignof_divide_composite; eauto.
+  eapply variant_field_offset_aligned; eauto.
+Qed.
+
 (* Enum assignment preserves the invariant *)
 Lemma assign_loc_variant_sound: forall fpm1 m1 m2 m3 own1 own2 b ofs v p vfp pfp e ty id fty fid fofs orgs co tag
     (MM: mmatch fpm1 ce m1 e own1)
@@ -2930,14 +3030,10 @@ Proof.
   eapply sem_wt_loc_unchanged_loc; eauto.  
   rewrite <- OFSEQ.
   eapply assign_loc_sem_wt; eauto.
-  (* alingment *)
+  (* alingment *)  
   rewrite OFSEQ.
-  eapply Z.divide_add_r.
-  eapply Z.divide_trans; eauto.
-  subst. rewrite PTY. simpl. rewrite CO.
-  erewrite co_consistent_alignof; eauto. 
-  eapply field_alignof_divide_composite; eauto.
-  eapply variant_field_offset_aligned; eauto.  
+  eapply variant_field_offset_aligned_add; eauto.
+  rewrite <- PTY. rewrite <- TY. auto.
   (* unchanged on location *)
   eapply Mem.store_unchanged_on; eauto.
   simpl. intros. intro. destruct H0. congruence.
@@ -4997,14 +5093,6 @@ Proof.
     eapply Mem.free_unchanged_on; eauto.
 Qed.
 
-Lemma deref_loc_det: forall ty m b ofs v1 v2,
-    deref_loc ty m b ofs v1 ->
-    deref_loc ty m b ofs v2 ->
-    v1 = v2.
-Proof.
-  destruct ty; intros.
-  all: try (inv H; inv H0; simpl in *; try congruence).
-Qed.
 
 Lemma deref_loc_rec_det: forall tys b ofs m v1 v2,
     deref_loc_rec m b ofs tys v1 ->
@@ -6129,20 +6217,27 @@ Proof.
     intros (N6 & N7 & N8).
     exploit get_loc_footprint_map_align; eauto. intros ALIGN.
     exploit cast_val_is_casted; eauto. intros CASTED.
+    replace (genv_cenv (globalenv se prog)) with ce in * by auto.
+    rewrite CO in WT4. inv WT4.
     (* show that the address of p after assigning the enum body is unchanged *)
-    assert (PADDREQ: b = b1 /\ ofs = ofs1).
-    { exploit eval_place_footprint_unchanged.
+    assert (PADDREQ: eval_place (globalenv se prog) le m2 p b ofs).
+    { exploit variant_field_offset_in_range_eq; eauto.
+      rewrite <- TYP. eauto. intros (OFSEQ & R1 & R2 & R3).
+      exploit eval_place_footprint_unchanged.
       2: eapply PADDR1. eauto. eauto. auto.
       all: eauto.
       intros (bs & UNC & NBS & INCL & DIS).
       eapply UNC; eauto.
       eapply Mem.unchanged_on_implies.
       eapply assign_loc_unchanged_on. eauto.
-      simpl. intros. intro. destruct H1. subst. eapply DIS; eauto.
-      simpl. auto. }    
-    destruct PADDREQ; subst.
-    replace (genv_cenv (globalenv se prog)) with ce in * by auto.
-    rewrite CO in WT4. inv WT4.
+      simpl. intros.
+      destruct H.
+      intro. destruct H1. subst. eapply DIS; eauto.
+      simpl. auto.
+      destruct H; subst. intro. destruct H. eapply H1.
+      rewrite OFSEQ in *. rewrite TYP. lia.      
+    }
+    exploit eval_place_det. eapply PADDR2. eauto. intros (E1 & E2). subst.
     exploit assign_loc_variant_sound; eauto.
     instantiate (1 := fp'). eapply list_norepet_append_right; eauto.
     instantiate (3 := pfp).
@@ -6166,14 +6261,14 @@ Proof.
     (* key proof: figure out which location the changed block resides
     in. The changed block is in the stack or in the footprint map
     (maybe we can prove this using get_loc_footprint_map_in_range *)
-    assert (RAN: In b1 (footprint_of_env le ++ flat_fp_map fpm2)).
+    assert (RAN: In b (footprint_of_env le ++ flat_fp_map fpm2)).
     { destruct (path_of_place p) eqn: POP.
       eapply get_loc_footprint_map_in_range; eauto. }
-    assert (RAN1: In b1 (footprint_of_env le ++ flat_fp_map fpm)).
+    assert (RAN1: In b (footprint_of_env le ++ flat_fp_map fpm)).
     { eapply in_app in RAN. apply in_app. destruct RAN; auto.
       right. eapply EQUIV1. eapply in_app; eauto. }
     (* The enum assignment only changes b1 *)
-    assert (UNC: Mem.unchanged_on (fun b' _ => b' <> b1) m1 m3).
+    assert (UNC: Mem.unchanged_on (fun b' _ => b' <> b) m1 m3).
     { eapply Mem.unchanged_on_trans.
       eapply Mem.unchanged_on_implies.
       eapply assign_loc_unchanged_on; eauto. simpl. intros.
@@ -7480,6 +7575,183 @@ Proof.
     eapply Mem.load_valid_access; eauto.
 Qed.
 
+Lemma step_no_mem_error: forall s,
+    sound_state s ->
+    wt_state s ->
+    step_mem_error ge s ->
+    False.
+Proof.
+  intros s SOUND WTST ERR; try (inv ERR; inv SOUND; inv WTST).
+  (* 1-3: step_assign *)
+  1-3: inv STMT; inv WT1; simpl in TR; simpl_getIM IM;
+  destruct (move_check_expr ce mayinit mayuninit universe e) eqn: MOVE1; try congruence;
+  unfold move_check_expr in MOVE1;  
+  destruct (move_check_expr' ce mayinit mayuninit universe e) eqn: MOVECKE; try congruence;
+  destruct p0 as (mayinit' & mayuninit');
+  destruct (move_check_assign mayinit' mayuninit' universe p) eqn: MOVE2; try congruence;
+  simpl in NOREP;
+  generalize NOREP as NOREP'; intros;
+  eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+  { eapply eval_expr_no_mem_error; eauto. }
+  { exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }    
+    exploit dominators_must_init_sound; eauto. intros DOM.
+    eapply eval_place_no_mem_error; eauto. }
+  { exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }    
+    exploit dominators_must_init_sound; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (pfp & GFP & WTFP3 & PRAN & PERM & VALID).
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.    
+    eapply assign_loc_no_mem_error; eauto.
+    eapply Mem.range_perm_implies; eauto.
+    constructor. }
+
+  (* 1-5: step_assign_variant *)
+  1-5: inv STMT; simpl in TR; simpl_getIM IM;
+  destruct (move_check_expr ce mayinit mayuninit universe e) eqn: MOVE1; try congruence;
+  unfold move_check_expr in MOVE1;
+  destruct (move_check_expr' ce mayinit mayuninit universe e) eqn: MOVECKE; try congruence;
+  destruct p0 as (mayinit' & mayuninit');
+  destruct (move_check_assign mayinit' mayuninit' universe p) eqn: MOVE2; try congruence;
+  inv WT1;
+  simpl in NOREP;
+  generalize NOREP as NOREP'; intros;
+  eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+  {  eapply eval_expr_no_mem_error; eauto. }
+  { exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }    
+    exploit dominators_must_init_sound; eauto. intros DOM.
+    eapply eval_place_no_mem_error; eauto. }
+  { exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }    
+    exploit dominators_must_init_sound; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (pfp & GFP & WTFP3 & PRAN & PERM & VALID).
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    replace (genv_cenv (globalenv se prog)) with (genv_cenv ge) in * by auto.
+    rewrite CO in WT4. inv WT4.
+    exploit variant_field_offset_in_range_eq; eauto.
+    rewrite <- TYP. eauto.
+    intros (OFSEQ & R1 & R2 & R3).
+    eapply assign_loc_no_mem_error; eauto.
+    rewrite OFSEQ. eapply variant_field_offset_aligned_add; eauto.
+    rewrite <- TYP. auto.
+    (* permission *)
+    rewrite OFSEQ.
+    red. intros. eapply Mem.perm_implies. eapply PERM. rewrite TYP. lia.
+    constructor. }
+  { exploit eval_expr_sem_wt; eauto.
+    intros (vfp & fpm2 & WTVAL & WTFP & MM1 & WFENV1 & NOREP1 & EQUIV1 & WFOWN1).
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }    
+    exploit dominators_must_init_sound; eauto. intros DOM.
+    exploit eval_place_sound; eauto.
+    intros (pfp & GFP & WTFP3 & PRAN & PERM & VALID).
+    exploit (@list_equiv_norepet1 block). eapply NOREP1. eauto. eauto.
+    intros (N6 & N7 & N8).
+    exploit get_loc_footprint_map_align; eauto. intros ALIGN.
+    exploit sem_cast_sem_wt; eauto.
+    intros (fp' & WTVAL2 & WTFP2 & FPEQ). rewrite FPEQ in *.
+    replace (genv_cenv (globalenv se prog)) with (genv_cenv ge) in * by auto.
+    rewrite CO in WT4. inv WT4.
+    exploit variant_field_offset_in_range_eq; eauto.
+    rewrite <- TYP. eauto.
+    intros (OFSEQ & R1 & R2 & R3).
+    assert (PADDREQ: eval_place (globalenv se prog) le m2 p b ofs).
+    { exploit eval_place_footprint_unchanged.
+      2: eapply PADDR1. eauto. eauto. auto.
+      all: eauto.
+      intros (bs & UNC & NBS & INCL & DIS).
+      eapply UNC; eauto.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on. eauto.
+      simpl. intros.
+      destruct H.
+      intro. destruct H1. subst. eapply DIS; eauto.
+      simpl. auto.
+      destruct H; subst. intro. destruct H. eapply H1.
+      rewrite OFSEQ in *. rewrite TYP.
+      replace (prog_comp_env prog) with ce in H2 by auto.
+      lia. }
+    (** eval_place_progress_no_mem_error *)
+
+    
+    
+        replace (genv_cenv (globalenv se prog)) with ce in * by auto.
+    rewrite CO in WT4. inv WT4.
+    (* show that the address of p after assigning the enum body is unchanged *)
+    assert (PADDREQ: eval_place (globalenv se prog) le m2 p b ofs).
+    { exploit variant_field_offset_in_range_eq; eauto.
+      rewrite <- TYP. eauto. intros (OFSEQ & R1 & R2 & R3).
+      exploit eval_place_footprint_unchanged.
+      2: eapply PADDR1. eauto. eauto. auto.
+      all: eauto.
+      intros (bs & UNC & NBS & INCL & DIS).
+      eapply UNC; eauto.
+      eapply Mem.unchanged_on_implies.
+      eapply assign_loc_unchanged_on. eauto.
+      simpl. intros.
+      destruct H.
+      intro. destruct H1. subst. eapply DIS; eauto.
+      simpl. auto.
+      destruct H; subst. intro. destruct H. eapply H1.
+      rewrite OFSEQ in *. rewrite TYP. lia.      
+    }
+
+    
+    eapply Mem.range_perm_implies; eauto.
+    constructor. }
+  
+  (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct list_norepet *)
+    simpl in NOREP.
+    generalize NOREP as NOREP'. intros.
+    eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+  - 
+    (** sound_own after moving the place in the expression *)
+    assert (SOWN1: sound_own (move_place_option own1 (moved_place e)) mayinit' mayuninit' universe).
+    { destruct (moved_place e) eqn: MP; simpl; inv MOVE1; auto.
+      eapply move_place_sound. auto. }
+    eapply dominators_must_init_sound in MOVE2; eauto.
+        
+
+    eval_expr_sem_wt
+    eapply eval_place_no_mem_error. eauto. eauto. eauto. eauto. 
+  (* step_assign_error1 *)
+  
+  - 
+    (* inversion of wt_state *)
+    inv WTST. inv WT1.
+    (* destruct list_norepet *)
+    simpl in NOREP.
+    generalize NOREP as NOREP'. intros.
+    eapply list_norepet3_fpm_changed in NOREP as (N1 & N2 & N3 & N4 & N5 & DIS1).
+
+  
 End MOVE_CHECK.
 
 (** Specific definition of partial safe *)

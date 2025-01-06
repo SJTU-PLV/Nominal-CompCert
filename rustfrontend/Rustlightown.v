@@ -579,7 +579,9 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     eval_place p b ofs ->
     typeof_place p = Tvariant orgs id ->
     ce ! id = Some co ->
-    (* check tag and fid. If we want to remove this check, we need to show co_members are not repeated in MoveCheckingSafe to make sure wt_place and wt_footprint relate the same field ident *)
+    (* check tag and fid. If we want to remove this check, we need to
+    show co_members are not repeated in MoveCheckingSafe to make sure
+    wt_place and wt_footprint relate the same field ident. Without this checking, I don't know how to relate the (fid, fty) in footprint of bmatch and (fid, fty) in the place *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
     variant_field_offset ce fid (co_members co) = OK fofs ->
@@ -590,6 +592,42 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     deref_loc (typeof_place p) m l ofs (Vptr l' ofs') ->
     eval_place (Pderef p ty) l' ofs'.
 
+
+Lemma deref_loc_det: forall ty m b ofs v1 v2,
+    deref_loc ty m b ofs v1 ->
+    deref_loc ty m b ofs v2 ->
+    v1 = v2.
+Proof.
+  destruct ty; intros.
+  all: try (inv H; inv H0; simpl in *; try congruence).
+Qed.
+
+(* eval_place is determinate *)
+Lemma eval_place_det: forall p b1 ofs1 b2 ofs2,
+    eval_place p b1 ofs1 ->
+    eval_place p b2 ofs2 ->
+    b1 = b2 /\ ofs1 = ofs2.
+Proof.
+  induction p; intros.
+  - inv H. inv H0.
+    rewrite H4 in H5. inv H5. auto.
+  - inv H. inv H0. rewrite H5 in H6. inv H6.
+    rewrite H8 in H11. inv H11.
+    rewrite H9 in H12. inv H12.
+    exploit IHp. eapply H4. eauto. intros (A1 & A2). subst.
+    eauto.
+  - inv H. inv H0. exploit IHp. eapply H3. eauto.
+    intros (A1 & A2). subst.
+    exploit deref_loc_det. eapply H6. eauto. intros A1. inv A1.
+    eauto.
+  - inv H. inv H0. rewrite H5 in H8. inv H8.
+    rewrite H6 in H9. inv H9.
+    exploit IHp. eapply H4. eauto. intros (A1 & A2). subst.
+    rewrite H7 in H12. inv H12.
+    rewrite H10 in H15. inv H15.
+    rewrite H11 in H16. inv H16. auto.
+Qed.
+    
 Inductive eval_place_mem_error : place -> Prop :=
 | eval_Pfield_error: forall p ty i,
     eval_place_mem_error p ->

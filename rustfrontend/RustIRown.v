@@ -648,27 +648,28 @@ Inductive function_entry_mem_error (f: function) (vargs: list val) (m: mem) (e: 
       function_entry_mem_error f vargs m e.
 
 Inductive step_mem_error : state -> Prop :=
-| step_assign_error1: forall f e p k le m own,
-    eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign p e) k le own m)
-| step_assign_error2: forall f e p k le m b ofs own,
-    eval_place ge le m p b ofs ->
+| step_assign_error1: forall f e p k le m own,    
     eval_expr_mem_error ge le m e ->
     step_mem_error (State f (Sassign p e) k le own m)
-| step_assign_error3: forall f e p k le m b ofs v v1 ty own,
+| step_assign_error2: forall f e p k le m own v,
+    eval_expr ge le m ge e v ->
+    eval_place_mem_error ge le m p ->
+    step_mem_error (State f (Sassign p e) k le own m)
+| step_assign_error3: forall f e p k le m b ofs v v1 own,
     eval_place ge le m p b ofs ->
     eval_expr ge le m ge e v ->
     sem_cast v (typeof e) (typeof_place p) = Some v1 ->
-    assign_loc_mem_error ge ty m b ofs v1 ->
+    assign_loc_mem_error ge (typeof_place p) m b ofs v1 ->
     step_mem_error (State f (Sassign p e) k le own m)
 | step_assign_variant_error1: forall f e p k le m enum_id fid own,
-    (* error in evaluating lhs *)
-    eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)
-| step_assign_variant_error2: forall f e p k le m enum_id fid own,
     (* error in evaluating the expression *)
     eval_expr_mem_error ge le m e ->
     step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)
+| step_assign_variant_error2: forall f e p k le v m enum_id fid own,
+    eval_expr ge le m ge e v ->
+    (* error in evaluating lhs *)
+    eval_place_mem_error ge le m p ->
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m)                   
 | step_assign_variant_error3: forall f e p ty k le m1 b ofs v v1 co fid enum_id orgs own fofs
     (TYP: typeof_place p = Tvariant orgs enum_id)
     (CO: ge.(genv_cenv) ! enum_id = Some co)
@@ -689,6 +690,7 @@ Inductive step_mem_error : state -> Prop :=
     (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
     (CAST: sem_cast v (typeof e) ty = Some v1)
     (AS: assign_loc ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1 m2)
+    (* error in evaluating the place in the second time *)
     (ERR: eval_place_mem_error ge le m2 p),
     step_mem_error (State f (Sassign_variant p enum_id fid e) k le own m1)
 | step_assign_variant_error5: forall f e p ty k le m1 m2 b ofs b1 ofs1 v v1 co fid enum_id orgs own fofs tag
