@@ -536,7 +536,7 @@ Inductive step_mem_error : state -> Prop :=
     (PADDR: eval_place ge le m p b ofs)
     (PTY: typeof_place p = Tbox ty)
     (PVAL: deref_loc (Tbox ty) m b ofs (Vptr b' ofs'))
-    (FREE: extcall_free_sem_mem_error (Vptr b' ofs') m),
+    (FREE: extcall_free_sem_mem_error [Vptr b' ofs'] m),
     step_mem_error (State f (Sdrop p) k le m)
 | step_drop_struct_error: forall p orgs id m k f le
     (PTY: typeof_place p = Tstruct orgs id)

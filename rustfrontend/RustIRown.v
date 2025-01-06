@@ -767,8 +767,10 @@ Inductive step_mem_error : state -> Prop :=
     (* error in evaluating the expression list *)
     eval_exprlist_mem_error ge le m ge al tyargs ->
     step_mem_error (State f (Scall p a al) k le own m)
-| step_internal_function_error: forall vf f vargs k m e
-    (FIND: Genv.find_funct ge vf = Some (Internal f)),
+| step_internal_function_error: forall vf f vargs k m e own1 own2
+    (FIND: Genv.find_funct ge vf = Some (Internal f))
+    (OWN1: init_own_env ge f = OK own1)
+    (OWN2: init_place_list own1 (places_of_locals (fn_params f)) = own2),
     function_entry_mem_error f vargs m e ->
     step_mem_error (Callstate vf vargs k m)
 (* | step_return_0_error: forall f k le m own, *)

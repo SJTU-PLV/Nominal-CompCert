@@ -1940,4 +1940,3 @@ Proof.
   red; simpl; intros. inv H; try inv SDROP; simpl; try lia.
   eapply external_call_trace_length; eauto.
 Qed.
-

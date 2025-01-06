@@ -276,6 +276,11 @@ Inductive wt_stmt: statement -> Prop :=
     (WT3: ty = Tfunction orgs rels tyl rty cc),
     (* We only support this kind of function call *)
     wt_stmt (Scall p (Eglobal id ty) al)
+| wt_Sifthenelse: forall e s1 s2
+    (WT1: wt_expr e)
+    (WT2: wt_stmt s1)
+    (WT3: wt_stmt s2),    
+    wt_stmt (Sifthenelse e s1 s2)
 | wt_Sreturn: forall p
     (WT1: wt_place p)
     (WT2: not_composite (typeof_place p) = true),
