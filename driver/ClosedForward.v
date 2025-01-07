@@ -276,10 +276,10 @@ Qed.
   
 End CLOSE_FORWARD.
 
-(* Checking whether the defs and lemmas from are typed as we want in the outside of the Section. *)
+(* Checking whether the defs and lemmas from are typed as we want in the outside of the Section.
 Check close_c.
 Check close_asm.
-Check closed_forward_simulation_cc_compcert.
+Check closed_forward_simulation_cc_compcert. *)
 
 Corollary transf_fsim_single : forall p tp,
     transf_clight_program p = OK tp ->

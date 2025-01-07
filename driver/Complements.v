@@ -73,30 +73,31 @@ Proof.
   eapply transf_bsim_single_c; eauto.
 Qed.
 
-(*
+
 (** If we consider the C evaluation strategy implemented by the compiler,
   we get stronger preservation results. *)
 
-Theorem transf_cstrategy_program_preservation:
+(* Theorem transf_cstrategy_program_preservation:
   forall p tp,
   transf_c_program p = OK tp ->
-  (forall beh, program_behaves (Cstrategy.semantics p) beh ->
-     exists beh', program_behaves (Asm.semantics tp) beh' /\ behavior_improves beh beh')
-/\(forall beh, program_behaves (Asm.semantics tp) beh ->
-     exists beh', program_behaves (Cstrategy.semantics p) beh' /\ behavior_improves beh' beh)
+  (forall beh, program_behaves (close_c (Cstrategy.semantics p)) beh ->
+     exists beh', program_behaves (close_asm (Asm.semantics tp)) beh' /\ behavior_improves beh beh')
+/\(forall beh, program_behaves (close_asm (Asm.semantics tp)) beh ->
+     exists beh', program_behaves (close_c (Cstrategy.semantics p)) beh' /\ behavior_improves beh' beh)
 /\(forall beh, not_wrong beh ->
-     program_behaves (Cstrategy.semantics p) beh -> program_behaves (Asm.semantics tp) beh)
+     program_behaves (close_c (Cstrategy.semantics p)) beh -> program_behaves (close_asm (Asm.semantics tp)) beh)
 /\(forall beh,
-     (forall beh', program_behaves (Cstrategy.semantics p) beh' -> not_wrong beh') ->
-     program_behaves (Asm.semantics tp) beh ->
-     program_behaves (Cstrategy.semantics p) beh).
+     (forall beh', program_behaves (close_c (Cstrategy.semantics p)) beh' -> not_wrong beh') ->
+     program_behaves (close_asm (Asm.semantics tp)) beh ->
+     program_behaves (close_c (Cstrategy.semantics p)) beh).
 Proof.
   assert (WBT: forall p, well_behaved_traces (Cstrategy.semantics p)).
     intros. eapply ssr_well_behaved. apply Cstrategy.semantics_strongly_receptive.
   intros.
-  assert (MATCH: match_prog p tp) by (apply transf_c_program_match; auto).
+  assert (MATCH: match_c_prog p tp) by (apply transf_c_program_match; auto).
   intuition auto.
   eapply forward_simulation_behavior_improves; eauto.
+  Search Cstrategy.semantics.
     apply (proj1 (cstrategy_semantic_preservation _ _ MATCH)).
   exploit backward_simulation_behavior_improves.
     apply (proj2 (cstrategy_semantic_preservation _ _ MATCH)).
@@ -226,16 +227,12 @@ Proof.
   exists (behavior_app t0 beh1). apply behavior_app_assoc.
 Qed.
 
-(** The separate compilation from C to Asm is unsupported because of the Hcomp issue
-    of open backward simulation *)
-
-
+(*
 (** * Extension to separate compilation *)
 
 (** The results above were given in terms of whole-program compilation.
     They also extend to separate compilation followed by linking. *)
 
-(*
 Section SEPARATE_COMPILATION.
 
 (** The source: a list of C compilation units *)

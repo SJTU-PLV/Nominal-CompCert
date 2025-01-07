@@ -411,3 +411,21 @@ Proof.
   2: { eapply closed_program_asm_LTS; eauto. }
   eapply compose_transf_c_program_correct; eauto.
 Qed.
+
+Require Import Behaviors.
+
+Theorem separate_transf_c_program_preservation:
+    forall p1 p2 spec tp1 tp2 tp,
+    compose (Csem.semantics p1) (Csem.semantics p2) = Some spec ->
+    transf_c_program p1 = OK tp1 ->
+    transf_c_program p2 = OK tp2 ->
+    link tp1 tp2 = Some tp ->
+    closed_program_asm tp ->
+    forall beh,
+      program_behaves (close_asm (Asm.semantics tp)) beh ->
+      exists beh', program_behaves (close_c spec) beh' /\ behavior_improves beh' beh.
+Proof.
+  intros.
+  eapply backward_simulation_behavior_improves; eauto.
+  eapply transf_bsim_link_c; eauto.
+Qed.
