@@ -44,80 +44,39 @@ Definition type_unop (op: unary_operation) (ty: Rusttypes.type) : res type :=
   end.
 
 
-Definition numeric_type (ty: type) :=
-  match ty with
-  (** NB : We do not support i/u8 i/u16 in binary operation otherwise
-  we need to consider the signed/zero extension of the result, which
-  is conflict with the val_casted properties. A solution is to change
-  the definition of sem_add... to consider signed extension after add
-  operation. But it is complicated. *)
-  | Tint I32 _
-  | Tlong _ 
-  | Tfloat _ => true
-  | _ => false
-  end.
-
-Definition numeric_ctype (ty: Ctypes.type) :=
-  match ty with
-  | Ctypes.Tint I32 _ _
-  | Ctypes.Tlong _  _
-  | Ctypes.Tfloat _ _ => true
-  | _ => false
-  end.
 
 Definition binarith_type (ty1 ty2: type) (m: string): res type :=
-  (* To avoid complicated type cast, we restrict that ty1 must be
-  equal to ty2 in binary operation and both of them are numeric
-  type *)
-  if type_eq ty1 ty2 then
-    if numeric_type ty1 then
-      OK ty1
-    else Error (msg m)
-  else Error (msg m).
-  (* match classify_binarith ty1 ty2 with *)
-  (* | bin_case_i sg => OK (Tint I32 sg noattr) *)
-  (* | bin_case_l sg => OK (Tlong sg noattr) *)
-  (* | bin_case_f => OK (Tfloat F64 noattr) *)
-  (* | bin_case_s => OK (Tfloat F32 noattr) *)
-  (* | bin_default   => Error (msg m) *)
-  (* end. *)
+  match classify_binarith ty1 ty2 with
+  | bin_case_i sg => OK (Tint I32 sg)
+  | bin_case_l sg => OK (Tlong sg)
+  | bin_case_f => OK (Tfloat F64 )
+  | bin_case_s => OK (Tfloat F32 )
+  | bin_default   => Error (msg m)
+  end.
 
 Definition binarith_int_type (ty1 ty2: type) (m: string): res type :=
-  if type_eq_except_origins ty1 ty2 then
-    match ty1 with
-    | Tint _ _
-    | Tlong _ => OK ty1
-    | _ =>  Error (msg m)
-    end
-  else  Error (msg m).
-  (* match classify_binarith ty1 ty2 with *)
-  (* | bin_case_i sg => OK (Tint I32 sg noattr) *)
-  (* | bin_case_l sg => OK (Tlong sg noattr) *)
-  (* | _ => Error (msg m) *)
-  (* end. *)
+  match classify_binarith ty1 ty2 with
+  | bin_case_i sg => OK (Tint I32 sg)
+  | bin_case_l sg => OK (Tlong sg)
+  | _ => Error (msg m)
+  end.
 
 Definition shift_op_type (ty1 ty2: type) (m: string): res type :=
   match classify_shift ty1 ty2 with
-  | shift_case_ii sg | shift_case_il sg => OK (Tint I32 sg )
-  | shift_case_li sg | shift_case_ll sg => OK (Tlong sg )
+  | shift_case_ii sg | shift_case_il sg => OK (Tint I32 sg)
+  | shift_case_li sg | shift_case_ll sg => OK (Tlong sg)
   | shift_default => Error (msg m)
   end.
 
 Definition comparison_type (ty1 ty2: type) (m: string): res type :=
-  if type_eq ty1 ty2 then
-    if numeric_type ty1 then
-      OK type_bool
-    else Error (msg m)
-  else Error (msg m).
-
-  (* match classify_binarith ty1 ty2 with *)
-  (* | bin_default => Error (msg m) *)
-  (* | _ => OK (Tint I32 Signed noattr) *)
-  (* end. *)
+  match classify_binarith ty1 ty2 with
+  | bin_default => Error (msg m)
+  | _ => OK (Tint I32 Signed)
+  end.
 
 Definition type_binop (op: binary_operation) (ty1 ty2: type) : res type :=
   match op with
-  | Oadd => binarith_type ty1 ty2 "operator infix +"
+  | Oadd => binarith_type ty1 ty2 "operator +"
   | Osub => binarith_type ty1 ty2 "operator infix -"
   | Omul => binarith_type ty1 ty2 "operator infix *"
   | Odiv => binarith_type ty1 ty2 "operator /"
@@ -135,6 +94,64 @@ Definition type_binop (op: binary_operation) (ty1 ty2: type) : res type :=
   | Oge => comparison_type ty1 ty2 "operator >="
   end.
 
+Ltac DestructCasesOK :=
+  match goal with
+  | [H: match match ?x with _ => _ end with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCasesOK
+  | [H: match match ?x with _ => _ end with _ => _ end = OK _ |- _ ] => destruct x eqn:?; DestructCasesOK
+  | [H: match ?x with _ => _ end = OK _ |- _ ] => destruct x eqn:?; DestructCasesOK
+  | [H: match ?x with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCasesOK
+  | [H: Some _ = Some _ |- _ ] => inv H; DestructCasesOK
+  | [H: None = Some _ |- _ ] => discriminate
+  | [H: OK _ = OK _ |- _ ] => inv H; DestructCasesOK
+  | [H: Error _ = OK _ |- _ ] => discriminate
+  | _ => idtac
+  end.
+
+Lemma classify_binarith_to_ctype: forall ty1 ty2 bc,
+    classify_binarith ty1 ty2 = bc ->
+    bc <> bin_default ->
+    Cop.classify_binarith (to_ctype ty1) (to_ctype ty2) = bc.
+Proof.
+  intros. unfold classify_binarith in H.
+  unfold Cop.classify_binarith.
+  destruct ty1; destruct ty2; simpl in *; DestructCases; try congruence; auto.
+Qed.
+
+  
+Lemma binarith_type_to_ctype: forall ty1 ty2 ty msg,
+    binarith_type ty1 ty2 msg = OK ty ->
+    Ctyping.binarith_type (to_ctype ty1) (to_ctype ty2) msg = OK (to_ctype ty).
+Proof.
+  intros. unfold binarith_type, classify_binarith in H.
+  unfold Ctyping.binarith_type, Cop.classify_binarith.  
+  destruct ty1; destruct ty2; simpl in *; DestructCasesOK; try congruence; auto.
+Qed.
+
+Lemma classify_shift_to_ctype: forall ty1 ty2 bc,
+    classify_shift ty1 ty2 = bc ->
+    bc <> shift_default ->
+    Cop.classify_shift (to_ctype ty1) (to_ctype ty2) = bc.
+Proof.
+  intros. unfold classify_shift in H.
+  unfold Cop.classify_shift.
+  destruct ty1; destruct ty2; simpl in *; DestructCases; try congruence; auto.
+  all: try destruct i0; auto.
+  subst. destruct i; auto.
+Qed.
+
+Lemma classify_cmp_to_ctype: forall ty1 ty2 bc,
+    classify_binarith ty1 ty2 = bc ->
+    bc <> bin_default ->
+    Cop.classify_cmp (to_ctype ty1) (to_ctype ty2) = cmp_default.
+Proof.
+  intros. unfold classify_binarith in H.
+  unfold classify_cmp.
+  destruct ty1; destruct ty2; simpl in *; DestructCases; try congruence; auto.
+  destruct i0; auto.
+  destruct i; auto. destruct i; auto.
+Qed.
+
+  
 (** * Syntactic type checking  *)
 
 Definition type_deref (ty: type) : res type :=
@@ -250,6 +267,7 @@ Definition wt_exprlist al : Prop :=
   Forall wt_expr al.
 
 Inductive wt_stmt: statement -> Prop :=
+| wt_Sskip: wt_stmt Sskip
 | wt_Sassign: forall p e
     (WT1: wt_place p)
     (WT2: wt_expr e),
@@ -270,6 +288,13 @@ Inductive wt_stmt: statement -> Prop :=
     (SZEQ: sizeof ce ty = sizeof ce (typeof e))
     (SZCK: 0 < sizeof ce (typeof e) <= Ptrofs.max_unsigned),
     wt_stmt (Sbox p e)
+| wt_Sstoragelive: forall id,
+    wt_stmt (Sstoragelive id)
+| wt_Sstoragedead: forall id,
+    wt_stmt (Sstoragedead id)
+| wt_Sdrop: forall p
+    (WT1: wt_place p),
+    wt_stmt (Sdrop p)
 | wt_Scall: forall p al id ty orgs rels tyl rty cc
     (WT1: wt_place p)
     (WT2: wt_exprlist al)
@@ -285,6 +310,17 @@ Inductive wt_stmt: statement -> Prop :=
     (WT1: wt_place p)
     (WT2: not_composite (typeof_place p) = true),
     wt_stmt (Sreturn p)
+| wt_Ssequence: forall s1 s2
+    (WT1: wt_stmt s1)
+    (WT2: wt_stmt s2),
+    wt_stmt (Ssequence s1 s2)
+| wt_Sloop: forall s
+    (WT1: wt_stmt s),
+    wt_stmt (Sloop s)
+| wt_Sbreak:
+  wt_stmt Sbreak
+| wt_Scontinue:
+  wt_stmt Scontinue        
 .
 
 End TYPING.
@@ -475,8 +511,10 @@ End PRESERVATION.
 
 Section COMP_ENV.
 
-  Variable ce: composite_env.
-  Variable te: typenv.
+Variable ce: composite_env.
+
+Section TENV.
+Variable te: typenv.
   
   Fixpoint type_check_place (p: place) : res unit :=
     match p with
@@ -536,7 +574,155 @@ Section COMP_ENV.
         | _ =>  Error (msg "wrong enum type")
         end
     end.
+
+Fixpoint type_check_pexpr (pe: pexpr) : res unit :=
+  match pe with
+  | Eunit => OK tt
+  | Econst_int _ ty =>
+      match ty with
+      | Tint sz si => OK tt
+      | _ => Error (msg "Econst_int type error")
+      end
+  | Econst_float _ ty =>
+      match ty with
+      | Tfloat sz => OK tt
+      | _ => Error (msg "Econst_float type error")
+      end
+  | Econst_single _ ty =>
+      match ty with
+      | Tfloat sz => OK tt
+      | _ => Error (msg "Econst_single type error")
+      end
+  | Econst_long _ ty =>
+      match ty with
+      | Tlong _ => OK tt
+      | _ => Error (msg "Econst_long type error")
+      end
+  | Eplace p ty =>
+      do _ <- type_check_place p;
+      if type_eq ty (typeof_place p) then
+        OK tt
+      else
+        Error (msg "Eplace type error")
+  | Ecktag p fid =>
+      match typeof_place p with
+      | Tvariant _ _ =>
+          type_check_place p
+      | _ =>
+          Error (msg "Ecktag type error")
+      end
+  | Eref org1 mut1 p ty =>
+      Error (msg "Reference is unsuppored")
+  | Eunop uop pe ty =>
+      do _ <- type_check_pexpr pe;
+      do ty1 <- type_unop uop (typeof_pexpr pe);
+      if type_eq ty ty1 then
+        OK tt
+      else
+        Error (msg "Eunop type error")
+  | Ebinop bop pe1 pe2 ty =>
+      do _ <- type_check_pexpr pe1;
+      do _ <- type_check_pexpr pe2;
+      do ty1 <- type_binop bop (typeof_pexpr pe1) (typeof_pexpr pe2);
+      if type_eq ty ty1 then
+        OK tt
+      else
+        Error (msg "Ebinop type error")
+  | Eglobal _ _ =>
+      Error (msg "Global variables are restricted to be used")
+  end.
+
+Definition type_check_expr (e: expr) : res unit :=
+  match e with
+  | Emoveplace p ty =>
+      do _ <- type_check_place p;
+      if scalar_type (typeof_place p) then
+        Error (msg "Cannot move scalar type")
+      else
+        if type_eq ty (typeof_place p) then
+          OK tt
+        else 
+          Error (msg "Emoveplace type error")
+  | Epure pe =>
+      if scalar_type (typeof_pexpr pe) then
+        type_check_pexpr pe
+      else
+        Error (msg "Not scalar type in pure expression")
+  end.
+
+Fixpoint type_check_exprlist (l: list expr) : res unit :=
+  match l with
+  | nil => OK tt
+  | e :: l' =>
+      do _ <- type_check_expr e;
+      type_check_exprlist l'
+  end.
+
+Fixpoint type_check_stmt (stmt: statement) : res unit :=
+  match stmt with
+  | Sskip => OK tt
+  | Sassign p e =>
+      do _ <- type_check_expr e;
+      do _ <- type_check_place p;
+      OK tt
+  | Sassign_variant p id fid e =>
+      do _ <- type_check_expr e;
+      do _ <- type_check_place p;
+      match ce!id with
+      | Some co =>
+          match co_sv co with
+          | TaggedUnion => OK tt
+          | _ => Error (msg "assign_variant type error")
+          end
+      | _ => Error (msg "assign_variant type error")
+      end
+  | Sbox p e =>
+      do _ <- type_check_expr e;
+      do _ <- type_check_place p;
+      match typeof_place p with
+      | Tbox ty =>
+          if Z.eqb (sizeof ce ty) (sizeof ce (typeof e))
+             && Z.ltb 0 (sizeof ce (typeof e))
+             && Z.leb (sizeof ce (typeof e)) Ptrofs.max_unsigned then
+            OK tt
+          else
+            Error (msg "size error in Sbox")
+      | _ =>
+          Error (msg "type error in Sbox")
+      end
+  | Sstoragelive _ | Sstoragedead _ => OK tt
+  | Sdrop p =>
+      do _ <- type_check_place p;
+      OK tt
+  | Scall p a al =>
+      do _ <- type_check_place p;
+      do _ <- type_check_exprlist al;
+      match a with
+      | Epure (Eglobal id (Tfunction _ _ _ _ _)) =>
+          OK tt
+      | _ =>
+          Error (msg "callee is not a global variable")
+      end
+  | Sifthenelse e s1 s2 =>
+      do _ <- type_check_expr e;
+      do _ <- type_check_stmt s1;
+      type_check_stmt s2
+  | Sreturn p =>
+      do _ <- type_check_place p;
+      if not_composite (typeof_place p) then
+        OK tt
+      else
+        Error (msg "return composites is not supported")
+  | Ssequence s1 s2 =>
+      do _ <- type_check_stmt s1;
+      type_check_stmt s2
+  | Sloop s =>
+      type_check_stmt s
+  | Sbreak | Scontinue => OK tt
+  end.
     
+End TENV.
+  
 End COMP_ENV.
 
 (** Soundness of type checking  *)
@@ -573,6 +759,108 @@ Proof.
     econstructor; eauto.
 Qed.
 
+Lemma type_check_pexpr_sound: forall ce te pe,
+    type_check_pexpr ce te pe = OK tt ->
+    wt_pexpr te ce pe.
+Proof.
+  induction pe; intros; simpl in *; try (econstructor; eauto; fail); try (destruct t; try congruence; econstructor; fail).
+  - monadInv H.
+    destruct type_eq in EQ0; try congruence. subst.
+    econstructor.
+    destruct x.
+    eapply type_check_place_sound; eauto.
+  - destruct (typeof_place p) eqn: TYP; try congruence.
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+  - monadInv H.
+    destruct type_eq in EQ2; try congruence. subst.
+    destruct x.
+    econstructor; eauto.
+  - monadInv H.    
+    destruct type_eq in EQ3; try congruence. subst.
+    destruct x. destruct x0.
+    econstructor; eauto.
+Qed.
+
+Lemma type_check_expr_sound: forall ce te e,
+    type_check_expr ce te e = OK tt ->
+    wt_expr te ce e.
+Proof.
+  destruct e; intros.
+  - inv H. monadInv H1.
+    destruct scalar_type eqn: TYP in EQ0; try congruence.
+    destruct type_eq in EQ0; try congruence. subst.
+    destruct x.
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+  - inv H.
+    destruct scalar_type eqn: TYP in H1; try congruence.
+    econstructor; auto.
+    eapply type_check_pexpr_sound; eauto.
+Qed.
+
+Lemma type_check_exprlist_sound: forall ce te l,
+    type_check_exprlist ce te l = OK tt ->
+    wt_exprlist te ce l.
+Proof.
+  induction l; simpl; intros.
+  econstructor.
+  monadInv H. destruct x.
+  econstructor; eauto.
+  eapply type_check_expr_sound; eauto.
+  eapply IHl; eauto.
+Qed.
+
+Lemma type_check_stmt_sound: forall ce te s,
+    type_check_stmt ce te s = OK tt ->
+    wt_stmt te ce s.
+Proof.
+  induction s; simpl in *; intros CK; try (econstructor; eauto; fail).
+  - monadInv CK. destruct x. destruct x0.
+    econstructor.
+    eapply type_check_place_sound; eauto.
+    eapply type_check_expr_sound; eauto.
+  - monadInv CK. destruct x. destruct x0.
+    destruct (ce!i) eqn: CO; try congruence.
+    destruct (co_sv c) eqn: SV; try congruence.
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+    eapply type_check_expr_sound; eauto.
+  - monadInv CK. destruct x. destruct x0.
+    destruct (typeof_place p) eqn: PTY; try congruence.
+    destruct andb eqn: CK in EQ2; try congruence.
+    rewrite !andb_true_iff in CK.
+    rewrite Z.ltb_lt in CK.
+    rewrite Z.leb_le in CK.
+    rewrite Z.eqb_eq in CK.
+    destruct CK as ((A1 & A2) & A3).
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+    eapply type_check_expr_sound; eauto.
+  - monadInv CK. destruct x.
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+  - destruct (type_check_place ce te p) eqn: A1; simpl in CK; try congruence.
+    destruct (type_check_exprlist ce te l) eqn: A2; simpl in CK; try congruence.
+    destruct e; try congruence.
+    destruct p0; try congruence.
+    destruct t; try congruence.
+    destruct u. destruct u0.
+    econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+    eapply type_check_exprlist_sound; eauto.
+  - monadInv CK. destruct x.
+    econstructor; eauto.
+  - monadInv CK. destruct x. destruct x0.
+    econstructor; eauto.
+    eapply type_check_expr_sound; eauto.
+  - monadInv CK.
+    destruct not_composite eqn: COM in EQ0; try congruence.
+    destruct x. econstructor; eauto.
+    eapply type_check_place_sound; eauto.
+Qed.
+
+    
 (** End of syntactic type checking  *)
 
 (** Some properties of is_prefix of well-typed places *)

@@ -984,18 +984,130 @@ Proof.
     inv WT1. simpl in *. try congruence.
     simpl in *. try congruence.
   (* neg *)
-  - unfold Cop.sem_neg in SEM; DestructCases; eauto with sem_ty.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    destruct si; inv H0; try constructor.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    inv WT1; simpl in *; try congruence. inv TY. econstructor.
-  - unfold Cop.sem_absfloat in SEM; DestructCases; eauto with sem_ty.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    destruct si; inv H0; try constructor.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    inv WT1; simpl in *; try congruence. destruct sz; try congruence; inv TY; try econstructor.
-    inv WT1; simpl in *; try congruence. inv TY. econstructor.
+  - unfold Cop.sem_neg in SEM; DestructCases; eauto with sem_ty; try (inv WT1; simpl in *; try congruence; inv TY; econstructor).
+  - unfold Cop.sem_absfloat in SEM; DestructCases; eauto with sem_ty; try (inv WT1; simpl in *; try congruence; inv TY; econstructor).
+Qed.
+
+(** Semantics well typedness preservation under binary operation
+(which is mostly copied from Ctyping.v *)
+
+Lemma sem_wt_val_sem_binarith: forall
+  (sem_int: Ctypes.signedness -> int -> int -> option val)
+  (sem_long: Ctypes.signedness -> int64 -> int64 -> option val)
+  (sem_float: Floats.float -> Floats.float -> option val)
+  (sem_single: Floats.float32 -> Floats.float32 -> option val)
+  v1 ty1 v2 ty2 m v ty msg,
+  (forall sg n1 n2,
+   match sem_int sg n1 n2 with None | Some (Vint _)  => True | _ => False end) ->
+  (forall sg n1 n2,
+   match sem_long sg n1 n2 with None | Some (Vlong _)  => True | _ => False end) ->
+  (forall n1 n2,
+   match sem_float n1 n2 with None | Some (Vfloat _) => True | _ => False end) ->
+  (forall n1 n2,
+   match sem_single n1 n2 with None | Some (Vsingle _) => True | _ => False end) ->
+  Cop.sem_binarith sem_int sem_long sem_float sem_single v1 (to_ctype ty1) v2 (to_ctype ty2) m = Some v ->
+  binarith_type ty1 ty2 msg = OK ty ->
+  sem_wt_val ce m (fp_scalar ty1) v1 ->
+  sem_wt_val ce m (fp_scalar ty2) v2 ->
+  sem_wt_val ce m (fp_scalar ty) v.
+Proof with (try discriminate).
+  intros. unfold Cop.sem_binarith in *.
+  exploit binarith_type_to_ctype. eauto. intros BTY.
+  unfold binarith_type in *.
+  set (ty' := Cop.binarith_type (Cop.classify_binarith (to_ctype ty1) (to_ctype ty2))) in *.
+  destruct (Cop.sem_cast v1 (to_ctype ty1) ty' m) as [v1'|] eqn:CAST1...
+  destruct (Cop.sem_cast v2 (to_ctype ty2) ty' m) as [v2'|] eqn:CAST2...
+  destruct (classify_binarith ty1 ty2) eqn: CLA; try congruence;
+  erewrite classify_binarith_to_ctype in *; eauto; try congruence;
+  simpl in *; inv H4;
+  DestructCases.
+  - specialize (H s i i0). rewrite H3 in H.
+    destruct v; try contradiction. econstructor.
+  - specialize (H0 s i i0). rewrite H3 in H0.
+    destruct v; try contradiction. econstructor.
+  - specialize (H1 f f0). rewrite H3 in H1.
+    destruct v; try contradiction. econstructor.     
+  - specialize (H2 f f0). rewrite H3 in H2.
+    destruct v; try contradiction. econstructor.    
+Qed.
+
+Lemma sem_wt_val_sem_binarith_int: forall
+  (sem_int: Ctypes.signedness -> int -> int -> option val)
+  (sem_long: Ctypes.signedness -> int64 -> int64 -> option val)
+  v1 ty1 v2 ty2 m v ty msg,
+  (forall sg n1 n2,
+   match sem_int sg n1 n2 with None | Some (Vint _)  => True | _ => False end) ->
+  (forall sg n1 n2,
+   match sem_long sg n1 n2 with None | Some (Vlong _)  => True | _ => False end) ->
+  Cop.sem_binarith sem_int sem_long (fun n1 n2 => None) (fun n1 n2 => None) v1 (to_ctype ty1) v2 (to_ctype ty2) m = Some v ->
+  binarith_int_type ty1 ty2 msg = OK ty ->
+  sem_wt_val ce m (fp_scalar ty1) v1 ->
+  sem_wt_val ce m (fp_scalar ty2) v2 ->
+  sem_wt_val ce m (fp_scalar ty) v.
+Proof.
+  intros. eapply sem_wt_val_sem_binarith with (msg := msg); eauto.
+  simpl; auto. simpl; auto.
+  unfold binarith_int_type, binarith_type in *.
+  destruct (classify_binarith ty1 ty2); congruence.
+Qed.  
+
+Lemma sem_wt_val_sem_shift:
+  forall sem_int sem_long ty1 ty2 msg ty v1 v2 v m,
+  shift_op_type ty1 ty2 msg = OK ty ->
+  Cop.sem_shift sem_int sem_long v1 (to_ctype ty1) v2 (to_ctype ty2) = Some v ->
+  sem_wt_val ce m (fp_scalar ty1) v1 ->
+  sem_wt_val ce m (fp_scalar ty2) v2 ->
+  sem_wt_val ce m (fp_scalar ty) v.
+Proof.
+  intros. unfold shift_op_type, Cop.sem_shift in *.
+  destruct (classify_shift ty1 ty2) eqn: CLA; try congruence;
+  erewrite classify_shift_to_ctype in *; eauto; try congruence;
+  simpl in *; inv H0; inv H; DestructCases; econstructor.
+Qed.
+
+Lemma sem_wt_val_sem_cmp:
+  forall ty1 ty2 msg ty c v1 v2 m v,
+  comparison_type ty1 ty2 msg = OK ty ->
+  Cop.sem_cmp c v1 (to_ctype ty1) v2 (to_ctype ty2) m = Some v ->
+  sem_wt_val ce m (fp_scalar ty1) v1 ->
+  sem_wt_val ce m (fp_scalar ty2) v2 ->
+  sem_wt_val ce m (fp_scalar ty) v.
+Proof with (try discriminate).
+  unfold comparison_type, Cop.sem_cmp; intros.
+  assert (X: forall b, sem_wt_val ce m (fp_scalar (Tint Ctypes.I32 Ctypes.Signed)) (Val.of_bool b)).
+  {
+    intros b; destruct b; constructor; exact I.
+  }
+  destruct (classify_binarith ty1 ty2) eqn: CLA; try congruence;
+    erewrite classify_cmp_to_ctype in H0; eauto; try congruence; simpl in *.
+  - unfold Cop.sem_binarith in H0.
+    set (ty' := Cop.binarith_type (Cop.classify_binarith (to_ctype ty1) (to_ctype ty2))) in *.
+    destruct (Cop.sem_cast v1 (to_ctype ty1) ty') as [v1'|]...
+    destruct (Cop.sem_cast v2 (to_ctype ty2) ty') as [v2'|]...
+    erewrite !classify_binarith_to_ctype in H0; eauto; try congruence; simpl in H0.
+    inv H.
+    DestructCases; auto.
+  - unfold Cop.sem_binarith in H0.
+    set (ty' := Cop.binarith_type (Cop.classify_binarith (to_ctype ty1) (to_ctype ty2))) in *.
+    destruct (Cop.sem_cast v1 (to_ctype ty1) ty') as [v1'|]...
+    destruct (Cop.sem_cast v2 (to_ctype ty2) ty') as [v2'|]...
+    erewrite !classify_binarith_to_ctype in H0; eauto; try congruence; simpl in H0.
+    inv H.
+    DestructCases; auto. 
+  - unfold Cop.sem_binarith in H0.
+    set (ty' := Cop.binarith_type (Cop.classify_binarith (to_ctype ty1) (to_ctype ty2))) in *.
+    destruct (Cop.sem_cast v1 (to_ctype ty1) ty') as [v1'|]...
+    destruct (Cop.sem_cast v2 (to_ctype ty2) ty') as [v2'|]...
+    erewrite !classify_binarith_to_ctype in H0; eauto; try congruence; simpl in H0.
+    inv H.
+    DestructCases; auto.
+  - unfold Cop.sem_binarith in H0.
+    set (ty' := Cop.binarith_type (Cop.classify_binarith (to_ctype ty1) (to_ctype ty2))) in *.
+    destruct (Cop.sem_cast v1 (to_ctype ty1) ty') as [v1'|]...
+    destruct (Cop.sem_cast v2 (to_ctype ty2) ty') as [v2'|]...
+    erewrite !classify_binarith_to_ctype in H0; eauto; try congruence; simpl in H0.
+    inv H.
+    DestructCases; auto.
 Qed.
 
 (* tedious *)
@@ -1005,8 +1117,44 @@ Lemma sem_wt_val_type_binop: forall bop ty1 ty2 ty v1 v2 v m,
     sem_wt_val ce m (fp_scalar ty1) v1 ->
     sem_wt_val ce m (fp_scalar ty2) v2 ->
     sem_wt_val ce m (fp_scalar ty) v.
-Admitted.
-  
+Proof.
+  intros until m. intros TY SEM WT1 WT2.
+  destruct bop; simpl in *.
+  - unfold Cop.sem_add_rust in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith; eauto; intros; exact I.
+  - unfold Cop.sem_sub_rust in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith; eauto; intros; exact I.
+  - unfold Cop.sem_mul in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith; eauto; intros; exact I.    
+  - unfold Cop.sem_div in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith; eauto; intros.
+    simpl; Ctyping.DestructMatch; auto.
+    simpl; Ctyping.DestructMatch; auto.
+    simpl; Ctyping.DestructMatch; auto.
+    simpl; Ctyping.DestructMatch; auto.
+  - unfold Cop.sem_mod in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith_int; eauto; intros.
+    simpl; Ctyping.DestructMatch; auto.
+    simpl; Ctyping.DestructMatch; auto.
+  - unfold Cop.sem_and in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith_int; eauto; intros; exact I.
+  - unfold Cop.sem_or in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith_int; eauto; intros; exact I.
+  - unfold Cop.sem_xor in SEM; DestructCases.
+    eapply sem_wt_val_sem_binarith_int; eauto; intros; exact I.
+  - unfold Cop.sem_shl in SEM; DestructCases.
+    eapply sem_wt_val_sem_shift; eauto.
+  - unfold Cop.sem_shr in SEM; DestructCases.
+    eapply sem_wt_val_sem_shift; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+  - eapply sem_wt_val_sem_cmp; eauto.
+Qed.
+
+    
 (* The result of eval_expr is semantically well typed *)
 
 (* The footprint must be fp_emp in pexpr *)
@@ -6086,17 +6234,6 @@ Proof.
   eapply A2. eauto. auto.
 Qed.
 
-(* frame rule of rsw_acc *)
-(* Lemma rsw_acc_frame: forall m1 m2 fp1 fp1' fp2 fp2' fp1'' fp2'' sg, *)
-(*     rsw_acc (rsw sg fp1 m1) (rsw sg fp2 m2) -> *)
-(*     (* separation conjunction *) *)
-(*     list_disjoint fp1 fp1' -> *)
-(*     list_disjoint fp2 fp2' -> *)
-(*     (* fp1 * fp1' = fp1'' *) *)
-(*     list_equiv (fp1 ++ fp1') fp1'' -> *)
-(*     list_equiv (fp1 ++ fp1') fp2'' -> *)
-(*     rsw_acc (rsw sg fp1'' m1) (rsw sg fp2'' m2). *)
-(* Admitted. *)
 
 (* Some frame update of rsw_acc *)
 Lemma rsw_acc_app: forall l l1 l2 m1 m2 sg Hm1 Hm2 Hm1',

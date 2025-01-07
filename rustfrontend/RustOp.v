@@ -43,23 +43,24 @@ Definition classify_neg (ty: type) : classify_neg_cases :=
   end.
 
 
-(* Definition classify_binarith (ty1: type) (ty2: type) : binarith_cases := *)
-(*   match ty1, ty2 with *)
-(*   | Tint I32 Unsigned _, Tint _ _ _ => bin_case_i Unsigned *)
-(*   | Tint _ _ _, Tint I32 Unsigned _ => bin_case_i Unsigned *)
-(*   | Tint _ _ _, Tint _ _ _ => bin_case_i Signed *)
-(*   | Tlong Signed _, Tlong Signed _ => bin_case_l Signed *)
-(*   | Tlong _ _, Tlong _ _ => bin_case_l Unsigned *)
-(*   | Tlong sg _, Tint _ _ _ => bin_case_l sg *)
-(*   | Tint _ _ _, Tlong sg _ => bin_case_l sg *)
-(*   | Tfloat F32 _, Tfloat F32 _ => bin_case_s *)
-(*   | Tfloat _ _, Tfloat _ _ => bin_case_f *)
-(*   | Tfloat F64 _, (Tint _ _ _ | Tlong _ _) => bin_case_f *)
-(*   | (Tint _ _ _ | Tlong _ _), Tfloat F64 _ => bin_case_f *)
-(*   | Tfloat F32 _, (Tint _ _ _ | Tlong _ _) => bin_case_s *)
-(*   | (Tint _ _ _ | Tlong _ _), Tfloat F32 _ => bin_case_s *)
-(*   | _, _ => bin_default *)
-(*   end. *)
+Definition classify_binarith (ty1: type) (ty2: type) : binarith_cases :=
+  match ty1, ty2 with
+  | Tint I32 Unsigned , Tint _ _ => bin_case_i Unsigned
+  | Tint _ _, Tint I32 Unsigned => bin_case_i Unsigned
+  | Tint _ _ , Tint _ _ => bin_case_i Signed
+  | Tlong Signed , Tlong Signed  => bin_case_l Signed
+  | Tlong _ , Tlong _ => bin_case_l Unsigned
+  | Tlong sg , Tint _ _ => bin_case_l sg
+  | Tint _ _, Tlong sg => bin_case_l sg
+  | Tfloat F32, Tfloat F32 => bin_case_s
+  | Tfloat _, Tfloat _ => bin_case_f
+  | Tfloat F64, (Tint _ _ | Tlong _) => bin_case_f
+  | (Tint _ _ | Tlong _), Tfloat F64 => bin_case_f
+  | Tfloat F32, (Tint _ _ | Tlong _) => bin_case_s
+  | (Tint _ _ | Tlong _), Tfloat F32 => bin_case_s
+  | _, _ => bin_default
+  end.
+
 
 Definition classify_shift (ty1: type) (ty2: type) :=
   match ty1, ty2 with
@@ -336,6 +337,7 @@ Ltac DestructCases :=
   match goal with
   | [H: match match ?x with _ => _ end with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCases
   | [H: match ?x with _ => _ end = Some _ |- _ ] => destruct x eqn:?; DestructCases
+  | [H: match ?x with _ => _ end = _ |- _ ] => destruct x eqn:?; DestructCases
   | [H: Some _ = Some _ |- _ ] => inv H; DestructCases
   | [H: None = Some _ |- _ ] => discriminate H
   | [H: @eq intsize _ _ |- _ ] => discriminate H || (clear H; DestructCases)
