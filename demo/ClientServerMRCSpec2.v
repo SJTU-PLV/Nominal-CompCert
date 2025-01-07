@@ -726,7 +726,7 @@ Proof.
       exists tm', Hm'. eexists.
       split. etransitivity; eauto.
       split. eapply star_step. eapply step_pop. econstructor.
-      econstructor. eapply star_step. simpl. econstructor.
+      econstructor. congruence. eapply star_step. simpl. econstructor.
       simpl. econstructor. eauto. eapply star_refl. eauto. eauto.
       right. eauto.
     + (*ks <> nil, IH case *)
@@ -788,9 +788,9 @@ Proof.
       (*steps *)
       split. 2: eauto.
       eapply star_step. eapply step_pop. econstructor.
-      econstructor. eapply star_step. simpl. econstructor.
+      econstructor. congruence. eapply star_step. simpl. econstructor.
       econstructor. eauto. eapply star_step. simpl.
-      eapply step_pop. econstructor. econstructor.
+      eapply step_pop. econstructor. econstructor. congruence.
       eapply star_step. simpl. econstructor. econstructor.
       eapply star_step. econstructor. econstructor.
       reflexivity. simpl. replace Archi.ptr64 with true by reflexivity.
@@ -1109,7 +1109,7 @@ Proof.
       simpl. econstructor. eapply find_encrypt_1;eauto.
       instantiate (1:= false). simpl.
       unfold Genv.is_internal. erewrite FINDENC. auto.
-      simpl. econstructor. erewrite FINDENC. auto.
+      simpl. econstructor. erewrite FINDENC. auto. congruence.
       eapply star_refl.
       1-2: eauto.
       eapply star_refl.
@@ -1349,7 +1349,7 @@ Proof.
       simpl. econstructor. eapply find_encrypt_1;eauto.
       instantiate (1:= false). simpl.
       unfold Genv.is_internal. erewrite FINDENC. auto.
-      simpl. econstructor. erewrite FINDENC. auto.
+      simpl. econstructor. erewrite FINDENC. auto. congruence.
       eapply star_refl.
       1-2: eauto.
       eapply star_refl.
@@ -1575,7 +1575,7 @@ Proof.
       simpl. eapply Mem.sup_include_trans. eauto.
       eapply Mem.sup_include_trans. inversion H13. eauto.
       eapply Mem.sup_include_trans. inv INJPACC1. inversion H21. eauto.
-      inv INJPACC2. inversion H21. eauto.
+      inv INJPACC2. inversion H21. eauto. congruence.
       eapply star_refl. eauto.
       eapply star_refl. eauto.
 

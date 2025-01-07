@@ -1046,7 +1046,7 @@ Proof.
       eapply H14 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
       (* final state in client *)
       econstructor. eapply step_pop.
-      econstructor. econstructor.
+      econstructor. econstructor. congruence.
       (* return 1 -> return 2 *)
       eapply star_step. econstructor. simpl. eapply step_asmret. eauto.
       eapply star_refl.
@@ -1128,11 +1128,11 @@ Proof.
       eapply H14 in INJP1. eapply H22 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
       (* final state in client *)
       econstructor. eapply step_pop.
-      econstructor. econstructor.
+      econstructor. econstructor. congruence.
       (* return 1 -> return 2 *)
       eapply star_step. econstructor. simpl. eapply step_asmret. eauto.
       (* final state in server *)
-      eapply star_step. eapply step_pop. simpl.  econstructor. simpl. econstructor.
+      eapply star_step. eapply step_pop. simpl.  econstructor. simpl. econstructor. congruence.
       (* returnstate in client *)
       eapply star_step. econstructor. simpl. econstructor.
       eapply star_step. econstructor. simpl. econstructor.
@@ -1277,7 +1277,7 @@ Proof.
       eapply Mem.sup_include_trans. red. intros.
       eapply Mem.valid_block_alloc; eauto.
       erewrite <- Mem.support_store; eauto.
-      auto.
+      auto. auto.
 
     (* match state *)
       econstructor. eauto. 2: eauto. rewrite INJDIF. eauto.
@@ -1328,7 +1328,7 @@ Proof.
        eapply Mem.sup_include_trans. red. intros.
       eapply Mem.valid_block_alloc; eauto.
       erewrite <- Mem.support_store; eauto.
-      auto.
+      auto. auto.
 
     (* match state *)
       econstructor. eauto. 2: eauto. rewrite INJDIF. eapply H15. eauto.
@@ -1420,7 +1420,7 @@ Proof.
       eapply star_one. eapply step_push; eauto.
       econstructor; eauto. instantiate (1:= false).
       cbn. unfold Genv.is_internal. rewrite FINDE2. reflexivity.
-      constructor; eauto. traceEq.
+      constructor; eauto. congruence. traceEq.
       simpl.
       (*ms*)
       inv INJP. simpl.

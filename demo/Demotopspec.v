@@ -3,7 +3,7 @@ Require Import Clight.
 Require Import InjectFootprint Invariant ValueAnalysis.
 Require Import CA Asm CallConv CKLRAlgebra.
 Require Import Demo Demospec DemoCspec.
-Require Import Smallstep Linking SmallstepLinking.
+Require Import Smallstep Linking SmallstepLinking SmallstepLinkingForward.
 Require Import LanguageInterface Compiler.
 
 (** * C-level composed specification *)
@@ -504,7 +504,7 @@ Proof.
         instantiate (1:= false). simpl.
         unfold Genv.is_internal.
         erewrite find_fung_ing;eauto.
-        econstructor. eapply find_fung_ing;eauto.
+        econstructor. eapply find_fung_ing; eauto. congruence.
         (* use I.H. *)
         rewrite! int_sub_one_sn.
         eapply plus_star.
@@ -513,7 +513,7 @@ Proof.
         intros (P1 & P2). eapply P2. eauto. 
         (* return from L_A *)
         eapply plus_left;eauto. eapply step_pop.
-        simpl. econstructor. simpl. econstructor.
+        simpl. econstructor. simpl. econstructor. congruence.
         (* one step from returnstateg to returnstatef *)
         eapply star_step;eauto. econstructor. econstructor.
         simpl. unfold Genv.symbol_address. rewrite FIND1.
@@ -551,7 +551,7 @@ Proof.
         instantiate (1:= true). simpl.
         unfold Genv.is_internal.
         erewrite find_funf_inf;eauto.
-        econstructor. eapply find_funf_inf;eauto.
+        econstructor. eapply find_funf_inf;eauto. congruence.
         (* use I.H. *)
         rewrite! int_sub_one_sn.
         eapply plus_star.
@@ -560,7 +560,7 @@ Proof.
         intros (P1 & P2). eapply P1. eauto. 
         (* return from L_A *)
         eapply plus_left;eauto. eapply step_pop.
-        simpl. econstructor. simpl. econstructor.
+        simpl. econstructor. simpl. econstructor. congruence.
         (* one step from returnstateg to returnstatef *)
         eapply star_step;eauto. econstructor. econstructor.
         simpl. unfold Genv.symbol_address. rewrite FIND2.

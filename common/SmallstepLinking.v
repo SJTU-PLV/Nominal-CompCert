@@ -177,3 +177,13 @@ Section LINK.
   Qed.
 
 End LINK.
+
+
+(** * Linking operator *)
+
+Local Unset Program Cases.
+
+Definition compose {li} (La Lb: Smallstep.semantics li li) :=
+  let L i := match i with true => La | false => Lb end in
+  option_map (semantics L) (link (skel La) (skel Lb)).
+

@@ -8,7 +8,7 @@ Require Import Invariant ValueAnalysis.
 
 Require Import Client.
 Require Import Server Serverspec Serverproof ClientServerCspec ClientServerCspec2.
-Require Import Linking SmallstepLinking.
+Require Import Linking SmallstepLinking SmallstepLinkingForward.
 
 (** * Top-level Theorems for The Client-Server Examples *)
 

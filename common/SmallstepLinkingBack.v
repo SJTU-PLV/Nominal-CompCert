@@ -338,12 +338,6 @@ End BSIM.
 
 (** * Linking operator *)
 
-Local Unset Program Cases.
-
-Definition compose {li} (La Lb: Smallstep.semantics li li) :=
-  let L i := match i with true => La | false => Lb end in
-  option_map (semantics L) (link (skel La) (skel Lb)).
-      
 Lemma compose_simulation {li1 li2} (cc: callconv li1 li2) L1a L1b L1 L2a L2b L2:
   backward_simulation cc cc L1a L2a ->
   backward_simulation cc cc L1b L2b ->

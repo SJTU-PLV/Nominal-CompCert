@@ -291,10 +291,9 @@ Proof.
   apply transf_clight_program_match; auto.
 Qed.
 
-Require Import Linking SmallstepLinking.
+Require Import Linking SmallstepLinking SmallstepLinkingForward.
 Require Import AsmLinking.
 
-(** Shall we go one more step to the closed [Asm.semantics] for the linked program tp? *)
 Corollary transf_fsim_link :
   forall p1 p2 spec tp1 tp2 tp,
     compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->

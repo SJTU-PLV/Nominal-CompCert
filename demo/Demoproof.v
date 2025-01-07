@@ -1304,7 +1304,7 @@ Qed.
 
 
 (* Final theorem *)
-Require Import Linking Smallstep SmallstepLinking.
+Require Import Linking Smallstep SmallstepLinking SmallstepLinkingForward.
 
 (** [[M_C]] ⊕ L_A ⫹ [[CompCert(M_C) + M_A]] *)
 Lemma compose_transf_Clight_Asm_correct:
