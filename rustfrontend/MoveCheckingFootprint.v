@@ -1678,10 +1678,6 @@ Qed.
 
 (** ** Typing of the footprint: used to make sure the footprint is well-formed *)
 
-
-Definition name_members (membs: members) : list ident :=
-  map name_member membs.
-
 Section COMP_ENV.
 
 Variable ce: composite_env.

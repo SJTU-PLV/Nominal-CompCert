@@ -5,7 +5,7 @@ Require Import Integers.
 Require Import AST.
 Require Import Memory.
 Require Import Events.
-Require Import Globalenvs.
+Require Import Globalenvs Linking.
 Require Import Smallstep SmallstepLinking SmallstepLinkingSafe.
 Require Import LanguageInterface CKLR Invariant.
 Require Import Rusttypes Rustlight Rustlightown.
@@ -49,6 +49,52 @@ Record move_check_program_spec (p: program) :=
       move_check_fundef_spec p.(prog_comp_env) fd;
 
   }.
+
+Lemma move_check_program_meet_spec: forall p tp,
+    move_check_program p = OK tp ->
+    move_check_program_spec p.
+Proof.
+  intros p tp CHECK.
+  unfold move_check_program in CHECK.
+  monadInv CHECK. unfold check_composite_env in EQ.
+  destruct PTree_Properties.for_all eqn: CE in EQ; try congruence.
+  erewrite PTree_Properties.for_all_correct in CE.
+  assert (CE1: forall id co, (prog_comp_env p) ! id = Some co ->
+                        (co_sizeof co <= Ptrofs.max_unsigned
+                        /\ list_length_z (co_members co) <= Int.max_unsigned
+                         /\ list_norepet (name_members (co_members co)))).
+  { intros. exploit CE; eauto.
+    intros CK. unfold check_composite in CK.
+    rewrite !andb_true_iff in CK.
+    rewrite !Z.leb_le in CK.
+    destruct CK as ((A1 & A2) & A3). repeat apply conj; auto.
+    eapply proj_sumbool_true; eauto. }
+  econstructor.
+  - destruct p. simpl.
+    eapply build_composite_env_consistent; eauto.
+  - intros. eapply CE1; eauto.
+  - intros. eapply CE1; eauto.
+  - intros. eapply CE1; eauto.
+  - set (ce := prog_comp_env p) in *.
+    rename x0 into tp.
+    assert (MAT: match_program_gen (fun ctx f tf => move_check_fundef_spec ce f) eq p p tp).
+    { eapply match_transform_partial_program2; eauto.
+      - intros id f tf CK. unfold move_check_fundef in CK.
+        destruct f.
+        + destruct (move_check_function ce f) eqn: CK1; try congruence.
+          destruct u.
+          econstructor; eauto.
+        + destruct e; try congruence; econstructor; eauto.
+      - intros. unfold transl_globvar in H. inv H. auto. }
+    destruct MAT as (MATCH & _). simpl in MATCH.
+    revert MATCH. generalize (prog_defs p) (AST.prog_defs tp).
+    induction 1; simpl; intros.
+    contradiction.
+    destruct a1.
+    destruct H0; eauto. inv H0.
+    inv H. destruct b1. simpl in *. subst. inv H1. auto.
+Qed.
+
     
 Section MOVE_CHECK.
 
@@ -8219,8 +8265,7 @@ Lemma move_check_module_safe (I: invariant li_rs) p:
   module_type_safe (semantics p) I I (mem_error p) ->  
   (* Genv.valid_for (erase_program (program_of_program p)) se ->  *)
   move_check_program p = OK p ->
-  module_type_safe (semantics p) (inv_compose I
- wt_rs) (inv_compose I wt_rs) SIF.
+  module_type_safe (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF.
   (* module_safe_se (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) not_stuck se. *)
 Proof.
   intros [SAFE] MVCHK. destruct SAFE as (SINV & PRE).
@@ -8230,27 +8275,30 @@ Proof.
                /\ sound_state p w2 se2 s
                /\ wt_state p se2 (mod_sg w2) s
                (** adhoc: for now we add this invariant here to deal
-               with typing information passed between modules *)
-               /\ rs_sig_comp_env (mod_sg w2) = p.(prog_comp_env)
-               /\ se1 = se2).
+               with typing information passed between modules. This
+               invariant is hard-code in the initial state *)
+               /\ rs_sig_comp_env (mod_sg w2) = p.(prog_comp_env)).
   red. constructor.
   eapply (Module_ksafe_components li_rs li_rs (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF IS).
   intros se (w1 & (se' & w2)) (SYMINV1 & SYMINV2) VSE. simpl in SYMINV2. subst.
   simpl in VSE.
   generalize (PRE se w1 SYMINV1 VSE). intros PRE1.
+  (* specification of move checking *)
+  exploit move_check_program_meet_spec; eauto.
+  intros SPEC. inv SPEC.
   econstructor.
   (* internal_step_preserves *)
-  - intros s t s' (SINV1 & SOUND & WTST & SE) STEP.
+  - intros s t s' (SINV1 & SOUND & WTST & CE) STEP.
     simpl. repeat apply conj; auto.
     + eapply internal_step_preserves; eauto.
     + eapply step_sound; eauto.
     + eapply step_sound; eauto.
   (* internal_state_progress *)
-  - intros s (SINV1 & SOUND & WTST & SE).
+  - intros s (SINV1 & SOUND & WTST & CE).
     exploit @internal_state_progress; eauto. intros [A|B].
     auto.
-    (* memory error is impossible in sound_state*)
-    admit.
+    (* memory error is impossible in sound_state *)
+    right. red. eapply step_no_mem_error; eauto.
   (* initial_preserves_progress *)
   - intros q VQ (QINV1 & QINV2).
     (** partial safe also allow initial_state???? *)
@@ -8258,6 +8306,10 @@ Proof.
     intros (s & INIT & SINV1).
     exists s. split; auto.
     intros s' INIT'.
+    (* establish rs_sig_comp_env (mod_sg w2) = globalenv se p in the
+    initial state *)
+    assert (CE: rs_sig_comp_env (mod_sg w2) = globalenv se p).
+    { inv QINV2. inv INIT'. simpl. auto. }
     red. exploit initial_state_sound; eauto.
     intros (SOUND & WT).
     repeat apply conj; auto.
@@ -8265,7 +8317,7 @@ Proof.
   - intros s q (SINV1 & SOUND & WTST & SE) ATEXT.
     exploit @external_preserves_progress; eauto.
     intros (wI & SYM1 & QINV1 & AFEXT1).    
-    exploit external_sound; eauto.
+    exploit external_sound; eauto. 
     intros ((wrs & se') & SYM2 & QINV2 & AFEXT2).
     exists (wI, (wrs, se')). repeat apply conj; auto.
     (* after external *)
@@ -8278,110 +8330,46 @@ Proof.
     red.  simpl in AF'. repeat apply conj; auto.
     eapply AF'. eauto. eapply AF'. eauto.
   (* final_state_preserves *)
-  - intros s r (SINV1 & SOUND & WTST & SE) FINAL.
+  - intros s r (SINV1 & SOUND & WTST & CE) FINAL.
     exploit @final_state_preserves; eauto.
     intros RINV1.
     exploit @final_sound; eauto. intros RINV2.
     econstructor; eauto.
-Admitted.
-
-    
-(*   (* preservation *) *)
-(*   - intros (w1 & w2) (SINV1 & SINV2).  *)
-(*     exploit PSAFE; eauto. intros PLSAFE. *)
-(*     constructor. *)
-(*     (* preserve step *) *)
-(*     + intros s t s' (REACH & PS & SOUND) STEP. *)
-(*       red. repeat apply conj. *)
-(*       * eapply step_reachable; eauto. *)
-(*       * eapply reachable_safe; eauto. *)
-(*         eapply step_reachable; eauto. *)
-(*       (* step sound_state *) *)
-(*       * eapply step_sound; eauto.         *)
-(*     (* initial *) *)
-(*     + intros q s VQ (QINV1 & QINV2) INIT. *)
-(*       red. repeat apply conj. *)
-(*       * eapply initial_reach; eauto. *)
-(*         eapply star_refl. *)
-(*       * eapply reachable_safe; eauto. *)
-(*         eapply initial_reach; eauto. *)
-(*         eapply star_refl. *)
-(*       (* initial sound state *) *)
-(*       * eapply initial_state_sound; eauto. *)
-(*     (* external preserve *) *)
-(*     + intros s s' q r (w1' & w2') (REACH & PS & SOUND) ATEXT (QINV1 & QINV2) (RINV1 & RINV2) AFEXT. *)
-(*       red. repeat apply conj. *)
-(*       * eapply external_reach; eauto. *)
-(*         eapply star_refl. *)
-(*       * eapply reachable_safe; eauto. *)
-(*         eapply external_reach; eauto. *)
-(*         eapply star_refl. *)
-(*       (** external sound state: may be very difficult!!! *) *)
-(*       * eapply external_sound_preserve; eauto. *)
-(*   (* progress *) *)
-(*   - intros (w1 & w2) (SINV1 & SINV2).  *)
-(*     exploit PSAFE; eauto. intros PLSAFE. *)
-(*     constructor. *)
-(*     (* sound_state progress *) *)
-(*     + intros s (REACH & PS & SOUND). *)
-(*       unfold partial_safe in PS. destruct PS; auto. *)
-(*       (** proof of no memory error in sound state *) *)
-(*       admit. *)
-(*     (* initial_progress *) *)
-(*     + intros q VQ (QINV1 & QINV2). *)
-(*       eapply initial_progress; eauto. *)
-(*     (* external_progress *) *)
-(*     + intros s q (REACH & PS & SOUND) ATEXT. *)
-(*       exploit (@external_progress li_rs); eauto. *)
-(*       intros (w1' & SINV1' & QINV1' & RINV1). *)
-(*       (** To construct wA: prove sound_state external progress *) *)
-(*       exploit external_sound_progress; eauto. *)
-(*       intros (w2' & SINV2' & QINV2' & RINV2'). *)
-(*       exists (w1',w2'). repeat apply conj; eauto. *)
-(*       intros r (RINV1'' & RINV2''). *)
-(*       eapply RINV2'. auto.             *)
-(*     (* final_progress *) *)
-(*     + intros s r (REACH & PS & SOUND) FINAL. *)
-(*       exploit (@final_progress li_rs); eauto. *)
-(*       intros RINV1. *)
-(*       (** final_progress of sound_state  *) *)
-(*       exploit final_sound_progress; eauto. *)
-(*       intros RINV2. constructor; auto.       *)
-(* Admitted. *)
-
-Definition wt_rs_inv p '(se, w) := sound_state p (se, w) se.
-
-Lemma sound_rustir_preserves p:
-  move_check_program p = OK p ->
-  preserves (semantics p) wt_rs wt_rs (wt_rs_inv p).
-Proof.
-  intros.
-  assert (CE: forall se, composite_env_consistent (globalenv se p)).
-  { intros. eapply build_composite_env_consistent.
-    instantiate (1 := (prog_types p)). destruct p; simpl; eauto. }
-  constructor; intros; destruct w; simpl in *; subst.
-  - eapply step_sound; eauto.
-    constructor.
-  - eapply initial_state_sound; eauto.
-    constructor.
-    auto.
-  - exploit external_sound_progress; eauto.
-    constructor.
-    intros (wA & SINV & QINV & RINV).
-    exists wA. repeat apply conj; auto.
-    intros. eapply external_sound_preserve; eauto.
-    constructor.
-  - exploit final_sound_progress; eauto.
-    constructor.
 Qed.
 
-Lemma sound_rustir_self_sim p:
-  move_check_program p = OK p ->
-  forward_simulation wt_rs wt_rs (semantics p) (semantics p).
-Proof.
-  intros.
-  eapply preserves_fsim with (IS := wt_rs_inv p).
-  eapply sound_rustir_preserves.
-  auto.
-Qed.
+(* Definition wt_rs_inv p '(se, w) := sound_state p (se, w) se. *)
+
+(* Lemma sound_rustir_preserves p: *)
+(*   move_check_program p = OK p -> *)
+(*   preserves (semantics p) wt_rs wt_rs (wt_rs_inv p). *)
+(* Proof. *)
+(*   intros. *)
+(*   assert (CE: forall se, composite_env_consistent (globalenv se p)). *)
+(*   { intros. eapply build_composite_env_consistent. *)
+(*     instantiate (1 := (prog_types p)). destruct p; simpl; eauto. } *)
+(*   constructor; intros; destruct w; simpl in *; subst. *)
+(*   - eapply step_sound; eauto. *)
+(*     constructor. *)
+(*   - eapply initial_state_sound; eauto. *)
+(*     constructor. *)
+(*     auto. *)
+(*   - exploit external_sound_progress; eauto. *)
+(*     constructor. *)
+(*     intros (wA & SINV & QINV & RINV). *)
+(*     exists wA. repeat apply conj; auto. *)
+(*     intros. eapply external_sound_preserve; eauto. *)
+(*     constructor. *)
+(*   - exploit final_sound_progress; eauto. *)
+(*     constructor. *)
+(* Qed. *)
+
+(* Lemma sound_rustir_self_sim p: *)
+(*   move_check_program p = OK p -> *)
+(*   forward_simulation wt_rs wt_rs (semantics p) (semantics p). *)
+(* Proof. *)
+(*   intros. *)
+(*   eapply preserves_fsim with (IS := wt_rs_inv p). *)
+(*   eapply sound_rustir_preserves. *)
+(*   auto. *)
+(* Qed. *)
  

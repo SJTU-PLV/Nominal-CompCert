@@ -1,4 +1,5 @@
 Require Import Coqlib.
+Require Import Integers.
 Require Import Maps.
 Require Import AST.
 Require Import FSetWeakList DecidableType.
@@ -355,9 +356,28 @@ Definition move_check_fundef (ce : composite_env) (id : ident) (fd : fundef) : E
       end
   end.
 
+(** Check the consistency of composite environment *)
+
+Definition name_members (membs: members) : list ident :=
+  map name_member membs.
+
+Definition check_composite (id: ident) (co: composite) : bool :=
+  Z.leb (co_sizeof co) Integers.Ptrofs.max_unsigned
+  && Z.leb (list_length_z (co_members co)) Int.max_unsigned
+  && list_norepet_dec ident_eq (name_members (co_members co)).
+
+Definition check_composite_env (ce: composite_env) : Errors.res unit :=
+  if PTree_Properties.for_all ce check_composite then
+    OK tt
+  else
+    Error (msg "fail in checking composite environment").
+
 Definition transl_globvar := fun (_ : ident) (ty : type) => OK ty.
 
 Definition move_check_program (p : program) :=
+  (* 1. check composite environment *)
+  do _ <- check_composite_env (prog_comp_env p);
+  (* 2. move checking *)
   do p1 <- (transform_partial_program2 (move_check_fundef (prog_comp_env p)) transl_globvar p);
    OK
      {|
