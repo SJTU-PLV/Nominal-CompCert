@@ -7,7 +7,7 @@ Require Import Memory.
 Require Import Ctypes Cop Ctyping.
 Require Import Globalenvs.
 Require Import Rusttypes RustOp Rustlight Rustlightown.
-Require Import RustIR RustIRown.
+Require Import Smallstep RustIR RustIRown.
 Require Import Errors Maps.
 Require Archi.
 
@@ -298,7 +298,8 @@ Inductive wt_stmt: statement -> Prop :=
 | wt_Scall: forall p al id ty orgs rels tyl rty cc
     (WT1: wt_place p)
     (WT2: wt_exprlist al)
-    (WT3: ty = Tfunction orgs rels tyl rty cc),
+    (WT3: ty = Tfunction orgs rels tyl rty cc)
+    (WT4: typeof_place p = rty),
     (* We only support this kind of function call *)
     wt_stmt (Scall p (Eglobal id ty) al)
 | wt_Sifthenelse: forall e s1 s2
@@ -403,7 +404,23 @@ Proof.
   induction l1; simpl; auto.
   intros. destruct a; auto.
 Qed.
-  
+
+Lemma alloc_variables_bind_vars_eq: forall l ce le1 m1 le2 m2,
+    alloc_variables ce le1 m1 l le2 m2 ->
+    bind_vars (env_to_tenv le1) l = (env_to_tenv le2).
+Proof.
+  induction l; intros; simpl in *. inv H. auto.
+  inv H. exploit IHl; eauto.
+  intros. unfold env_to_tenv in *.
+  rewrite <- H. f_equal.
+  eapply PTree.extensionality.
+  intros. rewrite PTree.gsspec.
+  destruct peq. subst.
+  rewrite PTree.gmap1. rewrite PTree.gss. auto.
+  rewrite !PTree.gmap1. rewrite PTree.gso; eauto.
+Qed.
+
+
 Inductive wt_function (ce: composite_env) : function -> Prop :=
   | wt_function_intro: forall f
       (WTS1: wt_stmt (bind_vars (bind_vars (PTree.empty _) f.(fn_params)) f.(fn_vars)) ce f.(fn_body)),
@@ -430,22 +447,36 @@ Variable prog: program.
 Hypothesis WTPROG: wt_program prog.
 Variable se: Genv.symtbl.
 Let ge := globalenv se prog.
+Let L := semantics prog se.
 
 Variable sg: rust_signature.
 (* Well-typed continuation and state *)
 
 Inductive wt_cont : typenv -> function -> cont -> Prop :=
+| wt_Kstop: forall f te
+    (WT1: wt_call_cont Kstop f.(fn_return)),
+    wt_cont te f Kstop
 | wt_Kseq: forall s k f te
     (WT1: wt_stmt te ge s)
     (WT2: wt_cont te f k),
     wt_cont te f (Kseq s k)
+| wt_Kloop: forall s k te f
+    (WT1: wt_stmt te ge s)
+    (WT2: wt_cont te f k),
+    wt_cont te f (Kloop s k)
+| wt_Kdropplace: forall f st ps (e: env) own k
+    (WT1: wt_cont e f k),
+    wt_cont e f (Kdropplace f st ps e own k)
+| wt_Kdropcall: forall f id st v e k membs
+    (WT1: wt_cont e f k),
+    wt_cont e f (Kdropcall id v st membs k)
 | wt_Kcall: forall k p f f' le own te
     (WT1: wt_call_cont (Kcall p f' le own k) f.(fn_return)),
     wt_cont te f (Kcall p f' le own k)
 
 with wt_call_cont : cont -> type -> Prop :=
 | wt_call_Kstop:
-  wt_call_cont  Kstop (rs_sig_res sg)
+  wt_call_cont Kstop (rs_sig_res sg)
 | wt_call_Kcall: forall p f (le: env) own k
     (WT1: wt_cont le f k)
     (WT2: wt_place le ge p),
@@ -456,7 +487,7 @@ with wt_call_cont : cont -> type -> Prop :=
 
 Inductive wt_state : state -> Prop :=
 | wt_regular_state: forall f s k (e: env) own m
-    (WT1: wt_stmt e ge s)                  
+    (WT1: wt_stmt e ge s)
     (WT2: wt_cont e f k),
     wt_state (State f s k e own m)
 | wt_callstate: forall vf fd orgs rels tyl rty cc k m vl
@@ -467,10 +498,15 @@ Inductive wt_state : state -> Prop :=
 | wt_returnstate: forall k rty m v
     (WT1: wt_call_cont k rty),
     wt_state (Returnstate v k m)
-| wt_dropplace_state: forall f st drops k own m (e: env)
-    (WT1: Forall (fun p => wt_place e ge p) (map fst drops)),
+| wt_dropplace: forall f st drops k own m (e: env)
+    (WT1: wt_cont e f k),
     wt_state (Dropplace f st drops k e own m)
+| wt_dropstate: forall id v st membs k m f te
+    (WT1: wt_cont te f k),
+    wt_state (Dropstate id v st membs k m)
 .
+
+Hint Constructors wt_cont wt_stmt wt_state: ty.
 
 Lemma wt_call_cont_type_eq: forall k ty1,
     wt_call_cont k ty1 ->
@@ -483,7 +519,7 @@ Lemma is_wt_call_cont:
   forall te f k,
     is_call_cont k -> wt_cont te f k -> wt_call_cont k f.(fn_return).
 Proof.
-  intros. inv H0; simpl in H; try contradiction. auto.
+  intros. inv H0; simpl in H; try contradiction; auto.
 Qed.
 
 Lemma wt_cont_call_cont: forall k le f ck,
@@ -504,7 +540,80 @@ Proof.
   eapply wt_cont_call_cont; eauto.
 Qed.
 
+(* The function found in the globalenv is well-typed *)
 
+Lemma find_funct_wt: forall vf fd,
+    Genv.find_funct ge vf = Some fd ->
+    wt_fundef ge fd.
+Proof.
+  intros. simpl in *. inv WTPROG.
+  eapply Genv.find_funct_prop; eauto.
+  intros. eapply H0; eauto.
+Qed.  
+
+Lemma wt_initial_state: forall s q,
+    rsq_sg q = sg ->
+    initial_state ge q s ->
+    wt_state s.
+Proof.
+  intros s q SGEQ INIT.
+  inv INIT.
+  exploit find_funct_wt; eauto.
+  intros WTF. inv WTF.
+  econstructor; eauto.
+  assert (RTY: tres = (rs_sig_res sg)).
+  { simpl in SGEQ. destruct sg. simpl. inv SGEQ. auto. }
+  subst. econstructor.
+Qed.
+
+Lemma wt_state_step_preservation: forall s1 t s2,
+    wt_state s1 ->
+    Step L s1 t s2 ->
+    wt_state s2.
+Proof.
+  intros s1 t s2 WTST STEP; inv STEP; inv WTST.
+  all: try eauto with ty.
+  - inv SDROP; eauto with ty.
+  - inv SDROP; eauto with ty; inv WT1; eauto with ty.
+  - inv WT1. simpl in *. inv H.
+    econstructor; eauto.
+    econstructor; eauto.
+  - exploit find_funct_wt; eauto.
+    intros WTF. simpl in *.
+    unfold ge in FIND0. rewrite FIND in FIND0. inv FIND0.
+    inv WTF. inv H0.
+    inv ENTRY. exploit alloc_variables_bind_vars_eq; eauto.
+    intros BINDEQ. rewrite bind_vars_app in *.
+    econstructor; eauto.
+    rewrite <- BINDEQ. eauto.    
+    inv WT1.
+    econstructor. destruct f. simpl in *. inv FTY. econstructor.
+    econstructor. destruct f. simpl in *. inv FTY. econstructor; eauto.
+  - inv WT1. econstructor.
+    eapply call_cont_wt_call_cont; eauto.
+  - inv WT1. econstructor; eauto. econstructor.
+  - inv WT1; eauto with ty.    
+  - inv WT2; eauto with ty.
+  - inv WT2; eauto with ty.
+  - inv WT2; eauto with ty.
+  - inv WT1; eauto with ty.
+    destruct b; eauto with ty.
+  - inv WT1; eauto with ty.
+  - inv WT2; eauto with ty.
+  - inv WT2; eauto with ty.
+Qed.
+
+Lemma wt_state_external_preservation: forall s1 q,
+    wt_state s1 ->
+    at_external ge s1 q ->
+    forall r s2, after_external s1 r s2 ->
+            wt_state s2.
+Proof.
+  intros. inv H0. inv H. inv H1.
+  econstructor; eauto.
+Qed.
+
+    
 End PRESERVATION.
 
 (** Type checking algorithm *)
@@ -698,8 +807,11 @@ Fixpoint type_check_stmt (stmt: statement) : res unit :=
       do _ <- type_check_place p;
       do _ <- type_check_exprlist al;
       match a with
-      | Epure (Eglobal id (Tfunction _ _ _ _ _)) =>
-          OK tt
+      | Epure (Eglobal id (Tfunction _ _ _ rty _)) =>
+          if type_eq (typeof_place p) rty then
+            OK tt
+          else
+            Error (msg "return type is not equal to the type of place which receives the return value")
       | _ =>
           Error (msg "callee is not a global variable")
       end
@@ -722,7 +834,7 @@ Fixpoint type_check_stmt (stmt: statement) : res unit :=
   end.
     
 End TENV.
-  
+
 End COMP_ENV.
 
 (** Soundness of type checking  *)
@@ -849,6 +961,7 @@ Proof.
     econstructor; eauto.
     eapply type_check_place_sound; eauto.
     eapply type_check_exprlist_sound; eauto.
+    destruct type_eq in CK; try congruence.    
   - monadInv CK. destruct x.
     econstructor; eauto.
   - monadInv CK. destruct x. destruct x0.
@@ -859,7 +972,6 @@ Proof.
     destruct x. econstructor; eauto.
     eapply type_check_place_sound; eauto.
 Qed.
-
     
 (** End of syntactic type checking  *)
 

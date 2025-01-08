@@ -1079,29 +1079,6 @@ Proof.
   eapply init_owned_place_still_owned; eauto.
 Qed.
 
-(* Lemma is_prefix_field_inv: forall p1 p2 fid fty, *)
-(*     is_prefix p1 (Pfield p2 fid fty) = true -> *)
-(*     is_prefix p1 p2 = false -> *)
-(*     exists fty', p1 = Pfield p2 fid fty'. *)
-(* Proof. *)
-(*   induction p1; intros. *)
-(*   - destr_prefix. unfold is_prefix in H0. *)
-(*     simpl in *. destruct (path_of_place p2) eqn: POP2. *)
-(*     inv POP. inv POP0. simpl in *. destruct ident_eq in H0; try congruence. *)
-(*     simpl in H0. congruence. *)
-(*   - repeat destr_prefix. unfold is_prefix in H0. *)
-(*     simpl in *. *)
-(*     destruct (path_of_place p1) eqn: POP1. *)
-(*     destruct (path_of_place p2) eqn: POP2. *)
-(*     inv POP. inv POP0. simpl in *. destruct ident_eq in H0; try congruence. *)
-    
-(*   induction p2; intros. *)
-(*   - simpl in *. admit. *)
-(*   -  *)
-(*   intros. unfold is_prefix. *)
-(*   repeat destr_prefix. *)
-(*   destruct (path_of_place p2) eqn: P2. *)
-(*   inv POP0. *)
 Lemma in_place_dominatros_and_parent_paths: forall p2 p p1
     (IN1: In p (place_dominators p2))
     (IN2: In p1 (parent_paths p2)),

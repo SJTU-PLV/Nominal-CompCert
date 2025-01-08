@@ -336,6 +336,8 @@ Definition move_check_function (ce: composite_env) (f: function) : Errors.res un
   do _ <- check_universe_wf te ce universe;
   do _ <- check_cyclic_struct_res ce (var_types (f.(fn_params) ++ f.(fn_vars)));
   do _ <- check_valid_types (var_types (f.(fn_params) ++ f.(fn_vars)));
+  (* type checking *)
+  do _ <- type_check_stmt ce te (fn_body f);
   (** 3. Run move checking ! *)
   do _ <- transl_on_cfg get_init_info analysis_res (move_check_stmt ce) check_cond_expr f.(fn_body) cfg;
   OK tt.
