@@ -1667,7 +1667,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     step_dropinsert (Dropinsert f (drop_escape_after id l) dk k le own m) E0
       (Dropinsert f (drop_escape_before l) dk k le own m)
 | step_dropinsert_to_drop_end: forall f le own m k dk
-    (NOTRETURN: forall p, dk <> Dreturn p /\ dk <> Dendlet),
+    (NOTRETURN: (forall p, dk <> Dreturn p) /\ dk <> Dendlet),
     step_dropinsert (Dropinsert f (drop_escape_before []) dk k le own m) E0
       (Dropinsert f drop_end dk k le own m)
       
