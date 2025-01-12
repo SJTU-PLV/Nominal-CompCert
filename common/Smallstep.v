@@ -2632,3 +2632,67 @@ Record bigstep_sound (B: bigstep_semantics) (L: semantics li_null li_wp) : Prop 
       bigstep_diverges B T ->
       exists s1, initial_state (load L) tt s1 /\ forever (step (load L)) (globalenv (load L)) s1 T
 }.
+
+(** * Forward simulation with the progress property  *)
+Section FSIM_WITH_PROGRESS.
+
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
+
+(** The general form of a forward simulation. *)
+
+Record fsimg_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
+                       (order: index -> index -> Prop)
+                       (match_states: index -> state1 -> state2 -> Prop) : Prop := {
+    fsimg_prop:
+    fsim_properties ccA ccB se1 se2 wB L1 L2
+      index order match_states;
+
+    fsimg_initial_progress: forall q1 q2 s2,
+      match_query ccB wB q1 q2 ->
+      initial_state L2 q2 s2 ->
+      exists s1, initial_state L1 q1 s1;
+
+    (** FIXME: this property may be not correct (but it can be proved
+    in RustIRgen?) *)
+    fsimg_external_progress: forall i s1 s2 s2' wA r1 r2,
+      match_states i s1 s2 ->
+      match_reply ccA wA r1 r2 -> 
+      after_external L2 s2 r2 s2' ->
+      exists s1', after_external L1 s1 r1 s1';
+    
+    fsimg_progress: forall i s1 s2,
+      match_states i s1 s2 -> safe L2 s2 ->
+      (exists r, final_state L1 s1 r)
+      \/ (exists q, at_external L1 s1 q)
+      \/ (exists t, exists s1', Step L1 s1 t s1');            
+  }.
+
+
+End FSIM_WITH_PROGRESS.
+
+Arguments fsimg_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
+
+Record fsimg_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+  Forward_simulation_progress {
+    fsimg_index: Type;
+    fsimg_order: fsimg_index -> fsimg_index -> Prop;
+    fsimg_match_states: _;
+
+    fsimg_skel:
+      skel L1 = skel L2;
+    fsimg_lts se1 se2 wB:
+      @match_senv liB1 liB2 ccB wB se1 se2 ->
+      Genv.valid_for (skel L1) se1 ->
+      fsimg_properties ccA ccB se1 se2 wB (activate L1 se1) (activate L2 se2)
+        fsimg_index fsimg_order (fsimg_match_states se1 se2 wB);
+    fsimg_order_wf:
+      well_founded fsimg_order;
+  }.
+
+Arguments Forward_simulation_progress {_ _ ccA _ _ ccB L1 L2 fsimg_index}.
+
+Definition forward_simulation_progress {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
+  inhabited (@fsimg_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).

@@ -799,8 +799,8 @@ Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2
 Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
 Context (IA1 : invariant liA1) (IB1: invariant liB1).
 
-Hypothesis L1_determ: open_determinate L1.
-Hypothesis L2_determ: open_determinate L2.
+(* Hypothesis L1_determ: open_determinate L1. *)
+(* Hypothesis L2_determ: open_determinate L2. *)
 
 (* why we need inhabited? *)
 Lemma module_safek_components_preservation:
@@ -910,6 +910,111 @@ Proof.
 Qed.
 
 End SAFETYK_PRESERVATION.
+
+(** Safety preservation under backward simulation (without safe premise
+but with progress property) *)
+
+Section SAFETYK_PRESERVATION_FSIMG.
+
+Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2).
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
+Context (IA2 : invariant liA2) (IB2: invariant liB2).
+
+Lemma module_safek_components_preservation_fsimg:
+  module_type_safe L2 IA2 IB2 SIF ->
+  forward_simulation_progress ccA ccB L1 L2 ->
+  module_type_safe L1 (ccinv ccA IA2) (ccinv ccB IB2) SIF.
+Proof.
+  intros [SAFE] [FSIM].
+  destruct SAFE as (SINV & SAFE).
+  inv FSIM.
+  red. constructor.
+  set (MINV:= fun se1 '(ccwB, wB) s1 => exists se2 i s2, fsimg_match_states se1 se2 ccwB i s1 s2
+                                                /\ match_senv ccB ccwB se1 se2
+                                                /\ symtbl_inv IB2 wB se2
+                                                /\ SINV se2 wB s2). 
+  eapply Module_ksafe_components with (msafek_invariant := MINV).  
+  intros se1 (ccwB & wB2) (se2 & SYM2 & MENV) VSE1.
+  econstructor.
+  (* step preservation *)
+  - simpl. intros s1 t s1' (se2' & i & s2 & MST & MSENV2 & SYM1 & SINV2).
+    intros STEP1.
+    assert (VSE2: Genv.valid_for (skel L2) se2').
+    { erewrite <- match_senv_valid_for; eauto.
+      erewrite <- fsimg_skel; eauto. }
+    edestruct @fsim_simulation as (i' & s2' & STEP2 & MINV2); eauto.
+    eapply fsimg_prop; eauto.
+    exists se2', i', s2'. repeat apply conj; auto.
+    (* prove plus preserves sound state *)
+    destruct STEP2.    
+    eapply lts_preserves_progress_star; eauto. eapply plus_star. eauto.
+    destruct H.  eapply lts_preserves_progress_star; eauto.    
+  (* internal_state_progress *)
+  - simpl. intros s1 (se2' & i & s2 & MST & MSENV2 & SYM1 & SINV2).
+    left.
+    assert (VSE2: Genv.valid_for (skel L2) se2').
+    { erewrite <- match_senv_valid_for; eauto.
+      erewrite <- fsimg_skel; eauto. }
+    eapply fsimg_progress; eauto.
+    (* prove sound state is internal safe *)
+    eapply safe_implies.
+    eapply lts_preserves_progress_internal_safe; eauto.
+  (* initial_preserves_progress *)
+  - intros q1 VQ1 (q2 & QINV1 & MQ).
+    generalize (fsimg_lts se1 se2 ccwB MENV VSE1). intros FSIMP.
+    assert (VQ2: valid_query (L2 se2) q2 = true).
+    { erewrite fsim_match_valid_query; eauto. eapply fsimg_prop; eauto. }
+    (* target initial progress *)
+    assert (VSE2: Genv.valid_for (skel L2) se2).
+    { erewrite <- match_senv_valid_for; eauto.
+      erewrite <- fsimg_skel; eauto. }
+    edestruct @initial_preserves_progress as (s2 & INIT2 & SINV2); eauto.
+    (* fsimg_initial_progress to show that L1 is initial_progress *)
+    edestruct @fsimg_initial_progress as (s1 & INIT1); eauto.
+    exists s1. split. auto.
+    intros s1' INIT1'.
+    exploit @fsim_match_initial_states; eauto.
+    eapply fsimg_prop; eauto.
+    intros (i & s2' & INIT2' & MST).
+    red. exists se2, i, s2'. repeat apply conj; auto.
+  (* external_preserves_progress *)
+  - intros s1 q1 (se2' & i & s2 & MST & MSENV2 & SYM1 & SINV2) ATEXT1.
+    assert (VSE2: Genv.valid_for (skel L2) se2).
+    { erewrite <- match_senv_valid_for; eauto.
+      erewrite <- fsimg_skel; eauto. }
+    assert (VSE2': Genv.valid_for (skel L2) se2').
+    { erewrite <- match_senv_valid_for. 2: eapply MSENV2.
+      erewrite <- fsimg_skel; eauto. }
+    edestruct @fsim_match_external as (ccwA & q2 & ATEXT2 & MQ & MSENV1 & AFEXT).
+    eapply fsimg_prop; eauto. all: eauto.
+    edestruct @external_preserves_progress as (wA & SYMA & QINV2 & AFSAFE); eauto.     
+    exists (ccwA, wA). repeat apply conj.
+    econstructor; eauto.
+    econstructor; eauto.
+    (* after external *)
+    intros r1 (r2 & RINV2 & MR).
+    exploit AFSAFE. eauto.
+    intros (s2' & AFST2 & SINV2').
+    edestruct @fsimg_external_progress as (s1' & AFEXT1'); eauto.
+    exists s1'. split. auto.
+    intros s1'' AFST1'.
+    exploit AFEXT; eauto.
+    intros (i' & s2'' & AFST2'' & MST').
+    red. exists se2', i', s2''. repeat apply conj; eauto.
+  (* final_state_preserves *)
+  - intros s1 r1 (se2' & i & s2 & MST & MSENV2 & SYM1 & SINV2) FINAL1.
+    assert (VSE2': Genv.valid_for (skel L2) se2').
+    { erewrite <- match_senv_valid_for; eauto.
+      erewrite <- fsimg_skel; eauto. }
+    edestruct @fsim_match_final_states as (r2 & FINAL2 & MR). 
+    eapply fsimg_prop; eauto. all: eauto.
+    (* star preserves SINV *)
+    exploit @final_state_preserves; eauto.
+    intros RINV1. econstructor; eauto.
+Qed.
+
+End SAFETYK_PRESERVATION_FSIMG.
+
 
 (** *End of Experiment code: safety preservation using type preserving method *)
 

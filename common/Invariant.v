@@ -149,6 +149,16 @@ Definition invcc {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invarian
     reply_inv '(wA, wcc) r2 := exists r1, reply_inv IA wA r1 /\ match_reply cc wcc r1 r2;
   |}.
 
+Definition ccinv {liA liB} (cc: callconv liA liB) (IB: invariant liB) : invariant liA :=
+  {|
+    inv_world := (ccworld cc * inv_world IB);
+    symtbl_inv '(wcc, wB) se1 := exists se2, symtbl_inv IB wB se2
+                                        /\ match_senv cc wcc se1 se2;
+    query_inv '(wcc, wB) q1 := exists q2, query_inv IB wB q2
+                                     /\ match_query cc wcc q1 q2; 
+    reply_inv '(wcc, wB) r1 := exists r2, reply_inv IB wB r2 /\ match_reply cc wcc r1 r2;
+  |}.
+
 
 Definition invcc_in {liA liB} (IA: invariant liA) (cc: callconv liA liB) : invariant liB :=
   {|

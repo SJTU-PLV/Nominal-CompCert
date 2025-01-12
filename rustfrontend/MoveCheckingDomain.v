@@ -1445,3 +1445,48 @@ Proof.
     eapply type_check_place_sound; eauto.
     red. unfold Proper. reflexivity.
 Qed.
+
+Require Import Permutation.                                    
+
+Section SEQ.
+
+Variable sem_data: mem -> footprint -> block -> Z -> Prop.
+
+Section LINKOFS.
+  
+Variable link_ofs: Z.
+
+(* The footprint structure is specific to the data type *)
+Inductive sem_Seq (m: mem) : flat_footprint -> list footprint -> block -> Z -> block -> Z -> Prop :=
+| sem_Seq_nil: forall b1 ofs1 b2 ofs2
+    (LOAD: Mem.load Mptr m b1 ofs1 = Some (Vptr b2 (Ptrofs.repr ofs2))),
+    sem_Seq m nil nil b1 ofs1 b2 ofs2
+| sem_Seq_cons: forall b1 ofs1 b2 ofs2 b l fp fpl
+    (LOAD: Mem.load Mptr m b1 ofs1 = Some (Vptr b (Ptrofs.repr link_ofs)))
+    (DATA: sem_data m fp b 0)
+    (NEXT: sem_Seq m l fpl b link_ofs b2 ofs2),
+    (** TODO: add permission properties *)    
+    sem_Seq m (b :: l) (fp :: fpl) b1 ofs1 b2 ofs2.
+
+Definition Seq (m: mem) (l: flat_footprint) (fpl: list footprint) (b1: block) (ofs1: Z) (b2: block) (ofs2: Z) : Prop :=
+  sem_Seq m l fpl b1 ofs1 b2 ofs2.
+
+Definition Cycle (m: mem) (l: flat_footprint) (fpl: list footprint) (b: block) (ofs: Z) : Prop :=
+  Seq m l fpl b ofs b ofs.
+
+End LINKOFS.
+
+Section DLINKOFS.
+
+Variable link_ofs: Z.
+
+(* semantics type of doubly-linked list exposed to other module *)
+Definition DCycle (m: mem) (bs: flat_footprint) (b: block) (ofs: Z) : Prop :=
+  exists l fpl, Permutation bs (l ++ flat_map footprint_flat fpl)
+           /\ Cycle link_ofs m l fpl b ofs
+           /\ Cycle (link_ofs + size_chunk Mptr) m (rev l) (rev fpl) b (ofs + size_chunk Mptr).
+
+End DLINKOFS.
+               
+End SEQ.
+                                    

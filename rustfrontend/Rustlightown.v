@@ -1736,8 +1736,6 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
     eval_exprlist ge le m ge al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    (* Cannot call drop glue *)
-    (forall f', fd = Internal f' -> fn_drop_glue f' = None) ->
     function_not_drop_glue fd ->
     step_dropinsert (Dropinsert f drop_end (Dcall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
 | step_dropinsert_break_seq: forall f s k le own m,
@@ -1777,7 +1775,7 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
       (Returnstate v1 ck m2)
 | step_dropinsert_endlet: forall f k le own m,
     (* adhoc: not use drop_end here is to make sure that target cound make a step *)
-    step_dropinsert (Dropinsert f (drop_escape_before []) Dendlet k le own m) E0
+  step_dropinsert (Dropinsert f (drop_escape_before []) Dendlet k le own m) E0
       (State f Sskip k le own m)
 .
 

@@ -55,3 +55,9 @@ struct List* pop_front(struct Node* l){
     free(head);
     return new_head;
 }
+
+int is_single(struct Node*l){
+    Link* head = (unsigned char*)l + link_offset();
+    if (head->next == head) return 1;
+    else return 0;
+}
