@@ -2696,3 +2696,36 @@ Arguments Forward_simulation_progress {_ _ ccA _ _ ccB L1 L2 fsimg_index}.
 
 Definition forward_simulation_progress {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
   inhabited (@fsimg_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).
+
+Section FSIM_IMPL.
+
+Context {liA1 liB1} (L1: semantics liA1 liB1).
+Context {liA2 liB2} (L2: semantics liA2 liB2).
+
+(** Forward simualtion with progress property implies the normal
+forward simulation *)
+
+Lemma fsim_progress_implies {ccA ccB}:
+  forward_simulation_progress ccA ccB L1 L2 ->
+  forward_simulation ccA ccB L1 L2.
+Proof.
+  intros [FSIMG]. econstructor.
+  inv FSIMG. eapply Forward_simulation with (fsim_match_states := fsimg_match_states0); eauto.
+  intros.
+  exploit fsimg_lts0; eauto.
+  intros FSIMG1. inv FSIMG1. inv fsimg_prop0.
+  econstructor; eauto.
+Qed.
+
+End FSIM_IMPL.
+
+(** Copy the tactic for normal forward simulation *)
+
+Ltac fsimg_tac tac :=
+  intros MATCH; constructor;
+  eapply Forward_simulation_progress with (fsimg_match_states := fun _ _ _ => _);
+  [ try fsim_skel MATCH
+  | intros se1 se2 w Hse Hse1; econstructor; try tac
+  | try solve [auto using well_founded_ltof]].
+
+Tactic Notation (at level 3) "fsimg" tactic3(tac) := fsimg_tac tac.

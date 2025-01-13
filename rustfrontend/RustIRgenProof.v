@@ -1655,11 +1655,12 @@ Qed.
 
 End PRESERVATION.
 
-Theorem transl_program_correct prog tprog:
+(* forward simulation with the progress property *)
+Theorem transl_program_correct1 prog tprog:
    match_prog prog tprog ->
-   forward_simulation cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
+   forward_simulation_progress cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
 Proof.
-  fsim eapply forward_simulation_plus; simpl in *. 
+  fsimg eapply forward_simulation_plus; simpl in *. 
   - symmetry. eapply match_prog_skel. auto.
   - intros q _ [ ]. subst. eapply is_internal_match_id. eauto.
     intros. destruct f; simpl in H. subst. auto. subst. auto.
@@ -1667,7 +1668,19 @@ Proof.
   - intros. exists r1. split. eapply final_states_simulation; eauto. auto.
   - intros. subst. edestruct external_states_simulation; eauto. exists tt, q1. intuition subst; eauto.
   - intros. eapply step_simulation; eauto. subst. auto.
+  - intros. subst. eapply initial_progress; eauto.
+  - intros. destruct H. subst. eapply external_progress; eauto.
+  - intros. destruct H. subst. eapply match_progress; eauto.
 Qed.
 
-    
- 
+Theorem transl_program_correct prog tprog:
+   match_prog prog tprog ->
+   forward_simulation cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
+Proof.
+  intros.
+  eapply fsim_progress_implies; eauto.
+  eapply transl_program_correct1; eauto.
+Qed.
+
+
+  
