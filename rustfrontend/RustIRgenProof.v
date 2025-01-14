@@ -1581,7 +1581,7 @@ Proof.
               exploit SAFE. eapply star_refl.
               intros [(r2 & CON)|[(q2 & CON)|(t2 & s2' & STEP2)]]; try inv CON.
               inv STEP2.
-              2: { destruct H8; congruence.}
+              2: { destruct H8; congruence. }
                 exploit match_cont_call_cont_inv; eauto.
               intros (ck1 & A1 & A2).
               do 2 eexists. econstructor. eapply step_dropinsert_return_after; solve_eval1.

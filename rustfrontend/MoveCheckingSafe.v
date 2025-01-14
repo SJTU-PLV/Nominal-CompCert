@@ -25,8 +25,9 @@ Inductive move_check_fundef_spec ce: fundef -> Prop :=
 | move_check_funct: forall f
     (CKFUN: move_check_function ce f = OK tt),
     move_check_fundef_spec ce (Internal f)
-| move_check_external: forall orgs rels tyl rty cc name sg,
-    move_check_fundef_spec ce (External orgs rels (EF_external name sg) tyl rty cc).
+| move_check_external: forall orgs rels tyl rty cc ef,
+    ((exists name sg, ef = EF_external name sg) \/ ef = EF_malloc \/ ef = EF_free) ->
+    move_check_fundef_spec ce (External orgs rels ef tyl rty cc).
 
 (** Specification of move checking  *)
 Record move_check_program_spec (p: program) :=
@@ -94,7 +95,7 @@ Proof.
         econstructor; eauto.
         econstructor.
         eapply move_check_function_wt; eauto.        
-      + destruct e; try congruence; split; econstructor; eauto.
+      + destruct e; try congruence; split; inv CK; econstructor; eauto.
     - intros. unfold transl_globvar in H. inv H. auto. }
   assert (SPEC: forall id fd, In (id, Gfun fd) p.(prog_defs) ->
                          move_check_fundef_spec p.(prog_comp_env) fd
@@ -6902,7 +6903,10 @@ Proof.
   return footprint can be constructed by (filter j (support m_res)). *)
   - inv SOUND.
     exploit find_funct_move_check. eapply FIND.
-    intros SPEC. inv SPEC. inv H.
+    intros SPEC. inv SPEC.
+    destruct NORMAL.
+    destruct H1; [|destruct H1; try congruence].
+    destruct H1 as (name1 & sg1 & A). subst. inv H.    
   (* step_return_1 *)
   - inv SOUND. inv STMT. unfold move_check_stmt in TR.
     unfold get_init_info in TR.

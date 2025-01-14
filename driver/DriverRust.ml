@@ -109,6 +109,14 @@ let debug_borrow_check = true
   | Errors.Error msg ->
     fatal_error no_loc "%a"  print_error msg *)
 
+let debug_MoveChecking (prog: RustIR.program) =
+  match MoveChecking.move_check_program prog with
+  | Errors.OK _ ->
+    Format.fprintf logout "@.Move Checking Success@.";
+    prog
+  | Errors.Error msg ->
+    fatal_error no_loc "%a"  print_error msg
+
 let debug_ClightComposite prog =
   match Clightgen.transl_composites prog.Rusttypes.prog_types with
   | Some clight_composites -> 
@@ -144,6 +152,7 @@ let process_rust_file test_case =
                           |> debug_RustIRgen
                           |> debug_RustCFG
                           |> debug_InitAnalysis
+                          |> debug_MoveChecking
                           |> debug_ElaborateDrop
                           (* |> debug_BorrowCheck *)
                           |> debug_ClightComposite

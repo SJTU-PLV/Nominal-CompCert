@@ -183,7 +183,7 @@ Cd "extraction".
 Separate Extraction
    Compiler.transf_c_program Compiler.transf_cminor_program
    (* rust *)
-   Compiler.transf_rust_program 
+   Compiler.transf_rust_program MoveChecking.move_check_program
    (* Some functions are needed in Ocaml side *)
    Rusttypes.signature_of_type Rusttypes.build_composite_env Rustsyntax.empty_drop_globdef
    Rustsyntax.type_of_function Rustlight.type_of_function RustIR.type_of_function

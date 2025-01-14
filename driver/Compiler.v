@@ -102,6 +102,7 @@ Require Rustlightgen.
 Require RustIRgen.
 Require InitAnalysis.
 Require ElaborateDrop.
+Require MoveChecking.
 (* Require BorrowCheckPolonius. *)
 Require Clightgen.
 
@@ -109,6 +110,7 @@ Require Clightgen.
 Require RustIRgenProof.
 Require Clightgenproof.
 Require ElaborateDropProof.
+Require MoveCheckingSafe.
 
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.
