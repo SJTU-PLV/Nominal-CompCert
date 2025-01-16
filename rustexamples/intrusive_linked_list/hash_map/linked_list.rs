@@ -12,7 +12,11 @@ enum List {
     Cons(Node)
 }
 
-extern fn process(k:i32, v: i32) -> i32
+extern fn process(k: i32, v: i32) -> i32
+
+fn hash(k: i32) -> i32{
+    return k % 10;
+}
 
 // use callback function instead of returning the value?
 fn find(l: Box<List>, k: i32) -> Box<List>{
@@ -56,7 +60,7 @@ fn remove(l: Box<List>, k: i32) -> Box<List>{
                 return node.next;
             }
             else {
-                node.next = delete(node.next, k);
+                node.next = remove(node.next, k);
                 l = List::Cons(node);
                 return l;
             }

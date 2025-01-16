@@ -17,6 +17,13 @@ extern int hash(int k);
 // We can also introduce handles to use multiple hash maps
 static List* hmap[DEFAULT_HASH_MAP_LENGTH] = {NULL};
 
+// Less efficient
+void init_map(){
+    for(int i = 0; i < DEFAULT_HASH_MAP_LENGTH; ++i){
+        hmap[i] = empty_list();
+    }
+}
+
 List** find_bucket(int key){
     int index = hash(key);
     return &(hmap[index]);

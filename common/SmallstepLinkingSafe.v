@@ -552,7 +552,7 @@ k steps". One opportunity of this definition is to utilize bound model
 checking. We treat SI as a special final state (but how to express its
 disjointness?) *)
 
-Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB St -> St -> Prop) (wI: inv_world IB) : nat -> St -> Prop :=
+Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invariant liA) (IB: invariant liB) (SI: St -> Prop) (wI: inv_world IB) : nat -> St -> Prop :=
 | safek_O: forall s,
     safek se L IA IB SI wI O s
 | safek_step: forall s1 t s2 k
@@ -566,7 +566,7 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
 | safek_SI: forall s k
     (* SI as a special final state. It can be False to define total *)
 (*     safe or memory_error to define partial safe *)
-    (SINV: SI L s),
+    (SINV: SI s),
     safek se L IA IB SI wI k s
 | safek_final: forall s r k
     (FINAL: final_state L s r)
@@ -618,7 +618,7 @@ Inductive safek {liA liB St} (se: Genv.symtbl) (L: lts liA liB St) (IA: invarian
 (* . *)
      
 
-Definition lts_safek {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: lts liA liB S -> S -> Prop) (wI: inv_world IB) :=  
+Definition lts_safek {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (SI: S -> Prop) (wI: inv_world IB) :=  
   forall q,
     (* when the query is valid and satisfis the pre-condition *)
     valid_query L q = true ->
@@ -642,13 +642,13 @@ Definition module_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) SI
     module_safek_se L IA IB (SI se) se.
 
 (* Module total safety (SI is False) *)
-Definition SIF {liA liB S} : Genv.symtbl -> lts liA liB S -> S -> Prop := (fun _ _ _ => False).
+Definition SIF {S} : Genv.symtbl -> S -> Prop := (fun _ _ => False).
 
 Definition module_total_safek {liA liB} (L: semantics liA liB) (IA IB: invariant _) := module_safek L IA IB SIF.
 
 (** Prove Safety by Invariant Preservation and Progress *)
 
-Record lts_preserves_progress {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (IS: inv_world IB -> S -> Prop) (w: inv_world IB) (PS: lts liA liB S -> S -> Prop) :=
+Record lts_preserves_progress {liA liB S} se (L: lts liA liB S) (IA: invariant liA) (IB: invariant liB) (IS: inv_world IB -> S -> Prop) (w: inv_world IB) (PS: S -> Prop) :=
   {
     internal_step_preserves: forall s t s',
       IS w s ->
@@ -656,7 +656,7 @@ Record lts_preserves_progress {liA liB S} se (L: lts liA liB S) (IA: invariant l
       IS w s';
     internal_state_progress: forall s,
       IS w s ->
-      not_stuck L s \/ PS L s;
+      not_stuck L s \/ PS s;
     
     initial_preserves_progress: forall q,
       valid_query L q = true ->
@@ -681,7 +681,7 @@ Record lts_preserves_progress {liA liB S} se (L: lts liA liB S) (IA: invariant l
   }.
 
 
-Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> lts liA liB (state L) -> (state L) -> Prop) :=
+Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> (state L) -> Prop) :=
   Module_ksafe_components
   {
     msafek_invariant: Genv.symtbl -> inv_world IB -> state L -> Prop;
@@ -692,7 +692,7 @@ Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant l
       lts_preserves_progress se (L se) IA IB (msafek_invariant se) wB (PS se);
   }.
 
-Definition module_type_safe {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> lts liA liB (state L) -> (state L) -> Prop) :=
+Definition module_type_safe {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> (state L) -> Prop) :=
   inhabited (@module_safek_components liA liB L IA IB PS).
 
 (* property of safety invariant *)
@@ -911,7 +911,7 @@ Qed.
 
 End SAFETYK_PRESERVATION.
 
-(** Safety preservation under backward simulation (without safe premise
+(** Safety preservation under forward simulation (without safe premise
 but with progress property) *)
 
 Section SAFETYK_PRESERVATION_FSIMG.

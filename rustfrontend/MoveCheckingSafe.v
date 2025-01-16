@@ -8332,7 +8332,7 @@ End MOVE_CHECK.
 (* Definition partial_safe ge (L: lts li_rs li_rs state) (s: state) : Prop := *)
 (*   not_stuck L s \/ step_mem_error ge s. *)
 
-Definition mem_error prog se (L: lts li_rs li_rs state) (s: state) : Prop :=
+Definition mem_error prog se (s: state) : Prop :=
   step_mem_error (globalenv se prog) s.
 
 (* I is the generic partial safe invariant *)
