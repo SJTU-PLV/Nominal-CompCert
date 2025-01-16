@@ -3,7 +3,7 @@ Require Import List.
 Require Import Events.
 Require Import Globalenvs.
 Require Import LanguageInterface.
-Require Import SmallstepLinking Smallstep.
+Require Import SmallstepLinking Smallstep SmallstepSafe.
 Require Import Linking.
 Require Import Classical.
 Require Import Invariant.
@@ -37,6 +37,29 @@ Definition not_stuck {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
   (exists r, final_state L s r)
   \/ (exists q, at_external L s q)
   \/ (exists t, exists s', Step L s t s').
+
+Definition partial_safe {liA liB st} (L: lts liA liB st) (err_state: st -> Prop) (s: st) : Prop :=
+  forall s' t,
+  Star L s t s' ->
+  ((exists r, final_state L s' r)
+  \/ (exists q, at_external L s' q)
+  \/ (exists t, exists s'', Step L s' t s''))
+  \/ err_state s'.
+
+Lemma star_partial_safe:
+  forall {liA liB st} (L: lts liA liB st) err s s' t,
+  Star L s t s' -> partial_safe L err s -> partial_safe L err s'.
+Proof.
+  intros; red; intros. eapply H0. eapply star_trans; eauto.
+Qed.
+
+Lemma partial_safe_implies {liA liB st} (L: lts liA liB st) err_state s:
+  partial_safe L err_state s ->
+  SmallstepSafe.partial_safe L err_state s.
+Proof.
+  intros. red. intros.
+  eapply H. eauto.
+Qed.
 
 
 (* Definition partial_safe {liA liB st} mem_error (L: lts liA liB st) (s: st) : Prop := *)
@@ -747,6 +770,17 @@ Proof.
   eauto.
 Qed.
 
+Lemma lts_preserves_progress_internal_partial_safe {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) se w SI err_state: forall s,
+    lts_preserves_progress se (L se) IA IB (SI se) w (err_state se) ->
+    SI se w s ->
+    partial_safe (L se) (err_state se) s.
+Proof.
+  intros s PRE SINV. red.
+  intros.  
+  exploit @lts_preserves_progress_star. eauto. eauto. auto.
+  intros A.
+  exploit @internal_state_progress. eauto. eauto. intros [B|C]; try contradiction; eauto.
+Qed.
 
 (* soundness of module_safe_components *)
 Lemma module_type_safe_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS:
@@ -1017,6 +1051,123 @@ End SAFETYK_PRESERVATION_FSIMG.
 
 
 (** *End of Experiment code: safety preservation using type preserving method *)
+
+
+(** *Experiment code: try to prove the preservation of partial safety under the error preserving backward simulation *)
+               
+Section PARTIAL_SAFETY_PRESERVATION.
+
+Context {liA1 liA2 liB1 liB2} (ccA: callconv liA1 liA2) (ccB: callconv liB1 liB2).
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
+Context (IA1 : invariant liA1) (IB1: invariant liB1).
+Context (err_state1: Genv.symtbl -> state L1 -> Prop) (err_state2: Genv.symtbl -> state L2 -> Prop).
+
+Lemma module_partial_safe_preservation:
+  module_type_safe L1 IA1 IB1 err_state1 ->
+  backward_simulation_preserve_error ccA ccB L1 L2 err_state1 err_state2 ->
+  module_type_safe L2 (invcc IA1 ccA) (invcc IB1 ccB) err_state2.
+Proof.
+  intros [SAFE] [BSIM].
+  destruct SAFE as (SINV & SAFE).
+  inv BSIM.
+  red. constructor.
+  set (MINV:= fun se2 '(wB, ccwB) s2 => exists se1 i s1, bsimp_match_states se1 se2 ccwB i s1 s2
+                                                /\ match_senv ccB ccwB se1 se2
+                                                /\ symtbl_inv IB1 wB se1
+                                                /\ SINV se1 wB s1). 
+  eapply Module_ksafe_components with (msafek_invariant := MINV).  
+  intros se2 (wB1 & ccwB) (se1 & SYM1 & MENV) VSE2.
+  econstructor.
+  (* step preservation *)
+  - simpl. intros s2 t s2' (se1' & i & s1 & MST & MSENV1 & SYM2 & SINV1).
+    intros STEP2.
+    assert (VSE1: Genv.valid_for (skel L1) se1').
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }
+    edestruct @bsimp_simulation as (i' & s1' & STEP1 & MINV1); eauto.
+    (* prove sound state is internal safe *)
+    eapply partial_safe_implies.
+    eapply lts_preserves_progress_internal_partial_safe; eauto.
+    exists se1', i', s1'. repeat apply conj; auto.
+    (* prove plus preserves sound state *)
+    destruct STEP1.    
+    eapply lts_preserves_progress_star; eauto. eapply plus_star. eauto.
+    destruct H.  eapply lts_preserves_progress_star; eauto.    
+  (* internal_state_progress *)
+  - simpl. intros s2 (se1' & i & s1 & MST & MSENV1 & SYM2 & SINV1).
+    assert (VSE1: Genv.valid_for (skel L1) se1').
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }
+    eapply bsimp_progress; eauto.
+    (* prove sound state is internal safe *)
+    eapply partial_safe_implies.
+    eapply lts_preserves_progress_internal_partial_safe; eauto.
+  (* initial_preserves_progress *)
+  - intros q2 VQ2 (q1 & QINV2 & MQ).
+    assert (VSE1: Genv.valid_for (skel L1) se1).
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }
+    generalize (bsimp_lts se1 se2 ccwB MENV VSE1). intros BSIMP.
+    assert (VQ1: valid_query (L1 se1) q1 = true).
+    { erewrite <- bsimp_match_valid_query; eauto. }
+    edestruct @bsimp_match_initial_states as [EXIST MATCH]; eauto.
+    (* source initial progress *)
+    edestruct @initial_preserves_progress as (s1 & INIT1 & SINV1); eauto.
+    exploit EXIST; eauto.
+    intros (s2 & INIT2).
+    exists s2. split. auto.
+    intros s2' INIT2'.
+    exploit MATCH; eauto.
+    intros (s1' & INIT1' & (i & MST)).
+    red.  exists se1, i, s1'. repeat apply conj; auto.
+  (* external_preserves_progress *)
+  - intros s2 q2 (se1' & i & s1 & MST & MSENV1 & SYM2 & SINV1) ATEXT2.
+    assert (VSE1: Genv.valid_for (skel L1) se1).
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }    
+    assert (VSE1': Genv.valid_for (skel L1) se1').
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }
+    edestruct @bsimp_match_external as (ccwA & s1' & q1 & STAR & ATEXT1 & MQ & MSENV2 & AFEXT); eauto.
+    (* prove sound state is internal safe *)
+    eapply partial_safe_implies.
+    eapply lts_preserves_progress_internal_partial_safe; eauto.
+    (* star preserves SINV *)
+    assert (SINV1': SINV se1' wB1 s1').
+    { eapply lts_preserves_progress_star; eauto. }
+    edestruct @external_preserves_progress as (wA & SYMA & QINV1 & AFSAFE); eauto.     
+    exists (wA, ccwA). repeat apply conj.
+    econstructor; eauto.
+    econstructor; eauto.
+    (* after external *)
+    intros r2 (r1 & RINV1 & MR).
+    exploit AFEXT. eauto.
+    intros [EXIST MATCH].
+    exploit AFSAFE. eauto.
+    intros (s1'' & AFST1 & SINV1'').
+    exploit EXIST. eauto. intros (s2' & AFST2).
+    exists s2'. split; auto.
+    intros s2'' AFST2'.
+    exploit MATCH; eauto.
+    intros (s1''' & AFST1'' & (i' & MST')).
+    red. exists se1', i', s1'''. repeat apply conj; eauto.
+  (* final_state_preserves *)
+  - intros s2 r2 (se1' & i & s1 & MST & MSENV1 & SYM2 & SINV1) FINAL2.
+    assert (VSE1': Genv.valid_for (skel L1) se1').
+    { eapply match_senv_valid_for; eauto.
+      erewrite bsimp_skel; eauto. }
+    edestruct @bsimp_match_final_states as (s1' & r1 & STAR & FINAL1 & MR); eauto.
+    (* prove sound state is internal safe *)
+    eapply partial_safe_implies.
+    eapply lts_preserves_progress_internal_partial_safe; eauto.
+    (* star preserves SINV *)
+    assert (SINV1': SINV se1' wB1 s1').
+    { eapply lts_preserves_progress_star; eauto. }
+    exploit @final_state_preserves; eauto.
+    intros RINV1. econstructor; eauto.
+Qed.
+
+End PARTIAL_SAFETY_PRESERVATION.
 
 
 (** *Experiment code about inductive defined open forward simulation  *)
