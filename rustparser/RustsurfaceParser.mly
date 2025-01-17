@@ -368,9 +368,10 @@ stmt_item:
 
 stmt:
   | s = stmt_item { s }
-  | IF; e = expr; LBRACE; s1 = stmt; RBRACE; ELSE; LBRACE; s2 = stmt; RBRACE; s3 = stmt;
+  (* In rust document, conditional expr also must not be struct expr *)
+  | IF; e = expr_except_struct; LBRACE; s1 = stmt; RBRACE; ELSE; LBRACE; s2 = stmt; RBRACE; s3 = stmt;
     { Ssequence (Sifthenelse (e, s1, s2), s3) }
-  | IF; e = expr; LBRACE; s1 = stmt; RBRACE; s3 = stmt;
+  | IF; e = expr_except_struct; LBRACE; s1 = stmt; RBRACE; s3 = stmt;
     { Ssequence (Sifthenelse (e, s1, Sskip), s3) }
   | WHILE; e = expr; LBRACE; s = stmt; RBRACE; s1 = stmt;
     { Ssequence (Swhile (e, s), s1) }
