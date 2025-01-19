@@ -203,7 +203,6 @@ Definition collect_func (f: function) : Errors.res PathsMap.t :=
 
 End COMP_ENV.
 
-
 (* Repeated definitions from Rustlightown because the genvs are
 different *)
 Section DROPMEMBER.
@@ -253,16 +252,6 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m1 tys m2 ->
     drop_box_rec b ofs m (ty :: tys) m2
 .
-
-Inductive extcall_free_sem_mem_error: list val -> mem -> Prop :=
-| extcall_free_error1: forall (b : block) (lo : ptrofs) (m : mem),
-    ~ Mem.valid_access m Mptr b (Ptrofs.unsigned lo - size_chunk Mptr) Readable ->
-    extcall_free_sem_mem_error [Vptr b lo] m
-| extcall_free_error2: forall (b : block) (lo sz : ptrofs) (m : mem),
-    Mem.load Mptr m b (Ptrofs.unsigned lo - size_chunk Mptr) = Some (Vptrofs sz) ->
-    Ptrofs.unsigned sz > 0 ->
-    ~ Mem.range_perm m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable ->
-    extcall_free_sem_mem_error [Vptr b lo] m.
 
 
 Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> Prop :=

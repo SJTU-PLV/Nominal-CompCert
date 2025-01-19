@@ -1362,6 +1362,7 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m (ty :: tys) m2
 .
 
+
 Inductive extcall_free_sem_mem_error: list val -> mem -> Prop :=
 | extcall_free_error1: forall (b : block) (lo : ptrofs) (m : mem),
     ~ Mem.valid_access m Mptr b (Ptrofs.unsigned lo - size_chunk Mptr) Readable ->
@@ -1462,7 +1463,6 @@ Inductive step_drop : state -> trace -> state -> Prop :=
       (Dropstate id1 (Vptr b1 ofs1) None nil (Kdropcall id2 (Vptr b2 ofs2) s membs k) m) E0
       (Dropstate id2 (Vptr b2 ofs2) s membs k m)
 .
-
 
 Inductive step_drop_mem_error : state -> Prop :=
 | step_dropstate_struct_error: forall id1 id2 co1 b1 ofs1 tys m k membs fid fty fofs orgs
@@ -1584,7 +1584,6 @@ come from dropinsert *)
       (Dropinsert f l dk k le own m)
 .
 
-
 Inductive step_dropplace_mem_error: state -> Prop :=
 | step_dropplace_box_error1: forall le m k f p own ps l
     (* eval_place error *)
@@ -1603,10 +1602,28 @@ Inductive step_dropplace_mem_error: state -> Prop :=
     (* free error *)
     (FREE: extcall_free_sem_mem_error [Vptr b' ofs'] m),
     step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_box (p :: l))) ps k le own m)
-| step_dropplace_comp_error: forall m k p f le own ps l
+| step_dropplace_struct_error: forall m k p f le own ps l orgs id co
+    (TYP: typeof_place p = Tstruct orgs id)
+    (CO: (genv_cenv ge) ! id = Some co)
+    (STRUCT: co_sv co = Struct)
     (* p is struct or enum *)
     (PADDR: eval_place_mem_error ge le m p),
-    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m) 
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m)
+| step_dropplace_enum_error1: forall m k p f le own ps l orgs id co
+    (TYP: typeof_place p = Tvariant orgs id)
+    (CO: (genv_cenv ge) ! id = Some co)
+    (STRUCT: co_sv co = TaggedUnion)
+    (* p is struct or enum *)
+    (PADDR: eval_place_mem_error ge le m p),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m)
+| step_dropplace_enum_error2: forall m k p orgs co id b ofs f le own ps l
+    (PTY: typeof_place p = Tvariant orgs id)
+    (SCO: ge.(genv_cenv) ! id = Some co)
+    (COENUM: co.(co_sv) = TaggedUnion)
+    (PADDR: eval_place ge le m p b ofs)
+    (* error in loading the tag *)
+    (ERR: ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable),
+    step_dropplace_mem_error (Dropplace f (Some (drop_fully_owned_comp p l)) ps k le own m)
 .
 
 
@@ -1779,6 +1796,127 @@ Inductive step_dropinsert : state -> trace -> state -> Prop :=
       (State f Sskip k le own m)
 .
 
+Inductive step_dropinsert_mem_error : state -> Prop :=
+| step_dropinsert_assign_error1: forall f e p k le m own,    
+    eval_expr_mem_error ge le m e ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign p e) k le own m)
+| step_dropinsert_assign_error2: forall f e p k le m own v,
+    eval_expr ge le m ge e v ->
+    eval_place_mem_error ge le m p ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign p e) k le own m)
+| step_dropinsert_assign_error3: forall f e p k le m b ofs v v1 own,
+    eval_place ge le m p b ofs ->
+    eval_expr ge le m ge e v ->
+    sem_cast v (typeof e) (typeof_place p) = Some v1 ->
+    assign_loc_mem_error ge (typeof_place p) m b ofs v1 ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign p e) k le own m)
+| step_dropinsert_assign_variant_error1: forall f e p k le m enum_id fid own,
+    (* error in evaluating the expression *)
+    eval_expr_mem_error ge le m e ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own m)
+| step_dropinsert_assign_variant_error2: forall f e p k le v m enum_id fid own,
+    eval_expr ge le m ge e v ->
+    (* error in evaluating lhs *)
+    eval_place_mem_error ge le m p ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own m)
+| step_dropinsert_assign_variant_error3: forall f e p ty k le m1 b ofs v v1 co fid enum_id orgs own fofs
+    (TYP: typeof_place p = Tvariant orgs enum_id)
+    (CO: ge.(genv_cenv) ! enum_id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
+    (EXPR: eval_expr ge le m1 ge e v)
+    (PADDR1: eval_place ge le m1 p b ofs)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
+    (CAST: sem_cast v (typeof e) ty = Some v1)
+    (* error in assigning the value to the enum body *)
+    (ERR: assign_loc_mem_error ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1),
+    step_dropinsert_mem_error(Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own m1)
+| step_dropinsert_assign_variant_error4: forall f e p ty k le m1 m2 b ofs v v1 co fid enum_id orgs own fofs
+    (TYP: typeof_place p = Tvariant orgs enum_id)
+    (CO: ge.(genv_cenv) ! enum_id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
+    (EXPR: eval_expr ge le m1 ge e v)
+    (PADDR1: eval_place ge le m1 p b ofs)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
+    (CAST: sem_cast v (typeof e) ty = Some v1)
+    (AS: assign_loc ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1 m2)
+    (* error in evaluating the place in the second time *)
+    (ERR: eval_place_mem_error ge le m2 p),
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own m1)
+| step_dropinsert_assign_variant_error5: forall f e p ty k le m1 m2 b ofs b1 ofs1 v v1 co fid enum_id orgs own fofs tag
+    (TYP: typeof_place p = Tvariant orgs enum_id)
+    (CO: ge.(genv_cenv) ! enum_id = Some co)
+    (FTY: field_type fid co.(co_members) = OK ty)
+    (EXPR: eval_expr ge le m1 ge e v)
+    (PADDR1: eval_place ge le m1 p b ofs)
+    (FOFS: variant_field_offset ge fid co.(co_members) = OK fofs)
+    (CAST: sem_cast v (typeof e) ty = Some v1)
+    (AS: assign_loc ge ty m1 b (Ptrofs.add ofs (Ptrofs.repr fofs)) v1 m2)
+    (PADDR: eval_place ge le m2 p b1 ofs1)
+    (TAG: field_tag fid (co_members co) = Some tag)
+    (* error in storing the tag *)
+    (ERR: ~ Mem.valid_access m2 Mint32 b1 (Ptrofs.unsigned ofs1) Writable),
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dassign_variant p enum_id fid e) k le own m1)
+| step_dropinsert_box_error1: forall le e p k m1 m2 f b ty own,
+    typeof_place p = Tbox ty ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    (* error in storing the size *)
+    ~ Mem.valid_access m2 Mptr b (- size_chunk Mptr) Writable ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dbox p e) k le own m1)
+| step_dropinsert_box_error2: forall le e p k m1 m2 m3 f b ty own,
+    typeof_place p = Tbox ty ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    (* error in evaluating the rhs *)
+    eval_expr_mem_error ge le m3 e ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dbox p e) k le own m1)
+| step_dropinsert_box_error3: forall le e p k m1 m2 m3 f b ty v v1 own,
+    typeof_place p = Tbox ty ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    eval_expr ge le m3 ge e v ->
+    sem_cast v (typeof e) ty = Some v1 ->
+    (* error in storing the rhs *)
+    assign_loc_mem_error ge ty m3 b Ptrofs.zero v1 ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dbox p e) k le own m1)
+| step_dropinsert_box_error4: forall le e p k m1 m2 m3 m4 f b ty v v1 own,
+    typeof_place p = Tbox ty ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    eval_expr ge le m3 ge e v ->
+    sem_cast v (typeof e) ty = Some v1 ->
+    assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
+    (* error in evaluating the address of lhs *)
+    eval_place_mem_error ge le m4 p ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dbox p e) k le own m1)
+| step_dropinsert_box_error5: forall le e p k m1 m2 m3 m4 f b ty v v1 pb pofs own,
+    typeof_place p = Tbox ty ->
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge (typeof e)) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge (typeof e)))) = Some m3 ->
+    eval_expr ge le m3 ge e v ->
+    sem_cast v (typeof e) ty = Some v1 ->
+    assign_loc ge ty m3 b Ptrofs.zero v1 m4 ->
+    eval_place ge le m4 p pb pofs ->
+    (* error in assigning the allocated block to the lhs *)
+    assign_loc_mem_error ge (typeof_place p) m4 pb pofs (Vptr b Ptrofs.zero) ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dbox p e) k le own m1)
+| step_dropinsert_call_error1: forall f a al k le m p own,
+    (* error in evaluating the function pointer *)
+    eval_expr_mem_error ge le m a ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dcall p a al) k le own m)
+| step_dropinsert_call_error2: forall f a al k le m  tyargs vf p own,
+    eval_expr ge le m ge a vf ->
+    (* error in evaluating the expression list *)
+    eval_exprlist_mem_error ge le m ge al tyargs ->
+    step_dropinsert_mem_error (Dropinsert f drop_end (Dcall p a al) k le own m)
+| step_dropinsert_return_error1: forall f p k le m own,
+    eval_expr_mem_error ge le m (Epure (Eplace p (typeof_place p)))->
+    step_dropinsert_mem_error (Dropinsert f (drop_return []) (Dreturn p) k le own m)
+| step_dropinsert_return_error2: forall f p k le m own,
+    Mem.free_list m (blocks_of_env ge le) = None ->
+    step_dropinsert_mem_error (Dropinsert f (drop_return []) (Dreturn p) k le own m)
+
+.
+
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p k le m own,
@@ -1880,6 +2018,7 @@ return nothing is only valid in void function! *)
 .
 
 
+
 (** Open semantics *)
 
 Inductive initial_state: rust_query -> state -> Prop :=
@@ -1910,10 +2049,56 @@ Inductive final_state: state -> rust_reply -> Prop:=
 | final_state_intro: forall v m,
     final_state (Returnstate v Kstop m) (rsr v m).
 
+(* memory error state *)
+
+Inductive function_entry_mem_error (f: function) (vargs: list val) (m: mem) (e: env) : Prop :=
+  | function_entry_mem_error_intro: forall m1,
+      list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
+      alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+      bind_parameters_mem_error ge e m1 f.(fn_params) vargs ->
+      function_entry_mem_error f vargs m e.
+
+Inductive step_mem_error : state -> Prop :=
+| step_dropinsert_error: forall f l dk k le own m,
+    step_dropinsert_mem_error (Dropinsert f l dk k le own m) ->
+    step_mem_error (Dropinsert f l dk k le own m)
+| step_dropplace_error: forall f st ps k le own m,
+    step_dropplace_mem_error (Dropplace f st ps k le own m) ->
+    step_mem_error (Dropplace f st ps k le own m)
+
+| step_dropstate_error: forall id v s membs k m,
+    step_drop_mem_error (Dropstate id v s membs k m) ->
+    step_mem_error (Dropstate id v s membs k m)
+| step_internal_function_error: forall vf f vargs k m e own1 own2
+    (FIND: Genv.find_funct ge vf = Some (Internal f))
+    (OWN1: init_own_env ge f = OK own1)
+    (OWN2: init_place_list own1 (places_of_locals (fn_params f)) = own2),
+    function_entry_mem_error f vargs m e ->
+    step_mem_error (Callstate vf vargs k m)
+(* | step_return_0_error: forall f k le m own, *)
+(*     Mem.free_list m (blocks_of_env ge le) = None -> *)
+(*     step_mem_error (State f (Sreturn p) k le own m) *)
+| step_returnstate_error1: forall p v m f k e own,
+    eval_place_mem_error ge e m p ->
+    step_mem_error (Returnstate v (Kcall p f e own k) m)
+| step_returnstate_error2: forall p v m f k e b ofs ty own,
+    ty = typeof_place p ->
+    eval_place ge e m p b ofs ->
+    assign_loc_mem_error ge ty m b ofs v ->
+    step_mem_error (Returnstate v (Kcall p f e own k) m)
+| step_ifthenelse_error:  forall f a s1 s2 k e m own,
+    eval_expr_mem_error ge e m a ->
+    step_mem_error (State f (Sifthenelse a s1 s2) k e own m)
+.
+
+
 End SMALLSTEP.
 
 End SEMANTICS.
 
+Definition mem_error (p: program) (se: Genv.symtbl) (s: state) : Prop :=
+  step_mem_error (globalenv se p) s.
+  
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
 
@@ -1938,3 +2123,4 @@ Proof.
   red; simpl; intros. inv H; try inv SDROP; simpl; try lia.
   eapply external_call_trace_length; eauto.
 Qed.
+ 

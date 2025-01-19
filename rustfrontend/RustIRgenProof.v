@@ -8,7 +8,7 @@ Require Import Rusttypes.
 Require Import Errors.
 Require Import LanguageInterface CKLR Inject InjectFootprint.
 Require Import RustIR Rustlight RustOp RustIRgen.
-Require Import RustIRown.
+Require Import SmallstepSafe RustIRown.
 Require Import InitDomain Rustlightown.    
 
 Import ListNotations.
@@ -1653,14 +1653,126 @@ Proof.
   eexists. econstructor.
 Qed.
 
+(** Proof of the preservation of memory error *)
+
+Lemma drop_box_rec_mem_error_implies: forall b ofs m tys,
+    drop_box_rec_mem_error ge b ofs m tys ->
+    RustIR.drop_box_rec_mem_error tge b ofs m tys.
+Proof.
+  intros. induction H.
+  - econstructor; eauto.
+  - eapply RustIR.drop_box_rec_error2; eauto.
+  - eapply RustIR.drop_box_rec_error3; eauto.
+  - eapply RustIR.drop_box_rec_error4; eauto.
+Qed.
+    
+Lemma mem_error_preservation: forall s1 s2,
+    step_mem_error ge s1 ->
+    match_states s1 s2 ->
+    exists s2', star RustIRown.step tge s2 E0 s2'
+           /\ RustIRown.step_mem_error tge s2'.
+Proof.
+  intros s1 s2 Err MATCH.
+  inv MATCH; inv Err.
+  (* step_ifthenelse_error *)
+  - eexists. split.
+    eapply star_refl.
+    econstructor. solve_eval.
+  - inv H0; try congruence.
+    (* step_dropinsert_return_error1 *)
+    + inv STMT1. rewrite gen_drops_for_vars_nil.
+      inv MST.
+      * inv MDCONT. eexists. split.
+        eapply star_step.
+        eapply RustIRown.step_skip_seq. eapply star_refl. eauto.
+        eapply RustIRown.step_return_error1; solve_eval.
+      * inv MRET. eexists. split.
+        eapply star_step.
+        eapply RustIRown.step_skip_seq. eapply star_refl. eauto.
+        eapply RustIRown.step_return_error1; solve_eval.
+    (* step_dropinsert_return_error2 *)
+    + inv STMT1. inv MST.
+      * inv MDCONT. eexists. split.
+        eapply star_step.
+        eapply RustIRown.step_skip_seq. eapply star_refl. eauto.
+        eapply RustIRown.step_return_error2; solve_eval.
+      * inv MRET. eexists. split.
+        eapply star_step.
+        eapply RustIRown.step_skip_seq. eapply star_refl. eauto.
+        eapply RustIRown.step_return_error2; solve_eval.
+  - inv H0; try congruence.
+    all: inv STMT2; eexists; split; [eapply star_refl|].
+    (* step_assign_error *)
+    eapply step_assign_error1; solve_eval.
+    eapply step_assign_error2; solve_eval.
+    eapply step_assign_error3; solve_eval.
+    (* step_assign_variant_error *)
+    eapply step_assign_variant_error1; solve_eval.
+    eapply step_assign_variant_error2; solve_eval.
+    eapply step_assign_variant_error3; solve_eval.
+    eapply step_assign_variant_error4; solve_eval.
+    eapply step_assign_variant_error5; solve_eval.
+    (* step_box_error *)
+    eapply step_box_error1; solve_eval.
+    eapply step_box_error2; solve_eval.
+    eapply step_box_error3; solve_eval.
+    eapply step_box_error4; solve_eval.
+    eapply step_box_error5; solve_eval.
+    (* step_call_error *)
+    eapply step_call_error1; solve_eval.
+    eapply step_call_error2; solve_eval.
+  - inv MCONT.
+    + inv H0.      
+      all: eexists; split; [eapply star_refl| econstructor].
+      (* step_dropplace_box_error *)
+      eapply RustIRown.step_dropplace_box_error1; solve_eval.
+      eapply RustIRown.step_dropplace_box_error2; solve_eval.
+      eapply RustIRown.step_dropplace_box_error3; solve_eval.
+      eapply RustIRown.step_dropplace_struct_error; solve_eval.
+      eapply RustIRown.step_dropplace_enum_error1; solve_eval.
+      eapply RustIRown.step_dropplace_enum_error2; solve_eval.
+    + inv H0.
+      all: eexists; split; [eapply star_refl| econstructor].
+      (* step_dropplace_box_error *)
+      eapply RustIRown.step_dropplace_box_error1; solve_eval.
+      eapply RustIRown.step_dropplace_box_error2; solve_eval.
+      eapply RustIRown.step_dropplace_box_error3; solve_eval.
+      eapply RustIRown.step_dropplace_struct_error; solve_eval.
+      eapply RustIRown.step_dropplace_enum_error1; solve_eval.
+      eapply RustIRown.step_dropplace_enum_error2; solve_eval.
+  - inv H0.    
+    all: eexists; split; [eapply star_refl| econstructor].
+    eapply RustIRown.step_dropstate_struct_error; solve_eval.
+    eapply RustIRown.step_dropstate_enum_error1; solve_eval.
+    eapply RustIRown.step_dropstate_enum_error2; solve_eval.
+    eapply RustIRown.step_dropstate_box_error; solve_eval.
+    eapply drop_box_rec_mem_error_implies. eauto.
+  - eexists. split.
+    eapply star_refl.
+    exploit find_funct_match_id; eauto. intros (tf & A1 & A2).
+    destruct tf; simpl in A2; inv A2.    
+    econstructor; solve_eval.
+    erewrite <- init_own_env_eq; eauto.
+    inv H0.
+    econstructor; solve_eval.
+  - eexists. split.
+    eapply star_refl.
+    specialize (MCONT nil). inv MCONT.
+    econstructor; solve_eval.
+  - eexists. split.
+    eapply star_refl.
+    specialize (MCONT nil). inv MCONT.
+    eapply RustIRown.step_returnstate_error2 ; solve_eval.
+Qed.  
+
 End PRESERVATION.
 
 (* forward simulation with the progress property *)
 Theorem transl_program_correct1 prog tprog:
    match_prog prog tprog ->
-   forward_simulation_progress cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
+   forward_simulation_progress_ubpreserve cc_id cc_id (semantics prog) (RustIRown.semantics tprog) (mem_error prog) (RustIRown.mem_error tprog).
 Proof.
-  fsimg eapply forward_simulation_plus; simpl in *. 
+  fsimp eapply forward_simulation_plus; simpl in *. 
   - symmetry. eapply match_prog_skel. auto.
   - intros q _ [ ]. subst. eapply is_internal_match_id. eauto.
     intros. destruct f; simpl in H. subst. auto. subst. auto.
@@ -1671,6 +1783,8 @@ Proof.
   - intros. subst. eapply initial_progress; eauto.
   - intros. destruct H. subst. eapply external_progress; eauto.
   - intros. destruct H. subst. eapply match_progress; eauto.
+  - intros. destruct H. subst.
+    eapply mem_error_preservation; eauto.    
 Qed.
 
 Theorem transl_program_correct prog tprog:
@@ -1678,7 +1792,7 @@ Theorem transl_program_correct prog tprog:
    forward_simulation cc_id cc_id (semantics prog) (RustIRown.semantics tprog).
 Proof.
   intros.
-  eapply fsim_progress_implies; eauto.
+  eapply fsim_progress_ubpreserve_implies; eauto.
   eapply transl_program_correct1; eauto.
 Qed.
 

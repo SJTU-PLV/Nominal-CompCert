@@ -776,10 +776,10 @@ Inductive step_mem_error : state -> Prop :=
 (* | step_return_0_error: forall f k le m own, *)
 (*     Mem.free_list m (blocks_of_env ge le) = None -> *)
 (*     step_mem_error (State f (Sreturn p) k le own m) *)
-| step_return_1_error1: forall f p k le m own,
+| step_return_error1: forall f p k le m own,
     eval_expr_mem_error ge le m (Epure (Eplace p (typeof_place p)))->
     step_mem_error (State f (Sreturn p) k le own m)
-| step_return_2_error2: forall f p k le m own,
+| step_return_error2: forall f p k le m own,
     Mem.free_list m (blocks_of_env ge le) = None ->
     step_mem_error (State f (Sreturn p) k le own m)
 | step_returnstate_error1: forall p v m f k e own,
@@ -799,6 +799,9 @@ Inductive step_mem_error : state -> Prop :=
 End SMALLSTEP.
 
 End SEMANTICS.
+
+Definition mem_error (p: program) (se: Genv.symtbl) (s: state) : Prop :=
+  step_mem_error (globalenv se p) s.
 
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.

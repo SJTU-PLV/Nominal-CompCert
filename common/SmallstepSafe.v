@@ -70,7 +70,7 @@ Arguments fsimp_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_s
 
 (* The error states should be transparent *)
 Record fsimp_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 err_state1 err_state2 :=
-  Forward_simulation_ppub {
+  Forward_simulation_progress_ubpreserve {
     fsimp_index: Type;
     fsimp_order: fsimp_index -> fsimp_index -> Prop;
     fsimp_match_states: _;
@@ -86,11 +86,60 @@ Record fsimp_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1
       well_founded fsimp_order;
   }.
 
-Arguments Forward_simulation_ppub {_ _ ccA _ _ ccB L1 L2 err_state1 err_state2 fsimp_index}.
+Arguments Forward_simulation_progress_ubpreserve {_ _ ccA _ _ ccB L1 L2 err_state1 err_state2 fsimp_index}.
 
 (* We can treat error_state as the patch of L1/L2 *)
-Definition forward_simulation_ppub {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 err_state1 err_state2 :=
+Definition forward_simulation_progress_ubpreserve {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 err_state1 err_state2 :=
   inhabited (@fsimp_components liA1 liA2 ccA liB1 liB2 ccB L1 L2 err_state1 err_state2).
+
+
+Section FSIM_IMPL.
+
+Context {liA1 liB1} (L1: semantics liA1 liB1).
+Context {liA2 liB2} (L2: semantics liA2 liB2).
+
+(** Forward simualtion with progress property implies the normal
+forward simulation *)
+
+Lemma fsim_progress_ubpreserve_implies {ccA ccB} err_state1 err_state2 :
+  forward_simulation_progress_ubpreserve ccA ccB L1 L2 err_state1 err_state2 ->
+  forward_simulation ccA ccB L1 L2.
+Proof.
+  intros [FSIMG]. econstructor.
+  inv FSIMG. eapply Forward_simulation with (fsim_match_states := fsimp_match_states0); eauto.
+  intros.
+  exploit fsimp_lts0; eauto.
+  intros FSIMG1. inv FSIMG1. inv fsimp_prop0.
+  econstructor; eauto.
+Qed.
+
+Lemma fsim_progress_ubpreserve_implies_progress {ccA ccB} err_state1 err_state2 :
+  forward_simulation_progress_ubpreserve ccA ccB L1 L2 err_state1 err_state2 ->
+  forward_simulation_progress ccA ccB L1 L2.
+Proof.
+  intros [FSIMG]. econstructor.
+  inv FSIMG. eapply Forward_simulation_progress with (fsimg_match_states := fsimp_match_states0); eauto.
+  intros.
+  exploit fsimp_lts0; eauto.
+  intros FSIMG1. inv FSIMG1. inv fsimp_prop0.
+  econstructor; eauto.
+  econstructor; eauto.
+Qed.
+
+
+End FSIM_IMPL.
+
+(** Copy the tactic for normal forward simulation *)
+
+Ltac fsimp_tac tac :=
+  intros MATCH; constructor;
+  eapply Forward_simulation_progress_ubpreserve with (fsimp_match_states := fun _ _ _ => _);
+  [ try fsim_skel MATCH
+  | intros se1 se2 w Hse Hse1; econstructor; try tac
+  | try solve [auto using well_founded_ltof]].
+
+Tactic Notation (at level 3) "fsimp" tactic3(tac) := fsimp_tac tac.
+
 
 (** Backward simulation with the property of UB preservation  *)
 
@@ -428,7 +477,7 @@ Lemma forward_to_backward_simulation_partial:
   forall {liA1 liA2} (ccA: callconv liA1 liA2),
   forall {liB1 liB2} (ccB: callconv liB1 liB2),
   forall L1 L2 err_state1 err_state2,
-    forward_simulation_ppub ccA ccB L1 L2 err_state1 err_state2 ->
+    forward_simulation_progress_ubpreserve ccA ccB L1 L2 err_state1 err_state2 ->
     receptive L1 ->
     determinate L2 ->
     sound_err L2 err_state2 ->
