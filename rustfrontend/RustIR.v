@@ -157,12 +157,12 @@ Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env); genv_dropm := generate_dropm p |}.
 
 
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
+Inductive function_entry (ce: composite_env) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
 | function_entry_intro: forall m1,
     list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
-    alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-    bind_parameters ge e m1 f.(fn_params) vargs m' ->
-    function_entry ge f vargs m e m'.
+    alloc_variables ce empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+    bind_parameters ce e m1 f.(fn_params) vargs m' ->
+    function_entry ce f vargs m e m'.
 
 End SEMANTICS.
 
@@ -253,6 +253,23 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m (ty :: tys) m2
 .
 
+
+(* drop_box_rec is deterministic *)
+Lemma drop_box_rec_det: forall tys b ofs m1 m2 m3,
+    drop_box_rec b ofs m1 tys m2 ->
+    drop_box_rec b ofs m1 tys m3 ->
+    m2 = m3.
+Proof.
+  induction tys; intros.
+  - inv H. inv H0. auto.
+  - inv H. inv H0.
+    exploit deref_loc_rec_det. eapply H3. eapply H2.
+    intros A. inv A.
+    exploit deref_loc_det. eapply H4. eapply H5. intros B. inv B.
+    exploit extcall_free_sem_det. eapply H6. eapply H9.
+    intros (C1 & C2). subst.
+    eauto.
+Qed.
 
 Inductive drop_box_rec_mem_error (b: block) (ofs: ptrofs) : mem -> list type -> Prop :=
 | drop_box_rec_error1: forall m ty tys,

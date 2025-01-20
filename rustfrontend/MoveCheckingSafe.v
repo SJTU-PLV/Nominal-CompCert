@@ -5302,84 +5302,6 @@ Proof.
 Qed.
 
 
-Lemma deref_loc_rec_det: forall tys b ofs m v1 v2,
-    deref_loc_rec m b ofs tys v1 ->
-    deref_loc_rec m b ofs tys v2 ->
-    v1 = v2.
-Proof.
-  induction tys; intros.
-  - inv H. inv H0. auto.
-  - inv H. inv H0. exploit IHtys. eapply H3. eapply H2. intros A.
-    inv A. eapply deref_loc_det; eauto.
-Qed.
-
-Lemma Vptrofs_det: forall sz1 sz2,
-    Vptrofs sz1 = Vptrofs sz2 ->
-    sz1 = sz2.
-Proof.
-  unfold Vptrofs.
-  intros.  destruct Archi.ptr64 eqn: P.
-  - destruct (Ptrofs.to_int64 sz1) eqn: S1.
-    destruct (Ptrofs.to_int64 sz2) eqn: S2.
-    inv H.
-    unfold Ptrofs.to_int64 in *.
-    Transparent Int64.repr.
-    unfold Int64.repr in *. inv S1. inv S2.
-    erewrite !Int64.Z_mod_modulus_eq in *.
-    generalize (Ptrofs.unsigned_range sz1).
-    generalize (Ptrofs.unsigned_range sz2).
-    intros. rewrite !Ptrofs.modulus_eq64 in *; auto.
-    erewrite !Z.mod_small in *; try lia.
-    destruct sz1. destruct sz2. eapply Ptrofs.mkint_eq.
-    simpl in H0. auto.
-  - destruct (Ptrofs.to_int sz1) eqn: S1.
-    destruct (Ptrofs.to_int sz2) eqn: S2.
-    inv H.
-    unfold Ptrofs.to_int in *.
-    Transparent Int.repr.
-    unfold Int.repr in *. inv S1. inv S2.
-    erewrite !Int.Z_mod_modulus_eq in *.
-    generalize (Ptrofs.unsigned_range sz1).
-    generalize (Ptrofs.unsigned_range sz2).
-    intros. rewrite !Ptrofs.modulus_eq32 in *; auto.
-    erewrite !Z.mod_small in *; try lia.
-    destruct sz1. destruct sz2. eapply Ptrofs.mkint_eq.
-    simpl in H0. auto.
-Qed.
-
-      
-Lemma extcall_free_sem_det: forall m1 t v1 v2 v3 m2 m3,
-    extcall_free_sem ge v1 m1 t v2 m2 ->
-    extcall_free_sem ge v1 m1 t v3 m3 ->
-    v2 = v3 /\ m2 = m3.
-Proof.
-  intros.
-  inv H.
-  - inv H0. rewrite H1 in H5.
-    destruct (Val.eq (Vptrofs sz) (Vptrofs sz0)); try congruence.
-    eapply Vptrofs_det in e. subst.
-    rewrite H3 in H8. inv H8.
-    auto.
-  - inv H0. auto.
-Qed.
-
-(* drop_box_rec is deterministic *)
-Lemma drop_box_rec_det: forall tys b ofs m1 m2 m3,
-    drop_box_rec ge b ofs m1 tys m2 ->
-    drop_box_rec ge b ofs m1 tys m3 ->
-    m2 = m3.
-Proof.
-  induction tys; intros.
-  - inv H. inv H0. auto.
-  - inv H. inv H0.
-    exploit deref_loc_rec_det. eapply H3. eapply H2.
-    intros A. inv A.
-    exploit deref_loc_det. eapply H4. eapply H5. intros B. inv B.
-    exploit extcall_free_sem_det. eapply H6. eapply H9.
-    intros (C1 & C2). subst.
-    eauto.
-Qed.
-
 Lemma rsw_acc_shrink: forall m1 m2 sg fp1 fp2 Hm1,
     incl fp2 fp1 ->
     Mem.unchanged_on (fun b _ => ~ In b fp1) m1 m2 ->
@@ -7324,33 +7246,6 @@ Proof.
     eapply Mem.load_valid_access; eauto.
 Qed.
 
-Lemma deref_loc_progress_no_mem_error: forall m b ofs ty v,
-    deref_loc ty m b ofs v ->
-    deref_loc_mem_error ty m b ofs ->
-    False.
-Proof.
-  intros. inv H0. apply H2.
-  inv H.
-  - rewrite H1 in H0. inv H0. eapply Mem.load_valid_access; eauto.
-  - rewrite H1 in H0. inv H0.
-  - rewrite H1 in H0. inv H0.
-Qed.
-
-
-Lemma eval_place_progress_no_mem_error: forall p m le b ofs
-    (ERR: eval_place_mem_error ce le m p)
-    (EVAL: eval_place ce le m p b ofs),
-    False.
-Proof.
-  induction p; intros; inv EVAL; inv ERR; eauto.
-  - exploit eval_place_det. eapply H1. eauto. intros (A1 & A2).
-    subst.
-    eapply deref_loc_progress_no_mem_error; eauto.
-  - exploit eval_place_det. eapply H2. eauto. intros (A1 & A2).
-    subst.
-    eapply H7. eapply Mem.load_valid_access; eauto.
-Qed.
-
 Lemma eval_pexpr_no_mem_error: forall pe m le own init uninit universe fpm
     (MM: mmatch fpm ce m le own)
     (ERR: eval_pexpr_mem_error ce le m pe)
@@ -7542,59 +7437,6 @@ Proof.
       eapply deref_loc_no_mem_error with (fp:= (fp_box b1 (sizeof ce ty1) fp1)) (b:= b2) (ofs:= ofs1). 
       econstructor; eauto.
       econstructor; eauto. auto.
-Qed.
-
-    
-Lemma deref_loc_rec_progress_no_mem_error: forall tys m b ofs v,
-    deref_loc_rec m b ofs tys v ->
-    deref_loc_rec_mem_error m b ofs tys ->
-    False.
-Proof.
-  induction tys; intros.
-  - inv H0.
-  - inv H. inv H0; eauto.
-    eapply deref_loc_progress_no_mem_error; eauto.
-    exploit deref_loc_rec_det. eauto. eapply H3. intros A. inv A. eauto.
-Qed.
-
-Lemma extcall_free_sem_progress_no_mem_error: forall vl m1 t v m2,
-    extcall_free_sem ge vl m1 t v m2 ->
-    extcall_free_sem_mem_error vl m1 ->
-    False.
-Proof. 
-  intros. inv H; inv H0.
-  - eapply H6. eapply Mem.load_valid_access; eauto.
-  - eapply H8.
-    rewrite H1 in H5.
-    destruct (Val.eq (Vptrofs sz) (Vptrofs sz0)); try congruence.
-    eapply Vptrofs_det in e. subst.
-    eapply Mem.free_range_perm; eauto.
-Qed.
-
-Lemma drop_box_rec_progress_no_mem_error: forall tys b ofs m1 m2,
-    drop_box_rec ge b ofs m1 tys m2 ->
-    drop_box_rec_mem_error ge b ofs m1 tys ->
-    False.
-Proof.
-  induction tys; intros.
-  - inv H0.
-  - inv H. inv H0.
-    + eapply deref_loc_rec_progress_no_mem_error; eauto.
-    + exploit deref_loc_rec_det. eapply H3. eapply H5.
-      intros A. inv A.
-      eapply deref_loc_progress_no_mem_error; eauto.
-    + exploit deref_loc_rec_det. eapply H3. eapply H2.
-      intros A. inv A.
-      exploit deref_loc_det. eapply H4. eapply H7.
-      intros A. inv A.
-      eapply extcall_free_sem_progress_no_mem_error; eauto.
-    + exploit deref_loc_rec_det. eapply H3. eapply H2.
-      intros A. inv A.
-      exploit deref_loc_det. eapply H4. eapply H5.
-      intros A. inv A.
-      exploit extcall_free_sem_det. eapply H6. eapply H9.
-      intros (A1 & A2). subst.
-      eauto.
 Qed.
 
 

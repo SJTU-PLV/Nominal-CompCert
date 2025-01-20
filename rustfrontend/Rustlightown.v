@@ -551,6 +551,30 @@ Inductive assign_loc_mem_error (ce : composite_env) (ty : type) (m : mem) (b : b
     ~ Mem.range_perm m b (Ptrofs.unsigned ofs) ((Ptrofs.unsigned ofs) + (sizeof ce ty)) Cur Writable ->
     assign_loc_mem_error ce ty m b ofs v.
 
+Lemma assign_loc_det ce : forall ty m b ofs v m1 m2,
+    assign_loc ce ty m b ofs v m1 ->
+    assign_loc ce ty m b ofs v m2 ->
+    m1 = m2.
+Proof.
+  intros. inv H; inv H0; auto; try congruence.
+Qed.
+
+Lemma assign_loc_progress_no_mem_error: forall ce ty m1 m2 b ofs v,
+    assign_loc ce ty m1 b ofs v m2 ->
+    assign_loc_mem_error ce ty m1 b ofs v ->
+    False.
+Proof.
+  intros. inv H; inv H0; try congruence; eauto.
+  - rewrite H1 in H. inv H.
+    eapply H3. eapply Mem.store_valid_access_3; eauto.
+  - eapply H10. eapply Mem.loadbytes_range_perm; eauto.
+  - eapply H8.    
+    eapply Mem.storebytes_range_perm in H7.
+    red. intros. eapply H7.
+    exploit Mem.loadbytes_length; eauto. intros.
+    rewrite H9. rewrite Z2Nat.id. auto.
+    generalize (sizeof_pos ce ty). lia.
+Qed.
 
 Section SEMANTICS.
   
@@ -649,6 +673,33 @@ Inductive eval_place_mem_error : place -> Prop :=
 .
 
 
+Lemma deref_loc_progress_no_mem_error: forall m b ofs ty v,
+    deref_loc ty m b ofs v ->
+    deref_loc_mem_error ty m b ofs ->
+    False.
+Proof.
+  intros. inv H0. apply H2.
+  inv H.
+  - rewrite H1 in H0. inv H0. eapply Mem.load_valid_access; eauto.
+  - rewrite H1 in H0. inv H0.
+  - rewrite H1 in H0. inv H0.
+Qed.
+
+
+Lemma eval_place_progress_no_mem_error: forall p b ofs
+    (ERR: eval_place_mem_error p)
+    (EVAL: eval_place p b ofs),
+    False.
+Proof.
+  induction p; intros; inv EVAL; inv ERR; eauto.
+  - exploit eval_place_det. eapply H1. eauto. intros (A1 & A2).
+    subst.
+    eapply deref_loc_progress_no_mem_error; eauto.
+  - exploit eval_place_det. eapply H2. eauto. intros (A1 & A2).
+    subst.
+    eapply H7. eapply Mem.load_valid_access; eauto.
+Qed.
+
 Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
 | eval_Pnil: eval_place_list nil nil nil
 | eval_Pcons: forall p b ofs lp lb lofs,
@@ -742,6 +793,54 @@ Inductive eval_exprlist se : list expr -> typelist -> list val -> Prop :=
     eval_exprlist se bl tyl vl ->
     eval_exprlist se (a :: bl) (Tcons ty tyl) (v2 :: vl).
 
+(* determinism of eval_expr *)
+
+Lemma eval_pexpr_det se: forall pe v1 v2,
+    eval_pexpr se pe v1 ->
+    eval_pexpr se pe v2 ->
+    v1 = v2.
+Proof.
+  induction pe; intros until v2; intros E1 E2; inv E1; inv E2; try (econstructor; eauto).
+  - exploit eval_place_det. eapply H1. eapply H2. intros (A1 & A2). subst.
+    eapply deref_loc_det; eauto.
+  - exploit eval_place_det. eapply H1. eapply H5. intros (A1 & A2). subst.
+    rewrite H2 in H7. inv H7.
+    rewrite H3 in H8. inv H8.
+    rewrite H4 in H9. inv H9.
+    rewrite H6 in H11. inv H11. auto.
+  - exploit eval_place_det. eapply H4. eapply H5. intros (A1 & A2). subst.    
+    auto.
+  - exploit IHpe. eapply H2. eapply H3. intros. subst.
+    rewrite H5 in H7. inv H7. auto.
+  - exploit IHpe1. eapply H3. eapply H5. intros. subst.
+    exploit IHpe2. eapply H4. eapply H6. intros. subst.
+    rewrite H8 in H11. inv H11. auto.
+  - rewrite GADDR in GADDR0. inv GADDR0.
+    eapply deref_loc_det; eauto.
+Qed.
+
+Lemma eval_expr_det se: forall e v1 v2,
+    eval_expr se e v1 ->
+    eval_expr se e v2 ->
+    v1 = v2.
+Proof.
+  intros. inv H; inv H0.
+  eapply eval_pexpr_det; eauto.
+  eapply eval_pexpr_det; eauto.
+Qed.
+
+Lemma eval_exprlist_det se: forall el tyl vl1 vl2,
+    eval_exprlist se el tyl vl1 ->
+    eval_exprlist se el tyl vl2 ->
+    vl1 = vl2.
+Proof.
+  induction el; intros until vl2; intros E1 E2; inv E1; inv E2; eauto.
+  f_equal; eauto.
+  exploit eval_expr_det. eapply H1. eapply H6. intros. subst.
+  rewrite H2 in H8. inv H8. auto.
+Qed.
+
+    
 (** Memory error in evaluation of expression  *)
 
 
@@ -789,7 +888,46 @@ Inductive eval_exprlist_mem_error se: list expr -> typelist -> Prop :=
     eval_exprlist_mem_error se (a :: bl) (Tcons ty tyl)
 .
 
+(* If eval_expr succeeds, then eval_expr has no memory error *)
 
+Lemma eval_pexpr_progress_no_mem_error se: forall pe v,
+    eval_pexpr se pe v ->
+    eval_pexpr_mem_error pe ->
+     False.
+Proof.
+  induction pe; intros v A1 A2; inv A1; inv A2; try congruence; eauto.
+  - eapply eval_place_progress_no_mem_error; eauto.
+  - exploit eval_place_det. eapply H1. eauto. intros (B1 & B2).
+    subst.
+    eapply deref_loc_progress_no_mem_error; eauto.
+  - eapply eval_place_progress_no_mem_error; eauto.
+  - exploit eval_place_det. eapply H1. eauto. intros (B1 & B2).
+    subst. eapply H7.
+    eapply Mem.load_valid_access; eauto.
+  - eapply eval_place_progress_no_mem_error; eauto.
+  - destruct H0; eauto.
+Qed.
+
+Lemma eval_expr_progress_no_mem_error se: forall a v,
+    eval_expr se a v ->
+    eval_expr_mem_error a ->
+     False.
+Proof.
+  intros. inv H; inv H0.
+  - eapply eval_pexpr_progress_no_mem_error; eauto.
+  - eapply eval_pexpr_progress_no_mem_error; eauto.
+Qed.
+
+Lemma eval_exprlist_progress_no_mem_error se: forall al tl vl,
+    eval_exprlist se al tl vl ->
+    eval_exprlist_mem_error se al tl ->
+     False.
+Proof.
+  induction al; intros until vl; intros E1 E2; inv E1; inv E2; try congruence; eauto.
+  eapply eval_expr_progress_no_mem_error; eauto.
+Qed.
+
+  
 End EXPR.
 
 (** Some definitions of dropplace and dropstate *)
@@ -1035,6 +1173,25 @@ Inductive bind_parameters_mem_error (ce: composite_env) (e: env) : mem -> list (
     bind_parameters_mem_error ce e m1 params vl ->
     bind_parameters_mem_error ce e m ((id, ty) :: params) (v1 :: vl).
 
+Lemma alloc_variables_det ce: forall l e1 m1 e2 m2 e3 m3,
+    alloc_variables ce e1 m1 l e2 m2 ->
+    alloc_variables ce e1 m1 l e3 m3 ->
+    e2 = e3 /\ m2 = m3.
+Proof.
+  induction l; intros until m3; intros A1 A2; inv A1; inv A2; auto.
+  rewrite H3 in H8. inv H8. eauto.
+Qed.
+
+Lemma bind_parameters_det ce: forall l vl e m m1 m2,
+    bind_parameters ce e m l vl m1 ->
+    bind_parameters ce e m l vl m2 ->
+    m1 = m2.
+Proof.
+  induction l; intros until m2; intros B1 B2; inv B1; inv B2; auto.
+  rewrite H1 in H9. inv H9.
+  exploit assign_loc_det. eapply H3. eauto. intros. subst.
+  eapply IHl; eauto.
+Qed.
 
 (** Return the list of blocks in the codomain of [e], with low and high bounds. *)
 
@@ -1274,13 +1431,13 @@ Defined.
 
 (* Use extract_vars to extract the local variables *)
 
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) : Prop :=
+Inductive function_entry (ce: composite_env) (f: function) (vargs: list val) (m: mem) (e: env) (m2: mem) : Prop :=
 | function_entry_intro: forall m1
     (* (VARS: vars = extract_vars f.(fn_body)) *)
     (NOREP: list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)))
-    (ALLOC: alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
-    (BIND: bind_parameters ge e m1 f.(fn_params) vargs m2),
-    function_entry ge f vargs m e m2.
+    (ALLOC: alloc_variables ce empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1)
+    (BIND: bind_parameters ce e m1 f.(fn_params) vargs m2),
+    function_entry ce f vargs m e m2.
 
 
 Section DROPMEMBER.
@@ -1342,6 +1499,55 @@ Inductive deref_loc_rec_mem_error (m: mem) (b: block) (ofs: ptrofs) : list type 
 .
 
 
+Lemma Vptrofs_det: forall sz1 sz2,
+    Vptrofs sz1 = Vptrofs sz2 ->
+    sz1 = sz2.
+Proof.
+  unfold Vptrofs.
+  intros.  destruct Archi.ptr64 eqn: P.
+  - destruct (Ptrofs.to_int64 sz1) eqn: S1.
+    destruct (Ptrofs.to_int64 sz2) eqn: S2.
+    inv H.
+    unfold Ptrofs.to_int64 in *.
+    Transparent Int64.repr.
+    unfold Int64.repr in *. inv S1. inv S2.
+    erewrite !Int64.Z_mod_modulus_eq in *.
+    generalize (Ptrofs.unsigned_range sz1).
+    generalize (Ptrofs.unsigned_range sz2).
+    intros. rewrite !Ptrofs.modulus_eq64 in *; auto.
+    erewrite !Z.mod_small in *; try lia.
+    destruct sz1. destruct sz2. eapply Ptrofs.mkint_eq.
+    simpl in H0. auto.
+  - destruct (Ptrofs.to_int sz1) eqn: S1.
+    destruct (Ptrofs.to_int sz2) eqn: S2.
+    inv H.
+    unfold Ptrofs.to_int in *.
+    Transparent Int.repr.
+    unfold Int.repr in *. inv S1. inv S2.
+    erewrite !Int.Z_mod_modulus_eq in *.
+    generalize (Ptrofs.unsigned_range sz1).
+    generalize (Ptrofs.unsigned_range sz2).
+    intros. rewrite !Ptrofs.modulus_eq32 in *; auto.
+    erewrite !Z.mod_small in *; try lia.
+    destruct sz1. destruct sz2. eapply Ptrofs.mkint_eq.
+    simpl in H0. auto.
+Qed.
+
+Lemma extcall_free_sem_det se: forall m1 t v1 v2 v3 m2 m3,
+    extcall_free_sem se v1 m1 t v2 m2 ->
+    extcall_free_sem se v1 m1 t v3 m3 ->
+    v2 = v3 /\ m2 = m3.
+Proof.
+  intros.
+  inv H.
+  - inv H0. rewrite H1 in H5.
+    destruct (Val.eq (Vptrofs sz) (Vptrofs sz0)); try congruence.
+    eapply Vptrofs_det in e. subst.
+    rewrite H3 in H8. inv H8.
+    auto.
+  - inv H0. auto.
+Qed.
+
 (* big step to recursively drop boxes [Tbox (Tbox (Tbox
 ...))]. (b,ofs) is the address of the starting block *)
 Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Prop :=
@@ -1361,6 +1567,36 @@ Inductive drop_box_rec (b: block) (ofs: ptrofs) : mem -> list type -> mem -> Pro
     drop_box_rec b ofs m1 tys m2 ->
     drop_box_rec b ofs m (ty :: tys) m2
 .
+
+
+Lemma deref_loc_rec_det: forall tys b ofs m v1 v2,
+    deref_loc_rec m b ofs tys v1 ->
+    deref_loc_rec m b ofs tys v2 ->
+    v1 = v2.
+Proof.
+  induction tys; intros.
+  - inv H. inv H0. auto.
+  - inv H. inv H0. exploit IHtys. eapply H3. eapply H2. intros A.
+    inv A. eapply deref_loc_det; eauto.
+Qed.
+
+
+(* drop_box_rec is deterministic *)
+Lemma drop_box_rec_det: forall tys b ofs m1 m2 m3,
+    drop_box_rec b ofs m1 tys m2 ->
+    drop_box_rec b ofs m1 tys m3 ->
+    m2 = m3.
+Proof.
+  induction tys; intros.
+  - inv H. inv H0. auto.
+  - inv H. inv H0.
+    exploit deref_loc_rec_det. eapply H3. eapply H2.
+    intros A. inv A.
+    exploit deref_loc_det. eapply H4. eapply H5. intros B. inv B.
+    exploit extcall_free_sem_det. eapply H6. eapply H9.
+    intros (C1 & C2). subst.
+    eauto.
+Qed.
 
 
 Inductive extcall_free_sem_mem_error: list val -> mem -> Prop :=
@@ -1903,8 +2139,9 @@ Inductive step_dropinsert_mem_error : state -> Prop :=
     (* error in evaluating the function pointer *)
     eval_expr_mem_error ge le m a ->
     step_dropinsert_mem_error (Dropinsert f drop_end (Dcall p a al) k le own m)
-| step_dropinsert_call_error2: forall f a al k le m  tyargs vf p own,
+| step_dropinsert_call_error2: forall f a al k le m  tyargs vf p own tyres cconv,
     eval_expr ge le m ge a vf ->
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     (* error in evaluating the expression list *)
     eval_exprlist_mem_error ge le m ge al tyargs ->
     step_dropinsert_mem_error (Dropinsert f drop_end (Dcall p a al) k le own m)

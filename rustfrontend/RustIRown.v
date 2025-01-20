@@ -8,7 +8,7 @@ Require Import AST Errors.
 Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
-Require Import Smallstep.
+Require Import Smallstep SmallstepSafe.
 Require Import Ctypes Rusttypes.
 Require Import Cop RustOp.
 Require Import LanguageInterface.
@@ -762,7 +762,8 @@ Inductive step_mem_error : state -> Prop :=
     (* error in evaluating the function pointer *)
     eval_expr_mem_error ge le m a ->
     step_mem_error (State f (Scall p a al) k le own m)
-| step_call_error2: forall f a al k le m  tyargs vf p own,
+| step_call_error2: forall f a al k le m  tyargs vf p own tyres cconv,
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m ge a vf ->
     (* error in evaluating the expression list *)
     eval_exprlist_mem_error ge le m ge al tyargs ->
@@ -806,3 +807,272 @@ Definition mem_error (p: program) (se: Genv.symtbl) (s: state) : Prop :=
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
 
+(** Determinism of the RustIRown semantics *)
+
+Ltac Determ :=
+  let EQ := fresh "EQ" in
+  try congruence;
+  match goal with
+  | [ |- match_traces _ E0 E0 /\ (_ -> _) ]  =>
+      split; [constructor|intros _; Determ]
+  | [ H1: eval_expr _ _ _ _ ?a ?v1, H2: eval_expr _ _ _ _ ?a ?v2 |- _ ] =>
+      assert (v1 = v2) by (eapply eval_expr_det; eauto);
+      subst;
+      clear H1 H2; Determ
+  | [ H1: eval_place _ _ _ ?p ?b1 ?ofs1, H2: eval_place _ _ _ ?p ?b2 ?ofs2 |- _ ] =>
+      assert (EQ: b1 = b2 /\ ofs1 = ofs2) by (eapply eval_place_det; eauto);
+      destruct EQ; subst;
+      clear H1 H2; Determ
+  | [ H1: sem_cast ?v _ _ = Some ?v1, H2: sem_cast ?v _ _ = Some ?v2 |- _ ] =>
+      assert (v1 = v2) by congruence;
+      subst;
+      clear H1 H2; Determ
+  | [ H1: assign_loc _ _ _ _ _ ?v ?m1, H2: assign_loc _ _ _ _ _ ?v ?m2 |- _ ] =>
+      assert (m1 = m2) by (eapply assign_loc_det; eauto);
+      subst;
+      clear H1 H2; Determ
+  | [ H1: eval_exprlist _ _ _ _ _ ?a ?v1, H2: eval_exprlist _ _ _ _ _ ?a ?v2 |- _ ] =>
+      assert (v1 = v2) by (eapply eval_exprlist_det; eauto);
+      subst;
+      clear H1 H2; Determ
+  | [H1: _ = Sskip \/ _ = Scontinue |- _ ] =>
+      destruct H1; Determ
+  | [H1: typeof_place ?p = _, H2: typeof_place ?p = _ |- _ ] =>
+      rewrite H1 in H2; inv H2; Determ
+  | [H1: deref_loc ?ty ?m ?b ?ofs ?v1, H2: deref_loc ?ty ?m ?b ?ofs ?v2 |- _ ] =>
+      assert (EQ: v1 = v2) by (eapply deref_loc_det; eauto);
+      inv EQ;
+      clear H1 H2; Determ
+  | [H1: ?ge ! ?id = Some ?co1, H2: ?ge ! ?id = Some ?co2 |- _] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | [H1: field_tag ?id ?ms = Some ?t1, H2: field_tag ?id ?ms = Some ?t2 |- _] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | [H1: variant_field_offset _ ?id ?ms = OK ?o1, H2: variant_field_offset _ ?id ?ms = OK ?o2 |- _] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | [H1: field_type ?id ?ms = OK ?ty1, H2: field_type ?id ?ms = OK ?ty2 |- _ ] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | [H1: Mem.alloc ?m _ _ = (?b1, ?m1), H2: Mem.alloc ?m _ _ = (?b2, ?m2) |- _ ] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | [H1: Mem.store ?c ?m ?b ?ofs ?v = Some ?m1, H2: Mem.store ?c ?m ?b ?ofs ?v = Some ?m2 |- _ ] =>
+      rewrite H1 in H2; inv H2;
+      clear H1 H2; Determ
+  | _ => idtac
+  end.
+
+
+Lemma step_dropplace_det: forall se p s t1 t2 s1 s2,
+    step_dropplace (globalenv se p) s t1 s1 ->
+    step_dropplace (globalenv se p) s t2 s2 ->
+    match_traces se t1 t2 /\ (t1 = t2 -> s1 = s2).
+Proof.
+  intros until s2. intros S1 S2.
+  inv S1; inv S2; Determ.
+  assert (m' = m'0).
+  eapply extcall_free_sem_det; eauto. subst.
+  congruence.
+Qed.
+
+Lemma step_drop_det: forall se p s t1 t2 s1 s2,
+    step_drop (globalenv se p) s t1 s1 ->
+    step_drop (globalenv se p) s t2 s2 ->
+    match_traces se t1 t2 /\ (t1 = t2 -> s1 = s2).
+Proof.
+  intros until s2. intros S1 S2.
+  inv S1; inv S2; Determ.
+  - rewrite FOFS in FOFS0. inv FOFS0.
+    exploit deref_loc_rec_det. eapply DEREF. eauto.
+    intros. inv H. congruence.
+  - rewrite FOFS in FOFS0. inv FOFS0.
+    exploit deref_loc_rec_det. eapply DEREF. eauto.
+    intros. inv H. congruence.
+  - rewrite FOFS in FOFS0. inv FOFS0.
+    exploit drop_box_rec_det. eapply DROPB. eauto.
+    intros. subst. congruence.
+Qed.
+
+    
+Lemma semantics_determinate:
+  forall (p: program), determinate (semantics p).
+Proof.
+  intros p se. constructor; set (ge := Genv.globalenv se p); simpl; intros.
+  (* determ *)
+  - inv H; inv H0; Determ.
+    + eapply step_dropplace_det; eauto.
+    + eapply step_drop_det; eauto.
+    + rewrite H1 in H15. inv H15. Determ.
+    + rewrite FIND in FIND0. inv FIND0.
+      inv ENTRY. inv ENTRY0.
+      exploit alloc_variables_det. eapply H0. eauto.
+      intros (A1 & A2). subst.
+      exploit bind_parameters_det. eapply H1. eauto.
+      intros. subst.
+      rewrite INITOWN in INITOWN0. inv INITOWN0.
+      congruence.
+    + rewrite FIND in FIND0. inv FIND0.
+      exploit external_call_determ. eapply H1. eapply H7.
+      intros (A1 & A2). simpl in A1. split; auto.
+      intros. subst. exploit A2; eauto.
+      intros (B1 & B2). congruence.
+    + rewrite H3 in H14. inv H14. auto.
+  - red; simpl. destruct 1; simpl; try lia.
+    inv SDROP; simpl; try lia.
+    inv SDROP; simpl; try lia.
+    eapply external_call_trace_length; eauto.
+  - inv H; inv H0; auto.
+  (* external no step *)
+  - red; intros; red; intros. inv H; inv H0. congruence.
+    replace ef with (EF_external name (signature_of_type targs tres cconv)) in H7 by congruence. auto.
+  - inv H; inv H0. congruence.
+  - inv H; inv H0. congruence.
+  (* final no step *)
+  - red; intros; red; intros. inv H; inv H0.
+  (* final not external *)
+  - inv H; inv H0.
+  - inv H; inv H0. auto.
+Qed.    
+
+(** Soundness of mem_error of RustIR *)
+
+
+Ltac NoErr :=
+  let EQ := fresh "EQ" in
+  Determ;
+  match goal with
+  | [ H1: eval_expr _ _ ?m _ ?a ?v1, H2: eval_expr_mem_error _ _ ?m ?a |- False ] =>
+      eapply eval_expr_progress_no_mem_error; eauto  
+  | [ H1: eval_place _ _ ?m ?p _ _, H2: eval_place_mem_error _ _ ?m ?p |- False ] =>
+      eapply eval_place_progress_no_mem_error; eauto
+  | [ H1: assign_loc _ _ ?m ?b ?ofs ?v _, H2: assign_loc_mem_error _ _ ?m ?b ?ofs ?v |- False ] =>
+      eapply assign_loc_progress_no_mem_error; [eapply H1| eapply H2]
+  | [ H1: eval_exprlist _ _ ?m _ ?al ?tl ?v1, H2: eval_exprlist_mem_error _ _ ?m _ ?al ?tl |- False ] =>
+      eapply eval_exprlist_progress_no_mem_error; eauto
+  | [H1: deref_loc ?ty ?m ?b ?ofs ?v1, H2: deref_loc_mem_error ?ty ?m ?b ?ofs |- False ] =>
+      eapply deref_loc_progress_no_mem_error; eauto
+  | _ => idtac
+  end.
+
+
+
+    
+Lemma deref_loc_rec_progress_no_mem_error: forall tys m b ofs v,
+    deref_loc_rec m b ofs tys v ->
+    deref_loc_rec_mem_error m b ofs tys ->
+    False.
+Proof.
+  induction tys; intros.
+  - inv H0.
+  - inv H. inv H0; eauto.
+    eapply deref_loc_progress_no_mem_error; eauto.
+    exploit deref_loc_rec_det. eauto. eapply H3. intros A. inv A. eauto.
+Qed.
+
+Lemma extcall_free_sem_progress_no_mem_error ge: forall vl m1 t v m2,
+    extcall_free_sem ge vl m1 t v m2 ->
+    extcall_free_sem_mem_error vl m1 ->
+    False.
+Proof. 
+  intros. inv H; inv H0.
+  - eapply H6. eapply Mem.load_valid_access; eauto.
+  - eapply H8.
+    rewrite H1 in H5.
+    destruct (Val.eq (Vptrofs sz) (Vptrofs sz0)); try congruence.
+    eapply Vptrofs_det in e. subst.
+    eapply Mem.free_range_perm; eauto.
+Qed.
+
+Lemma drop_box_rec_progress_no_mem_error ge: forall tys b ofs m1 m2,
+    drop_box_rec ge b ofs m1 tys m2 ->
+    drop_box_rec_mem_error ge b ofs m1 tys ->
+    False.
+Proof.
+  induction tys; intros.
+  - inv H0.
+  - inv H. inv H0.
+    + eapply deref_loc_rec_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H5.
+      intros A. inv A.
+      eapply deref_loc_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H2.
+      intros A. inv A.
+      exploit deref_loc_det. eapply H4. eapply H7.
+      intros A. inv A.
+      eapply extcall_free_sem_progress_no_mem_error; eauto.
+    + exploit deref_loc_rec_det. eapply H3. eapply H2.
+      intros A. inv A.
+      exploit deref_loc_det. eapply H4. eapply H5.
+      intros A. inv A.
+      exploit extcall_free_sem_det. eapply H6. eapply H9.
+      intros (A1 & A2). subst.
+      eauto.
+Qed.
+
+Lemma step_dropplace_progress_no_mem_error: forall ge s t s',
+    step_dropplace ge s t s' ->
+    step_dropplace_mem_error ge s ->
+    False.
+Proof.
+  intros ge s t s' S1 S2.
+  inv S1; inv S2; try congruence; eauto; NoErr.
+  - eapply extcall_free_sem_progress_no_mem_error; eauto.
+  - eapply ERR. eapply Mem.load_valid_access; eauto.
+Qed.
+
+Lemma step_drop_progress_no_mem_error: forall ge s t s',
+    step_drop ge s t s' ->
+    step_drop_mem_error ge s ->
+    False.
+Proof.
+    intros ge s t s' S1 S2.
+  inv S1; inv S2; try congruence; eauto; NoErr.
+    - rewrite FOFS in FOFS0. inv FOFS0.
+      eapply deref_loc_rec_progress_no_mem_error; eauto.
+    - rewrite FOFS in FOFS0. inv FOFS0.
+      eapply deref_loc_rec_progress_no_mem_error; eauto.
+    - rewrite FOFS in FOFS0. inv FOFS0.
+      exploit deref_loc_rec_det. eapply DEREF. eauto.
+      intros. inv H.
+      eapply TAG0. eapply Mem.load_valid_access; eauto.
+    - rewrite FOFS in FOFS0. inv FOFS0.
+      eapply drop_box_rec_progress_no_mem_error; eauto.
+Qed.
+
+
+Lemma bind_parameters_progress_no_mem_error ge: forall l e m vl m1,
+    bind_parameters ge e m l vl m1 ->
+    bind_parameters_mem_error ge e m l vl ->
+    False.
+Proof.
+  induction l; intros; inv H; inv H0; auto; NoErr.
+  eapply IHl; eauto.
+Qed.
+
+Lemma sound_mem_error: forall p,
+    sound_err (semantics p) (mem_error p).
+Proof.
+  intros.
+  econstructor.
+  - intros. red. intros.
+    intro STEP.
+    inv STEP; inv H; simpl in *; NoErr.
+    + eapply ERR. eapply Mem.store_valid_access_3; eauto.
+    + eapply H17. eapply Mem.store_valid_access_3; eauto.
+    + eapply step_dropplace_progress_no_mem_error; eauto.
+    + eapply step_drop_progress_no_mem_error; eauto.
+    + rewrite H0 in H8. inv H8.
+      NoErr.
+    + rewrite FIND in FIND0. inv FIND0.
+      inv H1. inv ENTRY.
+      exploit alloc_variables_det. eapply H0. eauto.
+      intros (A1 & A2). subst.
+      eapply bind_parameters_progress_no_mem_error; eauto.
+  - intros. inv H; inv H0.
+  - intros. inv H; inv H0.
+    rewrite H1 in FIND. inv FIND.
+Qed.    
+        
+                      

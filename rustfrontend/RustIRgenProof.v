@@ -1480,8 +1480,9 @@ Proof.
       destruct f1; simpl in TR; inv TR.
       do 2 eexists.
       econstructor; solve_eval1.
-      replace (prog_comp_env prog) with (genv_cenv ge) in ENTRY by auto.
-      eapply function_entry_eq_inv. solve_eval.
+      replace (prog_comp_env prog) with (RustIR.genv_cenv tge) in ENTRY.
+      eapply function_entry_eq_inv in ENTRY. solve_eval.
+      solve_eval.
       erewrite init_own_env_eq; eauto.
       solve_eval.
     (* step_external_function *)
@@ -1795,6 +1796,3 @@ Proof.
   eapply fsim_progress_ubpreserve_implies; eauto.
   eapply transl_program_correct1; eauto.
 Qed.
-
-
-  
