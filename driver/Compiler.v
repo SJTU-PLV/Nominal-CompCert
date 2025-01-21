@@ -112,6 +112,9 @@ Require Clightgenproof.
 Require ElaborateDropProof.
 Require MoveCheckingSafe.
 
+(** Open safety *)
+Require Import SmallstepSafe SmallstepLinkingSafe.
+
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.
 Parameter print_Cminor: Cminor.program -> unit.
@@ -214,6 +217,7 @@ Definition transl_init := Initializers.transl_init.
 
 (** * Rust frontend compiler  *)
 
+(* The pass of Rustsyntax to Rustlight is unverified *)
 Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
   OK p
   @@@ time "Rustsyntax to Rustlight" Rustlightgen.transl_program
@@ -234,6 +238,10 @@ verified. *)
 Definition transf_rustlight_program (p: Rustlight.program) : res Asm.program :=
   OK p
   !@@ time "Rustlight to RustIR" RustIRgen.transl_program
+  @@@ time "Move checking" (fun p => match MoveChecking.move_check_program p with
+                                 | OK _ => OK p
+                                 | Error msg => Error msg
+                                 end)
   @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
   @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
   @@@ transf_clight_program.
@@ -319,8 +327,20 @@ Definition CompCertO's_passes :=
   ::: mkpass Asmgenproof.match_prog
   ::: pass_nil _.
 
-Definition CompCertO's_passes_rust :=
+(** match_prog for the rust compiler *)
+
+Program Definition pass_partial_identity {l: Language} (spec: l -> Prop): Pass l l :=
+  {| pass_match := fun p1 p2 => p1 = p2 /\ (spec p1);
+     (*pass_match_link := _*) |}.
+
+Definition passes_rustlight_rustir :=
   mkpass RustIRgenProof.match_prog
+  ::: pass_nil _.
+
+
+Definition CompCertO's_passes_rustlight :=
+  mkpass (compose_passes passes_rustlight_rustir)
+    ::: (pass_partial_identity MoveCheckingSafe.move_check_program_spec)
     ::: mkpass ElaborateDropProof.match_prog
     ::: mkpass Clightgenproof.match_prog
     ::: CompCertO's_passes.
@@ -332,8 +352,11 @@ Definition CompCertO's_passes_rust :=
 Definition match_prog: Clight.program -> Asm.program -> Prop :=
   pass_match (compose_passes CompCertO's_passes).
 
-Definition match_prog_rust: Rustlight.program -> Asm.program -> Prop :=
-  pass_match (compose_passes CompCertO's_passes_rust).
+Definition match_prog_rustlight: Rustlight.program -> Asm.program -> Prop :=
+  pass_match (compose_passes CompCertO's_passes_rustlight).
+
+Definition match_prog_rustlight_rustir: Rustlight.program -> RustIR.program -> Prop :=
+  pass_match (compose_passes passes_rustlight_rustir).
 
 (** For CompCertO we are mostly interested in using Clight as a source
   language, however we can still prove a correctness theorem for CompCert C. *)
@@ -417,15 +440,19 @@ Qed.
 
 Theorem transf_rustlight_program_match: forall p tp,
     transf_rustlight_program p = OK tp ->
-    match_prog_rust p tp.
+    match_prog_rustlight p tp.
 Proof.
   intros p tp T.
   unfold transf_rustlight_program, time in T. simpl in T.
+  destruct MoveChecking.move_check_program eqn: MOVECHECK in T; simpl in T; try congruence.
   set (p1 := (RustIRgen.transl_program p)) in *.
   destruct (ElaborateDrop.transl_program p1) as [p2|e] eqn: P2; simpl in T; try discriminate.
   destruct (Clightgen.transl_program p2) as [p3|e] eqn: P3; simpl in T; try discriminate.
-  unfold match_prog_rust. cbn -[CompCertO's_passes_rust].
-  exists p1; split. apply RustIRgenProof.match_transf_program; auto.
+  unfold match_prog_rustlight. cbn -[CompCertO's_passes_rustlight].
+  exists p1; split. simpl. exists p1. split; auto.
+  apply RustIRgenProof.match_transf_program; auto.
+  exists p1; split. simpl. split; auto.
+  eapply MoveCheckingSafe.move_check_program_meet_spec; eauto.
   exists p2; split. apply ElaborateDropProof.match_transf_program; auto.
   exists p3; split. apply Clightgenproof.match_transf_program; auto.
   apply transf_clight_program_match; eauto.
@@ -1066,13 +1093,14 @@ Qed.
 
 (** * Correctness of the Rust compiler *)
 
+
 Theorem rustlight_semantic_preservation:
   forall p tp,
-  match_prog_rust p tp ->
+  match_prog_rustlight p tp ->
   forward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp)
   /\ backward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp).
 Proof.
-  intros p tp M. unfold match_prog_rust, pass_match, CompCertO's_passes_rust in M. 
+  intros p tp M. unfold match_prog_rustlight, pass_match, CompCertO's_passes_rustlight in M. 
   cbn -[CompCertO's_passes] in M.
   repeat DestructM.
   assert (F: forward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp)).
@@ -1089,6 +1117,7 @@ Proof.
     eapply rustlight_ro_selfsim.
     eapply compose_identity_pass. (* RustIRgen *)
     eapply RustIRgenProof.transl_program_correct; eauto.
+    destruct M; subst.
     eapply compose_forward_simulations. (* ElaborateDrop *)
     eapply ElaborateDropProof.transl_program_correct; eauto.
     eapply Clightgenproof.transl_program_correct; eauto.
@@ -1098,6 +1127,7 @@ Proof.
   apply Rustlightown.semantics_receptive.
   apply Asm.semantics_determinate.
 Qed.
+
 
 (* If the rust compiler compiles [p] and produces [tp], 
   [tp] preserves the semantics of [p], in the sense that there
@@ -1112,6 +1142,49 @@ Proof.
   intros. apply rustlight_semantic_preservation. apply transf_rustlight_program_match; auto.
 Qed.
 
+(** *Correctness of the verifying part of the compiler *)
+
+(* Proof structure
+
+  Rustlight {I} L1 [I]                             {cc1 @@ ((I @@ wt_rs) @@ cc1)} L2 [cc1 @@ ((I @@ wt_rs) @@ cc1)]
+      |                                                                            ↑  
+ (compile) L1 ⊑_cc1 L2                                                             |
+      |                                                                            |    
+   RustIR   {I @@ cc1} L2 [I @@ cc1]                                               | (by fsim with progress)
+      |                                                                            |
+ (move checking)                                                                   |
+      |                                                                            |
+   RustIR   {(I @@ cc1) @@ wt_rs} L2 [(I @@ cc1) @@ wt_rs] ⊑ {(I @@ wt_rs) @@ cc1} L2 [(I @@ wt_rs) @@ cc1]
+      |
+  (compile) L2 ⊑_cc2 L3
+      |           
+     Asm    {((I @@ wt_rs) @@ cc1) @@ cc2} L2 [((I @@ wt_rs) @@ cc1) @@ cc2] ⊑ {(I @@ wt_rs) @@ cc} L2 [(I @@ wt_rs) @@ cc]
+             where cc ≡ cc1 @ cc2 (i.e., cc ≡ cc_rust_compcert)
+ *)
+
+
+Theorem rustlight_partial_safe_to_total_safe I:
+  forall p tp,
+  match_prog_rustlight p tp ->
+  module_type_safe I I (Rustlightown.semantics p) (Rustlightown.mem_error p) ->
+  module_type_safe (invcc I cc_rust_compcert) (invcc I cc_rust_compcert) (Asm.semantics tp) SIF.
+Proof.
+  intros p tp M SAFE. generalize M as M1. intros.
+  unfold match_prog_rustlight, pass_match, CompCertO's_passes_rustlight in M.
+  cbn -[CompCertO's_passes] in M.
+  repeat DestructM. destruct M; subst.
+  (* 1. show that the RustIR program is partial safe. For now, it only
+  contains one compilation pass *)
+  
+  
+  (* 2. show that the RustIR program after move checking is total safe *)
+  exploit MoveCheckingSafe.move_check_module_safe.
+  
+  exploit rustlight_semantic_preservation
+  unfold match_prog_rust, pass_match, CompCertO's_passes_rust in M. 
+  cbn -[CompCertO's_passes] in M.
+  repeat DestructM.
+  
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every

@@ -524,3 +524,90 @@ Lemma rustlight_ro_selfsim:
 Proof.
   intros. eapply preserves_fsim. eapply rustlight_ro_preserves.
 Qed.
+
+(** Self simulation of RustIRown under ro_rs. It is used to construct
+the calling convention from RustIR to Asm. *)
+Require Import RustIRown.
+
+(* Rustlightown ro sound_state *)
+Inductive sound_state_rustir se0 m0 : state -> Prop :=
+| ro_inv_state_ir f s k e own m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state_rustir se0 m0 (State f s k e own m)
+| ro_inv_callstate_ir v args c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state_rustir se0 m0 (Callstate v args c m)
+| ro_inv_returnstate_ir v c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state_rustir se0 m0 (Returnstate v c m)
+| ro_inv_dropplace_ir f st drops k e own m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state_rustir se0 m0 (Dropplace f st drops k e own m)
+| ro_inv_dropstate_ir id v st membs k m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state_rustir se0 m0 (Dropstate id v st membs k m)
+.
+
+Lemma ro_acc_drop_box_rec_ir: forall tyl ge b ofs m1 m2,
+    RustIR.drop_box_rec ge b ofs m1 tyl m2 ->
+    ro_acc m1 m2.
+Proof.
+  induction tyl; intros.
+  inv H. eapply ro_acc_refl.
+  inv H. eapply ro_acc_trans.
+  inv H5. eapply ro_acc_free. eauto.
+  eauto.
+Qed.
+
+Lemma ro_acc_fe_ir : forall m m' ge f args e,
+    RustIR.function_entry ge f args m e m' ->
+    ro_acc m m'.
+Proof.
+  intros. inv H.
+  eapply ro_acc_trans.
+  eapply ro_acc_allocs; eauto.
+  eapply ro_acc_bind; eauto.
+Qed.
+
+
+Definition ro_inv_ir '(row se m) := sound_state_rustir se m.
+
+Lemma rustir_ro_preserves prog:
+  preserves (RustIRown.semantics prog) ro_rs ro_rs ro_inv_ir.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros.
+    Ltac Solve_ro_pre_ir :=
+      match goal with
+      | [H: assign_loc _ _ _ _ _ _ _ |- _] => apply ro_acc_assign_loc in H
+      | [H: external_call _ _ _ _ _ _ _ |- _] => apply ro_acc_external in H
+      | [H: Mem.free_list _ _ = Some _ |- _] => apply ro_acc_free_list in H
+      | [H: RustIR.function_entry _ _ _ _ _ _ |- _ ] => apply ro_acc_fe_ir in H
+      | [H: Mem.storev _ _ _ _ = Some _ |- _ ] => apply ro_acc_store in H
+      | [H: Mem.store _ _ _ _ _ = Some _ |- _ ] => apply ro_acc_store in H
+      | [H: Mem.alloc _ _ _ = _ |- _ ] => apply ro_acc_alloc in H
+      | [H: extcall_free_sem _ _ _ _ _ _ |- _ ] => apply ro_acc_free_sem in H
+      | [H: RustIR.drop_box_rec _ _ _ _ _ _ |- _ ] => apply ro_acc_drop_box_rec_ir in H
+      | _ => idtac
+      end.  
+    inv H0; inv H; try inv SDROP; repeat Solve_ro_pre_ir; econstructor; eauto using ro_acc_sound, ro_acc_trans.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0. inv H. simpl.
+    exists (row se1 m). split; eauto.
+    constructor; eauto. constructor; eauto.
+    intros r s' Hr AFTER. inv Hr. inv AFTER.
+    constructor.
+    eapply ro_acc_sound; eauto.
+    eapply ro_acc_trans; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+Lemma rustir_ro_selfsim:
+  forall p: (RustIR.program),
+    let sem := RustIRown.semantics p in
+    forward_simulation ro_rs ro_rs sem sem.
+Proof.
+  intros. eapply preserves_fsim. eapply rustir_ro_preserves.
+Qed.

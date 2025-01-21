@@ -8179,10 +8179,10 @@ Definition mem_error prog se (s: state) : Prop :=
 
 (* I is the generic partial safe invariant *)
 Lemma move_check_module_safe (I: invariant li_rs) p:
-  module_type_safe (semantics p) I I (mem_error p) ->  
+  module_type_safe I I (semantics p) (mem_error p) ->  
   (* Genv.valid_for (erase_program (program_of_program p)) se ->  *)
   move_check_program p = OK p ->
-  module_type_safe (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF.
+  module_type_safe (inv_compose I wt_rs) (inv_compose I wt_rs) (semantics p) SIF.
   (* module_safe_se (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) not_stuck se. *)
 Proof.
   intros [SAFE] MVCHK. destruct SAFE as (SINV & PRE).

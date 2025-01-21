@@ -715,7 +715,7 @@ Record module_safek_components {liA liB} (L: semantics liA liB) (IA: invariant l
       lts_preserves_progress se (L se) IA IB (msafek_invariant se) wB (PS se);
   }.
 
-Definition module_type_safe {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) (PS: Genv.symtbl -> (state L) -> Prop) :=
+Definition module_type_safe {liA liB} (IA: invariant liA) (IB: invariant liB) (L: semantics liA liB) (PS: Genv.symtbl -> (state L) -> Prop) :=
   inhabited (@module_safek_components liA liB L IA IB PS).
 
 (* property of safety invariant *)
@@ -784,7 +784,7 @@ Qed.
 
 (* soundness of module_safe_components *)
 Lemma module_type_safe_sound {liA liB} (L: semantics liA liB) (IA: invariant liA) (IB: invariant liB) PS:
-  module_type_safe L IA IB PS ->
+  module_type_safe IA IB L PS ->
   module_safek L IA IB PS.
 Proof.
   intros [SAFE]. inv SAFE.
@@ -838,9 +838,9 @@ Context (IA1 : invariant liA1) (IB1: invariant liB1).
 
 (* why we need inhabited? *)
 Lemma module_safek_components_preservation:
-  module_type_safe L1 IA1 IB1 SIF ->
+  module_type_safe IA1 IB1 L1 SIF ->
   backward_simulation ccA ccB L1 L2 ->
-  module_type_safe L2 (invcc IA1 ccA) (invcc IB1 ccB) SIF.
+  module_type_safe (invcc IA1 ccA) (invcc IB1 ccB) L2 SIF.
 Proof.
   intros [SAFE] [BSIM].
   destruct SAFE as (SINV & SAFE).
@@ -955,9 +955,9 @@ Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
 Context (IA2 : invariant liA2) (IB2: invariant liB2).
 
 Lemma module_safek_components_preservation_fsimg:
-  module_type_safe L2 IA2 IB2 SIF ->
+  module_type_safe IA2 IB2 L2 SIF ->
   forward_simulation_progress ccA ccB L1 L2 ->
-  module_type_safe L1 (ccinv ccA IA2) (ccinv ccB IB2) SIF.
+  module_type_safe (ccinv ccA IA2) (ccinv ccB IB2) L1 SIF.
 Proof.
   intros [SAFE] [FSIM].
   destruct SAFE as (SINV & SAFE).
@@ -1063,9 +1063,9 @@ Context (IA1 : invariant liA1) (IB1: invariant liB1).
 Context (err_state1: Genv.symtbl -> state L1 -> Prop) (err_state2: Genv.symtbl -> state L2 -> Prop).
 
 Lemma module_partial_safe_preservation:
-  module_type_safe L1 IA1 IB1 err_state1 ->
+  module_type_safe IA1 IB1 L1 err_state1 ->
   backward_simulation_preserve_error ccA ccB L1 L2 err_state1 err_state2 ->
-  module_type_safe L2 (invcc IA1 ccA) (invcc IB1 ccB) err_state2.
+  module_type_safe (invcc IA1 ccA) (invcc IB1 ccB) L2 err_state2.
 Proof.
   intros [SAFE] [BSIM].
   destruct SAFE as (SINV & SAFE).
