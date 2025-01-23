@@ -195,6 +195,9 @@ Definition inv_compose {li} (I1 I2: invariant li) : invariant li :=
     reply_inv '(w1, w2) r := reply_inv I1 w1 r /\ reply_inv I2 w2 r;
   |}.
 
+Infix "@@" := inv_compose (at level 30, right associativity) : inv_scope.
+Infix "@!" := invcc (at level 30, right associativity) : inv_scope.
+Infix "!@" := ccinv (at level 30, right associativity) : inv_scope.
 
 (** * Invariant-based simulation proof methods *)
 

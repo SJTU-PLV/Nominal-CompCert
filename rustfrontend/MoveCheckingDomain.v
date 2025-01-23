@@ -177,7 +177,7 @@ Proof.
   intros. red. intros. intro. eapply H0. auto.
 Qed.
 
-Inductive wt_rs_world :=
+Inductive rs_own_world :=
   rsw (sg: rust_signature)
     (fp: flat_footprint)
     (m: mem)
@@ -185,8 +185,8 @@ Inductive wt_rs_world :=
     (Hm: Mem.sup_include fp (Mem.support m)).
 
 (** FIXME: we may require that fp is norepet *)
-Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
-| wt_rs_query_intro: forall sg m vf args fpl fp Hm,
+Inductive rs_own_query : rs_own_world -> rust_query -> Prop :=
+| rs_own_query_intro: forall sg m vf args fpl fp Hm,
     let ce := rs_sig_comp_env sg in
     forall (NOREP: list_norepet (flat_map footprint_flat fpl))
     (SEMWT: sem_wt_val_list ce m fpl args)
@@ -194,12 +194,12 @@ Inductive wt_rs_query : wt_rs_world -> rust_query -> Prop :=
     (WTFP: wt_footprint_list ce (rs_sig_args sg) fpl)
     (* structured footprint is equivalent with the flat footprint in the interface *)
     (EQ: list_equiv fp (flat_map footprint_flat fpl)),
-    wt_rs_query (rsw sg fp m Hm) (rsq vf sg args m)
+    rs_own_query (rsw sg fp m Hm) (rsq vf sg args m)
 .
 
 (* Only consider ownership transfer for now. The footprints of generic
 origins are more complicated *)
-Inductive rsw_acc : wt_rs_world -> wt_rs_world -> Prop :=
+Inductive rsw_acc : rs_own_world -> rs_own_world -> Prop :=
 | rsw_acc_intro: forall sg fp fp' m m' Hm Hm'
     (UNC: Mem.unchanged_on (fun b ofs => ~ In b fp) m m')
     (* new footprint is separated *)
@@ -208,8 +208,8 @@ Inductive rsw_acc : wt_rs_world -> wt_rs_world -> Prop :=
     (* (INCR: flat_footprint_incr fp fp' m), *)
     rsw_acc (rsw sg fp m Hm) (rsw sg fp' m' Hm').
 
-Inductive wt_rs_reply : wt_rs_world -> rust_reply -> Prop :=
-| wt_rs_reply_intro: forall rfp m rv sg fp Hm,
+Inductive rs_own_reply : rs_own_world -> rust_reply -> Prop :=
+| rs_own_reply_intro: forall rfp m rv sg fp Hm,
     let ce := rs_sig_comp_env sg in
     forall (SEMWT: sem_wt_val ce m rfp rv)
     (WTFP: wt_footprint (rs_sig_comp_env sg) (rs_sig_res sg) rfp)
@@ -217,15 +217,15 @@ Inductive wt_rs_reply : wt_rs_world -> rust_reply -> Prop :=
     (* rfp is extracted from fpl *)
     (INCL: incl (footprint_flat rfp) fp)
     (NOREP: list_norepet (footprint_flat rfp)),
-    wt_rs_reply (rsw sg fp m Hm) (rsr rv m)
+    rs_own_reply (rsw sg fp m Hm) (rsr rv m)
 .
 
-Definition wt_rs : invariant li_rs :=
+Definition rs_own : invariant li_rs :=
   {|
-    inv_world := Genv.symtbl * wt_rs_world;
+    inv_world := Genv.symtbl * rs_own_world;
     symtbl_inv := fun '(se, _) => eq se;
-    query_inv := fun '(_, w) q => wt_rs_query w q;
-    reply_inv := fun '(_, w) r => exists w', rsw_acc w w' /\ wt_rs_reply w' r |}.
+    query_inv := fun '(_, w) q => rs_own_query w q;
+    reply_inv := fun '(_, w) r => exists w', rsw_acc w w' /\ rs_own_reply w' r |}.
 
 
 (* Unused: Rust type used in interface *)

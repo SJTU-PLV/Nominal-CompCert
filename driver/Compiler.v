@@ -110,10 +110,12 @@ Require Clightgen.
 Require RustIRgenProof.
 Require Clightgenproof.
 Require ElaborateDropProof.
+Require Import MoveCheckingDomain.
 Require MoveCheckingSafe.
 
 (** Open safety *)
 Require Import SmallstepSafe SmallstepLinkingSafe.
+Require Import InvariantAlgebra.
 
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.
@@ -136,6 +138,20 @@ Definition apply_partial (A B: Type)
                          (x: res A) (f: A -> res B) : res B :=
   match x with Error msg => Error msg | OK x1 => f x1 end.
 
+Definition apply_partial_id (A B: Type)
+                         (x: res A) (f: A -> res B) : res A :=
+  match x with
+  | Error msg => Error msg
+  | OK x1 =>
+      match f x1 with
+      | Error msg => Error msg
+      | OK _ =>
+          OK x1
+      end
+  end.
+
+Notation "a @!@ b" :=
+   (apply_partial_id _ _ a b) (at level 50, left associativity).
 Notation "a @@@ b" :=
    (apply_partial _ _ a b) (at level 50, left associativity).
 Notation "a !@@ b" :=
@@ -329,21 +345,24 @@ Definition CompCertO's_passes :=
 
 (** match_prog for the rust compiler *)
 
-Program Definition pass_partial_identity {l: Language} (spec: l -> Prop): Pass l l :=
-  {| pass_match := fun p1 p2 => p1 = p2 /\ (spec p1);
+Program Definition pass_partial_identity {l: Language} {A} (f: l -> res A): Pass l l :=
+  {| pass_match := fun p1 p2 => p1 = p2 /\ (exists x, f p1 = OK x);
      (*pass_match_link := _*) |}.
 
 Definition passes_rustlight_rustir :=
   mkpass RustIRgenProof.match_prog
   ::: pass_nil _.
 
+Definition CompCertO's_passes_rustir :=
+    mkpass ElaborateDropProof.match_prog
+    ::: mkpass Clightgenproof.match_prog
+    ::: CompCertO's_passes.
 
 Definition CompCertO's_passes_rustlight :=
   mkpass (compose_passes passes_rustlight_rustir)
-    ::: (pass_partial_identity MoveCheckingSafe.move_check_program_spec)
-    ::: mkpass ElaborateDropProof.match_prog
-    ::: mkpass Clightgenproof.match_prog
-    ::: CompCertO's_passes.
+    (** Move Checking pass *)
+    ::: pass_partial_identity MoveChecking.move_check_program
+    ::: CompCertO's_passes_rustir.
 
 (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
@@ -355,8 +374,8 @@ Definition match_prog: Clight.program -> Asm.program -> Prop :=
 Definition match_prog_rustlight: Rustlight.program -> Asm.program -> Prop :=
   pass_match (compose_passes CompCertO's_passes_rustlight).
 
-Definition match_prog_rustlight_rustir: Rustlight.program -> RustIR.program -> Prop :=
-  pass_match (compose_passes passes_rustlight_rustir).
+Definition match_prog_rustir: RustIR.program -> Asm.program -> Prop :=
+  pass_match (compose_passes CompCertO's_passes_rustir).
 
 (** For CompCertO we are mostly interested in using Clight as a source
   language, however we can still prove a correctness theorem for CompCert C. *)
@@ -452,7 +471,7 @@ Proof.
   exists p1; split. simpl. exists p1. split; auto.
   apply RustIRgenProof.match_transf_program; auto.
   exists p1; split. simpl. split; auto.
-  eapply MoveCheckingSafe.move_check_program_meet_spec; eauto.
+  eexists. eauto.
   exists p2; split. apply ElaborateDropProof.match_transf_program; auto.
   exists p3; split. apply Clightgenproof.match_transf_program; auto.
   apply transf_clight_program_match; eauto.
@@ -1093,6 +1112,41 @@ Qed.
 
 (** * Correctness of the Rust compiler *)
 
+Definition cc_rustir_compcert : callconv li_rs li_asm :=
+  (** FIXME: we can just prove ro in Rustlight and use some refinement
+  technique to get the final safety theorem. But for now, we reporve
+  ro in RustIRown and get the theorem easily *)
+  ro_rs
+  @ (cc_rs injp)
+  @ (cc_rs injp @ cc_rust_c)
+  @ cc_compcert.
+
+(* The calling covention from rustir to asm is not a direct
+refinement *)
+Lemma rustir_semantic_preservation:
+  forall p tp,
+  match_prog_rustir p tp ->
+  forward_simulation cc_rustir_compcert cc_rustir_compcert (RustIRown.semantics p) (Asm.semantics tp)
+  /\ backward_simulation cc_rustir_compcert cc_rustir_compcert (RustIRown.semantics p) (Asm.semantics tp).
+Proof.
+  intros p tp M. unfold match_prog_rustir, pass_match, CompCertO's_passes_rustir in M. 
+  cbn -[CompCertO's_passes] in M.
+  repeat DestructM.
+  assert (F: forward_simulation cc_rustir_compcert cc_rustir_compcert (RustIRown.semantics p) (Asm.semantics tp)).
+  { unfold cc_rustir_compcert.
+    eapply compose_forward_simulations.
+    eapply rustir_ro_selfsim.
+    eapply compose_forward_simulations.
+    eapply ElaborateDropProof.transl_program_correct; eauto.
+    eapply compose_forward_simulations.
+    eapply Clightgenproof.transl_program_correct; eauto.
+    eapply clight_semantic_preservation. eauto. }
+  split. auto.
+  apply forward_to_backward_simulation. auto.  
+  apply RustIRown.semantics_receptive.
+  apply Asm.semantics_determinate.
+Qed.
+
 
 Theorem rustlight_semantic_preservation:
   forall p tp,
@@ -1101,26 +1155,21 @@ Theorem rustlight_semantic_preservation:
   /\ backward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp).
 Proof.
   intros p tp M. unfold match_prog_rustlight, pass_match, CompCertO's_passes_rustlight in M. 
-  cbn -[CompCertO's_passes] in M.
-  repeat DestructM.
+  cbn -[CompCertO's_passes_rustir] in M.
+  repeat DestructM. destruct M. subst.
   assert (F: forward_simulation cc_rust_compcert cc_rust_compcert (Rustlightown.semantics p) (Asm.semantics tp)).
-  { rewrite cc_rust_expand at 2. 
-    do 2 rewrite <- (cc_compose_assoc _ _ cc_compcert).
+  { rewrite cc_rust_expand at 2.
+    (* do 2 rewrite <- (cc_compose_assoc _ _ cc_compcert). *)
     rewrite <- cc_rust_collapse at 1.
-    rewrite <- (cc_compose_assoc (cc_rs injp) _ cc_compcert).
-    rewrite <- (cc_compose_assoc ro_rs _ cc_compcert).
-    eapply compose_forward_simulations.
-    (* Clight to Asm semantics preservation *)
-    2: { eapply clight_semantic_preservation. eauto. }
-    (* Rustlight to Clight semantics preservation *)
-    eapply compose_forward_simulations. (* Rustlight ro self-sim *)
-    eapply rustlight_ro_selfsim.
+    (* rewrite <- (cc_compose_assoc (cc_rs injp) _ cc_compcert). *)
+    (* rewrite <- (cc_compose_assoc ro_rs _ cc_compcert). *)
+    (* eapply compose_forward_simulations. *)
+    (* RustIR to Asm semantics preservation *)    
     eapply compose_identity_pass. (* RustIRgen *)
     eapply RustIRgenProof.transl_program_correct; eauto.
-    destruct M; subst.
-    eapply compose_forward_simulations. (* ElaborateDrop *)
-    eapply ElaborateDropProof.transl_program_correct; eauto.
-    eapply Clightgenproof.transl_program_correct; eauto.
+    eapply rustir_semantic_preservation. eauto.
+    (* Rustlight ro self-sim *)
+    (* eapply rustlight_ro_selfsim. *)
   }
   split. auto.
   apply forward_to_backward_simulation. auto.  
@@ -1146,10 +1195,10 @@ Qed.
 
 (* Proof structure
 
-  Rustlight {I} L1 [I]                             {cc1 @@ ((I @@ wt_rs) @@ cc1)} L2 [cc1 @@ ((I @@ wt_rs) @@ cc1)]
+  Rustlight {I} L1 [I]                             {cc1 @@ ((I @@ wt_rs) @@ cc1)} L1 [cc1 @@ ((I @@ wt_rs) @@ cc1)]
       |                                                                            ↑  
  (compile) L1 ⊑_cc1 L2                                                             |
-      |                                                                            |    
+      |                                                                            |
    RustIR   {I @@ cc1} L2 [I @@ cc1]                                               | (by fsim with progress)
       |                                                                            |
  (move checking)                                                                   |
@@ -1162,29 +1211,60 @@ Qed.
              where cc ≡ cc1 @ cc2 (i.e., cc ≡ cc_rust_compcert)
  *)
 
+Local Open Scope inv_scope.
 
 Theorem rustlight_partial_safe_to_total_safe I:
   forall p tp,
   match_prog_rustlight p tp ->
   module_type_safe I I (Rustlightown.semantics p) (Rustlightown.mem_error p) ->
-  module_type_safe (invcc I cc_rust_compcert) (invcc I cc_rust_compcert) (Asm.semantics tp) SIF.
+  module_type_safe ((I @@ rs_own) @! cc_rust_compcert) ((I @@ rs_own) @! cc_rust_compcert) (Asm.semantics tp) SIF.
 Proof.
   intros p tp M SAFE. generalize M as M1. intros.
   unfold match_prog_rustlight, pass_match, CompCertO's_passes_rustlight in M.
-  cbn -[CompCertO's_passes] in M.
+  cbn -[CompCertO's_passes_rustir] in M.
   repeat DestructM. destruct M; subst.
-  (* 1. show that the RustIR program is partial safe. For now, it only
-  contains one compilation pass *)
-  
-  
-  (* 2. show that the RustIR program after move checking is total safe *)
-  exploit MoveCheckingSafe.move_check_module_safe.
-  
-  exploit rustlight_semantic_preservation
-  unfold match_prog_rust, pass_match, CompCertO's_passes_rust in M. 
-  cbn -[CompCertO's_passes] in M.
-  repeat DestructM.
-  
+  destruct H0.
+  (* 1. show backward simulation between p and p1 and then show p1 is
+  partial safe *)
+  assert (BSIM1: backward_simulation_preserve_error cc_id cc_id (Rustlightown.semantics p) (RustIRown.semantics p1) (Rustlightown.mem_error p) (RustIRown.mem_error p1)).
+  { eapply forward_to_backward_simulation_partial.
+    eapply RustIRgenProof.transl_program_correct1; eauto.
+    eapply Rustlightown.semantics_receptive.
+    eapply RustIRown.semantics_determinate.
+    eapply RustIRown.sound_mem_error. }
+  exploit @module_partial_safe_preservation; eauto.
+  intros PSAFE.
+  (* 2. show p1 is total safe after move checking *)  
+  exploit MoveCheckingSafe.move_check_module_safe; eauto.
+  intros TSAFE.
+  (* 3. swap rs_own and cc_id in TSAFE *)
+  exploit @open_safety_inv_ref. 3: eapply TSAFE.
+  eapply inv_commute_ref1. eapply invcc_commute_id1.
+  red. eapply inv_commute_ref2. eapply invcc_commute_id2.
+  intros TSAFE1.
+  (* 4. show backward simulation between RustIRown and Asm *)  
+  exploit @module_safek_components_preservation.
+  eapply TSAFE1. eapply rustir_semantic_preservation; eauto.
+  intros TSAFE2.
+  (* 5. invaraint refinement *)
+  eapply open_safety_inv_ref.
+  3: eapply TSAFE2.
+  (* ref1 *)
+  etransitivity. erewrite invcc_compose_assoc.
+  eapply cc_inv_ref. reflexivity.
+  instantiate (1 := cc_rust_compcert).
+  erewrite cc_compose_id_left.
+  unfold cc_rustir_compcert.
+  eapply cc_rust_collapse. reflexivity.
+  (* ref2 *)
+  red. etransitivity.
+  eapply cc_inv_ref. reflexivity.
+  eapply cc_rust_expand.
+  erewrite invcc_compose_assoc.
+  eapply cc_inv_ref. reflexivity.
+  erewrite cc_compose_id_left. reflexivity.
+Qed.
+
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every

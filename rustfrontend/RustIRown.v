@@ -1076,3 +1076,22 @@ Proof.
 Qed.    
         
                       
+Lemma semantics_receptive:
+  forall (p: program), receptive (semantics p).
+Proof.
+  intros p se. unfold semantics. simpl.
+  set (ge := globalenv se p). constructor; simpl; intros.
+(* receptiveness *)
+  assert (t1 = E0 -> exists s2, step ge s t2 s2).
+  intros. subst. inv H0. exists s1; auto.
+  inversion H; subst; auto.
+  inversion SDROP; subst; auto.
+  inversion SDROP; subst; auto.
+  (* external *)
+  exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
+  exists (Returnstate vres2 k m2). econstructor; eauto.
+  (* trace length *)
+  red; simpl; intros. inv H; try inv SDROP; simpl; try lia.
+  eapply external_call_trace_length; eauto.
+Qed.
+ 

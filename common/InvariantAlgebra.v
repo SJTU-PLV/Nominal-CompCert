@@ -4,11 +4,13 @@ Require Export Smallstep.
 Require Import CallconvAlgebra Invariant.
 Require Import SmallstepLinkingSafe.
 
+Local Open Scope inv_scope.
+
 (* Refinement of invariants *)
 
 (* [I1] is refined by [I2], meaning that any lts is safe under [I2] is
 also safe under [I1] *)
-Definition inv_ref {li} (I1 I2: invariant li) :=
+Definition invref {li} (I1 I2: invariant li) :=
   forall w1 se q,
     symtbl_inv I1 w1 se ->
     query_inv I1 w1 q ->
@@ -20,10 +22,10 @@ Definition inv_ref {li} (I1 I2: invariant li) :=
         reply_inv I1 w1 r.
 
 Definition inveqv {li} (I1 I2: invariant li) :=
-  inv_ref I1 I2 /\ inv_ref I2 I1.
+  invref I1 I2 /\ invref I2 I1.
 
 Global Instance inv_ref_preo li:
-  PreOrder (@inv_ref li).
+  PreOrder (@invref li).
 Proof.
   split.
   - intros I w1 se q SINV QINV.
@@ -44,7 +46,7 @@ Proof.
 Qed.
 
 Global Instance inv_ref_po li:
-  PartialOrder (@inveqv li) (@inv_ref li).
+  PartialOrder (@inveqv li) (@invref li).
 Proof.
   firstorder.
 Qed.
@@ -52,8 +54,8 @@ Qed.
 Global Instance open_safety_inv_ref:
   Monotonic
     (@module_type_safe)
-    (forallr - @ liA, forallr - @ liB, inv_ref ++>
-     inv_ref --> 
+    (forallr - @ liA, forallr - @ liB, invref ++>
+     invref --> 
      forallr - @ L, forallr - @ PS,
      impl
     ).
@@ -93,8 +95,9 @@ Proof.
     eapply RINV. eapply final_state_preserves; eauto.
 Qed.
 
+(** FIXME *)
 Lemma test_rewrite_inv_ref_fail {liA liB} : forall (IA: invariant liA) (IB1 IB2: invariant liB) L PS,
-    inv_ref IB2 IB1 ->
+    invref IB2 IB1 ->
     module_type_safe IA IB1 L PS ->
     module_type_safe IA IB2 L PS.
 Proof.
@@ -105,4 +108,148 @@ Proof.
 Qed.
 
 
+Global Instance inv_compose_ref li:
+  Proper (invref ++> invref ++> invref) (@inv_compose li).
+Proof.
+  intros I1 I1' R1 I2 I2' R2 (w1 & w2) se q (SINV1 & SINV2) (QINV1 & QINV2).
+  edestruct R1 as (w1' & SINV1' & QINV1' & RINV1'); eauto.
+  edestruct R2 as (w2' & SINV2' & QINV2' & RINV2'); eauto.
+  exists (w1', w2'). repeat apply conj; eauto.
+  intros. inv H. econstructor; eauto.
+Qed.
+
+(** Refinement of the calling conventions implies refinement of the
+invariants *)
+
+Global Instance cc_inv_ref li1 li2:
+  Proper (invref ++> ccref ++> invref) (@invcc li1 li2).
+Proof.
+  intros I I' RI cc cc' RCC (w & wcc) se2 q2 (se1 & SINV1 & MSENV) (q1 & QINV1 & MQ).
+  edestruct RI as (w' & SINV1' & QINV1' & RINV1'); eauto.
+  edestruct RCC as (wcc' & MSENV' & MQ' & MR'); eauto.
+  exists (w', wcc'). repeat apply conj.
+  econstructor; eauto.
+  econstructor; eauto.
+  intros r (r'' & RINV'' & MR''). econstructor; eauto.
+Qed.
+
+Lemma inv_compose_assoc {li} I1 I2 I3:
+  inveqv
+    (@inv_compose li (@inv_compose li I1 I2) I3)
+    (@inv_compose li I1 (@inv_compose li I2 I3)).
+Proof.
+  split.
+  - red. intros ((w1 & w2) & w3). intros.
+    inv H. inv H0. inv H. inv H1.
+    exists (w1, (w2, w3)). repeat apply conj; eauto.
+    intros. inv H1. inv H7. repeat econstructor; eauto.
+  - red. intros (w1 & (w2 & w3)). intros.
+    inv H. inv H0. inv H3. inv H2.
+    exists (w1, w2, w3). repeat apply conj; eauto.
+    intros. inv H2. inv H6. repeat econstructor; eauto.
+Qed.
+
+Lemma invcc_compose_assoc {li1 li2 li3} I cc1 cc2:
+  inveqv
+    (@invcc li2 li3 (@invcc li1 li2 I cc1) cc2)
+    (@invcc li1 li3 I (@cc_compose li1 li2 li3 cc1 cc2)).
+Proof.
+  split.
+  - red. intros ((w & wcc1) & wcc2) se3 q3 (se2 & (se1 & SINV1 & MSENV1) &MSENV2) (q2 & (q1 & QINV1 & MQ1) & MQ2).
+    exists (w, (se2, wcc1, wcc2)).
+    repeat apply conj.
+    + econstructor. split; eauto.
+      econstructor; eauto.
+    + econstructor. split; eauto.
+      econstructor; eauto.
+    + intros. inv H. inv H0. inv H1. inv H0.
+      repeat econstructor; eauto.
+  - red. intros (w & ((se2 & wcc1) & wcc2)) se3 q3 SINV QINV.
+    inv SINV. destruct H. inv H0.
+    inv QINV. destruct H0. inv H3. destruct H4.
+    exists ((w, wcc1), wcc2). repeat apply conj.
+    1-2: repeat econstructor; eauto.
+    intros. inv H5. destruct H6. inv H5. destruct H7.
+    repeat econstructor; eauto.
+Qed.
+
+
+(* (I@@I1)@!cc ⊑ (I@!cc)@@I2 *)
+Definition invcc_commute1 {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) :=
+  forall w2 wcc q1 q2 se1 se2,
+    match_query cc wcc q1 q2 ->
+    match_senv cc wcc se1 se2 ->
+    symtbl_inv I2 w2 se2 ->
+    query_inv I2 w2 q2 ->
+    exists w1, symtbl_inv I1 w1 se1
+          /\ query_inv I1 w1 q1
+          /\ forall r1 r2, match_reply cc wcc r1 r2 ->
+                     reply_inv I1 w1 r1 ->
+                     reply_inv I2 w2 r2.
+
+(* (I@!cc)@@I2 ⊑ (I@@I1)@!cc *)
+Definition invcc_commute2 {li1 li2} (cc: callconv li1 li2) (I1: invariant li1) (I2: invariant li2) :=
+  forall w1 wcc q1 q2 se1 se2,
+    match_query cc wcc q1 q2 ->
+    match_senv cc wcc se1 se2 ->
+    symtbl_inv I1 w1 se1 ->
+    query_inv I1 w1 q1 ->
+    exists w2, symtbl_inv I2 w2 se2
+          /\ query_inv I2 w2 q2
+          /\ forall r1 r2, match_reply cc wcc r1 r2 ->
+                     reply_inv I2 w2 r2 ->
+                     reply_inv I1 w1 r1.
+
+Lemma inv_commute_ref1 {li1 li2} I I1 I2 (cc: callconv li1 li2):
+  invcc_commute1 cc I1 I2 ->
+  invref ((I @! cc) @@ I2) ((I @@ I1) @! cc).
+Proof.
+  intros COM.
+  red. intros ((w & wcc) & w2) se2 q2. intros.
+  inv H. inv H1. inv H. 
+  inv H0. inv H. destruct H0. 
+  edestruct COM as (w1 & SINV1 & QINV1 & RINV1); eauto.
+  exists ((w, w1), wcc). repeat apply conj.
+  - repeat econstructor; eauto.
+  - repeat econstructor; eauto.
+  - intros. inv H5. destruct H6. inv H5.
+    repeat econstructor; eauto.
+Qed.
+
+Lemma inv_commute_ref2 {li1 li2} I I1 I2 (cc: callconv li1 li2):
+  invcc_commute2 cc I1 I2 ->
+  invref ((I @@ I1) @! cc) ((I @! cc) @@ I2).
+Proof. 
+  intros COM.
+  red. intros ((w & w1) & wcc) se1 q1. intros.
+  inv H. destruct H1. inv H. 
+  inv H0. destruct H. inv H. 
+  edestruct COM as (w2 & SINV2 & QINV2 & RINV2); eauto.
+  exists ((w, wcc), w2). split.
+  repeat econstructor; eauto.
+  split.
+  repeat econstructor; eauto.
+  intros. inv H. inv H6. destruct H. 
+  repeat econstructor; eauto.
+Qed.
+
+(* cc_id satisfies invcc_commute1/2 *)
+
+Lemma invcc_commute_id1 {li} (I: invariant li):
+  invcc_commute1 cc_id I I.
+Proof.
+  red. intros w wcc q1 q2 se1 se2 MQ MSENV SINV2 QINV2.
+  inv MSENV. inv MQ.
+  exists w. repeat apply conj; eauto.
+  intros. inv H. eauto.
+Qed.
+
+Lemma invcc_commute_id2 {li} (I: invariant li):
+  invcc_commute2 cc_id I I.
+Proof.
+  red. intros w wcc q1 q2 se1 se2 MQ MSENV SINV2 QINV2.
+  inv MSENV. inv MQ.
+  exists w. repeat apply conj; eauto.
+  intros. inv H. eauto.
+Qed.
 

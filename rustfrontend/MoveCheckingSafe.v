@@ -122,7 +122,7 @@ Qed.
 Section MOVE_CHECK.
 
 Variable prog: program.
-Variable w: wt_rs_world.
+Variable w: rs_own_world.
 Variable se: Genv.symtbl.
 Hypothesis VALIDSE: Genv.valid_for (erase_program prog) se.
 Let L := semantics prog se.
@@ -7035,7 +7035,7 @@ Qed.
 
 
 Lemma initial_state_sound: forall q s,
-    query_inv wt_rs (se, w) q ->
+    query_inv rs_own (se, w) q ->
     initial_state ge q s ->
     sound_state s /\ wt_state s.
 Proof.
@@ -7066,8 +7066,8 @@ Lemma external_sound: forall s q,
     sound_state s ->
     wt_state s ->
     at_external ge s q ->
-    exists wA, symtbl_inv wt_rs wA se /\ query_inv wt_rs wA q /\
-            forall r, reply_inv wt_rs wA r ->
+    exists wA, symtbl_inv rs_own wA se /\ query_inv rs_own wA q /\
+            forall r, reply_inv rs_own wA r ->
                  (exists s', after_external s r s' (* do we really need
                  this exists s'? It is repeated in partial safe *)
                         /\ forall s', after_external s r s' -> sound_state s' /\ wt_state s').
@@ -7091,7 +7091,7 @@ Proof.
   rewrite H in FUNC. inv FUNC. simpl in *. inv FUNTY.
   rewrite H in FIND. inv FIND. simpl in *. inv FTY.
   repeat apply conj; auto.
-  - eapply wt_rs_query_intro with (fpl := fpl).
+  - eapply rs_own_query_intro with (fpl := fpl).
     eapply list_norepet_append_right; eauto.
     eauto.
     (* wt_footprint_list *)
@@ -7153,7 +7153,7 @@ Lemma final_sound: forall s r,
     sound_state s ->
     wt_state s ->
     final_state s r ->
-    reply_inv wt_rs (se, w) r.
+    reply_inv rs_own (se, w) r.
 Proof.
   intros s r SOUND WTST FINAL.
   inv FINAL. inv SOUND. inv WTST.  
@@ -7172,7 +7172,7 @@ Proof.
   assert (SGEQ: mod_sg = sg).
   { unfold mod_sg. inv ACC; eauto. }
   subst. simpl in *.
-  eapply wt_rs_reply_intro with (rfp:= rfp); eauto.
+  eapply rs_own_reply_intro with (rfp:= rfp); eauto.
   all: try rewrite SG_COMP_ENV; auto.
   eapply incl_refl.
   eapply list_norepet_append_left; eauto.
@@ -8178,12 +8178,12 @@ Definition mem_error prog se (s: state) : Prop :=
   step_mem_error (globalenv se prog) s.
 
 (* I is the generic partial safe invariant *)
-Lemma move_check_module_safe (I: invariant li_rs) p:
+Lemma move_check_module_safe (I: invariant li_rs) p p1:
   module_type_safe I I (semantics p) (mem_error p) ->  
   (* Genv.valid_for (erase_program (program_of_program p)) se ->  *)
-  move_check_program p = OK p ->
-  module_type_safe (inv_compose I wt_rs) (inv_compose I wt_rs) (semantics p) SIF.
-  (* module_safe_se (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) not_stuck se. *)
+  move_check_program p = OK p1 ->
+  module_type_safe (inv_compose I rs_own) (inv_compose I rs_own) (semantics p) SIF.
+  (* module_safe_se (semantics p) (inv_compose I rs_own) (inv_compose I rs_own) not_stuck se. *)
 Proof.
   intros [SAFE] MVCHK. destruct SAFE as (SINV & PRE).
   (* w1 is the world in partial safe *)
@@ -8196,7 +8196,7 @@ Proof.
                invariant is hard-code in the initial state *)
                /\ rs_sig_comp_env (mod_sg w2) = p.(prog_comp_env)).
   red. constructor.
-  eapply (Module_ksafe_components li_rs li_rs (semantics p) (inv_compose I wt_rs) (inv_compose I wt_rs) SIF IS).
+  eapply (Module_ksafe_components li_rs li_rs (semantics p) (inv_compose I rs_own) (inv_compose I rs_own) SIF IS).
   intros se (w1 & (se' & w2)) (SYMINV1 & SYMINV2) VSE. simpl in SYMINV2. subst.
   simpl in VSE.
   generalize (PRE se w1 SYMINV1 VSE). intros PRE1.
@@ -8253,11 +8253,11 @@ Proof.
     exploit @final_sound; simpl; eauto. 
 Qed.
 
-(* Definition wt_rs_inv p '(se, w) := sound_state p (se, w) se. *)
+(* Definition rs_own_inv p '(se, w) := sound_state p (se, w) se. *)
 
 (* Lemma sound_rustir_preserves p: *)
 (*   move_check_program p = OK p -> *)
-(*   preserves (semantics p) wt_rs wt_rs (wt_rs_inv p). *)
+(*   preserves (semantics p) rs_own rs_own (rs_own_inv p). *)
 (* Proof. *)
 (*   intros. *)
 (*   assert (CE: forall se, composite_env_consistent (globalenv se p)). *)
@@ -8281,10 +8281,10 @@ Qed.
 
 (* Lemma sound_rustir_self_sim p: *)
 (*   move_check_program p = OK p -> *)
-(*   forward_simulation wt_rs wt_rs (semantics p) (semantics p). *)
+(*   forward_simulation rs_own rs_own (semantics p) (semantics p). *)
 (* Proof. *)
 (*   intros. *)
-(*   eapply preserves_fsim with (IS := wt_rs_inv p). *)
+(*   eapply preserves_fsim with (IS := rs_own_inv p). *)
 (*   eapply sound_rustir_preserves. *)
 (*   auto. *)
 (* Qed. *)
