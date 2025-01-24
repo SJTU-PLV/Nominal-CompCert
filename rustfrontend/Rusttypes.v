@@ -438,8 +438,11 @@ Require Import Wfsimpl.
 (* It is equivalent to type which has [Move (Noncopy)] and [Drop]
 trait in Rust. For borrow checking, we need a new charaterized
 function to identify [Move] type *)
-Definition own_type (ce: composite_env) : type -> bool :=
-  Fixm (@PTree_Properties.cardinal composite) own_type' ce.
+(* Definition own_type (ce: composite_env) : type -> bool := *)
+(*   Fixm (@PTree_Properties.cardinal composite) own_type' ce. *)
+
+Definition own_type (ce: composite_env) ty : bool :=
+  negb (scalar_type ty).
 
 (** Fuel version own_type  *)
 (* (* If run out of fuel, return none *) *)

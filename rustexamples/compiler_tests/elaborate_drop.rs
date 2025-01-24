@@ -13,8 +13,8 @@ enum Option{
     None
 }
 
-fn test(){
-
+fn test() -> bool {
+    return true;
 }
 
 fn f2(){
@@ -38,5 +38,5 @@ fn f2(){
 
 fn main(){
     f2();
-    printf("Success\n");
+    //printf("Success\n");
 }

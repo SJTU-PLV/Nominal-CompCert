@@ -1484,7 +1484,7 @@ Proof.
       eapply function_entry_eq_inv in ENTRY. solve_eval.
       solve_eval.
       erewrite init_own_env_eq; eauto.
-      solve_eval.
+      (* solve_eval. *)
     (* step_external_function *)
     + inv MATCH.
       exploit find_funct_match_id_inv; eauto. intros (f1 & FIND1 & TR).

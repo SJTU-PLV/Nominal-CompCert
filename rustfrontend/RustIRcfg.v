@@ -777,8 +777,12 @@ Definition transl_on_instr (src: statement) (pc: node) (instr: instruction)
   | Isel sel _ =>
       match select_stmt src sel with
       | Some s =>
-          do ts <- transl_stmt (get_an ae pc) s;
-          set_stmt pc src sel ts
+          match transl_stmt (get_an ae pc) s with
+          | OK ts =>
+             set_stmt pc src sel ts
+          | Error msg =>
+             Error ((CTX pc) :: msg)
+          end
       | None =>
           Error [CTX pc; MSG " select_stmt error in transl_on_instr"]
       end
@@ -1233,7 +1237,7 @@ Proof.
     destruct i.
     + inv A. eapply IHl; eauto.
     + destruct (select_stmt body1 s1) eqn: SEL1; try congruence.
-      Errors.monadInv A.
+      destruct transl_stmt eqn: TR in A; try congruence.
       exploit set_stmt_select; eauto.
       intros SEL2.
       exploit DISJOINT. left. eauto. intros DIS.
@@ -1312,19 +1316,20 @@ Proof.
   Errors.monadInv C1.
   unfold transl_on_instr in EQ0.
   destruct (select_stmt x sel) eqn: SEL1; try congruence.
-  unfold body1' in EQ. Errors.monadInv EQ0.
+  unfold body1' in EQ.
+  destruct transl_stmt eqn: TR in EQ0; try congruence.
   (* transl on disjoint selector select_stmt is unchanged *)
   exploit transl_on_instrs_unchanged. eapply SEL. eauto.
   (* prove disjointness *)   
   intros. eapply DISJOINT. eapply PTree.elements_complete.
   erewrite B2. eapply in_app. eauto. intros SEL2.
   rewrite SEL1 in SEL2. inv SEL2.    
-  exists x0.    
+  exists s1.    
   split.
   (* set_stmt and then select it *)
-  unfold set_stmt in EQ2.
-  destruct (update_stmt x sel x0) eqn: UPDATE; try congruence.
-  inv EQ2.
+  unfold set_stmt in EQ0.
+  destruct (update_stmt x sel s1) eqn: UPDATE; try congruence.
+  inv EQ0.
   exploit update_stmt_select; eauto. 
   intros SEL2.
   eapply transl_on_instrs_unchanged; eauto.
@@ -1719,33 +1724,34 @@ Proof.
     + inv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Inop n) = OK s0).
       { destruct i0; simpl in *; inv A2; auto.
-        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ. simpl. rewrite EQ0. auto.
+        destruct (select_stmt s s1); try congruence.
+        destruct transl_stmt eqn: TR1 in H0; try congruence.
+        rewrite TR1. simpl. rewrite H0. auto.
         (* Icond *)
         Errors.monadInv H0. rewrite EQ. simpl. auto. }
       rewrite B1. auto.
     (* i is Isel *)
     + destruct (select_stmt body s1) eqn: S1; try congruence.
-      Errors.monadInv A1.
+      destruct transl_stmt eqn: TR1 in A1; try congruence.
       (* case analysis of i0 *)
       destruct i0; simpl in *.
       (* i0 is Inop *)
-      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
+      * inv A2. rewrite S1. rewrite TR1. simpl. rewrite A1. auto.
       (* i0 is Isel *)
-      * assert (DIS: selector_disjoint s1 s3).
+      * assert (DIS: selector_disjoint s1 s4).
         { unfold itosels in NOREP. simpl in NOREP. inv NOREP.
           inv NOREP0. eapply DIS. econstructor. auto. }
-        destruct (select_stmt s s3) eqn: S2; try congruence.
-        Errors.monadInv A2.
+        destruct (select_stmt s s4) eqn: S2; try congruence.
+        destruct transl_stmt eqn: S3 in A2; try congruence.
         exploit set_stmt_disjoint_select_inv; eauto.
         (* prove disjointness of s3 and s1 *)
         eapply selector_disjoint_sym. auto.
         intros C1.        
-        rewrite C1. rewrite EQ1. simpl.
+        rewrite C1. rewrite S3. simpl.
         (* set_stmt to body *)
         unfold transl at 2. simpl.
         unfold transl_on. simpl.
-        exploit select_stmt_then_set. eapply C1. instantiate (1 := x0). instantiate (1 := p0).
+        exploit select_stmt_then_set. eapply C1. instantiate (1 := s6). instantiate (1 := p0).
         intros (body' & C2).
         erewrite C2. simpl.
         (* select disjoint statement in body' *)
@@ -1753,18 +1759,19 @@ Proof.
         (* prove disjointness between s1 and s3 *)
         auto.
         intros C3. rewrite C3.
-        rewrite EQ. simpl.
+        rewrite TR1. simpl.
         erewrite set_stmt_disjoint_reorder; eauto.
       (* i0 is Icond *)
-      * Errors.monadInv A2. rewrite EQ1. simpl.
-        rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
-      * inv A2. rewrite S1. rewrite EQ. simpl. rewrite EQ0. auto.
+      * Errors.monadInv A2. rewrite EQ. simpl.
+        rewrite S1. rewrite TR1. simpl. rewrite A1. auto.
+      * inv A2. rewrite S1. rewrite TR1. simpl. rewrite A1. auto.
     (* Icond *)
     + Errors.monadInv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Icond e n n0) = OK s0).
       { destruct i0; simpl in *; try rewrite EQ; inv A2; auto.
-        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ0. simpl. rewrite EQ1. simpl. rewrite EQ. auto.
+        destruct (select_stmt s s1); try congruence.
+        destruct transl_stmt eqn: TR1 in H0; try congruence.
+        rewrite TR1. simpl. rewrite H0. simpl. rewrite EQ. auto.
         (* Icond *)
         Errors.monadInv H0. rewrite EQ0. simpl. rewrite EQ. auto. }
       rewrite B1. auto.
@@ -1772,8 +1779,9 @@ Proof.
     + inv A1.
       assert (B1: transl (transl_on_instr s p0 i0) (p, Iend) = OK s0).
       { destruct i0; simpl in *; inv A2; auto.
-        destruct (select_stmt s s1); try congruence. Errors.monadInv H0.
-        rewrite EQ. simpl. rewrite EQ0. auto.
+        destruct (select_stmt s s1); try congruence.
+        destruct transl_stmt eqn: TR1 in H0; try congruence.
+        rewrite TR1. simpl. rewrite H0. auto.
         (* Icond *)
         Errors.monadInv H0. rewrite EQ. simpl. auto. }
       rewrite B1. auto.      
@@ -2101,11 +2109,11 @@ Proof.
     + inv A. eapply IHinstrs; eauto.
     + destruct (select_stmt body1 s1) eqn: B.
       2: inv A.
-      Errors.monadInv A.
+      destruct transl_stmt eqn: TR1 in A; try congruence.
       assert (NOTPRE: forall l, s1 ++ l <> sel).
       { intros. eapply NOTIN; eauto. }
       exploit set_stmt_not_prefix_memb_eq; eauto.
-      intros (s3 & SEL2 & SEQ).          
+      intros (s4 &  SEL2 & SEQ).          
       exploit IHinstrs. eauto. eapply SEL2.
       intros. eapply NOTIN. eauto.
       intros (s' & SEL3 & SEQ1). exists s'.

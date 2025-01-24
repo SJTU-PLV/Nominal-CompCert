@@ -1,7 +1,7 @@
 fn main() {
 	let n : i32 = 10;
 	let y : Box<i32> = fact(n);
-	printf("Factorial of %d is %d\n", n, *y);
+	// printf("Factorial of %d is %d\n", n, *y);
 }
 
 

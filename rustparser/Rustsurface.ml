@@ -820,7 +820,7 @@ module To_syntax = struct
     set_st { st with composites = cos'
                    ; enums = IdentMap.add i ce' st.enums }
 
-  let rty_bool = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned)
+  let rty_bool = Rusttypes.Tint (Ctypes.I32, Ctypes.Signed)
 
   let infer_unop (op: Cop.unary_operation)
       (t: Rusttypes.coq_type) : Rusttypes.coq_type monad =

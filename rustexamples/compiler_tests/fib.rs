@@ -12,5 +12,5 @@ fn main(){
     let r: i32;
     n = 35;
     r = fib(n);
-    printf("fib(%d) = %d\n", n, r);
+    // printf("fib(%d) = %d\n", n, r);
 }
