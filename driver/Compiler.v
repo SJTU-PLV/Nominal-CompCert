@@ -1217,7 +1217,8 @@ Theorem rustlight_partial_safe_to_total_safe I:
   forall p tp,
   match_prog_rustlight p tp ->
   module_type_safe I I (Rustlightown.semantics p) (Rustlightown.mem_error p) ->
-  module_type_safe ((I @@ rs_own) @! cc_rust_compcert) ((I @@ rs_own) @! cc_rust_compcert) (Asm.semantics tp) SIF.
+  module_type_safe ((I @@ rs_own) @! cc_rust_compcert) ((I @@ rs_own) @! cc_rust_compcert) (Asm.semantics tp) SIF
+  /\ module_type_safe (I @@ rs_own) (I @@ rs_own) (Rustlightown.semantics p) SIF.
 Proof.
   intros p tp M SAFE. generalize M as M1. intros.
   unfold match_prog_rustlight, pass_match, CompCertO's_passes_rustlight in M.
@@ -1246,25 +1247,38 @@ Proof.
   exploit @module_safek_components_preservation.
   eapply TSAFE1. eapply rustir_semantic_preservation; eauto.
   intros TSAFE2.
-  (* 5. invaraint refinement *)
-  eapply open_safety_inv_ref.
-  3: eapply TSAFE2.
-  (* ref1 *)
-  etransitivity. erewrite invcc_compose_assoc.
-  eapply cc_inv_ref. reflexivity.
-  instantiate (1 := cc_rust_compcert).
-  erewrite cc_compose_id_left.
-  unfold cc_rustir_compcert.
-  eapply cc_rust_collapse. reflexivity.
-  (* ref2 *)
-  red. etransitivity.
-  eapply cc_inv_ref. reflexivity.
-  eapply cc_rust_expand.
-  erewrite invcc_compose_assoc.
-  eapply cc_inv_ref. reflexivity.
-  erewrite cc_compose_id_left. reflexivity.
+  (** show total safety in Asm and Rustlght  *)
+  split.
+ - (* 5. invaraint refinement *)
+   eapply open_safety_inv_ref.
+   3: eapply TSAFE2.
+   (* ref1 *)
+   etransitivity. erewrite invcc_compose_assoc.
+   eapply cc_inv_ref. reflexivity.
+   instantiate (1 := cc_rust_compcert).
+   erewrite cc_compose_id_left.
+   unfold cc_rustir_compcert.
+   eapply cc_rust_collapse. reflexivity.
+   (* ref2 *)
+   red. etransitivity.
+   eapply cc_inv_ref. reflexivity.
+   eapply cc_rust_expand.
+   erewrite invcc_compose_assoc.
+   eapply cc_inv_ref. reflexivity.
+   erewrite cc_compose_id_left. reflexivity.
+ - (* 6 show forward simulation with the progress property between
+  rustlight and rustir *)
+  assert (FSIM: forward_simulation_progress cc_id cc_id (Rustlightown.semantics p) (RustIRown.semantics p1)).
+  { eapply fsim_progress_ubpreserve_implies_progress.
+    eapply RustIRgenProof.transl_program_correct1. auto. }
+  (* 7. show total safety of Rustlight *)
+  exploit @module_safek_components_preservation_fsimg. eapply TSAFE1.
+  eauto. intros TSAFE0.
+  eapply open_safety_inv_ref. 3: eapply TSAFE0.
+  eapply id_inv_id_equiv.  eapply id_inv_id_equiv.  
 Qed.
 
+  
 (*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every

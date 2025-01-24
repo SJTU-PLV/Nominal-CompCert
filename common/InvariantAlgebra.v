@@ -253,3 +253,36 @@ Proof.
   intros. inv H. eauto.
 Qed.
 
+(** Commute property of invcc and ccinv *)
+
+Lemma cc_inv_cc_equiv {li} (cc: callconv li li) I:
+  inveqv (cc !@ I @! cc) I.
+Proof.
+  split.
+  - red. intros (wcc1, (w, wcc2)) se q1 S Q.
+    inv S. destruct H. inv H. destruct H1.
+    inv Q. destruct H2. inv H2. destruct H4.
+Abort.
+
+(* Arbitary cc is difficult *)
+Lemma id_inv_id_equiv {li} (I: invariant li) :
+  inveqv (1 !@ I @! 1) I.
+Proof.
+  split.
+  - red. intros (wcc1, (w, wcc2)) se q1 S Q.
+    inv S. destruct H. inv H. destruct H1.
+    inv Q. destruct H2. inv H2. destruct H4.
+    inv H0. inv H1. inv H3. inv H4.
+    exists w. repeat apply conj; auto.
+    intros. eexists. split.
+    econstructor. split. eauto. econstructor.
+    econstructor.
+  - red. intros w se q1 S Q.
+    exists (tt, (w, tt)). repeat apply conj.
+    repeat econstructor; eauto.
+    repeat econstructor; eauto.
+    intros. inv H. destruct H0. inv H. destruct H1. inv H1. inv H0.
+    auto.
+Qed.
+
+    
