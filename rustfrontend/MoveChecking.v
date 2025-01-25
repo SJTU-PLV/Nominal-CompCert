@@ -113,8 +113,10 @@ Fixpoint move_check_pexpr (pe : pexpr) : bool :=
       if scalar_type ty then
         (* dominators are init means that the location if p is valid;
            the children of p is init means that the value of p is
-           semantically wel-typed *)
-        dominators_must_init init uninit universe p && must_init init uninit universe p
+           semantically wel-typed. Note that p may be downcast so we
+           just require that the valid owner of p is init *)
+          dominators_must_init init uninit universe p && must_init init uninit universe (valid_owner p)
+        (* dominators_must_init init uninit universe p && must_init init uninit universe p *)
       else
         (* For now only support copy a scalar type value *)
         false

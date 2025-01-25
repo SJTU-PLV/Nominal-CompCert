@@ -1205,12 +1205,17 @@ Proof.
     exploit eval_place_sound; eauto.
     intros (pfp & GFP & WTFP & RAN & PERM & VALID).
     exploit get_loc_footprint_map_align; eauto. intros AL.
-    (* show that (b, ofs) is sem_wt_loc *)
+    (* get the footprint of valid owner *)
+    exploit valid_owner_place_footprint; eauto.
+    intros (fp' & ofs1 & fofs & G1 & G2 & G3).
+    (* show that (b, ofs) is sem_wt_loc *)    
     exploit MM. eauto. eapply must_init_sound; eauto.
-    intros (BM & FULL).
+    intros (BM' & FULL').
+    exploit valid_owner_bmatch; eauto. intros BM.
     (* scalar typed bmatch is sem_wt_loc *)
     exploit bmatch_scalar_type_sem_wt_loc; eauto. intros (WTLOC & FPEQ).
     subst.
+    rewrite <- G3 in WTLOC.
     exploit deref_sem_wt_loc_sound; eauto.
     eapply Mem.range_perm_implies; eauto. constructor.
   - simpl. inv WTPE. inv EVAL.
@@ -7267,9 +7272,13 @@ Proof.
     { eapply dominators_must_init_sound; eauto. }
     exploit eval_place_sound; eauto.
     intros (fp & A1 & A2 & A3).
+    exploit valid_owner_place_footprint; eauto.
+    intros (fp1 & ofs1 & fofs1 & G1 & G2 & G3).
     exploit MM. eauto.
     eapply must_init_sound. eauto. eauto.
     intros (BM & FULL).
+    exploit valid_owner_bmatch; eauto. intros BM1.
+    rewrite <- G3 in BM1.
     eapply deref_loc_no_mem_error; eauto.
   - destruct (typeof_place p) eqn: PTY; try congruence.
     eapply andb_true_iff in POWN as (B1 & B2).
