@@ -9,6 +9,7 @@ extern List* empty_list();
 extern List* find(List* l, int k);
 extern List* insert(List* l, int k, int v);
 extern List* remove(List* l, int k);
+extern int delete_list(List* l);
 
 // The hash function can be implemented in assembly. It must guarantee
 // that the return index must less than DEFAULT_HASH_MAP_LENGTH.
@@ -26,6 +27,7 @@ void init_map(){
 
 List** find_bucket(int key){
     int index = hash(key);
+    printf("index is %d\n", index);
     return &(hmap[index]);
 }
 
@@ -52,7 +54,7 @@ void hmap_set(int key, int val){
 }
 
 int process(int key, int val){
-    printf("The key %d is mapped to %d", key, val);
+    printf("The key %d is mapped to %d\n", key, val);
     return val;
 }
 
@@ -90,4 +92,17 @@ void hmap_remove(int key){
     // else{
     //     remove(hmap[index], key);
     // }
+}
+
+void delete_hmap(){
+    for(int i = 0; i < DEFAULT_HASH_MAP_LENGTH; ++i){
+        if (hmap[i] != NULL) delete_list(hmap[i]);
+    }
+    printf("Delete the hash map\n");
+}
+
+int main(){
+    hmap_set(19, 10);
+    hmap_get(19);
+    delete_hmap();
 }

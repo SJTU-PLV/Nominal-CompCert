@@ -38,7 +38,7 @@ fn print_list(l: Box<list>) {
             return;
         } 
         list::cons(tl) => {
-            printf("%d, ", tl.value);
+            // printf("%d, ", tl.value);
             print_list(tl.next);
         }
     };
@@ -54,7 +54,7 @@ fn main(){
     ls = push(ls, 3);
     let l1 : Box<list> = pop_and_push(ls, 4);
     // result is 4 2 1 0  
-    printf("The elements of list is: ");
+    //printf("The elements of list is: ");
     print_list(l1);
-    printf("\n");
+    //printf("\n");
 }

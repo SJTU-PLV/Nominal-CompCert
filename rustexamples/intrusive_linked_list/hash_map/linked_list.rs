@@ -28,11 +28,12 @@ fn find(l: Box<List>, k: i32) -> Box<List>{
         List::Cons(node) => {
             if (k == node.key) {
                 node.val = process(k, node.val);
-                l = List::Cons(node);
+                *l = List::Cons(node);
                 return l;
             }
             else {
-                l = List::Cons(find(node, k));
+                node.next = find(node.next, k);
+                *l = List::Cons(node);
                 return l
             }
         }
@@ -44,7 +45,7 @@ fn empty_list() -> Box<List> {
 }
 
 fn insert(l: Box<List>, k: i32, v: i32) -> Box<List>{
-    let head = Node{key: k, val: v, next: l};
+    let head: Node = Node{key: k, val: v, next: l};
     l = Box(List::Cons(head));
     return l;
 }
@@ -61,9 +62,13 @@ fn remove(l: Box<List>, k: i32) -> Box<List>{
             }
             else {
                 node.next = remove(node.next, k);
-                l = List::Cons(node);
+                *l = List::Cons(node);
                 return l;
             }
         }
     }
+}
+
+fn delete_list(l: Box<List>){
+    return;
 }

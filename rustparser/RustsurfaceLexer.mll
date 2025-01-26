@@ -22,6 +22,7 @@ rule read =
  | "+" { ADD }
  | "-" { SUBS }
  | "/" { DIV }
+ | "%" { MOD }
 
  | "!" { NOT }
  | "<=" { LE }

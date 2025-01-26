@@ -14,6 +14,7 @@ open Rustsurface
 %token NOT
 %token ADD
 %token SUBS
+%token MOD
 %token DIV
 %token LE
 %token GE
@@ -242,6 +243,7 @@ expr:
   | e1 = expr; SUBS; e2 = expr { Ebinop (Cop.Osub, e1, e2) }
   | e1 = expr; ASTERISK; e2 = expr { Ebinop (Cop.Omul, e1, e2) }
   | e1 = expr; DIV; e2 = expr { Ebinop (Cop.Odiv, e1, e2) }
+  | e1 = expr; MOD; e2 = expr { Ebinop (Cop.Omod, e1, e2) }
   | e1 = expr; LE; e2 = expr { Ebinop (Cop.Ole, e1, e2) }
   | e1 = expr; GE; e2 = expr { Ebinop (Cop.Oge, e1, e2) }
   | e1 = expr; RANGLE; e2 = expr { Ebinop (Cop.Ogt, e1, e2) }

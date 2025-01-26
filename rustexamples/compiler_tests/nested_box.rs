@@ -21,5 +21,5 @@ fn main(){
     };
     let b : Box<i32> = (**(a.f)).l;
 
-    printf("Success\n");
+    //printf("Success\n");
 }
