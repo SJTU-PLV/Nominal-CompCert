@@ -1176,6 +1176,7 @@ Notation " ( x ) " := x (in custom rustlight_place at level 20) : rustlight_scop
 Notation " x # t " := (Plocal x t) (in custom rustlight_place at level 0, x global, t global) : rustlight_scope.
 Notation " ! p " := (Pderef p (deref_type (typeof_pexpr p))) (in custom rustlight_place at level 10, p at level 20) : rustlight_scope.
 Notation " p . x < t > " := (Pfield p x t) (in custom rustlight_place at level 10, x global, t global) : rustlight_scope.
+Notation " p 'as' x < t > " := (Pdowncast p x t) (in custom rustlight_place at level 10, x global, t global) : rustlight_scope.
 
 
 (* Notations for expression. Expression is at level 20 *)
@@ -1188,7 +1189,7 @@ Notation " e1 * e2 " := ((Ebinop Omul e1 e2 (typeof e1)))  (in custom rustlight_
 Notation " e1 - e2 " := ((Ebinop Osub e1 e2 (typeof e1)))  (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
 Notation " 'copy' p " := ((Eplace p (typeof_place p))) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
 Notation " 'move' p " := (Emoveplace p (typeof_place p)) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
-(* TODO: Ecktag and Eget/Emoveget *)
+Notation " 'cktag' p x " := (Ecktag p x) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
 
 
 (* Print Grammar constr. *)
@@ -1220,23 +1221,23 @@ Definition test_option_ident_to_expr : option expr  := @Some expr A.
 (* Print Graph. *)
 (* Print Coercion Paths ident expr. *)
 
-(* Definition test : statement := *)
-(*   <{ let A : type_int32s in *)
-(*      A#type_int32s := $1; *)
-(*      A#type_int32s := $0; *)
-(*      return (A#type_int32s); *)
-(*      skip; break; return0; return (move A#type_int32s); *)
-(*      if (($1) < ($0)) then *)
-(*        B#type_int32s := copy C#type_int32s; *)
-(*        A#type_int32s := copy B#type_int32s *)
-(*      else *)
-(*        A#type_int32s := copy C#type_int32s *)
-(*      end; *)
-(*      loop *)
-(*        A#type_int32s := copy C#type_int32s; *)
-(*        B#type_int32s := copy A#type_int32s *)
-(*      end; *)
-(*      return0 *)
-(*      end }>. *)
+Definition test : statement :=
+  <{ let A : type_int32s in
+     A#type_int32s := $1;
+     A#type_int32s := $0;
+     return (A#type_int32s);
+     skip; break; return (A#type_int32s);
+     if (($1) < ($0)) then
+       B#type_int32s := copy C#type_int32s;
+       A#type_int32s := copy B#type_int32s
+     else
+       A#type_int32s := copy C#type_int32s
+     end;
+     loop
+       A#type_int32s := copy C#type_int32s;
+       B#type_int32s := copy A#type_int32s
+     end;
+     return (A#type_int32s)
+     end }>.
 
 (** ** Pretty printing for Rustlight programs  *)

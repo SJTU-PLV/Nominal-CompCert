@@ -14,8 +14,8 @@ enum List {
 
 extern fn process(k: i32, v: i32) -> i32
 
-fn hash(k: i32) -> i32{
-    return k % 10;
+fn hash(k: i32, range: i32) -> i32{
+    return k % range;
 }
 
 // use callback function instead of returning the value?

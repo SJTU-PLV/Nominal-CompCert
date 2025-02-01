@@ -13,7 +13,7 @@ extern int delete_list(List* l);
 
 // The hash function can be implemented in assembly. It must guarantee
 // that the return index must less than DEFAULT_HASH_MAP_LENGTH.
-extern int hash(int k);
+extern int hash(int k, int range);
 
 // We can also introduce handles to use multiple hash maps
 static List* hmap[DEFAULT_HASH_MAP_LENGTH] = {NULL};
@@ -26,8 +26,7 @@ void init_map(){
 }
 
 List** find_bucket(int key){
-    int index = hash(key);
-    printf("index is %d\n", index);
+    int index = hash(key, DEFAULT_HASH_MAP_LENGTH);
     return &(hmap[index]);
 }
 
