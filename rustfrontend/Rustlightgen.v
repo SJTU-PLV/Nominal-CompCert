@@ -157,6 +157,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
             (* evaluate the structure arguments *)
             match ce!id with
             | Some co =>
+                (**TODO: we can optimize the generated code by eliminating the generated temp variable to reduce the overhead of memory copying *)
                 do temp_id <- gensym ty;
                 let temp := Plocal temp_id ty in
                 do (args_stmts, args_exprs) <- transl_exprlist args;
@@ -433,18 +434,6 @@ Definition extract_temps : mon (list (ident * type)) :=
 
 (** Smart constructor for [if ... then ... else]. (copy from SimplExpr.v) *)
 
-Definition eval_simpl_expr (a: expr) : option val := 
-  match a with
-  | Epure pe =>
-      match pe with
-      | Econst_int n _ => Some(Vint n)
-      | Econst_float n _ => Some(Vfloat n)
-      | Econst_single n _ => Some(Vsingle n)
-      | Econst_long n _ => Some(Vlong n)
-      | _ => None
-      end
-  | _ => None
-  end.
 
 (** TODO: some optimizations  *)
 Definition makeif (a: expr) (s1 s2: statement) : statement :=
@@ -563,7 +552,7 @@ with transl_arm_statements (sl: arm_statements) (p: place) (co: composite) : mon
       match ids with
       | Some (fid, temp_id) =>
           (* Replace temp_id with (p as fid) in [arm] *)
-          match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
+          match List.find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
           | Some m =>
               let ty := type_member m in
               (* replace generic origins in ty with dummy origins *)

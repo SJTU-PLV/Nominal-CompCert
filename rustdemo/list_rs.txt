@@ -1,0 +1,179 @@
+
+struct Node ;
+variant List ;
+struct Node {
+  int key;
+  int val;
+  Box<variant List> next;
+};
+
+variant List {
+  () Nil;
+  struct Node Cons;
+};
+
+int hash(int, int);
+Box<variant List> find(Box<variant List>, int);
+Box<variant List> empty_list(void);
+Box<variant List> insert(Box<variant List>, int, int);
+Box<variant List> remove(Box<variant List>, int);
+() delete_list(Box<variant List>);
+extern int process(int, int);
+() __drop_in_place_Node(void);
+() __drop_in_place_List(void);
+extern () malloc(void);
+extern () free(void);
+int hash(k: int, range: int)
+
+int _retv;
+{
+  _retv = k % range;
+  return _retv;
+}
+
+Box<variant List> find(l: Box<variant List>, k: int)
+
+Box<variant List> _retv;
+() _;
+struct Node node;
+int _31;
+variant List _32;
+Box<variant List> _33;
+variant List _34;
+{
+  if (cktag(*l , Nil)) {
+    let _ : () in {
+      _ = (*l  as Nil);
+      _retv = move l;
+      return _retv;
+    }
+  } else {
+    let node : struct Node in {
+      node = move (*l  as Cons);
+      if (k == node.key) {
+        let _31 : int in {
+          _31 = glob process(k, node.val);
+          node.val = _31;
+        }
+        let _32 : variant List in {
+          _32 = List::Cons(move node);
+          *l  = move _32;
+        }
+        _retv = move l;
+        return _retv;
+      } else {
+        let _33 : Box<variant List> in {
+          _33 = glob find(move node.next, k);
+          node.next = move _33;
+        }
+        let _34 : variant List in {
+          _34 = List::Cons(move node);
+          *l  = move _34;
+        }
+        _retv = move l;
+        return _retv;
+      }
+    }
+  }
+}
+
+Box<variant List> empty_list()
+
+Box<variant List> _retv;
+Box<variant List> _36;
+variant List _35;
+{
+  let _36 : Box<variant List> in {
+    let _35 : variant List in {
+      _35 = List::Nil(tt);
+      _36 = Box::new(move _35);
+      _retv = move _36;
+    }
+  }
+  return _retv;
+}
+
+Box<variant List> insert(l: Box<variant List>, k: int, v: int)
+
+Box<variant List> _retv;    
+struct Node head;
+struct Node _37;
+Box<variant List> _39;
+variant List _38;
+{
+  let head : struct Node in {
+    let _37 : struct Node in {
+      _37.key = k;
+      _37.val = v;
+      _37.next = move l;
+      head = move _37;
+    }
+    let _39 : Box<variant List> in {
+      let _38 : variant List in {
+        _38 = List::Cons(move head);
+        _39 = Box::new(move _38);
+        l = move _39;
+      }
+    }
+    _retv = move l;
+    return _retv;
+  }
+}
+
+Box<variant List> remove(l: Box<variant List>, k: int)
+
+Box<variant List> _retv;
+() _;
+struct Node node;
+Box<variant List> _40;
+variant List _41;
+{
+  if (cktag(*l , Nil)) {
+    let _ : () in {
+      _ = (*l  as Nil);
+      _retv = move l;
+      return _retv;
+    }
+  } else {
+    let node : struct Node in {
+      node = move (*l  as Cons);
+      if (k == node.key) {
+        _retv = move node.next;
+        return _retv;
+      } else {
+        let _40 : Box<variant List> in {
+          _40 = glob remove(move node.next, k);
+          node.next = move _40;
+        }
+        let _41 : variant List in {
+          _41 = List::Cons(move node);
+          *l  = move _41;
+        }
+        _retv = move l;
+        return _retv;
+      }
+    }
+  }
+}
+
+() delete_list(l: Box<variant List>)
+
+() _retv;
+{
+  _retv = tt;
+  return _retv;
+}
+
+() __drop_in_place_Node()
+
+() List;
+{
+  /*skip*/
+}
+
+() __drop_in_place_List()
+
+() List;
+{
+  /*skip*/
+}

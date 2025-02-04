@@ -22,7 +22,7 @@ fn hash(k: i32, range: i32) -> i32{
 fn find(l: Box<List>, k: i32) -> Box<List>{
     match *l {
         List::Nil => {
-            *l = List::Nil;
+            // *l = List::Nil; l is not moved out
             return l;
         }
         List::Cons(node) => {
@@ -53,7 +53,7 @@ fn insert(l: Box<List>, k: i32, v: i32) -> Box<List>{
 fn remove(l: Box<List>, k: i32) -> Box<List>{
     match *l {
         List::Nil => {
-            *l = List::Nil;
+            // *l = List::Nil;
             return l;
         }
         List::Cons(node) => {

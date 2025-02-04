@@ -173,6 +173,11 @@ let print_stmt_direct stmt = print_stmt (formatter_of_out_channel stdout) stmt
 let print_function p id f =
   fprintf p "%s@ "
             (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv f.fn_generic_origins f.fn_origins_relation) f.fn_return);
+  (* Print variables and their types *)
+  List.iter
+    (fun (id, ty) ->
+      fprintf p "%s;@ " (name_rust_decl (extern_atom id) ty))
+    f.fn_vars;
   fprintf p "@[<v 2>{@ ";
   print_stmt p f.fn_body;
   fprintf p "@;<0 -2>}@]@ @ "
