@@ -291,4 +291,3 @@ Definition linked_list_mod : program :=
     prog_comp_env_eq := proj2_sig build_ce_ok; |}.
 
 
-    
