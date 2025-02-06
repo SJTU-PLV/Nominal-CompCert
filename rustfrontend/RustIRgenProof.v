@@ -707,7 +707,7 @@ Lemma collect_func_eq: forall f tf ce,
 Proof.
   unfold transl_function, collect_func, RustIR.collect_func.
   intros. subst. simpl in *.
-  destruct list_norepet_dec; try congruence.
+  (* destruct list_norepet_dec; try congruence. *)
   f_equal.
   erewrite <- collect_stmt_eq. auto.
 Qed.
@@ -720,7 +720,7 @@ Proof.
   unfold transl_function. intros. subst.
   unfold init_own_env, RustIRown.init_own_env.
   destruct (collect_func ce f) eqn: A.
-  - simpl. erewrite <- collect_func_eq. erewrite A.
+  - erewrite <- collect_func_eq. erewrite A.
     simpl.
     (* copy what we do in sound_function_entry (InitAnalysis) and
     match_transf_program (Clightgenproof) *)
@@ -736,7 +736,7 @@ Proof.
   intros flag0 E. destruct flag0; try congruence.
   repeat f_equal.
   auto.
-  - simpl. erewrite <- collect_func_eq. erewrite A. simpl. auto.
+  - erewrite <- collect_func_eq. erewrite A. simpl. auto.
     auto.
 Qed.
 

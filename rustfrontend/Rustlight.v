@@ -29,7 +29,7 @@ Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
 Proof.
   generalize type_eq ident_eq. intros.
   decide equality.
-Qed.
+Defined.
 
 Global Opaque place_eq.
 
@@ -229,7 +229,7 @@ Proof.
   destruct (ident_eq fid fid0); subst. auto. right. congruence.
   destruct (ident_eq fid fid0); destruct (type_eq ty ty0); subst; auto.
   1-3: right; congruence.
-Qed.
+Defined.
 
 Definition paths : Type := (ident * list path).
 

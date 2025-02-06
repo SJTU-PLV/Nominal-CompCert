@@ -193,13 +193,10 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
 
 Definition collect_func (f: function) : Errors.res PathsMap.t :=
   let vars := f.(fn_params) ++ f.(fn_vars) in  
-  if list_norepet_dec ident_eq (map fst vars) then
-    let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
-    (** TODO: add all the parameters and variables to l (may be useless?) *)
-    let init_map := fold_right (collect_place ce) (PTree.empty LPaths.t) l in
-    Errors.OK (collect_stmt f.(fn_body) init_map)
-  else
-    Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
+  let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
+  (** TODO: add all the parameters and variables to l (may be useless?) *)
+  let init_map := fold_right (collect_place ce) (PTree.empty LPaths.t) l in
+  OK (collect_stmt f.(fn_body) init_map).
 
 End COMP_ENV.
 

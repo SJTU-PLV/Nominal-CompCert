@@ -265,7 +265,7 @@ Lemma build_ce_ok :
   { ce | build_composite_env composite_types = OK ce}.
 Proof.
   eexists. unfold build_composite_env, composite_types. simpl. eauto.
-Qed.
+Defined.
 
 (* external functions *)
 

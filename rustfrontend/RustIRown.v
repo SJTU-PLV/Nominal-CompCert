@@ -137,6 +137,7 @@ Next Obligation.
   (* set (init:= (add_place_list whole *)
   (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
   (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  (* set (whole := (collect_func ce f)) in *. *)
   set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) in *.
   set (uninit :=(add_place_list whole
              (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
@@ -155,6 +156,7 @@ Next Obligation.
   (* set (init:= (add_place_list whole *)
   (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
   (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  (* set (whole := (collect_func ce f)) in *. *)
   set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) at 1.
   fold init in A ,B.
   set (uninit :=(add_place_list whole

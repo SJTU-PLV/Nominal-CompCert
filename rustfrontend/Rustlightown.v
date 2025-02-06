@@ -576,6 +576,98 @@ Proof.
     generalize (sizeof_pos ce ty). lia.
 Qed.
 
+Definition do_deref_loc ty m b ofs : option val :=
+  match access_mode ty with
+  | By_value chunk =>
+      Mem.loadv chunk m (Vptr b ofs)
+  | By_reference | By_copy => Some (Vptr b ofs)
+  | By_nothing => None
+  end.
+
+Lemma do_deref_loc_sound: forall ty m b ofs v,
+    do_deref_loc ty m b ofs = Some v ->
+    deref_loc ty m b ofs v.
+Proof.
+  unfold do_deref_loc.
+  destruct ty; intros; simpl in *.
+  - econstructor; eauto. simpl. eauto.
+  - DestructCases; econstructor; simpl; eauto.
+  - econstructor; simpl; eauto.
+  - DestructCases; econstructor; simpl; eauto.
+  - inv H. eapply deref_loc_reference; eauto.
+  - econstructor; simpl; eauto.
+  - econstructor; simpl; eauto.
+  - inv H. eapply deref_loc_reference; eauto.
+  - inv H. eapply deref_loc_copy; eauto.
+  - inv H. eapply deref_loc_copy; eauto.
+Qed.
+
+(* copy from Cexe *)
+Definition assign_copy_ok ce (ty: type) (b: block) (ofs: ptrofs) (b': block) (ofs': ptrofs) : Prop :=
+  (alignof_blockcopy ce ty | Ptrofs.unsigned ofs') /\ (alignof_blockcopy ce ty | Ptrofs.unsigned ofs) /\
+  (b' <> b \/ Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs
+           \/ Ptrofs.unsigned ofs' + sizeof ce ty <= Ptrofs.unsigned ofs
+           \/ Ptrofs.unsigned ofs + sizeof ce ty <= Ptrofs.unsigned ofs').
+
+Remark check_assign_copy:
+  forall ce (ty: type) (b: block) (ofs: ptrofs) (b': block) (ofs': ptrofs),
+  { assign_copy_ok ce ty b ofs b' ofs' } + {~ assign_copy_ok ce ty b ofs b' ofs' }.
+Proof with try (right; intuition lia).
+  intros. unfold assign_copy_ok.
+  destruct (Zdivide_dec (alignof_blockcopy ce ty) (Ptrofs.unsigned ofs')); auto...
+  destruct (Zdivide_dec (alignof_blockcopy ce ty) (Ptrofs.unsigned ofs)); auto...
+  assert (Y: {b' <> b \/
+              Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs \/
+              Ptrofs.unsigned ofs' + sizeof ce ty <= Ptrofs.unsigned ofs \/
+              Ptrofs.unsigned ofs + sizeof ce ty <= Ptrofs.unsigned ofs'} +
+           {~(b' <> b \/
+              Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs \/
+              Ptrofs.unsigned ofs' + sizeof ce ty <= Ptrofs.unsigned ofs \/
+              Ptrofs.unsigned ofs + sizeof ce ty <= Ptrofs.unsigned ofs')}).
+  destruct (eq_block b' b); auto.
+  destruct (zeq (Ptrofs.unsigned ofs') (Ptrofs.unsigned ofs)); auto.
+  destruct (zle (Ptrofs.unsigned ofs' + sizeof ce ty) (Ptrofs.unsigned ofs)); auto.
+  destruct (zle (Ptrofs.unsigned ofs + sizeof ce ty) (Ptrofs.unsigned ofs')); auto.
+  right; intuition lia.
+  destruct Y... left; intuition lia.
+Defined.
+
+Definition do_assign_loc ce ty m b ofs v : option mem :=
+  match access_mode ty with
+  | By_value chunk =>
+      Mem.storev chunk m (Vptr b ofs) v
+  | By_copy =>
+      match v with
+      | Vptr b' ofs' =>
+          if complete_type ce ty then
+            if check_assign_copy ce ty b ofs b' ofs' then
+              match Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof ce ty) with
+              | Some bytes =>
+                  Mem.storebytes m b (Ptrofs.unsigned ofs) bytes
+              | _ => None
+              end
+            else None
+          else None
+      | _ => None
+      end
+  | _ => None
+  end.
+
+Lemma do_assign_loc_sound: forall ce ty m b ofs v m',
+    do_assign_loc ce ty m b ofs v = Some m' ->
+    assign_loc ce ty m b ofs v m'.
+Proof.
+  unfold do_assign_loc. intros.
+  destruct (access_mode ty) eqn: MODE; try congruence.
+  - econstructor; eauto.
+  - destruct v; try congruence.
+    destruct complete_type eqn: COM; try congruence.
+    destruct check_assign_copy; try congruence. inv a.
+    destruct Mem.loadbytes eqn: LOAD; try congruence.
+    destruct H1 as (A1 & A2).
+    eapply assign_loc_copy; eauto.
+Qed.
+    
 Section SEMANTICS.
   
 (** ** Evaluation of expressions *)
@@ -1193,6 +1285,56 @@ Proof.
   eapply IHl; eauto.
 Qed.
 
+Fixpoint do_alloc_variables ce e m l : (env * mem) :=
+  match l with
+  | nil => (e, m)
+  | (id, ty) :: l' =>
+      let (m1, b) := Mem.alloc m 0 (sizeof ce ty) in
+      do_alloc_variables ce (PTree.set id (b, ty) e) m1 l'
+  end.
+
+Lemma do_alloc_variables_sound: forall l ce e1 m1 e2 m2,
+    do_alloc_variables ce e1 m1 l = (e2, m2) ->
+    alloc_variables ce e1 m1 l e2 m2.
+Proof.
+  induction l; intros; simpl in *.
+  inv H. econstructor; eauto.
+  destruct a. destruct Mem.alloc eqn: ALLOC in H. econstructor; eauto.
+Qed.
+
+
+Fixpoint do_bind_parameters ce e m tyl al {struct tyl} : option mem :=
+  match tyl, al with
+  | nil, nil => Some m
+  | (id, ty1) :: tyl', v :: al' =>
+      match e ! id with
+      | Some (b, ty2) =>
+          if type_eq ty1 ty2 then
+            match do_assign_loc ce ty1 m b Ptrofs.zero v with
+            | Some m1 =>
+                do_bind_parameters ce e m1 tyl' al'
+            | _ => None
+            end
+          else None
+      | _ => None
+      end
+  | _, _ => None
+  end.
+
+Lemma do_bind_parameters_sound: forall ce tyl al e m1 m2,
+    do_bind_parameters ce e m1 tyl al = Some m2 ->
+    bind_parameters ce e m1 tyl al m2.
+Proof.  
+  induction tyl; destruct al; intros; simpl in *; try congruence.
+  - inv H. econstructor.
+  - destruct a. try congruence.
+  - destruct a. destruct (e!p) eqn: E; try congruence.
+    destruct p0. destruct type_eq in H; try congruence. subst.
+    destruct do_assign_loc eqn: ASS in H; try congruence.
+    econstructor; eauto.
+    eapply do_assign_loc_sound; eauto.
+Qed.
+
 (** Return the list of blocks in the codomain of [e], with low and high bounds. *)
 
 Definition block_of_binding (ce: composite_env) (id_b_ty: ident * (block * type)) :=
@@ -1239,13 +1381,13 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
 
 Definition collect_func (f: function) : Errors.res PathsMap.t :=
   let vars := f.(fn_params) ++ f.(fn_vars) in  
-  if list_norepet_dec ident_eq (map fst vars) then
+  (* if list_norepet_dec ident_eq (map fst vars) then *)
     let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
     (** TODO: add all the parameters and variables to l (may be useless?) *)
     let init_map := fold_right (collect_place ce) (PTree.empty LPaths.t) l in
-    Errors.OK (collect_stmt f.(fn_body) init_map)
-  else
-    Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
+    OK (collect_stmt f.(fn_body) init_map).
+  (* else *)
+  (*   Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil). *)
 
 End WITH_CE.
 
@@ -1357,6 +1499,7 @@ Next Obligation.
   (* set (init:= (add_place_list whole *)
   (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
   (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  (* set (whole := (collect_func ce f)) in *. *)
   set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) in *.
   set (uninit :=(add_place_list whole
              (map (fun elt : ident * type => Plocal (fst elt) (snd elt))
@@ -1375,6 +1518,7 @@ Next Obligation.
   (* set (init:= (add_place_list whole *)
   (*             (map (fun elt : ident * type => Plocal (fst elt) (snd elt)) (fn_params f)) *)
   (*             (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole))) in *. *)
+  (* set (whole := (collect_func ce f)) in *. *)
   set (init:= (PTree.map (fun (_ : positive) (_ : LPaths.t) => Paths.empty) whole)) at 1.
   fold init in A ,B.
   set (uninit :=(add_place_list whole
@@ -2215,7 +2359,7 @@ return nothing is only valid in void function! *)
 (*     (VARDROPS: drops = vars_to_drops ge (concat (cont_vars k))) *)
 (*     (PARAMDROPS: param_drops = vars_to_drops ge f.(fn_params)), *)
 (*     step (State f Sskip k e own m) E0 (Dropinsert f (drops++param_drops) (Dreturn Vundef) k e own m) *)
-
+  
 | step_returnstate: forall p v b ofs m1 m2 e f k own1 own2
     (TFASSIGN: own_transfer_assign own1 p = own2),
     eval_place ge e m1 p b ofs ->
