@@ -87,7 +87,7 @@ Definition find_ty : type := Tfunction nil nil (Tcons List_box (Tcons type_int32
 
 (* argument: l: List_box and k: type_int32s *)
 Definition find_body : statement :=
-  <{ if (cktag l#List_ty is Nil) then
+  <{ if (cktag (! (l#List_box)) is Nil) then
        let wildcard : Tunit in
          wildcard#Tunit := copy (!l#List_box) as Nil <Tunit>;
          _retv#List_box := move l#List_box;

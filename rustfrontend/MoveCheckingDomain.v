@@ -70,10 +70,10 @@ with sem_wt_val (m: mem) : footprint -> val -> Prop :=
 | wt_val_int: forall sz si n,
     (* Cop.cast_int_int sz si n = n -> *)
     sem_wt_val m (fp_scalar (Tint sz si)) (Vint n)
-| wt_val_single: forall n sz,
-    sem_wt_val m (fp_scalar (Tfloat sz)) (Vsingle n)
-| wt_val_float: forall n sz,
-    sem_wt_val m (fp_scalar (Tfloat sz)) (Vfloat n)
+| wt_val_single: forall n,
+    sem_wt_val m (fp_scalar (Tfloat Ctypes.F32)) (Vsingle n)
+| wt_val_float: forall n,
+    sem_wt_val m (fp_scalar (Tfloat Ctypes.F64)) (Vfloat n)
 | wt_val_long: forall si n,
     sem_wt_val m (fp_scalar (Tlong si)) (Vlong n)
 | wt_val_box: forall b fp sz

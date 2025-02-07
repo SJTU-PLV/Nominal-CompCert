@@ -225,10 +225,10 @@ Inductive wt_pexpr: pexpr -> Prop :=
   wt_pexpr Eunit
 | wt_Econst_int: forall n sz si,
     wt_pexpr (Econst_int n (Tint sz si))
-| wt_Econst_float: forall f sz,
-    wt_pexpr (Econst_float f (Tfloat sz))
-| wt_Econst_single: forall f sz,
-    wt_pexpr (Econst_single f (Tfloat sz))
+| wt_Econst_float: forall f,
+    wt_pexpr (Econst_float f (Tfloat Ctypes.F64))
+| wt_Econst_single: forall f,
+    wt_pexpr (Econst_single f (Tfloat Ctypes.F32))
 | wt_Econst_long: forall n si,
     wt_pexpr (Econst_long n (Tlong si))
 | wt_Eplace: forall p
@@ -694,12 +694,12 @@ Fixpoint type_check_pexpr (pe: pexpr) : res unit :=
       end
   | Econst_float _ ty =>
       match ty with
-      | Tfloat sz => OK tt
+      | Tfloat Ctypes.F64 => OK tt
       | _ => Error (msg "Econst_float type error")
       end
   | Econst_single _ ty =>
       match ty with
-      | Tfloat sz => OK tt
+      | Tfloat Ctypes.F32 => OK tt
       | _ => Error (msg "Econst_single type error")
       end
   | Econst_long _ ty =>
@@ -875,7 +875,7 @@ Lemma type_check_pexpr_sound: forall ce te pe,
     type_check_pexpr ce te pe = OK tt ->
     wt_pexpr te ce pe.
 Proof.
-  induction pe; intros; simpl in *; try (econstructor; eauto; fail); try (destruct t; try congruence; econstructor; fail).
+  induction pe; intros; simpl in *; try (econstructor; eauto; fail); try (destruct t; try congruence; try (destruct f0; try congruence); econstructor; fail).
   - monadInv H.
     destruct type_eq in EQ0; try congruence. subst.
     econstructor.

@@ -1700,7 +1700,7 @@ Inductive wt_footprint : type -> footprint -> Prop :=
 | wt_fp_struct: forall orgs id fpl co
     (CO: ce ! id = Some co)
     (STRUCT: co_sv co = Struct)
-    (** TODO: combine WT1 and WT2 elegantly. WT1 is used in getting
+    (** TODO: combine WT1 andp WT2 elegantly. WT1 is used in getting
     the sub-field's footprint. WT2 is used in proving the properties
     of sub-field's footprint *)
     (WT1: forall fid fty,

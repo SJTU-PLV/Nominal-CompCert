@@ -79,6 +79,7 @@ Definition classify_shift (ty1: type) (ty2: type) :=
 Definition classify_cast (tfrom tto: type) : classify_cast_cases :=
   (* remove non-numeric to numeric cast *)
   match tto, tfrom with
+  | Tunit, Tunit => cast_case_void
   (* To [_Bool] *)
   | Tint IBool _ , Tint _ _ => cast_case_i2bool
   | Tint IBool _ , Tlong _ => cast_case_l2bool
@@ -262,7 +263,12 @@ Definition sem_cast (v: val) (t1 t2: type) : option val :=
       | _ => None
       end
   | cast_case_void =>
-      None
+      match v with
+      | Vint _ =>
+          (* Tunit *)
+          Some (Vint Int.zero)
+      | _ => None
+      end
   | cast_case_default =>
       None
   end.
@@ -353,5 +359,5 @@ Lemma cast_val_is_casted:
   forall v ty ty' v' , sem_cast v ty ty' = Some v' -> val_casted v' ty'.
 Proof.
   unfold sem_cast; intros.
-  destruct ty, ty'; simpl in H; DestructCases; try constructor; auto.
+  destruct ty, ty'; simpl in H; DestructCases; try constructor; auto.  
 Qed.

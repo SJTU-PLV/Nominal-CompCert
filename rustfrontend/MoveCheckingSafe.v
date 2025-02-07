@@ -1235,7 +1235,7 @@ Proof.
 Qed.
     
   
-(* The value produced by eval_expr is semantics well-typed. We need to
+(* THE value produced by eval_expr is semantics well-typed. We need to
 update the abstract memory (split the footprint of the value from
 fpm1) *)
 Lemma eval_expr_sem_wt: forall fpm1 m le own1 own2 e v init uninit universe
@@ -3281,6 +3281,23 @@ Proof.
   all: try (eexists; repeat apply conj; econstructor;eauto).
   inv WTLOC.
   econstructor; eauto.
+Qed.
+
+Lemma sem_cast_sem_wt_exists: forall m fp v1 ty,
+    sem_wt_val ce m fp v1 ->
+    wt_footprint ce ty fp ->
+    exists v2, sem_cast v1 ty ty = Some v2.
+Proof.
+  intros until ty. intros WTVAL WTFP.
+  destruct ty; DestructCases; inv WTFP; inv WTVAL; simpl in *; try congruence; try (eexists; reflexivity).
+  - eexists. unfold sem_cast. simpl.
+    destruct i; eauto.
+  - unfold sem_cast. simpl.
+    rewrite dec_eq_true. eexists. reflexivity.
+  - unfold sem_cast. simpl.
+    rewrite dec_eq_true. eexists. reflexivity.
+  - unfold sem_cast. simpl.
+    rewrite dec_eq_true. eexists. reflexivity.
 Qed.
 
 Lemma sem_cast_val_footprint_unchanged: forall v1 v2 ty1 ty2,
@@ -8298,3 +8315,4 @@ Qed.
 (*   auto. *)
 (* Qed. *)
  
+
