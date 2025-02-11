@@ -296,7 +296,23 @@ Inductive val_casted : val -> type -> Prop :=
 | val_casted_enum: forall id orgs b ofs,
     val_casted (Vptr b ofs) (Tvariant orgs id).
 
-
+Lemma val_casted_dec: forall v ty, {val_casted v ty} + {~ val_casted v ty}.
+Proof.
+  destruct ty; destruct v; try (right; intro CAST; inv CAST; fail); try (left; econstructor; fail).
+  - destruct (Int.eq_dec i Int.zero); subst.
+    left. econstructor.
+    right. intro. inv H. congruence.
+  - destruct (Int.eq_dec (cast_int_int i s i0) i0).
+    left. econstructor; auto.
+    right. intro. inv H. congruence.
+  - destruct f.
+    right. intro. inv H.
+    left. constructor.
+  - destruct f.
+    left. constructor.
+    right. intro. inv H.
+Qed.
+    
 Inductive val_casted_list: list val -> typelist -> Prop :=
   | vcl_nil:
       val_casted_list nil Tnil
