@@ -12,7 +12,7 @@ enum List {
     Cons(Node)
 }
 
-extern fn process(k: i32, v: i32) -> i32
+extern fn process(v: i32) -> i32
 
 fn hash(k: i32, range: i32) -> i32{
     return k % range;
@@ -27,15 +27,13 @@ fn find(l: Box<List>, k: i32) -> Box<List>{
         }
         List::Cons(node) => {
             if (k == node.key) {
-                node.val = process(k, node.val);
-                *l = List::Cons(node);
-                return l;
+                node.val = process(node.val);
             }
             else {
                 node.next = find(node.next, k);
-                *l = List::Cons(node);
-                return l
             }
+            *l = List::Cons(node);
+            return l;
         }
     }
 }

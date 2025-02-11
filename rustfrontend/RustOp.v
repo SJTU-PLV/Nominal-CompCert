@@ -264,9 +264,11 @@ Definition sem_cast (v: val) (t1 t2: type) : option val :=
       end
   | cast_case_void =>
       match v with
-      | Vint _ =>
-          (* Tunit *)
-          Some (Vint Int.zero)
+      | Vint i =>
+          if Int.eq i Int.zero then
+            (* Tunit *)
+            Some (Vint Int.zero)
+          else None
       | _ => None
       end
   | cast_case_default =>
@@ -361,3 +363,107 @@ Proof.
   unfold sem_cast; intros.
   destruct ty, ty'; simpl in H; DestructCases; try constructor; auto.  
 Qed.
+
+  
+Ltac TrivialInject :=
+  match goal with
+  | [ H: None = Some _ |- _ ] => discriminate
+  | [ H: Some _ = Some _ |- _ ] => inv H; TrivialInject
+  | [ H: match ?x with Some _ => _ | None => _ end = Some _ |- _ ] => destruct x; TrivialInject
+  | [ H: match ?x with true => _ | false => _ end = Some _ |- _ ] => destruct x eqn:?; TrivialInject
+  | [ |- exists v2', Some ?v = Some v2' /\ _ ] => exists v; split; auto
+  (* | [H: Int.eq ?i1 ?i2 = true |- _ ] => *)
+  (*     generalize (Int.eq_spec i1 i2); rewrite H; intros; subst; *)
+  (*     clear H; TrivialInject *)
+  (* | [ H:  match match ?i0 with IBool  => _ | _ => _ end with ?v4 => ?v5 | _ => _ end = _ |- Some _ ] => destruct i0; simpl in *; TrivialInject *)
+  | _ => idtac
+  end.
+
+Lemma sem_cast_to_ctype_inject: forall f v1 v1' v2 t1 t2 m,
+    sem_cast v1 t1 t2 = Some v2 ->
+    Val.inject f v1 v1' ->
+    exists v2', Cop.sem_cast v1' (to_ctype t1) (to_ctype t2) m = Some v2' /\ Val.inject f v2 v2'.
+Proof.
+  Transparent Archi.ptr64.
+  unfold sem_cast; unfold Cop.sem_cast; intros; destruct t1; simpl in *; TrivialInject.  
+  - destruct t2; simpl in H; destruct v1; inv H0;
+      try (destruct i; simpl in *);
+           try (destruct f0; simpl in *); TrivialInject.
+    generalize (Int.eq_spec {| Int.intval := intval; Int.intrange := intrange |} Int.zero). rewrite Heqb. intros. rewrite H. econstructor.
+  - destruct t2; inv H0; simpl in *;
+     try (destruct i; simpl in *);
+          try (destruct f0; simpl in *);
+               try (destruct i0; simpl in *);
+               TrivialInject.
+  -  destruct t2; inv H0; simpl in *; TrivialInject; try(destruct i0; destruct (Archi.ptr64); simpl in *; TrivialInject; simpl in *);
+    try (destruct (intsize_eq I8 I32); TrivialInject; inv e);
+    try (destruct (intsize_eq I16 I32); TrivialInject; inv e);
+    try (destruct f0; simpl in *; TrivialInject);
+    try (destruct i; simpl in *; TrivialInject).
+  - destruct t2; inv H0; simpl in *; 
+    try(destruct i);  
+    try(destruct Archi.ptr64 );
+    try (destruct f0; simpl in *);
+    try (destruct f1; simpl in *);
+    TrivialInject. 
+    (* econstructor. eauto. auto.     *)
+  - destruct t2; inv H0; simpl in *;
+    try (destruct f0);
+    try (destruct i); 
+    try (destruct f1); TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+      try(destruct i; destruct (Archi.ptr64));
+       try (destruct f0); try (destruct type_eq); TrivialInject.
+    econstructor. eauto. auto.
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i; destruct (Archi.ptr64));
+    try (destruct f0); TrivialInject. 
+    econstructor; eauto; TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i; destruct (Archi.ptr64));
+    try (destruct f0); TrivialInject. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i0; destruct (Archi.ptr64)); 
+    try (destruct f0); 
+    try (destruct (ident_eq i i0~1); TrivialInject); 
+    try (destruct (ident_eq i i0~0); TrivialInject); 
+    try (inv H);
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+  - destruct t2; inv H0; simpl in *;
+    try(destruct i0; destruct (Archi.ptr64)); 
+    try (destruct f0); 
+    try (destruct (ident_eq i i0~1); TrivialInject); 
+    try (destruct (ident_eq i i0~0); TrivialInject); 
+    try (inv H);
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+    try (eapply Val.inject_ptr; eauto). 
+    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
+    destruct (ident_eq i 1). split. auto.  
+    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
+  Qed. 
+
+
+Lemma sem_cast_id: forall v1 v2 ty1 ty2 m,
+    sem_cast v1 ty1 ty2 = Some v2 ->
+    Cop.sem_cast v1 (to_ctype ty1) (to_ctype ty2) m = Some v2.
+Proof.
+  intros.
+  exploit cast_val_is_casted. eauto. intros CAST.
+  exploit (sem_cast_to_ctype_inject inject_id v1 v1 v2); eauto.
+  eapply val_inject_id. inv CAST; econstructor.
+  instantiate (1 := m).
+  intros (v2' & A1 & A2). inv A2; eauto.
+  inv H0. rewrite Ptrofs.add_zero in A1. auto.
+  inv CAST.
+Qed.
+

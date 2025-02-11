@@ -476,7 +476,7 @@ Proof.
         eapply Forall_forall in H2.
         eapply negb_true_iff. eauto. auto.
     + right. intro. eapply n. inv H. auto.
-Qed.
+Defined.
       
 Definition is_full_internal (universe: Paths.t) (p: place) : bool :=
   Paths.for_all (fun p1 => negb (is_prefix_strict p p1)) universe.

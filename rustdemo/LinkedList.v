@@ -60,7 +60,7 @@ Definition List_ty : type := Tvariant nil List.
 Definition Node_ty : type := Tstruct nil Node.
 
 (* function types declaration *)
-Definition process_ty : type := Tfunction nil nil (Tcons type_int32s (Tcons type_int32s Tnil)) type_int32s cc_default.
+Definition process_ty : type := Tfunction nil nil (Tcons type_int32s Tnil) type_int32s cc_default.
 
 Local Open Scope rustlight_scope.
 
@@ -88,38 +88,45 @@ Definition find_ty : type := Tfunction nil nil (Tcons List_box (Tcons type_int32
 (* argument: l: List_box and k: type_int32s *)
 Definition find_body : statement :=
   <{ if (cktag (! (l#List_box)) is Nil) then
-       let wildcard : Tunit in
-         wildcard#Tunit := copy (!l#List_box) as Nil <Tunit>;
-         _retv#List_box := move l#List_box;
-         return _retv#List_box
-       end
+       (* let wildcard : Tunit in *)
+       (*   wildcard#Tunit := copy (!l#List_box) as Nil <Tunit>; *)
+       (*   _retv#List_box := move l#List_box; *)
+       (* return _retv#List_box *)
+       _retv#List_box := move l#List_box;
+       return _retv#List_box
+       (* end *)
      else
        let node : Node_ty in
          node#Node_ty := move (!l#List_box) as Cons <Node_ty>;
          if (copy k#type_int32s == copy node#Node_ty proj key<type_int32s>) then
-           let _31 : type_int32s in
-             _31#type_int32s <- process<process_ty> @ {pure (copy k#type_int32s), pure (copy node#Node_ty proj val <type_int32s>)};
-             node#Node_ty proj val <type_int32s> := copy _31#type_int32s
-           end;
-           let _32 : List_ty in
-             _32#List_ty :=v List::Cons(move node#Node_ty); 
-             (!l#List_box) := move _32#List_ty
-           end;
-           _retv#List_box := move l#List_box;
-           return _retv#List_box
+           (* let _31 : type_int32s in *)
+           (*   _31#type_int32s <- process<process_ty> @ {pure (copy k#type_int32s), pure (copy node#Node_ty proj val <type_int32s>)}; *)
+           (*   node#Node_ty proj val <type_int32s> := copy _31#type_int32s *)
+           (* end; *)
+           (* let _32 : List_ty in *)
+           (*   _32#List_ty :=v List::Cons(move node#Node_ty);  *)
+           (*   (!l#List_box) := move _32#List_ty *)
+           (* end; *)
+           (* _retv#List_box := move l#List_box; *)
+           (* return _retv#List_box *)
+           node#Node_ty proj val <type_int32s> <- process<process_ty> @ {pure (copy node#Node_ty proj val <type_int32s>)}
          else
-           let _33 : List_box in
-             _33#List_box <- find<find_ty> @ {move node#Node_ty proj next<List_box>, pure (copy k#type_int32s)};
-             node#Node_ty proj next<List_box> := move _33#List_box
-           end;
-           let _34 : List_ty in
-             _34#List_ty :=v List::Cons(move node#Node_ty); 
-             (!l#List_box) := move _34#List_ty
-           end;
-           _retv#List_box := move l#List_box;
-           return _retv#List_box
-         fi
-        end
+           (* let _33 : List_box in *)
+           (*   _33#List_box <- find<find_ty> @ {move node#Node_ty proj next<List_box>, pure (copy k#type_int32s)}; *)
+           (*   node#Node_ty proj next<List_box> := move _33#List_box *)
+           (* end; *)
+           (* let _34 : List_ty in *)
+           (*   _34#List_ty :=v List::Cons(move node#Node_ty);  *)
+           (*   (!l#List_box) := move _34#List_ty *)
+           (* end; *)
+           (* _retv#List_box := move l#List_box; *)
+           (* return _retv#List_box *)
+           node#Node_ty proj next<List_box> <- find<find_ty> @ {move node#Node_ty proj next<List_box>, pure (copy k#type_int32s)}           
+         fi;
+         (!l#List_box) :=v List::Cons(move node#Node_ty);
+         _retv#List_box := move l#List_box;
+         return _retv#List_box
+      end
       fi }>.
  
 Definition find_func : function :=
@@ -128,7 +135,8 @@ Definition find_func : function :=
     fn_drop_glue := None;
     fn_return := List_box;
     fn_callconv := cc_default;
-    fn_vars := [(_retv, List_box); (wildcard, Tunit); (node, Node_ty); (_31, type_int32s); (_32, List_ty); (_33, List_box); (_34, List_ty)];
+    (* fn_vars := [(_retv, List_box); (wildcard, Tunit); (node, Node_ty); (_31, type_int32s); (_32, List_ty); (_33, List_box); (_34, List_ty)]; *)
+    fn_vars := [(_retv, List_box); (node, Node_ty)];
     fn_params := [(l, List_box); (k, type_int32s)];
     fn_body := find_body |}.
   
@@ -270,7 +278,7 @@ Defined.
 (* external functions *)
 
 Definition process_ext : fundef :=
-  External nil nil (EF_external "process" (AST.mksignature [AST.Tint; AST.Tint] AST.Tint cc_default)) (Tcons type_int32s (Tcons type_int32s Tnil)) type_int32s cc_default.
+  External nil nil (EF_external "process" (AST.mksignature [AST.Tint] AST.Tint cc_default)) (Tcons type_int32s Tnil) type_int32s cc_default.
 
 Definition linked_list_mod : program :=
   {| prog_defs := [(hash, Gfun (Internal hash_func));

@@ -843,13 +843,17 @@ Inductive eval_pexpr (se: Genv.symtbl) : pexpr -> val ->  Prop :=
     value. But we want to prove that it is one or zero *)
     (* int_val_casted v ty -> *)
     eval_pexpr se (Eplace p ty) v
-| eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs,
-    eval_place p b ofs ->
+| eval_Ecktag: forall (p: place) b ofs tag tagz id fid co orgs
+    (EVALP: eval_place p b ofs)
     (* load the tag *) 
-    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    typeof_place p = Tvariant orgs id ->
-    ce ! id = Some co ->
-    field_tag fid co.(co_members) = Some tagz ->
+    (LOADTAG: Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag))
+    (PTY: typeof_place p = Tvariant orgs id)
+    (CO: ce ! id = Some co)                 
+    (FTAG: field_tag fid co.(co_members) = Some tagz)
+    (* adhoc: the range checking in the semantics is used to make sure
+    that if the execution passes this check, the downcast evalution in
+    the match arms must be successful *)
+    (RANGE: Int.unsigned tag < list_length_z co.(co_members)),
     eval_pexpr se (Ecktag p fid) (Val.of_bool (Int.eq tag (Int.repr tagz)))
 | eval_Eref: forall p b ofs mut ty org,
     eval_place p b ofs ->
@@ -895,11 +899,11 @@ Proof.
   induction pe; intros until v2; intros E1 E2; inv E1; inv E2; try (econstructor; eauto).
   - exploit eval_place_det. eapply H1. eapply H2. intros (A1 & A2). subst.
     eapply deref_loc_det; eauto.
-  - exploit eval_place_det. eapply H1. eapply H5. intros (A1 & A2). subst.
-    rewrite H2 in H7. inv H7.
-    rewrite H3 in H8. inv H8.
-    rewrite H4 in H9. inv H9.
-    rewrite H6 in H11. inv H11. auto.
+  - exploit eval_place_det. eapply EVALP. eapply EVALP0. intros (A1 & A2). subst.
+    rewrite PTY in PTY0. inv PTY0.
+    rewrite CO in CO0. inv CO0.
+    rewrite LOADTAG in LOADTAG0. inv LOADTAG0.
+    rewrite FTAG in FTAG0. inv FTAG0. auto.
   - exploit eval_place_det. eapply H4. eapply H5. intros (A1 & A2). subst.    
     auto.
   - exploit IHpe. eapply H2. eapply H3. intros. subst.
@@ -993,8 +997,8 @@ Proof.
     subst.
     eapply deref_loc_progress_no_mem_error; eauto.
   - eapply eval_place_progress_no_mem_error; eauto.
-  - exploit eval_place_det. eapply H1. eauto. intros (B1 & B2).
-    subst. eapply H7.
+  - exploit eval_place_det. eapply EVALP. eauto. intros (B1 & B2).
+    subst. eapply H2.
     eapply Mem.load_valid_access; eauto.
   - eapply eval_place_progress_no_mem_error; eauto.
   - destruct H0; eauto.

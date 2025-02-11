@@ -52,7 +52,13 @@ void hmap_set(int key, int val){
     // }
 }
 
-int process(int key, int val){
+int process(int val){
+    printf("The key is mapped to %d\n", val);
+    return val;
+}
+
+// process_with_key takes (key, val) as arguments
+int process_with_key(int key, int val){
     printf("The key %d is mapped to %d\n", key, val);
     return val;
 }

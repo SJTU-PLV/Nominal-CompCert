@@ -930,26 +930,26 @@ Proof.
       rewrite <-  EQTYPETA. eauto. eauto. 
     + inv EVAL. inv H0.   
       inversion PEXPR. 
-      rewrite H4 in H0. 
-      rewrite H5 in H0. 
-      rewrite H7 in H0. 
+      rewrite PTY in H0. 
+      rewrite CO in H0. 
+      rewrite FTAG in H0. 
       destruct (get_variant_tag tce id) eqn:VTAG; inv H0.
       unfold get_variant_tag in VTAG. 
       destruct (tce ! id) eqn:TCID; inv VTAG. 
       destruct (co_su c) eqn: COSUC; inv H0. 
-      destruct (Ctypes.co_members c) eqn: COMEM; inv H6. 
+      destruct (Ctypes.co_members c) eqn: COMEM; inv H2. 
       destruct (m0) eqn: MEMB; inv H0. 
-      destruct (m1) eqn: MEMB1; inv H6. 
+      destruct (m1) eqn: MEMB1; inv H2. 
       destruct (m0) eqn: MEMB0; inv H0.
-      destruct (t0) eqn: T0; inv H6. 
+      destruct (t0) eqn: T0; inv H2. 
       destruct l eqn: L; inv H0.  
       monadInv H1. 
       exploit place_to_cexpr_type; eauto. 
-      intros Htpx. rewrite H4 in Htpx. simpl in Htpx. 
+      intros Htpx. rewrite PTY in Htpx. simpl in Htpx. 
       exploit eval_place_inject; eauto. 
       instantiate (1:=le).  
       intros (b' & ofs' & A & B). 
-      pose (CEID := H5).  
+      pose (CEID := CO).  
       eexists. split. 
       * eapply Clight.eval_Ebinop. 
          
@@ -1182,87 +1182,6 @@ Proof.
       apply inject_incr_refl.
       apply inject_separated_refl.
 Qed. 
-  
-  
-Ltac TrivialInject :=
-  match goal with
-  | [ H: None = Some _ |- _ ] => discriminate
-  | [ H: Some _ = Some _ |- _ ] => inv H; TrivialInject
-  | [ H: match ?x with Some _ => _ | None => _ end = Some _ |- _ ] => destruct x; TrivialInject
-  | [ H: match ?x with true => _ | false => _ end = Some _ |- _ ] => destruct x eqn:?; TrivialInject
-  | [ |- exists v2', Some ?v = Some v2' /\ _ ] => exists v; split; auto
-  (* | [ H:  match match ?i0 with IBool  => _ | _ => _ end with ?v4 => ?v5 | _ => _ end = _ |- Some _ ] => destruct i0; simpl in *; TrivialInject *)
-  | _ => idtac
-  end.
-
-Lemma sem_cast_to_ctype_inject: forall f v1 v1' v2 t1 t2 m,
-    sem_cast v1 t1 t2 = Some v2 ->
-    Val.inject f v1 v1' ->
-    exists v2', Cop.sem_cast v1' (to_ctype t1) (to_ctype t2) m = Some v2' /\ Val.inject f v2 v2'.
-Proof. 
-  unfold sem_cast; unfold Cop.sem_cast; intros; destruct t1; simpl in *; TrivialInject.
-  - destruct t2; inv H0; simpl in *;
-     try (destruct i; simpl in *);
-    try (destruct f0; simpl in *); TrivialInject.  
-  -  destruct t2; inv H0; simpl in *; TrivialInject; try(destruct i0; destruct (Archi.ptr64); simpl in *; TrivialInject; simpl in *);
-    try (destruct (intsize_eq I8 I32); TrivialInject; inv e);
-    try (destruct (intsize_eq I16 I32); TrivialInject; inv e);
-    try (destruct f0; simpl in *; TrivialInject).  
-    destruct (intsize_eq I32 I32).  esplit.  eauto. exfalso. apply n. auto.        
-  - destruct t2; inv H0; simpl in *; 
-    try(destruct i);  
-    try(destruct Archi.ptr64 );
-    try (destruct f0; simpl in *);
-    TrivialInject. 
-    (* econstructor. eauto. auto.     *)
-  - destruct t2; inv H0; simpl in *;
-    try (destruct f0);
-    try (destruct i); 
-    try (destruct f1); TrivialInject. 
-  - destruct t2; inv H0; simpl in *; 
-    try(destruct i; destruct (Archi.ptr64)); 
-    try (destruct f0); TrivialInject. 
-  - destruct t2; inv H0; simpl in *;
-      try(destruct i; destruct (Archi.ptr64));
-       try (destruct f0); try (destruct type_eq); TrivialInject.
-    econstructor. eauto. auto.
-  - destruct t2; inv H0; simpl in *;
-    try(destruct i; destruct (Archi.ptr64));
-    try (destruct f0); TrivialInject. 
-    econstructor; eauto; TrivialInject. 
-  - destruct t2; inv H0; simpl in *;
-    try(destruct i; destruct (Archi.ptr64));
-    try (destruct f0); TrivialInject. 
-  - destruct t2; inv H0; simpl in *;
-    try(destruct i0; destruct (Archi.ptr64)); 
-    try (destruct f0); 
-    try (destruct (ident_eq i i0~1); TrivialInject); 
-    try (destruct (ident_eq i i0~0); TrivialInject); 
-    try (inv H);
-    try (eapply Val.inject_ptr; eauto). 
-    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
-    destruct (ident_eq i 1). split. auto.  
-    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
-    try (eapply Val.inject_ptr; eauto). 
-    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
-    destruct (ident_eq i 1). split. auto.  
-    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
-  - destruct t2; inv H0; simpl in *;
-    try(destruct i0; destruct (Archi.ptr64)); 
-    try (destruct f0); 
-    try (destruct (ident_eq i i0~1); TrivialInject); 
-    try (destruct (ident_eq i i0~0); TrivialInject); 
-    try (inv H);
-    try (eapply Val.inject_ptr; eauto). 
-    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
-    destruct (ident_eq i 1). split. auto.  
-    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
-    try (eapply Val.inject_ptr; eauto). 
-    exists (Vptr b2 (Ptrofs.add ofs1 (Ptrofs.repr delta))).
-    destruct (ident_eq i 1). split. auto.  
-    TrivialInject. eapply Val.inject_ptr; eauto. inv H2. 
-  Qed. 
-
   
 (* use injp_acc to prove inj_incr *)
 Lemma injp_acc_inj_incr: forall f f' m1 m2 m1' m2' Hm Hm',
