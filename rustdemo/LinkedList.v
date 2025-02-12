@@ -40,7 +40,7 @@ Definition malloc : ident := 191%positive.
 Definition free : ident := 17%positive.
 Definition hash : ident := 32%positive.
 Definition range : ident := 15%positive.
-Definition _31 : ident := 12%positive.
+Definition tmp : ident := 12%positive.
 Definition _32 : ident := 177%positive.
 Definition _33 : ident := 143%positive.
 Definition _34 : ident := 111%positive.
@@ -121,7 +121,12 @@ Definition find_body : statement :=
            (* end; *)
            (* _retv#List_box := move l#List_box; *)
            (* return _retv#List_box *)
-           node#Node_ty proj next<List_box> <- find<find_ty> @ {move node#Node_ty proj next<List_box>, pure (copy k#type_int32s)}           
+           (** We do not support node.next = process(move node.next,
+           k) for now *)
+           let tmp : List_box in
+             tmp#List_box <- find<find_ty> @ {move node#Node_ty proj next<List_box>, pure (copy k#type_int32s)};
+             node#Node_ty proj next<List_box> := move tmp#List_box
+           end
          fi;
          (!l#List_box) :=v List::Cons(move node#Node_ty);
          _retv#List_box := move l#List_box;
@@ -136,7 +141,7 @@ Definition find_func : function :=
     fn_return := List_box;
     fn_callconv := cc_default;
     (* fn_vars := [(_retv, List_box); (wildcard, Tunit); (node, Node_ty); (_31, type_int32s); (_32, List_ty); (_33, List_box); (_34, List_ty)]; *)
-    fn_vars := [(_retv, List_box); (node, Node_ty)];
+    fn_vars := [(_retv, List_box); (node, Node_ty); (tmp, List_box)];
     fn_params := [(l, List_box); (k, type_int32s)];
     fn_body := find_body |}.
   

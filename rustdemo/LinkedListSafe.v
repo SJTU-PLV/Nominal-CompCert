@@ -97,6 +97,63 @@ Definition own_env_find t E1 E2 :=
     (* (fun id : positive => Rustlightown.init_own_env_obligation_1 find_func t E id) *)
     (* (fun id : positive => Rustlightown.init_own_env_obligation_2 find_func t E id). *)
 
+(* b0-b3 are blocks allocated for the parameters and variables in find
+function *)
+Definition find_env b0 b1 b2 b3 b4 :=
+  (PTree.set tmp (b4, List_box)
+     (PTree.set node (b3, Node_ty)
+        (PTree.set _retv (b2, List_box)
+           (PTree.set LinkedList.k (b0, type_int32s)
+              (PTree.set l (b1, List_box) empty_env))))).
+
+
+Definition return_find_cont (e: env) t E1 E2 k :=
+  (Kcall
+     (Plocal tmp List_box)
+     find_func
+     e
+     (move_place_list
+        (own_transfer_assign
+           (move_place
+              (init_place
+                 (init_place
+                    (own_env_find t E1 E2)
+                    (Plocal l List_box))
+                 (Plocal LinkedList.k type_int32s))
+              (Pderef (Plocal l List_box) List_ty))
+           (Plocal node Node_ty))
+        (moved_place_list
+           [Emoveplace
+              (Pfield (Plocal node Node_ty) next List_box)
+              List_box;
+            Epure
+              (Eplace (Plocal LinkedList.k type_int32s) type_int32s)]))   
+     (Kseq
+        (Sassign (Pfield (Plocal node Node_ty) next List_box)
+           (Emoveplace (Plocal tmp List_box) List_box))
+        (Klet tmp List_box
+           (Kseq
+              (Ssequence
+                 (Sassign_variant
+                    (Pderef (Plocal l List_box) List_ty) List Cons
+                    (Emoveplace (Plocal node Node_ty) Node_ty))
+                 (Ssequence
+                    (Sassign (Plocal _retv List_box)
+                       (Emoveplace (Plocal l List_box) List_box))
+                    (Sreturn (Plocal _retv List_box))))
+              (Klet node Node_ty k))))).
+  
+(* The continuation when calling find function or returning from the
+last find function *)
+Inductive sound_find_cont : cont -> Prop :=
+| sound_find_Kstop:
+    sound_find_cont Kstop
+| sound_find_Kcall: forall k b0 b1 b2 b3 b4 t E1 E2
+    (CONT: sound_find_cont k)
+    (UNI: collect_func ge find_func = OK t),                      
+    sound_find_cont (return_find_cont (find_env b0 b1 b2 b3 b4) t E1 E2 k).
+
+
 Definition return_process_cont (e: env) t E1 E2 k :=
   (Kcall
      (Pfield (Plocal node Node_ty) LinkedList.val type_int32s)
@@ -119,25 +176,17 @@ Definition return_process_cont (e: env) t E1 E2 k :=
                 (Sassign (Plocal _retv List_box)
                    (Emoveplace (Plocal l List_box) List_box))
                 (Sreturn (Plocal _retv List_box))))
-          (Klet node Node_ty k))).
+          (Klet node Node_ty k))).       
 
-(* b0-b3 are blocks allocated for the parameters and variables in find
-function *)
-Definition return_process_env b0 b1 b2 b3 :=
-  (PTree.set node (b3, Node_ty)
-     (PTree.set _retv (b2, List_box)
-        (PTree.set LinkedList.k (b0, type_int32s)
-           (PTree.set l (b1, List_box) empty_env)))).
 
-(* The continuation when calling find function or returning from the
-last find function *)
-Inductive sound_find_cont : cont -> Prop :=
-| sound_find_Kstop:
-    sound_find_cont Kstop
-| sound_find_Kcall: forall k p f e own s,
-    sound_find_cont k ->
-    (* TODO: specify the statement *)
-    sound_find_cont (Kcall p f e own (Kseq s k)).
+(* continuation of the returnstate in find function *)
+Inductive find_cont_ret_process : cont -> Prop :=
+(* return from process *)
+| find_return_process: forall k t b0 b1 b2 b3 b4 E1 E2
+    (CONT: sound_find_cont k)
+    (UNI: collect_func ge find_func = OK t),
+    find_cont_ret_process (return_process_cont (find_env b0 b1 b2 b3 b4) t E1 E2 k)
+.
 
 Definition sound_cont (f: ident) : cont -> Prop :=
   if ident_eq f find then
@@ -159,19 +208,18 @@ Inductive call_func (f: ident) : state -> Prop :=
     (ARGS: length vl = length_of_args f),
     call_func f (Callstate (Vptr b Ptrofs.zero) vl k m).
 
-(* continuation of the returnstate in find function *)
-Inductive find_cont_ret_process : cont -> Prop :=
-(* return from process *)
-| find_return_process: forall k b0 b1 b2 b3 t E1 E2,
-    (* TODO: specify the statement *)
-    find_cont_ret_process (return_process_cont (return_process_env b0 b1 b2 b3) t E1 E2 k)
-.
 
 (* returnstate in find function *)
 Inductive return_find : state -> Prop :=
 | return_find_intro: forall k v m,
     sound_find_cont k ->
     return_find (Returnstate v k m).
+
+Inductive return_process : state -> Prop :=
+| return_process_intro: forall k v m
+    (CONT: find_cont_ret_process k),
+    return_process (Returnstate v k m).
+
 
 Definition not_call_return_state s :=
   match s with
@@ -187,6 +235,8 @@ Inductive sound_state : state -> Prop :=
 | find_state_internal1: forall s0 s1 t n
     (CALL: call_func find s0)
     (STAR: starNf step num_frames ge n s0 t s1)
+    (* used to prevent complicated reasoning in proving query/reply
+    invariant in at_external state or final state *)
     (NOTCALL: not_call_return_state s1)
     (RAN: (1 <= n <= 20)%nat),
     sound_state s1
@@ -197,14 +247,24 @@ Inductive sound_state : state -> Prop :=
 | find_state_return_process: forall v k m
     (CONT: find_cont_ret_process k),
     sound_state (Returnstate v k m)
+(* state comes from return process *)
 | find_state_internal2: forall s0 s1 s2 t1 t2 n
+    (RET: return_process s0)
+    (* prevent num_frames inconsistent between s0 and s2 *)
+    (STEP: step ge s0 t1 s1)
+    (STAR: starNf step num_frames ge n s1 t2 s2)
+    (NOTCALL: not_call_return_state s2)
+    (RAN: (0 <= n <= 28)%nat),
+    sound_state s2          
+(* state comes from return find *)
+| find_state_internal3: forall s0 s1 s2 t1 t2 n
     (RET: return_find s0)
     (* prevent num_frames inconsistent between s0 and s2 *)
     (STEP: step ge s0 t1 s1)
     (STAR: starNf step num_frames ge n s1 t2 s2)
-    (RAN: (0 <= n <= 10)%nat),
-    not_call_return_state s2 ->
-    sound_state s1
+    (NOTCALL: not_call_return_state s2)
+    (RAN: (0 <= n <= 28)%nat),
+    sound_state s2
 (* This state can be return from the current find function or return
 from the last find function *)
 | find_returnstate: forall v k m,
@@ -298,11 +358,36 @@ Proof using se.
   vm_compute in H. inv H. reflexivity.
 Qed.
 
+Lemma split_drop_place_find_deref_l: forall w,
+    collect_func ge find_func = OK w ->
+    split_drop_place ge (PathsMap.get l w) (Pderef (Plocal l List_box) List_ty) List_ty = OK [(Pderef (Plocal l List_box) List_ty, true)].
+Proof using se.
+  intros. unfold collect_func in H.
+  vm_compute in H. inv H. reflexivity.
+Qed.
+
+
 Lemma split_drop_place_find_node: forall w,
     collect_func ge find_func = OK w ->
     split_drop_place ge (PathsMap.get node w) (Plocal node Node_ty) Node_ty = OK [(Pfield (Plocal node Node_ty) key type_int32s, true);
     (Pfield (Plocal node Node_ty) LinkedList.val type_int32s, true);
     (Pfield (Plocal node Node_ty) next List_box, true)].
+Proof using se.
+  intros. unfold collect_func in H.
+  vm_compute in H. inv H. reflexivity.  
+Qed.
+
+Lemma split_drop_place_find_node_next: forall w,
+    collect_func ge find_func = OK w ->
+    split_drop_place ge (PathsMap.get node w) (Pfield (Plocal node Node_ty) next List_box) List_box = OK [(Pfield (Plocal node Node_ty) next List_box, true)].
+Proof using se.
+  intros. unfold collect_func in H.
+  vm_compute in H. inv H. reflexivity.  
+Qed.
+
+Lemma split_drop_place_find_tmp: forall w,
+    collect_func ge find_func = OK w ->
+    split_drop_place ge (PathsMap.get tmp w) (Plocal tmp List_box) List_box = OK [(Plocal tmp List_box, true)].
 Proof using se.
   intros. unfold collect_func in H.
   vm_compute in H. inv H. reflexivity.  
@@ -380,7 +465,7 @@ Proof.
     generalize flag at 1 3.
     intros flag0 E. destruct flag0; try congruence. intros. inv INITOWN.
     (* construct e *)
-    inv ENTRY. inv ALLOC. inv H7. inv H9. inv H10. inv H11.
+    inv ENTRY. inv ALLOC. inv H7. inv H9. inv H10. inv H11. inv H12.
     inv STAR0.
     (* stop here: evaluate the if statement *)
     { split.
@@ -391,12 +476,11 @@ Proof.
           (* we should show thata v1 must be a pointer *)
           destruct (val_is_ptr v1) eqn: VPTR.
           * destruct v1; simpl in VPTR; try congruence.
-            destruct (Mem.valid_access_dec m' Mint32 b4 (Ptrofs.unsigned i) Readable) eqn: VA2.
+            destruct (Mem.valid_access_dec m' Mint32 b5 (Ptrofs.unsigned i) Readable) eqn: VA2.
             -- exploit Mem.valid_access_load. eapply v0. intros (v2 & LOAD2).
                destruct (val_is_int v2) eqn: VINT.
                ++ destruct v2; simpl in VINT; try congruence.
-                  right. right.
-                  
+                  right. right.                  
                   do 2 eexists.
                   (* evaluate if then else *)
                   econstructor. econstructor. econstructor.
@@ -427,13 +511,13 @@ Proof.
         inv H; simpl; auto. lia. }
     (* destruct the if step *)
     inv STEP.
-    2: { destruct H11; unfold find_body in *; try congruence. }
+    2: { destruct H12; unfold find_body in *; try congruence. }
     (* get the bool value *)
-    simpl in H15. inv H13. inv H0.
+    simpl in H16. inv H14. inv H0.
     simpl in PTY. unfold List_ty in PTY. inv PTY.
     vm_compute in CO. inv CO. vm_compute in FTAG. inv FTAG.
     simpl in RANGE. unfold list_length_z in RANGE. simpl in RANGE.
-    destruct (Int.eq tag (Int.repr 0)) eqn: EQZ; vm_compute in H15; inv H15.
+    destruct (Int.eq tag (Int.repr 0)) eqn: EQZ; vm_compute in H16; inv H16.
     (** evaluate the if branch *)
     { inv STAR; cbn [num_frames] in *.
       (* stop here: evaluate Ssequence *)
@@ -445,7 +529,7 @@ Proof.
           inv H; simpl; auto.
           inv H; simpl; auto. lia. }
       inv STEP.
-      2: { destruct H11; congruence. }
+      2: { destruct H12; congruence. }
       inv STAR0; cbn [num_frames num_frames_cont] in *.
       (* stop here: evaluate Sassign to Dassign *)
       { split.
@@ -556,7 +640,7 @@ Proof.
           eapply starNf_step_right; eauto. 
           1-2: inv H; simpl; auto. lia. }
       inv STEP.
-      2: { destruct H11; congruence. }
+      2: { destruct H12; congruence. }
       inv STAR; cbn [num_frames num_frames_cont] in *.
       (* evaluate step_dropinsert_return_before *)
       { split.
@@ -642,11 +726,11 @@ Proof.
       inv STAR; cbn [num_frames num_frames_cont] in *.
       (* stop here: evaluate step_dropinsert_return_after *)
       { split.
-        - destruct (Mem.valid_access_dec m5 Mptr b2 0 Readable) eqn: ?VA.
+        - destruct (Mem.valid_access_dec m6 Mptr b2 0 Readable) eqn: ?VA.
           + exploit Mem.valid_access_load. eapply v0.
             intros (?v & ?LOAD).
             destruct (sem_cast v2 List_box List_box) eqn: ?CAST.
-            * destruct (Mem.free_list m5 [(b3, 0, 16); (b1, 0, 8); (b2, 0, 8); (b0, 0, 4)]) eqn: ?FREELIST.
+            * destruct (Mem.free_list m6 [(b3, 0, 16); (b4, 0, 8); (b1, 0, 8); (b2, 0, 8); (b0, 0, 4)]) eqn: ?FREELIST.
               -- left. red. do 2 right.
                  exploit sound_call_cont_find; eauto.
                  intros (ck & CK & SCK).
@@ -654,9 +738,7 @@ Proof.
                  eapply step_dropinsert_return_after.
                  econstructor. econstructor. econstructor. reflexivity.
                  econstructor. reflexivity. eauto.
-                 eauto. eauto. 
-                 instantiate (1 := [(b3, 0, 16); (b1, 0, 8); (b2, 0, 8); (b0, 0, 4)]).
-                 reflexivity. eauto.
+                 eauto. eauto. reflexivity. eauto.
               (* free_list memory error *)
               -- right. econstructor.
                  eapply step_dropinsert_return_error2; eauto.
@@ -687,33 +769,28 @@ Proof.
           + intros. inv H.
         (** TODO: ck1 is Kcall. Fill this code after finishing calling
         find *)
-        - admit.
-        (* - split. *)
-        (*   + destruct (val_casted_dec v2 type_int32s). *)
-        (*     * destruct (Mem.valid_access_dec m6 Mint32 b9 4 Writable). *)
-        (*       -- edestruct Mem.valid_access_store with (v:= v2) as (?m & ?STORE).  *)
-        (*          eauto. *)
-        (*          left. red. do 2 right. *)
-        (*          do 2 eexists. econstructor. reflexivity. *)
-        (*          econstructor. econstructor. reflexivity. reflexivity. *)
-        (*          reflexivity. reflexivity. auto. *)
-        (*          econstructor. reflexivity. eauto. *)
-        (*       -- right. eapply step_returnstate_error2. *)
-        (*          reflexivity. *)
-        (*          econstructor. econstructor. reflexivity. reflexivity. *)
-        (*          reflexivity. reflexivity. *)
-        (*          econstructor. reflexivity. eauto. *)
-        (*     (** TODO: The return value is not val_casted. Treat it as *)
-        (*     a kind of memory error *) *)
-        (*     * admit. *)
-        (*   + intros. *)
-        (*     eapply find_state_internal2 with (n:=0%nat); eauto. *)
-        (*     econstructor. econstructor. econ *)
-        (*     2: { econstructor. eauto. econstructor. eauto. *)
-        (*           inv H; simpl. *)            
-        (*     eapply starNf_step_right; eauto.  *)
-        (*     1-2: inv H; simpl; auto. lia. } *)
-      }
+        - split.
+          + destruct (val_casted_dec v2 List_box).
+            * destruct (Mem.valid_access_dec m7 Mptr b11 0 Writable).
+              -- edestruct Mem.valid_access_store with (v:= v2) as (?m & ?STORE).
+                 eauto.
+                 left. red. do 2 right.
+                 do 2 eexists. econstructor. reflexivity.
+                 econstructor.  reflexivity. eauto.
+                 econstructor. reflexivity. eauto.
+              -- right. eapply step_returnstate_error2.
+                 reflexivity.
+                 econstructor. reflexivity. 
+                 econstructor. reflexivity. eauto.
+            (** TODO: The return value is not val_casted. Treat it as
+            a kind of memory error *)
+            * admit.
+          + intros.
+            eapply find_state_internal3 with (n:=0%nat).
+            2: eauto.
+            econstructor. econstructor. eauto. eauto.
+            econstructor. 
+            inv H; simpl; eauto. lia. }
       (* num frames contradiction *)
       inv STEP.
       simpl in FEQ16.
@@ -735,7 +812,7 @@ Proof.
           eapply starNf_step_right; eauto. 
           1-2: inv H; simpl; auto. lia. }
       inv STEP.
-      2: { destruct H11; congruence. }
+      2: { destruct H12; congruence. }
       inv STAR0; cbn [num_frames num_frames_cont] in *.
       (* stop here: evaluate Ssequence *)
       { split.
@@ -833,7 +910,7 @@ Proof.
       { split.
         (* Note that the evaluation of conditional expression provides
         the fact of loading *l *)        
-        - destruct (Mem.range_perm_dec m' b5 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) ((Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) + 16) Cur Readable).
+        - destruct (Mem.range_perm_dec m' b6 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) ((Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) + 16) Cur Readable).
           + exploit Mem.range_perm_loadbytes. eapply r. intros (bys & LOADBYTES).
             destruct (Mem.range_perm_dec m' b3 0 (0 + 16) Cur Writable).
             * edestruct Mem.range_perm_storebytes with (bytes:= bys) as (?m & ?STOREBYTES).
@@ -913,11 +990,11 @@ Proof.
       inv STAR0; cbn [num_frames num_frames_cont] in *.
       (* evaluate Sifthenelse *)
       { split.
-        - destruct (Mem.valid_access_dec m5 Mint32 b0 0 Readable).
+        - destruct (Mem.valid_access_dec m6 Mint32 b0 0 Readable).
           + exploit Mem.valid_access_load. eauto.
             intros (?v & ?LOAD).
             destruct (sem_cast v2 type_int32s type_int32s) eqn: ?CAST.
-            * destruct (Mem.valid_access_dec m5 Mint32 b3 0 Readable).
+            * destruct (Mem.valid_access_dec m6 Mint32 b3 0 Readable).
               -- exploit Mem.valid_access_load. eauto.
                  intros (?v & ?LOAD).
                  destruct (sem_cast v5 type_int32s type_int32s) eqn: ?CAST.
@@ -966,7 +1043,7 @@ Proof.
           eapply starNf_step_right; eauto. 
           1-2: inv H; simpl; auto. lia. }
       inv STEP.
-      destruct b6.
+      destruct b7.
       
       (* evaluate the true branch *)
       { inv STAR; cbn [num_frames num_frames_cont] in *.
@@ -993,7 +1070,7 @@ Proof.
         inv STAR; cbn [num_frames num_frames_cont] in *.
         (* evaluate Dcall *)
         { split.
-          - destruct (Mem.valid_access_dec m5 Mint32 b3 4 Readable).
+          - destruct (Mem.valid_access_dec m6 Mint32 b3 4 Readable).
             + exploit Mem.valid_access_load. eauto.
               intros (?v & ?LOAD).
               destruct (sem_cast v3 type_int32s type_int32s) eqn: ?CAST.
@@ -1035,7 +1112,7 @@ Proof.
               eauto.
           - intros. inv H. inv SDROP.
             (* show that vf points to process_ext *)
-            inv H20. inv H0. inv DEF; simpl in H; try congruence.
+            inv H21. inv H0. inv DEF; simpl in H; try congruence.
             generalize (wf_senv process). intros FINDPRO.
             simpl in FINDPRO. destruct FINDPRO as (?b & FINDPRO). 
             simpl in GADDR. rewrite GADDR in FINDPRO. inv FINDPRO.
@@ -1046,39 +1123,707 @@ Proof.
             erewrite Genv.find_invert_symbol; eauto.
             reflexivity.
             (* sound_find_cont *)
-            simpl. econstructor. }
-        
-                
-            
-            simpl in FINDF. rewrite dec_eq_true in FINDF. unfold Genv.find_funct_ptr in FINDF.
-            rewrite Genv.find_def_spec in FINDF.
-            erewrite Genv.find_invert_symbol in FINDF; eauto.
-            
-            eapply find_state_call_process.
-            eapply 
+            simpl. econstructor. eauto. eauto. }
+        inv STEP. inv SDROP. simpl in FEQ15.
+        exfalso. eapply Nat.neq_succ_diag_l; eauto. }
 
-            (in_dec ident_eq process (prog_defs_names linked_list_mod)).
-            
-          simpl.
-          eapply do_assign_loc
-            econstructor. reflexivity.
+      (* evaluate the false branch (i.e., calling find function) *)
+      { inv STAR; cbn [num_frames num_frames_cont] in *.
+        (* evaluate Slet *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+          - intros. eapply find_state_internal1 with (n:=15%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; simpl; auto. lia. }
+        inv STEP.
+        inv STAR0; cbn [num_frames num_frames_cont] in *.
+        (* evaluate Ssequence *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+          - intros. eapply find_state_internal1 with (n:=16%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; simpl; auto. lia. }
+        inv STEP.
+        inv STAR; cbn [num_frames num_frames_cont] in *.
+        (* evaluate Scall to Dcall *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+          - intros. eapply find_state_internal1 with (n:=17%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; simpl; auto. lia. }
+        inv STEP.
+        inv STAR0; cbn [num_frames num_frames_cont] in *.
+        (* evaluate step_dropinsert_to_dropplace_reassign *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+            eapply step_dropinsert_to_dropplace_reassign.
+            reflexivity. reflexivity.
+            eapply split_drop_place_find_tmp. eauto.
+          - intros. eapply find_state_internal1 with (n:=18%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; inv SDROP; simpl; auto. lia.}
+        inv STEP. inv SDROP.
+        2: { vm_compute in OWNTY0. congruence. }
+        clear OWNTY0.
+        erewrite split_drop_place_find_tmp in SPLIT; eauto.
+        inv SPLIT.
+        inv STAR; cbn [num_frames num_frames_cont] in *.
+        (* evaluate step_dropplace_init1 *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+            eapply step_dropplace_init1.
+            unfold collect_func in A. vm_compute in A. inv A.
+            reflexivity.
+          - intros. eapply find_state_internal1 with (n:=19%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; inv SDROP; simpl; auto. lia.}
+        inv STEP. inv SDROP.
+        2: { unfold collect_func in A. vm_compute in A. inv A.
+             vm_compute in OWN. congruence. }
+        2: { simpl in SCALAR. congruence. }
+        clear NOTOWN. 
+        inv STAR0; cbn [num_frames num_frames_cont] in *.
+        (* evaluate step_dropplace_return *)
+        { split.
+          - left. red. do 2 right.
+            do 2 eexists. econstructor.
+            eapply step_dropplace_return.
+          - intros. eapply find_state_internal1 with (n:=20%nat); eauto.
+            eapply starNf_step_right; eauto. 
+            1-2: inv H; inv SDROP; simpl; auto. lia.}
+        inv STEP. inv SDROP.
+        inv STAR; cbn [num_frames num_frames_cont] in *.        
+        (* evaluate Dcall *)
+        { split.
+          - (* construct the block of process *)
+            generalize (wf_senv find). intros FINDF.
+            simpl in FINDF. destruct FINDF as (?b & FINDF).
+            destruct (Mem.valid_access_dec m6 Mptr b3 8 Readable).
+            + exploit Mem.valid_access_load. eauto.
+              intros (?v & ?LOAD).
+              destruct (sem_cast v3 List_box List_box) eqn: ?CAST.
+              * destruct (Mem.valid_access_dec m6 Mint32 b0 0 Readable).
+                -- exploit Mem.valid_access_load. eauto.
+                   intros (?v & ?LOAD).
+                   destruct (sem_cast v6 type_int32s type_int32s) eqn: ?CAST.
+                   ++ left. red. do 2 right.
+                      do 2 eexists. econstructor. econstructor.
+                      reflexivity. reflexivity.
+                      econstructor. econstructor. eauto.
+                      eapply deref_loc_reference. reflexivity.
+                      (* evaluate the arguments *)
+                      econstructor.
+                      econstructor. econstructor. econstructor.
+                      econstructor. reflexivity. reflexivity.
+                      reflexivity. reflexivity. econstructor. reflexivity.
+                      eauto. eauto.
+                      econstructor. econstructor. econstructor. econstructor.
+                      reflexivity. econstructor. reflexivity.
+                      eauto. eauto.
+                      econstructor.
+                      (* find_funct *)
+                      simpl. rewrite dec_eq_true. unfold Genv.find_funct_ptr.
+                      rewrite Genv.find_def_spec.
+                      erewrite Genv.find_invert_symbol; eauto.
+                      reflexivity. reflexivity.
+                      simpl. auto.
+                   (* sem_cast fails *)
+                   ++ admit.
+                -- right. econstructor.
+                   eapply step_dropinsert_call_error2.
+                   econstructor. econstructor. eauto.
+                   eapply deref_loc_reference. reflexivity. reflexivity.
+                   eapply eval_Econs_mem_error2.
+                   econstructor.
+                   econstructor. econstructor. econstructor.
+                   reflexivity. reflexivity.
+                   reflexivity. reflexivity. econstructor. reflexivity.
+                   eauto.
+                   eapply eval_Econs_mem_error1.
+                   econstructor. eapply eval_Eplace_error2.
+                   econstructor. econstructor. econstructor.
+                   reflexivity. eauto.
+              (* sem_cast fails *)
+              * admit.
+            + right. econstructor.
+              eapply step_dropinsert_call_error2.
+              econstructor. econstructor. eauto.
+              eapply deref_loc_reference. reflexivity. reflexivity.
+              eapply eval_Econs_mem_error1.
+              econstructor. eapply eval_Eplace_error2.
+              econstructor. econstructor. econstructor.
+              reflexivity. reflexivity. reflexivity.
+              econstructor. reflexivity. eauto.
+          - intros. inv H. inv SDROP.
+            inv H21. inv H0.
+            inv DEF; simpl in H; try congruence.
+            eapply callstate_find. econstructor.
+            eapply Genv.find_invert_symbol. eauto.
+            econstructor. eauto. eauto.
+            inv H22. inv H11. inv H21. reflexivity. }
+        inv STEP. inv SDROP. simpl in FEQ19.
+        exfalso. eapply Nat.neq_succ_diag_l; eauto. }
+    }
+    
+  (* call process *)
+  - split.
+    + left. right. left.
+      eexists. econstructor. simpl in PROC. simpl.
+      rewrite PROC. f_equal. unfold process_ext. f_equal.
+    (* use the fact that there is not step in the state of
+    at_external *)
+    + intros. inv H. rewrite PROC in FIND. inv FIND.
+      rewrite PROC in FIND. inv FIND. inv H6.
+  (* return from process *)
+  - split.
+    + inv CONT.
+      destruct (val_casted_dec v type_int32s).
+      * destruct (Mem.valid_access_dec m Mint32 b3 4 Writable).
+        -- edestruct Mem.valid_access_store as (?m & ?STORE). eauto.
+           left. do 2 right.
+           do 2 eexists.
+           econstructor. reflexivity.
+           econstructor. econstructor. reflexivity. reflexivity.
+           reflexivity. reflexivity.
+           simpl. eauto.
+           econstructor. reflexivity.
+           eauto.
+        -- right.
+           eapply step_returnstate_error2. reflexivity.
+           econstructor. econstructor. reflexivity. reflexivity.
+           reflexivity. reflexivity.
+           econstructor. reflexivity. eauto.
+      (* val is not val_casted in returnstate *)
+      * admit.
+    + intros. eapply find_state_internal2 with (n:=0%nat).
+      2: eauto.
+      econstructor. auto.
+      econstructor. inv H; simpl; auto. lia.
+  (* execution after returning from process *)
+  - generalize RET. intros RET1.
+    generalize STEP. intros STEP1.
+    generalize STAR as STAR1. intros.
+    inv RET. inv STEP. inv CONT.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    (* evaluate skip_seq *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+      - intros. eapply find_state_internal2 with (n:=1%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP.
+    (** The following code may be reused in the execution of returning
+    from find *)
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* evaluate Ssequence *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+      - intros. eapply find_state_internal2 with (n:=2%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    (* evaluate Sassign_variant to Dassign_variant *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+      - intros. eapply find_state_internal2 with (n:=3%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* evaluate step_dropinsert_to_dropplace_reassign *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. eapply step_dropinsert_to_dropplace_reassign.
+        reflexivity. reflexivity.
+        eapply split_drop_place_find_deref_l. eauto.
+      - intros. eapply find_state_internal2 with (n:=4%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    2: { vm_compute in OWNTY. congruence. }
+    erewrite split_drop_place_find_deref_l in SPLIT; eauto. inv SPLIT.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    (* evaluate step_dropplace_init1 *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+        eapply step_dropplace_init1.
+        unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+        reflexivity.
+      - intros. eapply find_state_internal2 with (n:=5%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+         vm_compute in OWN. congruence. }
+    2: { simpl in SCALAR. congruence. }
+    clear NOTOWN.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. econstructor.
+      - intros. eapply find_state_internal2 with (n:=6%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    (* evaluate assign_variant (many cases of memory error) *)
+    { split.
+      - destruct (Mem.valid_access_dec m2 Mptr b1 0 Readable).
+        + exploit Mem.valid_access_load. eauto. intros (?v & ?LOAD).
+          (* we should show thata v1 must be a pointer *)
+          destruct (val_is_ptr v1) eqn: VPTR.
+          * destruct v1; simpl in VPTR; try congruence.
+            destruct (Mem.range_perm_dec m2 b3 0 (0 + 16) Cur Readable).
+            -- exploit Mem.range_perm_loadbytes. eapply r. intros (bys & LOADBYTES).
+               destruct (Mem.range_perm_dec m2 b5 (Ptrofs.unsigned (Ptrofs.add i (Ptrofs.repr 8))) (Ptrofs.unsigned (Ptrofs.add i (Ptrofs.repr 8)) + 16) Cur Writable).
+               ++ edestruct Mem.range_perm_storebytes with (bytes:= bys) as (?m & ?STOREBYTES).
+                  erewrite Mem.loadbytes_length; eauto. eauto.
+                  destruct (Mem.valid_access_dec m0 Mptr b1 0 Readable).
+                  ** exploit Mem.valid_access_load. eauto. intros (?v & ?LOAD).
+                     (* we should show thata v1 must be a pointer *)
+                     destruct (val_is_ptr v2) eqn: ?VPTR.
+                     --- destruct v2; simpl in VPTR0; try congruence.
+                         destruct (Mem.valid_access_dec m0 Mint32 b6 (Ptrofs.unsigned i0) Writable).
+                         +++ edestruct Mem.valid_access_store as (?m & ?STORE). eauto.
+                             left. red. do 2 right.
+                             do 2 eexists. econstructor. econstructor.
+                             1-5: reflexivity.
+                             econstructor. econstructor. econstructor.
+                             reflexivity. eapply deref_loc_copy. reflexivity.
+                             econstructor. econstructor. reflexivity.
+                             econstructor. reflexivity. eauto.
+                             instantiate (1:= 8). reflexivity.
+                             (* sem_cast *)
+                             simpl. reflexivity.
+                             (* memory copy *)
+                             eapply do_assign_loc_sound.
+                             unfold do_assign_loc.
+                             replace (sizeof (Smallstep.globalenv (linked_list_sem se))
+                                        (type_member (Member_plain Cons Node_ty))) with 16 by reflexivity.
+                             rewrite Ptrofs.unsigned_zero. rewrite LOADBYTES.
+                             rewrite STOREBYTES.
+                             destruct check_assign_copy.
+                             reflexivity.
+                             (** TODO: we can treat check_assign_copy failure as a kind of memory error *)
+                             admit.
+                             reflexivity.
+                             econstructor. econstructor. reflexivity.
+                             econstructor. reflexivity.
+                             eauto.
+                             simpl. eauto.
+                         (* All the following cases are memory error *)
+                         +++ admit.
+                     --- admit.
+                  ** admit.
+               ++ admit.
+            -- admit.
+          * admit.
+        + admit.
+      - intros. eapply find_state_internal2 with (n:=7%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. 
+      - intros. eapply find_state_internal2 with (n:=8%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP. 
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. 
+      - intros. eapply find_state_internal2 with (n:=9%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* evaluate Sassign to _retv *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. 
+      - intros. eapply find_state_internal2 with (n:=10%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    (* evaluate step_dropinsert_to_dropplace_reassign *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. eapply step_dropinsert_to_dropplace_reassign.
+        reflexivity. reflexivity.
+        eapply split_drop_place_find_retv. eauto.
+      - intros. eapply find_state_internal2 with (n:=11%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    2: { vm_compute in OWNTY0. congruence. }
+    erewrite split_drop_place_find_retv in SPLIT; eauto. inv SPLIT.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* evaluate step_dropplace_init1 *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+        eapply step_dropplace_init1.
+        unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+        reflexivity.
+      - intros. eapply find_state_internal2 with (n:=12%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+         vm_compute in OWN. congruence. }
+    2: { simpl in SCALAR. congruence. }
+    clear NOTOWN.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. econstructor.
+      - intros. eapply find_state_internal2 with (n:=13%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* evaluate Dassign *)
+    { split.
+      - destruct (Mem.valid_access_dec m3 Mptr b1 0 Readable).
+        + exploit Mem.valid_access_load. eauto.
+          intros (?v & ?LOAD).
+          destruct (sem_cast v3 List_box List_box) eqn: ?CAST.
+          * destruct (Mem.valid_access_dec m3 Mptr b2 0 Writable).
+            -- edestruct Mem.valid_access_store as (?m & ?STORE). eauto.
+               left. red. do 2 right.
+               do 2 eexists. econstructor. econstructor.
+               reflexivity. reflexivity.
+               simpl. unfold List_box. congruence.
+               econstructor. reflexivity.
+               econstructor. econstructor. econstructor.
+               reflexivity.
+               econstructor. reflexivity. eauto. eauto.
+               econstructor. reflexivity. eauto.
+            -- right. econstructor.
+               eapply step_dropinsert_assign_error3.
+               econstructor. reflexivity.
+               econstructor. econstructor. econstructor.
+               reflexivity. econstructor. reflexivity. eauto.
+               eauto. econstructor. reflexivity. eauto.
+          * admit.
+        + right. econstructor.
+          eapply step_dropinsert_assign_error1.
+          econstructor. eapply eval_Eplace_error2.
           econstructor. reflexivity.
-          eauto. reflexivity. reflexivity.
-                 
-          
-      Cop.val_casted
-      eval_Ebinop
-      destruct (Int.eq_
-        length
-        
-      
-            simpl.
-            Mem.load_cast val_casted
-              val_casted
-              Int.eq_
+          econstructor. reflexivity. eauto.
+      - intros. eapply find_state_internal2 with (n:=14%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; inv SDROP; simpl; auto. lia. }
+    inv STEP. inv SDROP.
+    inv STAR; cbn [num_frames num_frames_cont] in *.
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor. 
+      - intros. eapply find_state_internal2 with (n:=15%nat); eauto.
+        eapply starNf_step_right; eauto. 
+        1-2: inv H; simpl; auto. lia. }
+    inv STEP. 
+    inv STAR0; cbn [num_frames num_frames_cont] in *.
+    (* stop here: evaluate Sreturn *)
+    { split.
+      - left. red. do 2 right.
+        do 2 eexists. econstructor.
+      - intros. eapply find_state_internal2 with (n:=16%nat); eauto.
+        eapply starNf_step_right; eauto. 
+          1-2: inv H; simpl; auto. lia. }
+      inv STEP.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      (* evaluate step_dropinsert_to_dropplace_escape (to drop the
+      node) *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          simpl.
+          erewrite sound_cont_no_vars with (f:= find); eauto.
+          eapply step_dropinsert_to_dropplace_escape.
+          reflexivity. reflexivity.
+          eapply split_drop_place_find_node. eauto.
+        - intros. eapply find_state_internal2 with (n:=17%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP.
+      erewrite sound_cont_no_vars with (f:= find) in SDROP; eauto.
+      inv SDROP.
+      2: { vm_compute in OWNTY1. congruence. }
+      erewrite split_drop_place_find_node in SPLIT; eauto.
+      inv SPLIT.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_init1.
+          unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=18%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      clear NOTOWN.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_init1.
+          unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=19%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      clear NOTOWN.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_init1.
+          unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=20%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      clear NOTOWN.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_return.
+        - intros. eapply find_state_internal2 with (n:=21%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          econstructor.
+        - intros. eapply find_state_internal2 with (n:=22%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      (* evaluate step_dropinsert_return_before *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropinsert_return_before.
+        - intros. eapply find_state_internal2 with (n:=23%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      destruct NOTRETURN; congruence.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.      
+      (* stop here: evaluate step_dropinsert_to_dropplace_return *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropinsert_to_dropplace_return.
+          reflexivity. reflexivity.
+          eapply split_drop_place_find_l; eauto.
+        - intros. eapply find_state_internal2 with (n:=24%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold List_box in OWNTY0. vm_compute in OWNTY2. congruence. }
+      erewrite split_drop_place_find_l in SPLIT; eauto. inv SPLIT.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      (* stop here: evaluate step_dropplace_init1 *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_init1.
+          unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=25%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      clear NOTOWN.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      (* stop here: evaluate step_dropplace_init1 *)
+       { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_init1.
+          unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=26%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      2: { unfold collect_func in UNI. vm_compute in UNI. inv UNI.
+           vm_compute in OWN. congruence. }
+      clear NOTOWN.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      (* stop here: evaluate step_dropplace_return *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropplace_return.
+        - intros. eapply find_state_internal2 with (n:=27%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      (* stop here: evaluate step_dropinsert_skip_return *)
+      { split.
+        - left. red. do 2 right.
+          do 2 eexists. econstructor.
+          eapply step_dropinsert_skip_return.
+          reflexivity.
+        - intros. eapply find_state_internal2 with (n:=28%nat); eauto.
+          eapply starNf_step_right; eauto. 
+          1-2: inv H; inv SDROP; simpl; auto. lia. }
+      inv STEP. inv SDROP.
+      vm_compute in OWNTY3. congruence.
+      inv STAR; cbn [num_frames num_frames_cont] in *.
+      (* stop here: evaluate step_dropinsert_return_after *)
+      { split.
+        - destruct (Mem.valid_access_dec m4 Mptr b2 0 Readable) eqn: ?VA.
+          + exploit Mem.valid_access_load. eauto.
+            intros (?v & ?LOAD).
+            destruct (sem_cast v5 List_box List_box) eqn: ?CAST.
+            * destruct (Mem.free_list m4 [(b3, 0, 16); (b4, 0, 8); (b1, 0, 8); (b2, 0, 8); (b0, 0, 4)]) eqn: ?FREELIST.
+              -- left. red. do 2 right.
+                 exploit sound_call_cont_find; eauto.
+                 intros (ck & CK & SCK).
+                 do 2 eexists. econstructor.
+                 eapply step_dropinsert_return_after.
+                 econstructor. econstructor. econstructor. reflexivity.
+                 econstructor. reflexivity. eauto.
+                 eauto. eauto. reflexivity. eauto.
+              (* free_list memory error *)
+              -- right. econstructor.
+                 eapply step_dropinsert_return_error2; eauto.
+            (* sem_cast fails *)
+            * admit.
+          + right. econstructor.
+            eapply step_dropinsert_return_error1; eauto.
+            econstructor. eapply eval_Eplace_error2.
+            econstructor. reflexivity.
+            econstructor. reflexivity. eauto.
+        - intros. inv H. inv SDROP.
+          exploit sound_call_cont_find; eauto.
+          intros (ck1 & CK & SCK). simpl in CONT. rewrite CONT in CK.
+          inv CK.          
+          eapply find_returnstate. eauto. }
+      inv STEP. inv SDROP.
+      (* show that it cannot take more step using num_frames unchanged
+      property *)
+      inv STAR0; cbn [num_frames num_frames_cont] in *.
+      (** show that the returnstate can take a step *)
+      { exploit sound_call_cont_find; eauto.
+        intros (ck1 & CK & SCK). simpl in CONT. rewrite CONT in CK. inv CK.
+        vm_compute in SCK. inv SCK.
+        (* ck1 is Kstop *)
+        - split.
+          (* final state *)
+          + left. red. left.
+            eexists. econstructor.
+          + intros. inv H.
+        (** TODO: ck1 is Kcall. Fill this code after finishing calling
+        find *)
+        - split.
+          + destruct (val_casted_dec v5 List_box).
+            * destruct (Mem.valid_access_dec m5 Mptr b12 0 Writable).
+              -- edestruct Mem.valid_access_store with (v:= v5) as (?m & ?STORE).
+                 eauto.
+                 left. red. do 2 right.
+                 do 2 eexists. econstructor. reflexivity.
+                 econstructor.  reflexivity. eauto.
+                 econstructor. reflexivity. eauto.
+              -- right. eapply step_returnstate_error2.
+                 reflexivity.
+                 econstructor. reflexivity. 
+                 econstructor. reflexivity. eauto.
+            (** TODO: The return value is not val_casted. Treat it as
+            a kind of memory error *)
+            * admit.
+          + intros.
+            eapply find_state_internal3 with (n:=0%nat).
+            2: eauto.
+            econstructor. econstructor. eauto. eauto.
+            econstructor. 
+            inv H; simpl; eauto. lia. }
+      (* num frames contradiction *)
+      inv STEP.
+      simpl in FEQ28.
+      exfalso. eapply Nat.neq_succ_diag_l; eauto.
+
+  (* execution after returning from find (the code is similar to the
+  last case *)
+  - admit.
+
+  (* state in find_returnstate (returing from find function) *)
+  - inv H.
+    (* ck1 is Kstop *)
+    + split.
+      (* final state *)
+      * left. red. left.
+        eexists. econstructor.
+      * intros. inv H.
+    (** TODO: ck1 is Kcall. Fill this code after finishing calling
+      find *)
+    + split.
+      * destruct (val_casted_dec v List_box).
+        -- destruct (Mem.valid_access_dec m Mptr b4 0 Writable).
+           ++ edestruct Mem.valid_access_store with (v:= v) as (?m & ?STORE).
+              eauto.
+              left. red. do 2 right.
+              do 2 eexists. econstructor. reflexivity.
+              econstructor.  reflexivity. eauto.
+              econstructor. reflexivity. eauto.
+           ++ right. eapply step_returnstate_error2.
               reflexivity.
-            repeat econstructor.
-            Lemma starN_step_r: forall genv step
+              econstructor. reflexivity. 
+              econstructor. reflexivity. eauto.
+      (** TODO: The return value is not val_casted. Treat it as
+            a kind of memory error *)
+        -- admit.
+      * intros.
+        eapply find_state_internal3 with (n:=0%nat).
+        2: eauto.
+        econstructor. econstructor. eauto. eauto.
+        econstructor. 
+        inv H; simpl; eauto. lia. 
+
 Admitted.
 
 End SOUNDNESS.
